@@ -109,7 +109,7 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
         model = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
+            "THUDM/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

@@ -128,7 +128,7 @@ class Bnb4BitTest(Base4bitTest):
 
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=torch.float16, device_map="auto"
+            self.model_name, dtype=torch.float16, device_map="auto"
         )
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
 
@@ -538,7 +538,7 @@ class Pipeline4BitTest(Base4bitTest):
                 "device_map": "auto",
                 "load_in_4bit": True,
                 # float16 isn't supported on CPU, use bfloat16 instead
-                "torch_dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
+                "dtype": torch.bfloat16 if torch_device == "cpu" else torch.float16,
             },
             max_new_tokens=self.MAX_NEW_TOKENS,
         )

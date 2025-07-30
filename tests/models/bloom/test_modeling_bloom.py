@@ -534,8 +534,8 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_embeddings(self):
-        # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")
+        # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -763,7 +763,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
             torch_device
         )
         model.eval()
@@ -790,7 +790,7 @@ class BloomEmbeddingTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, torch_dtype="auto").to(
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
             torch_device
         )  # load in bf16
         model.eval()

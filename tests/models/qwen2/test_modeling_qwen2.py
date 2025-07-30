@@ -221,9 +221,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
-        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16)
+        model = Qwen2ForCausalLM.from_pretrained("Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16)
         assistant_model = Qwen2ForCausalLM.from_pretrained(
-            "Qwen/Qwen2-0.5B", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen2-0.5B", device_map="auto", dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -278,7 +278,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained(
             qwen_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

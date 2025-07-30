@@ -93,7 +93,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -113,7 +113,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -135,7 +135,7 @@ class Starcoder2IntegrationTest(unittest.TestCase):
         model_id = "bigcode/starcoder2-7b"
 
         model = Starcoder2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token

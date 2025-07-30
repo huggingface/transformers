@@ -89,7 +89,7 @@ class GlmIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.float16, revision=self.revision
+            self.model_id, dtype=torch.float16, revision=self.revision
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
@@ -107,7 +107,7 @@ class GlmIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, revision=self.revision
+            self.model_id, dtype=torch.bfloat16, revision=self.revision
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
@@ -137,7 +137,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="eager",
             revision=self.revision,
         )
@@ -160,7 +160,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="sdpa",
             revision=self.revision,
         )
@@ -184,7 +184,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             revision=self.revision,
         )

@@ -4542,10 +4542,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertTrue("Tried passing in a callable to `accelerator_config`" in str(context.exception))
 
-    def test_torch_dtype_to_json(self):
+    def test_dtype_to_json(self):
         @dataclasses.dataclass
         class TorchDtypeTrainingArguments(TrainingArguments):
-            torch_dtype: torch.dtype = dataclasses.field(
+            dtype: torch.dtype = dataclasses.field(
                 default=torch.float32,
             )
 
@@ -4563,13 +4563,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             "int64",
             "bool",
         ]:
-            torch_dtype = getattr(torch, dtype)
+            dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=dtype)
 
                 args_dict = args.to_dict()
-                self.assertIn("torch_dtype", args_dict)
-                self.assertEqual(args_dict["torch_dtype"], dtype)
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
 
     @require_accelerate_version_min_0_30
     def test_eval_use_gather_object(self):

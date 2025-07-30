@@ -443,7 +443,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float32)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float32)
         model.to(device)
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
@@ -471,7 +471,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a newbie to the world"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -484,7 +484,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-790m-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-790m-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -497,7 +497,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -510,7 +510,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -522,7 +522,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(
             torch_device
         )
 

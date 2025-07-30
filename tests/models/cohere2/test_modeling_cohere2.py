@@ -148,7 +148,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_id, dtype=torch.bfloat16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -173,7 +173,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         # fmt: on
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, attn_implementation="eager"
+            model_id, dtype=torch.float16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -194,7 +194,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -215,7 +215,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype="float16"
+            model_id, attn_implementation="flash_attention_2", dtype="float16"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -256,7 +256,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "CohereForAI/c4ai-command-r7b-12-2024",
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -316,7 +316,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         # We use `sliding_window=1024` instead of the origin value `4096` in the config to avoid GPU OOM
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16, sliding_window=1024
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16, sliding_window=1024
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window

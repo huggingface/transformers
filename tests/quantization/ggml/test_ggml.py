@@ -207,7 +207,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q6_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.gguf_model_id, gguf_file=q6_k_gguf_model_id, torch_dtype=torch.float16
+            self.gguf_model_id, gguf_file=q6_k_gguf_model_id, dtype=torch.float16
         ).to(torch_device)
 
         self.assertTrue(model.lm_head.weight.dtype == torch.float16)
@@ -346,7 +346,7 @@ class GgufModelTests(unittest.TestCase):
             self.mistral_model_id,
             gguf_file=self.q4_0_mistral_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -361,7 +361,7 @@ class GgufModelTests(unittest.TestCase):
             self.qwen2_model_id,
             gguf_file=self.q4_0_qwen2_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -375,7 +375,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.qwen2moe_model_id,
             gguf_file=self.q8_qwen2moe_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")
@@ -388,11 +388,11 @@ class GgufModelTests(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.qwen2moe_model_id,
             gguf_file=self.fp16_qwen2moe_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         original_model = AutoModelForCausalLM.from_pretrained(
             self.qwen2moe_original_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         quantized_state_dict = quantized_model.state_dict()
@@ -406,7 +406,7 @@ class GgufModelTests(unittest.TestCase):
     def test_phi3_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id, device_map="auto", torch_dtype=torch.float16
+            self.phi3_model_id, gguf_file=self.q4_0_phi3_model_id, device_map="auto", dtype=torch.float16
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -430,7 +430,7 @@ class GgufModelTests(unittest.TestCase):
             self.llama3_model_id,
             gguf_file=self.q4_llama3_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -445,7 +445,7 @@ class GgufModelTests(unittest.TestCase):
             self.bloom_model_id,
             gguf_file=self.fp16_bloom_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -460,7 +460,7 @@ class GgufModelTests(unittest.TestCase):
             self.bloom_model_id,
             gguf_file=self.q8_bloom_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -474,12 +474,12 @@ class GgufModelTests(unittest.TestCase):
             self.bloom_model_id,
             gguf_file=self.fp16_bloom_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_bloom_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         quantized_state_dict = quantized_model.state_dict()
@@ -498,7 +498,7 @@ class GgufModelTests(unittest.TestCase):
     def test_t5_f16(self):
         tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.fp16_t5_model_id)
         model = AutoModelForSeq2SeqLM.from_pretrained(
-            self.t5_model_id, gguf_file=self.fp16_t5_model_id, device_map="auto", torch_dtype=torch.float16
+            self.t5_model_id, gguf_file=self.fp16_t5_model_id, device_map="auto", dtype=torch.float16
         )
 
         T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
@@ -512,7 +512,7 @@ class GgufModelTests(unittest.TestCase):
     def test_t5_q8_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.t5_model_id, gguf_file=self.q8_0_t5_model_id)
         model = AutoModelForSeq2SeqLM.from_pretrained(
-            self.t5_model_id, gguf_file=self.q8_0_t5_model_id, device_map="auto", torch_dtype=torch.float16
+            self.t5_model_id, gguf_file=self.q8_0_t5_model_id, device_map="auto", dtype=torch.float16
         )
 
         T5_EXAMPLE_TEXT = "translate English to German: How old are you?"
@@ -528,12 +528,12 @@ class GgufModelTests(unittest.TestCase):
             self.t5_model_id,
             gguf_file=self.fp16_t5_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         original_model = AutoModelForSeq2SeqLM.from_pretrained(
             self.original_t5_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         quantized_state_dict = quantized_model.state_dict()
@@ -550,7 +550,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gpt2_model_id,
             gguf_file=self.q8_gpt2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")
@@ -563,11 +563,11 @@ class GgufModelTests(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.gpt2_model_id,
             gguf_file=self.fp16_gpt2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         original_model = AutoModelForCausalLM.from_pretrained(
             self.gpt2_original_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         quantized_state_dict = quantized_model.state_dict()
@@ -585,7 +585,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gpt2_xl_model_id,
             gguf_file=self.q6_k_gpt2_xl_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")
@@ -601,7 +601,7 @@ class GgufModelTests(unittest.TestCase):
             self.falcon40b_model_id,
             gguf_file=self.q2_k_falcon40b_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -616,7 +616,7 @@ class GgufModelTests(unittest.TestCase):
             self.falcon7b_model_id_q2,
             gguf_file=self.q2_k_falcon7b_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"].to(torch_device)
@@ -631,12 +631,12 @@ class GgufModelTests(unittest.TestCase):
             self.falcon7b_model_id_fp16,
             gguf_file=self.fp16_falcon7b_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_flacon7b_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         quantized_state_dict = quantized_model.state_dict()
@@ -654,7 +654,7 @@ class GgufModelTests(unittest.TestCase):
             self.stablelm_model_id,
             gguf_file=self.q4_k_m_stablelm_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.stablelm_model_id, gguf_file=self.q4_k_m_stablelm_model_id)
@@ -667,13 +667,13 @@ class GgufModelTests(unittest.TestCase):
     def test_stablelm_fp16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_stablelm2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.stablelm2_model_id,
             gguf_file=self.fp16_stablelm2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.stablelm2_model_id, gguf_file=self.fp16_stablelm2_model_id)
@@ -692,14 +692,14 @@ class GgufModelTests(unittest.TestCase):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_stablelm2_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.stablelm2_model_id,
             gguf_file=self.fp16_stablelm2_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -716,14 +716,14 @@ class GgufModelTests(unittest.TestCase):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.starcoder2_original_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.starcoder2_fp16_model_id,
             gguf_file=self.fp16_starcoder2_gguf_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -742,7 +742,7 @@ class GgufModelTests(unittest.TestCase):
             self.starcoder2_model_id,
             gguf_file=self.q6_k_starcoder2_model_id,
             device_map="auto",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.starcoder2_model_id, gguf_file=self.q6_k_starcoder2_model_id)
@@ -755,13 +755,13 @@ class GgufModelTests(unittest.TestCase):
     def test_mamba_weights_conversion_fp16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.mamba_original_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.mamba_model_id,
             gguf_file=self.fp16_mamba_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -783,7 +783,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.mamba_model_id,
             gguf_file=self.q6_k_mamba_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.mamba_model_id, gguf_file=self.q6_k_mamba_model_id)
@@ -796,13 +796,13 @@ class GgufModelTests(unittest.TestCase):
     def test_nemotron_weights_conversion_fp16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.nemotron_original_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.nemotron_model_id,
             gguf_file=self.fp16_nemotron_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -819,7 +819,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.nemotron_model_id,
             gguf_file=self.q6_k_nemotron_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
@@ -833,7 +833,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
             gguf_file=self.q3_k_gemma2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.q3_k_gemma2_model_id)
@@ -847,7 +847,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
             gguf_file=self.q8_0_gemma2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.q8_0_gemma2_model_id)
@@ -861,7 +861,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
             gguf_file=self.fp32_gemma2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.fp32_gemma2_model_id)
@@ -875,13 +875,13 @@ class GgufModelTests(unittest.TestCase):
     def test_gemma2_weights_conversion_fp32(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
             gguf_file=self.fp32_gemma2_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -900,7 +900,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma3_qat_model_id,
             gguf_file=self.q4_0_gemma3_qat_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.gemma3_qat_model_id, gguf_file=self.q4_0_gemma3_qat_model_id)
@@ -916,13 +916,13 @@ class GgufModelTests(unittest.TestCase):
     def test_gemma3_text_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma3_text_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma3_text_model_id,
             gguf_file=self.bf16_gemma3_text_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -941,13 +941,13 @@ class GgufModelTests(unittest.TestCase):
     def test_gemma3_vision_weights_conversion_bf16(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma3_vision_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).language_model
 
         converted_model = AutoModelForCausalLM.from_pretrained(
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         converted_state_dict = converted_model.state_dict()
@@ -967,7 +967,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.qwen3_model_id,
             gguf_file=self.q8_0_qwen3_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
@@ -981,7 +981,7 @@ class GgufModelTests(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.qwen3moe_model_id,
             gguf_file=self.q4_k_m_qwen3moe_model_id,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")

@@ -258,10 +258,10 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
         model = Qwen2MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
         )
         assistant_model = Qwen2MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", torch_dtype=torch.float16
+            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

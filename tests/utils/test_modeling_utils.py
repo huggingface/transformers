@@ -503,9 +503,9 @@ class ModelUtilsTest(TestCasePlus):
         )
         self.assertIsNotNone(model)
 
-    def test_model_from_config_torch_dtype(self):
+    def test_model_from_config_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
-        # float dtype. To make it happen config.torch_dtype needs to be set before instantiating the
+        # float dtype. To make it happen config.dtype needs to be set before instantiating the
         # model from the config object.
 
         config = T5Config.from_pretrained(TINY_T5)
@@ -514,97 +514,97 @@ class ModelUtilsTest(TestCasePlus):
         # model = T5ForConditionalGeneration.from_config(config)
         self.assertEqual(model.dtype, torch.float32)
 
-        model = AutoModel.from_config(config, torch_dtype=torch.float16)
+        model = AutoModel.from_config(config, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
-            model = AutoModel.from_config(config, torch_dtype=torch.int64)
+            model = AutoModel.from_config(config, dtype=torch.int64)
 
-    def test_model_from_config_torch_dtype_str(self):
-        # test that from_pretrained works with torch_dtype being strings like "float32" for PyTorch backend
-        model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float32")
+    def test_model_from_config_dtype_str(self):
+        # test that from_pretrained works with dtype being strings like "float32" for PyTorch backend
+        model = AutoModel.from_pretrained(TINY_T5, dtype="float32")
         self.assertEqual(model.dtype, torch.float32)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float16")
+        model = AutoModel.from_pretrained(TINY_T5, dtype="float16")
         self.assertEqual(model.dtype, torch.float16)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
-            model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
+            model = AutoModel.from_pretrained(TINY_T5, dtype="int64")
 
-    def test_model_from_config_torch_dtype_composite(self):
+    def test_model_from_config_dtype_composite(self):
         """
-        Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
+        Test that from_pretrained works with dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
         # Load without dtype specified
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        # should be able to set torch_dtype as a simple string and the model loads it correctly
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
+        # should be able to set dtype as a simple string and the model loads it correctly
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        # should be able to set torch_dtype as a dict for each sub-config
+        # should be able to set dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
-            TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
+            TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
         )
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
-            TINY_LLAVA, torch_dtype={"text_config": torch.float32, "vision_config": torch.float16, "": torch.bfloat16}
+            TINY_LLAVA, dtype={"text_config": torch.float32, "vision_config": torch.float16, "": torch.bfloat16}
         )
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
         config = copy.deepcopy(model.config)
-        config.text_config.torch_dtype = torch.float32
-        config.vision_config.torch_dtype = torch.bfloat16
-        config.torch_dtype = torch.float16
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
+        config.text_config.dtype = torch.float32
+        config.vision_config.dtype = torch.bfloat16
+        config.dtype = torch.float16
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, torch_dtype="auto")
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
-        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
+        self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
-            model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="int64")
+            model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype="int64")
             model = LlavaForConditionalGeneration.from_pretrained(
-                TINY_LLAVA, torch_dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
+                TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
-    def test_model_from_pretrained_torch_dtype(self):
+    def test_model_from_pretrained_dtype(self):
         # test that the model can be instantiated with dtype of either
-        # 1. explicit from_pretrained's torch_dtype argument
-        # 2. via autodiscovery by looking at model weights (torch_dtype="auto")
+        # 1. explicit from_pretrained's dtype argument
+        # 2. via autodiscovery by looking at model weights (dtype="auto")
         # so if a model.half() was saved, we want it to be instantiated as such.
         #
         # test an explicit model class, but also AutoModel separately as the latter goes through a different code path
@@ -614,11 +614,11 @@ class ModelUtilsTest(TestCasePlus):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertEqual(model.dtype, torch.float32)
 
-        def remove_torch_dtype(model_path):
+        def remove_dtype(model_path):
             file = f"{model_path}/config.json"
             with open(file, encoding="utf-8") as f:
                 s = json.load(f)
-            s.pop("torch_dtype")
+            s.pop("dtype")
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(s, f)
 
@@ -626,65 +626,65 @@ class ModelUtilsTest(TestCasePlus):
         model.save_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path)
         self.assertEqual(model.dtype, torch.float32)
-        # 1. test torch_dtype="auto" via `config.torch_dtype`
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        # 1. test dtype="auto" via `config.dtype`
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
-        # 2. test torch_dtype="auto" via auto-derivation
-        # now remove the torch_dtype entry from config.json and try "auto" again which should
+        # 2. test dtype="auto" via auto-derivation
+        # now remove the dtype entry from config.json and try "auto" again which should
         # perform auto-derivation from weights
-        remove_torch_dtype(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        remove_dtype(model_path)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
         # test forced loading in fp16 (even though the weights are in fp32)
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
         # test fp16 save_pretrained, loaded with auto-detection
         model = model.half()
         model.save_pretrained(model_path)
-        # 1. test torch_dtype="auto" via `config.torch_dtype`
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
-        self.assertEqual(model.config.torch_dtype, torch.float16)
+        # 1. test dtype="auto" via `config.dtype`
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype="auto")
+        self.assertEqual(model.config.dtype, torch.float16)
         self.assertEqual(model.dtype, torch.float16)
-        # tests `config.torch_dtype` saving
+        # tests `config.dtype` saving
         with open(f"{model_path}/config.json") as f:
             config_dict = json.load(f)
-        self.assertEqual(config_dict["torch_dtype"], "float16")
-        # 2. test torch_dtype="auto" via auto-derivation
+        self.assertEqual(config_dict["dtype"], "float16")
+        # 2. test dtype="auto" via auto-derivation
         # now same with using config info
-        remove_torch_dtype(model_path)
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        remove_dtype(model_path)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype="auto")
         self.assertEqual(model.dtype, torch.float16)
 
-        # 3. now retest that AutoModel behaves the same wrt torch_dtype="auto" as T5ForConditionalGeneration
-        model = AutoModel.from_pretrained(model_path, torch_dtype="auto")
+        # 3. now retest that AutoModel behaves the same wrt dtype="auto" as T5ForConditionalGeneration
+        model = AutoModel.from_pretrained(model_path, dtype="auto")
         self.assertEqual(model.dtype, torch.float16)
 
         # test fp16 save_pretrained, loaded with the explicit fp16
-        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
         # test AutoModel separately as it goes through a different path
-        # test auto-detection - as currently TINY_T5 doesn't have torch_dtype entry
-        model = AutoModel.from_pretrained(TINY_T5, torch_dtype="auto")
-        # test that the config object didn't get polluted with torch_dtype="auto"
-        # there was a bug that after this call we ended up with config.torch_dtype=="auto"
-        self.assertNotEqual(model.config.torch_dtype, "auto")
+        # test auto-detection - as currently TINY_T5 doesn't have dtype entry
+        model = AutoModel.from_pretrained(TINY_T5, dtype="auto")
+        # test that the config object didn't get polluted with dtype="auto"
+        # there was a bug that after this call we ended up with config.dtype=="auto"
+        self.assertNotEqual(model.config.dtype, "auto")
         # now test the outcome
         self.assertEqual(model.dtype, torch.float32)
-        model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
+        model = AutoModel.from_pretrained(TINY_T5, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
         # test model whose first param is not of a floating type, but int
-        model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
+        model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
         # test model that init the model with _from_config
         model = CLIPTextModelWithProjection.from_pretrained(
             "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
             subfolder="text_encoder",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         self.assertEqual(model.dtype, torch.bfloat16)
 
@@ -1536,7 +1536,7 @@ class ModelUtilsTest(TestCasePlus):
                 pretrained_model_name_or_path=model_id,
                 config=model_config,
                 ignore_mismatched_sizes=True,
-                torch_dtype=torch.float16,
+                dtype=torch.float16,
             )
             model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
 
@@ -1784,7 +1784,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
 
-    def test_restore_default_torch_dtype_from_pretrained(self):
+    def test_restore_default_dtype_from_pretrained(self):
         """
         Tests that the default torch dtype is restored
         when an error happens during the loading of a model.
@@ -1793,25 +1793,25 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        # Mock injection point which is right after the call to `_set_default_torch_dtype`
-        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+        # Mock injection point which is right after the call to `_set_default_dtype`
+        original_set_default_dtype = MistralForCausalLM._set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
-            original_set_default_torch_dtype(*args, **kwargs)
+            original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
         with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
             side_effect=debug,
         ):
             with self.assertRaises(RuntimeError):
-                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", dtype=torch.float16)
         # default should still be float32
         assert torch.get_default_dtype() == torch.float32
         torch.set_default_dtype(old_dtype)
 
-    def test_restore_default_torch_dtype_from_config(self):
+    def test_restore_default_dtype_from_config(self):
         """
         Tests that the default torch dtype is restored
         when an error happens during the loading of a model.
@@ -1824,20 +1824,20 @@ class ModelUtilsTest(TestCasePlus):
             TINY_MISTRAL,
         )
 
-        # Mock injection point which is right after the call to `_set_default_torch_dtype`
-        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+        # Mock injection point which is right after the call to `_set_default_dtype`
+        original_set_default_dtype = MistralForCausalLM._set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
-            original_set_default_torch_dtype(*args, **kwargs)
+            original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
         with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
             side_effect=debug,
         ):
             with self.assertRaises(RuntimeError):
-                config.torch_dtype = torch.float16
+                config.dtype = torch.float16
                 _ = AutoModelForCausalLM.from_config(
                     config,
                 )
@@ -1870,7 +1870,7 @@ class ModelUtilsTest(TestCasePlus):
         Note that we run this test in a subprocess, to ensure that cuda is not already initialized/warmed-up.
         """
         # First download the weights if not already on disk
-        _ = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+        _ = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
 
         script_to_run = textwrap.dedent(
             """
@@ -1891,7 +1891,7 @@ class ModelUtilsTest(TestCasePlus):
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
             torch_accelerator_module.synchronize(device)
             t0 = time.time()
-            model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.float16, device_map=device)
+            model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=torch.float16, device_map=device)
             torch_accelerator_module.synchronize(device)
             dt = time.time() - t0
 

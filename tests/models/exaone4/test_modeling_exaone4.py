@@ -185,7 +185,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def test_model_logits(self):
         input_ids = [405, 7584, 79579, 76636, 2907, 94640, 373]
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="eager"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
@@ -236,7 +236,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
     def test_model_logits_bf16(self):
         input_ids = [405, 7584, 79579, 76636, 2907, 94640, 373]
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
@@ -289,7 +289,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         prompt = "Tell me about the Miracle on the Han river."
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="eager"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="eager"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -307,7 +307,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         prompt = "Tell me about the Miracle on the Han river."
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.bfloat16, attn_implementation="sdpa"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -325,7 +325,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [433, 9055]
         input_ids = [433, 9055] * 2048
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="flash_attention_2"
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
 
@@ -344,7 +344,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.TEST_MODEL_ID)
         prompt = "This is a nice place. " * 700 + "I really enjoy the scenery,"
         model = Exaone4ForCausalLM.from_pretrained(
-            self.TEST_MODEL_ID, device_map="auto", torch_dtype=torch.float16, attn_implementation="sdpa"
+            self.TEST_MODEL_ID, device_map="auto", dtype=torch.float16, attn_implementation="sdpa"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
@@ -381,7 +381,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         model = Exaone4ForCausalLM.from_pretrained(
             self.TEST_MODEL_ID,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

@@ -342,9 +342,9 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
-        if use_attention_mask or (not use_attention_mask and torch_dtype == "fp32" and not output_attentions):
+        if use_attention_mask or (not use_attention_mask and dtype == "fp32" and not output_attentions):
             self.skipTest("Test is failing, fix me :) ")
         parent_parameterized_test = getattr(ModelTesterMixin, self._testMethodName)
         parent_parameterized_test(self)
@@ -597,7 +597,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
                 res_eager = model_eager.generate(**inputs_dict, **generate_kwargs)
@@ -606,7 +606,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
                 model_attn = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
                 res_attn = model_attn.generate(**inputs_dict, **generate_kwargs)
@@ -642,7 +642,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
             accelerate_available = False
 
             model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-                model_checkpoint, torch_dtype=torch.float16
+                model_checkpoint, dtype=torch.float16
             )
             self.assertTrue(model.codec_model.dtype == torch.float32)
             self.assertTrue(model.model.dtype == torch.float16)
@@ -650,7 +650,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
 
             # Load without in bf16
             model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-                model_checkpoint, torch_dtype=torch.bfloat16
+                model_checkpoint, dtype=torch.bfloat16
             )
             self.assertTrue(model.codec_model.dtype == torch.float32)
             self.assertTrue(model.model.dtype == torch.bfloat16)
@@ -658,7 +658,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
 
         # Load using `accelerate` in bf16
         model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-            model_checkpoint, torch_dtype=torch.bfloat16, device_map="auto"
+            model_checkpoint, dtype=torch.bfloat16, device_map="auto"
         )
         self.assertTrue(model.codec_model.dtype == torch.float32)
         self.assertTrue(model.model.dtype == torch.bfloat16)
@@ -667,7 +667,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
         # Load using `accelerate` in bf16
         model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
             model_checkpoint,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         self.assertTrue(model.codec_model.dtype == torch.float32)
         self.assertTrue(model.model.dtype == torch.bfloat16)
@@ -676,7 +676,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
         # Load without using `accelerate`
         model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
             model_checkpoint,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         self.assertTrue(model.codec_model.dtype == torch.float32)
         self.assertTrue(model.model.dtype == torch.float16)
@@ -684,7 +684,7 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
 
         # Load using `accelerate`
         model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-            model_checkpoint, torch_dtype=torch.float16, device_map="auto"
+            model_checkpoint, dtype=torch.float16, device_map="auto"
         )
         self.assertTrue(model.codec_model.dtype == torch.float32)
         self.assertTrue(model.model.dtype == torch.float16)

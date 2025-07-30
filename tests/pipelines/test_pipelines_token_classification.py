@@ -67,7 +67,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         token_classifier = TokenClassificationPipeline(
             model=model,
@@ -75,7 +75,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
@@ -894,7 +894,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt_fp16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.float16
+            task="token-classification", model=model_name, framework="pt", dtype=torch.float16
         )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
@@ -909,7 +909,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt_bf16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.bfloat16
+            task="token-classification", model=model_name, framework="pt", dtype=torch.bfloat16
         )
         outputs = token_classifier("This is a test !")
         self.assertEqual(

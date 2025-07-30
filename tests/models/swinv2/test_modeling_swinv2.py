@@ -491,7 +491,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_fp16(self):
         model = Swinv2ForImageClassification.from_pretrained(
-            "microsoft/swinv2-tiny-patch4-window8-256", torch_dtype=torch.float16
+            "microsoft/swinv2-tiny-patch4-window8-256", dtype=torch.float16
         ).to(torch_device)
         image_processor = self.default_image_processor
 

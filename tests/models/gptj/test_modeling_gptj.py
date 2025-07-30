@@ -425,7 +425,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @tooslow
     def test_batch_generation(self):
         # Marked as @tooslow due to GPU OOM
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
 
@@ -485,7 +485,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @slow
     def test_model_from_pretrained(self):
         model_name = "EleutherAI/gpt-j-6B"
-        model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
+        model = GPTJModel.from_pretrained(model_name, revision="float16", dtype=torch.float16)
         self.assertIsNotNone(model)
 
 
@@ -496,7 +496,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
             model = GPTJForCausalLM.from_pretrained(
-                "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+                "EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16
             )
             if checkpointing:
                 model.gradient_checkpointing_enable()
@@ -513,7 +513,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_gptj_sample(self):
         # Marked as @tooslow due to GPU OOM (issue #13676)
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
-        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -552,7 +552,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
         model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+            "EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16
         ).to(torch_device)
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 

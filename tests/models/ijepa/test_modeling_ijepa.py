@@ -300,7 +300,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         """
         model = IJepaModel.from_pretrained(
             "facebook/ijepa_vith14_1k",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto",
         )
         image_processor = self.default_image_processor

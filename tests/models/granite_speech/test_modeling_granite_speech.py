@@ -199,7 +199,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         input_features,
         attention_mask,
     ):
-        config.torch_dtype = torch.float16
+        config.dtype = torch.float16
         model = GraniteSpeechForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
