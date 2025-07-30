@@ -247,11 +247,14 @@ def eager_attention_forward(
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
-    logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
-    sinks = torch.exp(sinks - logits_max)
-    unnormalized_scores = torch.exp(attn_weights - logits_max)
-    normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
-    scores = unnormalized_scores / normalizer
+
+    # combine sinks with attention weight to prevent overflow in BF16/FP16 when training with bsz>1
+    # subtract per‑row max, then soft‑max once (soft-max trick)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)   
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    # drop sink prob
+    scores = probs[..., :-1]
 
     # TODO we are going with this one to fix gradients becoming nans
     # sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
