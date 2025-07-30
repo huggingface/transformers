@@ -39,7 +39,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig, Glm4VMoeTextConfig
+from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -702,25 +702,8 @@ class Glm4v_moeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Glm4VMoeTextMLP(nn.Module):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class Glm4VMoeTextTopkRouter(nn.Module):
-    def __init__(self, config: Glm4VMoeTextConfig):
+class Glm4v_moeTextTopkRouter(nn.Module):
+    def __init__(self, config: Glm4v_moeTextConfig):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
@@ -771,17 +754,17 @@ class Glm4v_moeTextMoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: Glm4v_moeTextConfig):
         super().__init__()
         self.config = config
         self.experts = nn.ModuleList(
             [
-                Glm4VMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
+                Glm4v_moeTextMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
-        self.gate = Glm4VMoeTextTopkRouter(config)
-        self.shared_experts = Glm4VMoeTextMLP(
+        self.gate = Glm4v_moeTextTopkRouter(config)
+        self.shared_experts = Glm4v_moeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
@@ -838,61 +821,6 @@ class Glm4v_moeTextMLP(nn.Module):
         return down_proj
 
 
-class Glm4VMoeTextMoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = nn.ModuleList(
-            [
-                Glm4VMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        self.gate = Glm4VMoeTextTopkRouter(config)
-        self.shared_experts = Glm4VMoeTextMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-
-    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
-        """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
-
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
-
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
-        return final_hidden_states.type(hidden_states.dtype)
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
 class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
         super().__init__()
@@ -900,17 +828,12 @@ class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Glm4VMoeTextMoE(config)
-        else:
-            self.mlp = Glm4VMoeTextMLP(config)
-
-        self.input_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        if layer_idx >= config.first_k_dense_replace:
             self.mlp = Glm4v_moeTextMoE(config)
         else:
             self.mlp = Glm4v_moeTextMLP(config)
+
+        self.input_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

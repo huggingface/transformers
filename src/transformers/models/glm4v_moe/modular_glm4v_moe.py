@@ -30,6 +30,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeMLP,
     Glm4MoeMoE,
     Glm4MoeRMSNorm,
+    Glm4MoeTopkRouter,
     eager_attention_forward,
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
@@ -489,17 +490,34 @@ class Glm4v_moeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Glm4v_moeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
+    def __init__(self, config: Glm4v_moeTextConfig):
+        super().__init__(config)
+
+
 class Glm4v_moeTextMoE(Glm4MoeMoE):
-    pass
+    def __init__(self, config: Glm4v_moeTextConfig):
+        super().__init__(config)
+        self.config = config
+        self.experts = nn.ModuleList(
+            [
+                Glm4v_moeTextMLP(config, intermediate_size=config.moe_intermediate_size)
+                for _ in range(config.n_routed_experts)
+            ]
+        )
+        self.gate = Glm4v_moeTextTopkRouter(config)
+        self.shared_experts = Glm4v_moeTextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
 
 class Glm4v_moeTextMLP(Glm4MoeMLP):
     pass
 
 
-class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer):
+class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+        nn.Module.__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
 
