@@ -2319,7 +2319,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
         # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
-        if torch_dtype := kwargs.pop("torch_dtype", None) is not None:
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
             logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
             # if both kwargs are provided, use `dtype`
             dtype = dtype if dtype != config.dtype else torch_dtype
