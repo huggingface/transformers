@@ -182,7 +182,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class Cohere2IntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model_checkpoint = "CohereForAI/Cohere2-Vision"
+        cls.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
         cls.model = None
 
     @classmethod

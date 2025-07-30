@@ -83,7 +83,7 @@ class Cohere2VisionConfig(PretrainedConfig):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "cohere2"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["cohere2"]()
+            text_config = CONFIG_MAPPING["cohere2"](tie_word_embeddings=True)
 
         self.text_config = text_config
         self.image_token_id = image_token_id
