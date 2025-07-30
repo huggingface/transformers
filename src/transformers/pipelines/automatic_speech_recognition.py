@@ -454,9 +454,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
-            for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.dtype
-            ):
+            for item in chunk_iter(inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.dtype):
                 yield {**item, **extra}
         else:
             if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:

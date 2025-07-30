@@ -5131,9 +5131,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
 
-        if model._keep_in_fp32_modules_strict is not None and (
-            dtype == torch.float16 or dtype == torch.bfloat16
-        ):
+        if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
 
         keep_in_fp32_regex = None

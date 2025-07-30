@@ -1208,7 +1208,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         Dtype of the model (if it's Pytorch model), `None` otherwise.
         """
         return getattr(self.model, "dtype", None)
-    
+
     @property
     def torch_dtype(self) -> Optional["torch.dtype"]:
         """

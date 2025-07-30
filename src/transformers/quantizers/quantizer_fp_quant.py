@@ -79,9 +79,7 @@ class FPQuantHfQuantizer(HfQuantizer):
             logger.info("`dtype` is None. Setting `dtype=torch.bfloat16` for qutlass compatibility.")
             dtype = torch.bfloat16
         elif dtype != torch.bfloat16:
-            raise ValueError(
-                f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`."
-            )
+            raise ValueError(f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`.")
 
         return dtype
 

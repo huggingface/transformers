@@ -30,6 +30,7 @@ else:
 
 logger = logging.get_logger(__file__)
 
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -67,7 +68,7 @@ class HfQuantizer(ABC):
                 f" You explicitly passed `pre_quantized=False` meaning your model weights are not quantized. Make sure to "
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
-        
+
     def update_torch_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Deprecared in favor of `update_dtype`!
@@ -76,7 +77,9 @@ class HfQuantizer(ABC):
             dtype (`torch.dtype`):
                 The input dtype that is passed in `from_pretrained`
         """
-        logger.warning_once("`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57")
+        logger.warning_once(
+            "`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57"
+        )
         return self.update_dtype(dtype)
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
@@ -172,9 +175,7 @@ class HfQuantizer(ABC):
         """
 
         return {
-            name: dtype
-            for name, _ in model.named_parameters()
-            if any(m in name for m in self.modules_to_not_convert)
+            name: dtype for name, _ in model.named_parameters() if any(m in name for m in self.modules_to_not_convert)
         }
 
     def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:

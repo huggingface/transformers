@@ -109,9 +109,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             logger.info("Loading model using torch.float16 for compressed-tensors quantization")
             dtype = torch.float16
         elif dtype != torch.float16:
-            logger.info(
-                "We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors."
-            )
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
