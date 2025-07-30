@@ -91,7 +91,7 @@ class DeepseekVLModelTester:
         self.image_size = vision_config["image_size"]
         self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = 0
 
     def get_config(self):
         return DeepseekVLConfig(
