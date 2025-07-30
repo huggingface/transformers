@@ -187,7 +187,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
             text += [output_text]
         return text
 
-    @require_torch_large_accelerator
     @require_read_token
     def test_model_20b_bf16(self):
         model_id = ""
@@ -204,7 +203,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text[1], EXPECTED_TEXTS)
         self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
-    @require_torch_large_accelerator
     @require_read_token
     def test_model_20b_bf16_use_kernels(self):
         model_id = ""
@@ -222,7 +220,6 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text[1], EXPECTED_TEXTS)
         self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
-    @require_torch_large_accelerator
     @require_read_token
     def test_model_120b_bf16_use_kernels(self):
         model_id = ""
@@ -241,6 +238,7 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
 
+@slow
 @require_torch_multi_accelerator
 class OpenAIMoeTPTest(TensorParallelTestBase):
     def test_model_training(self):
