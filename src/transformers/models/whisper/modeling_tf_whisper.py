@@ -867,12 +867,6 @@ class TFWhisperDecoder(keras.layers.Layer):
 
         self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1598,14 +1592,14 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         ):
             forced_decoder_ids = self.generation_config.forced_decoder_ids
         else:
-            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
+            forced_decoder_ids = kwargs.get("forced_decoder_ids")
 
         if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
             forced_decoder_ids = []
             if hasattr(generation_config, "language"):
-                if generation_config.language in generation_config.lang_to_id.keys():
+                if generation_config.language in generation_config.lang_to_id:
                     language_token = generation_config.language
-                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                elif generation_config.language in TO_LANGUAGE_CODE:
                     language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
                 elif generation_config.language in TO_LANGUAGE_CODE.values():
                     language_token = f"<|{generation_config.language}|>"

@@ -71,7 +71,7 @@ class TestImportStructures(unittest.TestCase):
         }
 
         self.assertEqual(len(import_structure.keys()), len(valid_frozensets.keys()))
-        for _frozenset in valid_frozensets.keys():
+        for _frozenset in valid_frozensets:
             self.assertTrue(_frozenset in import_structure)
             self.assertListEqual(list(import_structure[_frozenset].keys()), list(valid_frozensets[_frozenset].keys()))
             for module, objects in valid_frozensets[_frozenset].items():

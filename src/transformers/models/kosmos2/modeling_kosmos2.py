@@ -1156,7 +1156,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(self, Kosmos2VisionModel):
             factor = self.config.initializer_factor
@@ -1179,65 +1179,34 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-            if module.q_proj.bias is not None:
-                module.q_proj.bias.data.zero_()
-            if module.k_proj.bias is not None:
-                module.k_proj.bias.data.zero_()
-            if module.v_proj.bias is not None:
-                module.v_proj.bias.data.zero_()
-            if module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
         elif isinstance(module, Kosmos2VisionMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-            if module.fc1.bias is not None:
-                module.fc1.bias.data.zero_()
-            if module.fc2.bias is not None:
-                module.fc2.bias.data.zero_()
-        elif isinstance(module, Kosmos2VisionEncoderLayer):
-            module.layer_norm1.bias.data.zero_()
-            module.layer_norm1.weight.data.fill_(1.0)
-            module.layer_norm2.bias.data.zero_()
-            module.layer_norm2.weight.data.fill_(1.0)
-        elif isinstance(module, Kosmos2VisionTransformer):
-            module.pre_layrnorm.bias.data.zero_()
-            module.pre_layrnorm.weight.data.fill_(1.0)
-            module.post_layernorm.bias.data.zero_()
-            module.post_layernorm.weight.data.fill_(1.0)
         elif isinstance(module, KosmosTextAttention):
             nn.init.normal_(module.q_proj.weight, std=std)
             nn.init.normal_(module.k_proj.weight, std=std)
             nn.init.normal_(module.v_proj.weight, std=std)
             nn.init.normal_(module.out_proj.weight, std=std)
-            if module.q_proj.bias is not None:
-                module.q_proj.bias.data.zero_()
-            if module.k_proj.bias is not None:
-                module.k_proj.bias.data.zero_()
-            if module.v_proj.bias is not None:
-                module.v_proj.bias.data.zero_()
-            if module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
         elif isinstance(module, Kosmos2TextFFN):
             nn.init.normal_(module.fc1.weight, std=std)
             nn.init.normal_(module.fc2.weight, std=std)
-            if module.fc1.bias is not None:
-                module.fc1.bias.data.zero_()
-            if module.fc2.bias is not None:
-                module.fc2.bias.data.zero_()
         elif isinstance(module, Kosmos2TextForCausalLM):
             nn.init.normal_(module.lm_head.weight, std=std)
-            if module.lm_head.bias is not None:
-                module.lm_head.bias.data.zero_()
         elif isinstance(module, Kosmos2ImageToTextProjection):
             nn.init.normal_(module.dense.weight, std=std)
-            if module.dense.bias is not None:
-                module.dense.bias.data.zero_()
+            nn.init.normal_(module.latent_query)
         elif isinstance(module, Kosmos2TextTransformer):
             module.embed_tokens.weight.data.normal_(mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
@@ -1284,9 +1253,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1368,14 +1334,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embed_tokens
 
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @can_return_tuple
     @auto_docstring

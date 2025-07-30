@@ -66,7 +66,7 @@ dataset = DatasetDict({
   }
 )
 
-# step 3: push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+# step 3: push to hub (assumes you have ran the hf auth login command in a terminal/notebook)
 dataset.push_to_hub("name of repo on the hub")
 
 # optionally, you can push to a private repo on the hub
@@ -98,7 +98,7 @@ The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transfor
 Here we show how to fine-tune a [SegFormer](https://huggingface.co/nvidia/mit-b0) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset:
 
 In order to use `segments/sidewalk-semantic`: 
- - Log in to Hugging Face with `huggingface-cli login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
+ - Log in to Hugging Face with `hf auth login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
  - Accept terms of use for `sidewalk-semantic` on [dataset page](https://huggingface.co/datasets/segments/sidewalk-semantic).
 
 ```bash

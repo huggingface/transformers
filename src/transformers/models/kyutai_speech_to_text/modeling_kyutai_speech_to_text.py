@@ -815,12 +815,6 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -1094,18 +1088,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model = decoder
 
@@ -1233,11 +1215,14 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         cache_methods = [
             "_prepare_cache_for_generation",
             "_get_cache",
-            "_supports_default_dynamic_cache",
             "_get_layer_device_map_for_cache_init",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
+
+        setattr(
+            self.codec_model, "_supports_default_dynamic_cache", types.MethodType(lambda x: True, self.codec_model)
+        )
 
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,

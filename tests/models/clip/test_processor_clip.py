@@ -137,7 +137,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_image_proc = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_image_proc.keys():
+        for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -152,7 +152,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_processor(self):
