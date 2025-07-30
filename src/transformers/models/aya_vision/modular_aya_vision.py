@@ -32,9 +32,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from .configuration_aya_vision import AyaVisionConfig
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
+from .configuration_aya_vision import AyaVisionConfig
+
 
 logger = logging.get_logger(__name__)
 

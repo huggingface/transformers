@@ -49,17 +49,6 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         self.act = ACT2FN["silu"]
         self.linear_2 = nn.Linear(self.intermediate_size // 2, config.text_config.hidden_size, bias=True)
 
-    def forward(self, image_features):
-        image_features = self.pixel_shuffle(image_features)
-        hidden_states = self.linear_1(image_features)
-
-        # Split along last dimension and apply SwiGLU
-        x, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.act(gate) * x
-
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
     def pixel_shuffle(self, image_features):  # B, S, D
         batch_size, seq_length, feature_dim = image_features.shape
         height = width = int(seq_length**0.5)
@@ -74,6 +63,17 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         )
         image_features = image_features.permute(0, 2, 1, 3)
         return image_features
+
+    def forward(self, image_features):
+        image_features = self.pixel_shuffle(image_features)
+        hidden_states = self.linear_1(image_features)
+
+        # Split along last dimension and apply SwiGLU
+        x, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.act(gate) * x
+
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 @dataclass
