@@ -628,6 +628,10 @@ class InternS1Model(InternS1PreTrainedModel):
 
         self.multi_modal_projector = InternS1MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
+
+        self.is_moe_model = False
+        if hasattr(config.text_config, "output_router_logits"):
+            self.is_moe_model = True
         self.post_init()
 
     def get_input_embeddings(self):
@@ -719,9 +723,14 @@ class InternS1Model(InternS1PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
+        if self.is_moe_model:
+            output_router_logits = (
+                output_router_logits
+                if output_router_logits is not None
+                else self.config.text_config.output_router_logits
+            )
+            kwargs["output_router_logits"] = output_router_logits
+
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -781,7 +790,7 @@ class InternS1Model(InternS1PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if self.is_moe_model else None,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
@@ -966,6 +975,10 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         super().__init__(config)
         self.model = InternS1Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.is_moe_model = False
+        if hasattr(config.text_config, "output_router_logits"):
+            self.is_moe_model = True
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1071,9 +1084,14 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
+        if self.is_moe_model:
+            output_router_logits = (
+                output_router_logits
+                if output_router_logits is not None
+                else self.config.text_config.output_router_logits
+            )
+            kwargs["output_router_logits"] = output_router_logits
+
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -1113,7 +1131,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             )
 
         aux_loss = None
-        if output_router_logits and labels is not None:
+        if self.is_moe_model and output_router_logits and labels is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.config.text_config.num_experts,
@@ -1129,7 +1147,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if self.is_moe_model else None,
             image_hidden_states=outputs.image_hidden_states,
         )
 

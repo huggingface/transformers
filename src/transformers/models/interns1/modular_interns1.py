@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -563,6 +564,19 @@ class InternS1ModelOutputWithPast(ModelOutput):
 class InternS1Model(LlavaModel):
     _checkpoint_conversion_mapping = {}
 
+    def __init__(self, config: InternS1Config):
+        super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+
+        self.multi_modal_projector = InternS1MultiModalProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+
+        self.is_moe_model = False
+        if hasattr(config.text_config, 'output_router_logits'):
+            self.is_moe_model = True
+
+        self.post_init()
+
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 
@@ -675,9 +689,13 @@ class InternS1Model(LlavaModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
+        if self.is_moe_model:
+            output_router_logits = (
+                output_router_logits if output_router_logits is not None else
+                self.config.text_config.output_router_logits
+            )
+            kwargs['output_router_logits'] = output_router_logits
+
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -737,7 +755,7 @@ class InternS1Model(LlavaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if self.is_moe_model else None,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
@@ -877,6 +895,16 @@ def load_balancing_loss_func(
 class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
+    def __init__(self, config: InternS1Config):
+        super().__init__(config)
+        self.model = InternS1Model(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.is_moe_model = False
+        if hasattr(config.text_config, 'output_router_logits'):
+            self.is_moe_model = True
+        self.post_init()
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -938,9 +966,12 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
-        )
+        if self.is_moe_model:
+            output_router_logits = (
+                output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+            )
+            kwargs['output_router_logits'] = output_router_logits
+
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -980,7 +1011,7 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
             )
 
         aux_loss = None
-        if output_router_logits and labels is not None:
+        if self.is_moe_model and output_router_logits and labels is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.config.text_config.num_experts,
@@ -996,7 +1027,7 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if self.is_moe_model else None,
             image_hidden_states=outputs.image_hidden_states,
         )
 
