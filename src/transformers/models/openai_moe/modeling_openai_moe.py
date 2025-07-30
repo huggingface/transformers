@@ -247,18 +247,10 @@ def eager_attention_forward(
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
-    # logits_max = torch.max(attn_weights, dim=-1, keepdim=True).values
-    # # prevent overflow in BF16/FP16 when training with bsz>1. we clamp in the range [-80, 80] because exp(>80) ~ inf
-    # sinks = torch.exp(torch.clamp(sinks - logits_max, max=80))
-    # unnormalized_scores = torch.exp(torch.clamp(attn_weights - logits_max, min=-80))
 
-    # normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
-    # scores = unnormalized_scores / normalizer
-
-    # Numerically‑safe soft‑max: combine sinks with K‑logits,
-    # subtract per‑row max, then soft‑max once.
+    # combine sinks with K-logits to prevent overflow in BF16/FP16 when training with bsz>1
+    # subtract per‑row max, then soft‑max once (soft-max trick)
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)   
-    # soft‑max trick
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     # drop sink prob
