@@ -1059,7 +1059,7 @@ if __name__ == "__main__":
     runner_not_available = False
     runner_failed = False
     # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
-    setup_failed = False if setup_status in ["skipped", "success"] else True
+    setup_failed = setup_status not in ["skipped", "success"]
 
     org = "huggingface"
     repo = "transformers"
