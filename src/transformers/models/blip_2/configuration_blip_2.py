@@ -304,7 +304,7 @@ class Blip2Config(PretrainedConfig):
 
         self.vision_config = Blip2VisionConfig(**vision_config)
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
+        text_model_type = text_config.get("model_type", "opt")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.num_query_tokens = num_query_tokens

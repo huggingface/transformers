@@ -1285,7 +1285,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            skip_the_layer = self.training and dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
                 layer_head_mask = head_mask[idx] if head_mask is not None else None
                 cross_attn_layer_head_mask = cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
