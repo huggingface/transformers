@@ -216,6 +216,10 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Cohere2VisionModelOutputWithPast]:
+        r"""
+        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
+            Number of patches per input image.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -340,6 +344,8 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Cohere2VisionCausalLMOutputWithPast]:
         r"""
+        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
+            Number of patches per input image.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
