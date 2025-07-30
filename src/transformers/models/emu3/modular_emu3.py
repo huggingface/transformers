@@ -1021,7 +1021,7 @@ class Emu3Model(Emu3PreTrainedModel):
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_sizes)
             image_embeds = torch.cat(image_embeds, dim=0)
-            special_image_mask = self.get_placeholder_tokens(
+            special_image_mask = self.get_placeholder_get_placeholder_tokens(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)

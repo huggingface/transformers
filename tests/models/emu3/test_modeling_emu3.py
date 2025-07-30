@@ -202,8 +202,8 @@ class Emu3Vision2TextModelTester:
         codebook_size=20,
         temporal_downsample_factor=1,
         base_channels=32,
-        vq_channel_multiplier=[1, 1],
-        image_seq_length=100,
+        vq_channel_multiplier=[1, 2, 2, 1, 1],
+        image_seq_length=2,
         vq_img_token_start_id=3,
     ):
         self.parent = parent
