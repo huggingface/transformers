@@ -45,7 +45,7 @@ from transformers.models.vitdet.modeling_vitdet import window_partition, window_
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
 from ...activations import ACT2FN
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
@@ -53,6 +53,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     pil_torch_interpolation_mapping,
@@ -146,32 +147,54 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     ) -> "torch.Tensor":
         return SamImageProcessorFast()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
-    def _preprocess_segmentation_maps(
+    def _preprocess_image_like_inputs(
         self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        original_sizes = [image.shape[-2:] for image in images]
+        images_kwargs = kwargs.copy()
+        pixel_values = self._preprocess(images, **images_kwargs)
+        reshaped_input_sizes = [image.shape[-2:] for image in images]
+        data = {
+            "pixel_values": pixel_values,
+            "original_sizes": original_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
+        }
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
             )
 
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-            processed_segmentation_maps.append(segmentation_map)
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "size": segmentation_maps_kwargs.pop("mask_size"),
+                }
+            )
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+            data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
-        kwargs["do_rescale"] = False
-        kwargs["do_normalize"] = False
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-        kwargs["size"] = kwargs.pop("mask_size")
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)  # Remove channel dimension
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
+        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
     def _further_process_kwargs(
         self,
@@ -231,12 +254,14 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
-                The threshold to use for binarizing the masks.
+                Threshold for binarization and post-processing operations.
             binarize (`bool`, *optional*, defaults to `True`):
                 Whether to binarize the masks.
-            pad_size (`int`, *optional*, defaults to `self.pad_size`):
-                The target size the images were padded to before being passed to the model. If None, the target size is
-                assumed to be the processor's `pad_size`.
+            max_hole_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a hole to fill.
+            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a sprinkle to fill.
+
         Returns:
             (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.
@@ -482,7 +507,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
 
 class Sam2VisionNeck(nn.Module):
-    def __init__(self, config: Sam2HieraDetConfig):
+    def __init__(self, config: Sam2VisionConfig):
         super().__init__()
         self.config = config
 
@@ -3747,9 +3772,6 @@ class Sam2VideoModel(Sam2Model):
                 temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
                 # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
                 object_pointers = torch.stack(object_pointers_list, dim=0)
-                object_pointers_pos_embed = object_pointers.new_zeros(
-                    len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
-                )
 
                 if self.enable_temporal_pos_encoding_for_object_pointers:
                     max_temporal_diff = float(max_object_pointers_to_use - 1)
@@ -3765,6 +3787,10 @@ class Sam2VideoModel(Sam2Model):
                     sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
                     projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
                     object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
+                else:
+                    object_pointers_pos_embed = object_pointers.new_zeros(
+                        len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
+                    )
 
                 if self.mem_dim < num_channels:
                     # If memory dimension is smaller, reshape/split pointers and repeat positional encoding

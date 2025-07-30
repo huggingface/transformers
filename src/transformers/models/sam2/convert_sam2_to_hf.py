@@ -76,9 +76,11 @@ def get_config(model_name):
     mask_decoder_config = Sam2MaskDecoderConfig()
 
     if "sam2.1" in model_name:
+        enable_temporal_pos_encoding_for_object_pointers = True
         project_temporal_pos_encoding_in_object_pointers = True
         enable_occlusion_spatial_embedding = True
     else:
+        enable_temporal_pos_encoding_for_object_pointers = False
         project_temporal_pos_encoding_in_object_pointers = False
         enable_occlusion_spatial_embedding = False
 
@@ -86,6 +88,7 @@ def get_config(model_name):
         vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,
         mask_decoder_config=mask_decoder_config,
+        enable_temporal_pos_encoding_for_object_pointers=enable_temporal_pos_encoding_for_object_pointers,
         project_temporal_pos_encoding_in_object_pointers=project_temporal_pos_encoding_in_object_pointers,
         enable_occlusion_spatial_embedding=enable_occlusion_spatial_embedding,
     )
