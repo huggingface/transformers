@@ -887,8 +887,12 @@ def _load_state_dict_into_meta_model(
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                    param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
+                    # special case for OpenAIMoeForCausalLM, we wait for the param to be leave the meta device before casting it to cpu
+                    if model.__class__.__name__ == "OpenAIMoeForCausalLM" and value.device.type == "meta":
+                        continue
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         param_to = "meta"
@@ -5124,8 +5128,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
-            hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
+            hf_quantizer.postprocess_model(model, config=config)
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping

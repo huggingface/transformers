@@ -331,7 +331,7 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             else:
                 setattr(module, param_name.rsplit(".", 1)[1], param_value)
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).to(target_device)
+                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
                 setattr(module, proj, torch.nn.Parameter(dequantized))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
