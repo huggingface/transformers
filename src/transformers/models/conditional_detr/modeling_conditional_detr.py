@@ -973,7 +973,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ConditionalDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
@@ -983,6 +983,9 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrEncoder with Detr->ConditionalDetr,DETR->ConditionalDETR
