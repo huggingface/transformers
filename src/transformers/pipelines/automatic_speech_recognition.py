@@ -176,10 +176,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
-        torch_dtype (Union[`int`, `torch.dtype`], *optional*):
-            The data-type (dtype) of the computation. Setting this to `None` will use float32 precision. Set to
-            `torch.float16` or `torch.bfloat16` to use half-precision in the respective dtypes.
-
     """
 
     _pipeline_calls_generate = True
@@ -200,7 +196,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         tokenizer: Optional[PreTrainedTokenizer] = None,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
         device: Union[int, "torch.device"] = None,
-        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -218,7 +213,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         else:
             self.type = "ctc"
 
-        super().__init__(model, tokenizer, feature_extractor, device=device, torch_dtype=torch_dtype, **kwargs)
+        super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
     def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
@@ -460,7 +455,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Chunk length must be superior to stride length")
 
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.dtype
             ):
                 yield {**item, **extra}
         else:
@@ -490,8 +485,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         return_tensors="pt",
                         return_attention_mask=True,
                     )
-            if self.torch_dtype is not None:
-                processed = processed.to(dtype=self.torch_dtype)
+            if self.dtype is not None:
+                processed = processed.to(dtype=self.dtype)
             if stride is not None:
                 if self.type == "seq2seq":
                     raise ValueError("Stride is only usable with CTC models, try removing it !")

@@ -409,7 +409,7 @@ class ImageTextToTextPipeline(Pipeline):
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
         model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
-            dtype=self.torch_dtype
+            dtype=self.dtype
         )
 
         model_inputs["text"] = inputs_text

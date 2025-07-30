@@ -14,7 +14,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from ..utils import is_torch_available
+from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
 
@@ -28,6 +28,7 @@ if is_torch_available():
 else:
     ModuleList = str
 
+logger = logging.get_logger(__file__)
 
 class HfQuantizer(ABC):
     """
@@ -66,18 +67,29 @@ class HfQuantizer(ABC):
                 f" You explicitly passed `pre_quantized=False` meaning your model weights are not quantized. Make sure to "
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
+        
+    def update_torch_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        """
+        Deprecared in favor of `update_dtype`!
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        Args:
+            dtype (`torch.dtype`):
+                The input dtype that is passed in `from_pretrained`
+        """
+        logger.warning_once("`update_torch_dtype` is deprecated in favor of `update_dtype`! It will be removed in version v4.57")
+        return self.update_dtype(dtype)
+
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Some quantization methods require to explicitly set the dtype of the model to a
         target dtype. You need to override this method in case you want to make sure that behavior is
         preserved
 
         Args:
-            torch_dtype (`torch.dtype`):
+            dtype (`torch.dtype`):
                 The input dtype that is passed in `from_pretrained`
         """
-        return torch_dtype
+        return dtype
 
     def update_device_map(self, device_map: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         """
@@ -91,17 +103,17 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         """
         Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
         to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
         to `torch.int8` and for 4-bit we pass a custom enum `accelerate.CustomDtype.int4`.
 
         Args:
-            torch_dtype (`torch.dtype`, *optional*):
+            dtype (`torch.dtype`, *optional*):
                 The torch_dtype that is used to compute the device_map.
         """
-        return torch_dtype
+        return dtype
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
@@ -146,7 +158,7 @@ class HfQuantizer(ABC):
         """
         return expected_keys
 
-    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
+    def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
         """
         returns dtypes for modules that are not quantized - used for the computation of the device_map in case
         one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
@@ -155,12 +167,12 @@ class HfQuantizer(ABC):
         Args:
             model (`~transformers.PreTrainedModel`):
                 The model to quantize
-            torch_dtype (`torch.dtype`):
+            dtype (`torch.dtype`):
                 The dtype passed in `from_pretrained` method.
         """
 
         return {
-            name: torch_dtype
+            name: dtype
             for name, _ in model.named_parameters()
             if any(m in name for m in self.modules_to_not_convert)
         }

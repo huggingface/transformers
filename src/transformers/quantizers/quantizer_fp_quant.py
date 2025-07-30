@@ -74,16 +74,16 @@ class FPQuantHfQuantizer(HfQuantizer):
                 " This is not supported. Please remove the CPU or disk device from the device_map."
             )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.bfloat16` for qutlass compatibility.")
-            torch_dtype = torch.bfloat16
-        elif torch_dtype != torch.bfloat16:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("`dtype` is None. Setting `dtype=torch.bfloat16` for qutlass compatibility.")
+            dtype = torch.bfloat16
+        elif dtype != torch.bfloat16:
             raise ValueError(
-                f"Invalid `torch_dtype` {torch_dtype}. fp_quant quantization only supports `torch_dtype=torch.bfloat16`."
+                f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`."
             )
 
-        return torch_dtype
+        return dtype
 
     def create_quantized_param(
         self,
