@@ -46,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="facebook/hubert-large-ls960-ft",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 

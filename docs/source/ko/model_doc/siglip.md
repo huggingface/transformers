@@ -136,7 +136,7 @@ Flash Attention 2를 사용하여 모델을 로드하고 실행하려면 아래 
 >>> model = SiglipModel.from_pretrained(
 ...     "google/siglip-so400m-patch14-384",
 ...     attn_implementation="flash_attention_2",
-...     torch_dtype=torch.float16,
+...     dtype=torch.float16,
 ...     device_map=device,
 ... )
 >>> processor = SiglipProcessor.from_pretrained("google/siglip-so400m-patch14-384")
@@ -177,7 +177,7 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 >>> model = SiglipModel.from_pretrained(
 ...     "google/siglip-so400m-patch14-384",
 ...     attn_implementation="sdpa",
-...     torch_dtype=torch.float16,
+...     dtype=torch.float16,
 ...     device_map=device,
 ... )
 ```
