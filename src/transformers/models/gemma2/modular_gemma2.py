@@ -29,7 +29,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -317,7 +316,6 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -565,17 +563,11 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
 
 
 class Gemma2ForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma2Model(config)
-        self.post_init()
+    pass
 
 
 class Gemma2ForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma2Model(config)
-        self.post_init()
+    pass
 
 
 __all__ = [

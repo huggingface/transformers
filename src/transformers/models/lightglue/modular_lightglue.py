@@ -143,9 +143,7 @@ class LightGlueConfig(PretrainedConfig):
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
-            )
+            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
             if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
                 keypoint_detector_config = AutoConfig.from_pretrained(
                     keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
@@ -510,16 +508,6 @@ class LightGluePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module) -> None:
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[torch.Tensor, torch.Tensor]:

@@ -38,9 +38,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    make_list_of_images,
     pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -474,41 +472,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             except Exception as e:
                 logger.warning_once(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
-
-    def _preprocess_segmentation_maps(
-        self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_rescale"] = False
-        kwargs["do_normalize"] = False
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-        kwargs["size"] = kwargs.pop("mask_size")
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)  # Remove channel dimension
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
-
     def _further_process_kwargs(
         self,
         size: Optional[SizeDict] = None,
@@ -556,73 +519,64 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to preprocess.
         """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
         original_sizes = [image.shape[-2:] for image in images]
-
-        images = self._preprocess(
-            images=images,
-            **kwargs,
-        )
+        images_kwargs = kwargs.copy()
+        pixel_values = self._preprocess(images, **images_kwargs)
         reshaped_input_sizes = [image.shape[-2:] for image in images]
+        data = {
+            "pixel_values": pixel_values,
+            "original_sizes": original_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
+        }
 
         if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_segmentation_maps(
-                segmentation_maps=segmentation_maps,
-                **kwargs,
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
             )
 
-            return BatchFeature(
-                data={
-                    "pixel_values": images,
-                    "labels": segmentation_maps,
-                    "original_sizes": original_sizes,
-                    "reshaped_input_sizes": reshaped_input_sizes,
-                },
-                tensor_type=kwargs["return_tensors"],
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "size": segmentation_maps_kwargs.pop("mask_size"),
+                }
             )
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+            data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
-        return BatchFeature(
-            data={
-                "pixel_values": images,
-                "original_sizes": original_sizes,
-                "reshaped_input_sizes": reshaped_input_sizes,
-            },
-            tensor_type=kwargs["return_tensors"],
-        )
+        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def generate_crop_boxes(
         self,
@@ -778,12 +732,14 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
-                The threshold to use for binarizing the masks.
+                Threshold for binarization and post-processing operations.
             binarize (`bool`, *optional*, defaults to `True`):
                 Whether to binarize the masks.
-            pad_size (`int`, *optional*, defaults to `self.pad_size`):
-                The target size the images were padded to before being passed to the model. If None, the target size is
-                assumed to be the processor's `pad_size`.
+            max_hole_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a hole to fill.
+            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a sprinkle to fill.
+
         Returns:
             (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.

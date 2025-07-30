@@ -330,7 +330,7 @@ def load_pytorch_state_dict_in_tf2_model(
             tf_model(tf_inputs, training=False)  # Make sure model is built
     # Convert old format to new format if needed from a PyTorch state_dict
     tf_keys_to_pt_keys = {}
-    for key in pt_state_dict.keys():
+    for key in pt_state_dict:
         new_key = None
         if "gamma" in key:
             new_key = key.replace("gamma", "weight")
@@ -361,7 +361,7 @@ def load_pytorch_state_dict_in_tf2_model(
     # and there is no MainLayer class. This means that TF base classes have one
     # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
-    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys.keys()):
+    if not any(s.startswith(tf_model.base_model_prefix) for s in tf_keys_to_pt_keys):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
@@ -573,7 +573,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
     start_prefix_to_remove = ""
-    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict):
         start_prefix_to_remove = pt_model.base_model_prefix + "."
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables

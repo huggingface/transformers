@@ -1047,7 +1047,7 @@ def log_metrics(self, split, metrics):
 
     print(f"***** {split} metrics *****")
     metrics_formatted = self.metrics_format(metrics)
-    k_width = max(len(str(x)) for x in metrics_formatted.keys())
+    k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
@@ -1139,9 +1139,7 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
         ]
     # Add model specific parameters that are not in any child
     result += [
-        k
-        for k in model._parameters.keys()
-        if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
+        k for k in model._parameters if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
     ]
 
     return result
@@ -1333,7 +1331,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        extra_keys = sorted(key for key in config_dict if key not in cls.__dataclass_fields__)
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"

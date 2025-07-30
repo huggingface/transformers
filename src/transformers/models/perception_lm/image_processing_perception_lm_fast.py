@@ -37,7 +37,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
 )
@@ -51,14 +51,22 @@ if is_torchvision_available():
 
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
+        Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for
+        multi-scale processing, otherwise uses single tile for lower memory usage.
+    tile_size (`int`, *optional*, defaults to `448`):
+        Height and width dimension (in pixels) of each tile used for image processing.
+    max_num_tiles (`int`, *optional*, defaults to `36`):
+        Maximum number of tiles an image can be split into based on its aspect ratio.
+    """
+
     vision_input_type: str = "thumb+tile"
     tile_size: int = 448
     max_num_tiles: int = 36
 
 
-@add_start_docstrings(
-    "Constructs a fast PerceptionLM image processor.",
-)
+@auto_docstring
 class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
@@ -73,6 +81,10 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     @staticmethod
     def _factors(n: int):
@@ -206,7 +218,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         closest_aspect_ratio = None
         if target_aspect_ratio >= 1:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k <= target_aspect_ratio],
+                [k for k in asp_dict if k <= target_aspect_ratio],
                 key=lambda x: abs(x - target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
@@ -214,7 +226,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             return max(tiles_given_aspect_ratio, key=lambda x: x[0])
         else:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k > target_aspect_ratio],
+                [k for k in asp_dict if k > target_aspect_ratio],
                 key=lambda x: abs(1 / x - 1 / target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]

@@ -149,7 +149,7 @@ class LlavaNextProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = text
         if image_inputs:
@@ -231,14 +231,9 @@ class LlavaNextProcessor(ProcessorMixin):
         Args:
             image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (list[list[str]], *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (list[int], *optional*):
-                The input length formatted as per each audio.
         Returns:
-            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
-            to a list containing the number of placeholder tokens required. If the model doesn't accept
-            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
         vision_data = {}
         if image_sizes is not None:

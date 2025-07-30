@@ -37,8 +37,6 @@ if TYPE_CHECKING:
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
 
-from ..utils.deprecation import deprecate_kwarg
-
 
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
@@ -134,7 +132,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 )
 
         # Remove potential default "logits_to_keep" key
-        if "logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_logits_to_keep():
+        if "logits_to_keep" in assistant_kwargs and not assistant_model._supports_logits_to_keep():
             del assistant_kwargs["logits_to_keep"]
 
         # If the assistant is an encoder-decoder model, assume the encoder is different on the assistant.
@@ -685,9 +683,6 @@ class AssistantToTargetTranslator:
             The tokenizer used by the assistant model.
         target_vocab_size (`int`):
             The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
-        assistant_model_device (str, optional): The device on which the assistant model is loaded.
-                Defaults to "cpu".
-        assistant_model_device (`str`, defaults to "cpu"): The device where the assistant model is located. Used for placing tensors.
         assistant_model (Optional[PreTrainedModel], optional): The assistant model to be used. Defaults to None for backward compatibility.
         assistant_prune_lm_head (bool): Whether to prune the assistant model's language model
             head to match the target vocabulary. This is only applicable if `assistant_model` is provided.
@@ -697,21 +692,17 @@ class AssistantToTargetTranslator:
     FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
     SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
 
-    @deprecate_kwarg("assistant_model_device", version="4.53")
     def __init__(
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        assistant_model_device: str = "cpu",
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ):
         self._target_tokenizer: PreTrainedTokenizerBase = target_tokenizer
         self._assistant_tokenizer: PreTrainedTokenizerBase = assistant_tokenizer
-        self._assistant_model_device: str = (
-            assistant_model_device if assistant_model is None else assistant_model.device
-        )
+        self._assistant_model_device = assistant_model.device if assistant_model is not None else "cpu"
         self.target_vocab_size: int = target_vocab_size
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
             self._get_assistant_to_target_input_ids()
@@ -845,13 +836,11 @@ class AssistantVocabTranslatorCache:
     _cache = weakref.WeakKeyDictionary()
 
     @classmethod
-    @deprecate_kwarg("assistant_model_device", version="4.53")
     def get_translator(
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         target_vocab_size: int,
-        assistant_model_device: str = "cpu",
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_prune_lm_head: bool = False,
     ) -> AssistantToTargetTranslator:
@@ -866,7 +855,6 @@ class AssistantVocabTranslatorCache:
                 target_tokenizer,
                 assistant_tokenizer,
                 target_vocab_size,
-                assistant_model_device,
                 assistant_model,
                 assistant_prune_lm_head,
             )

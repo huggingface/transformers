@@ -185,7 +185,7 @@ def keras_serializable(cls):
             else:
                 initializer(self, config, *args, **kwargs)
         else:
-            raise ValueError("Must pass either `config` (PretrainedConfig) or `config` (dict)")
+            raise TypeError("Must pass either `config` (PretrainedConfig) or `config` (dict)")
 
         self._config = config
         self._kwargs = kwargs
@@ -991,13 +991,13 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
                     # If not, make the value to None
-                    saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+                    saved_weight_value = saved_weights.get(symbolic_weight_name)
 
                     # Retrocompatibility patch: some embeddings are stored with the weights name (e.g. Bart's
                     # `model.shared/embeddings:0` are stored as `model.shared/weights:0`)
                     if saved_weight_value is None and symbolic_weight_name.endswith("embeddings:0"):
                         symbolic_weight_name = symbolic_weight_name[:-12] + "weight:0"
-                        saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+                        saved_weight_value = saved_weights.get(symbolic_weight_name)
 
                     # Add the updated name to the final list for computing missing/unexpected values
                     symbolic_weights_names.add(symbolic_weight_name)
@@ -1637,7 +1637,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 for key, val in y.items():
                     if key in arg_names and key not in x:
                         x[key] = val
-                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                    elif output_to_label.get(key) in arg_names and key not in x:
                         x[output_to_label[key]] = val
         if y is None:
             y = {key: val for key, val in x.items() if key in label_kwargs}
@@ -1662,7 +1662,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             # This next block matches outputs to label keys. Tensorflow's standard method for doing this
             # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
             if isinstance(y, dict) and len(y) == 1:
-                if list(y.keys())[0] in y_pred.keys():
+                if list(y.keys())[0] in y_pred:
                     y_pred = y_pred[list(y.keys())[0]]
                 elif list(y_pred.keys())[0] == "loss":
                     y_pred = y_pred[1]
@@ -1672,7 +1672,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             elif isinstance(y, dict):
                 # If the labels are a dict, match keys from the output by name
                 y_pred = {key: val for key, val in y_pred.items() if key in y}
-            elif isinstance(y, tuple) or isinstance(y, list):
+            elif isinstance(y, (tuple, list)):
                 # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
                 if list(y_pred.keys())[0] == "loss":
                     y_pred = y_pred.to_tuple()[1:]
@@ -1745,7 +1745,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 for key, val in y.items():
                     if key in arg_names and key not in x:
                         x[key] = val
-                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                    elif output_to_label.get(key) in arg_names and key not in x:
                         x[output_to_label[key]] = val
         if y is None:
             y = {key: val for key, val in x.items() if key in label_kwargs}
@@ -1769,7 +1769,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         # This next block matches outputs to label keys. Tensorflow's standard method for doing this
         # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
         if isinstance(y, dict) and len(y) == 1:
-            if list(y.keys())[0] in y_pred.keys():
+            if list(y.keys())[0] in y_pred:
                 y_pred = y_pred[list(y.keys())[0]]
             elif list(y_pred.keys())[0] == "loss":
                 y_pred = y_pred[1]
@@ -1779,7 +1779,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         elif isinstance(y, dict):
             # If the labels are a dict, match keys from the output by name
             y_pred = {key: val for key, val in y_pred.items() if key in y}
-        elif isinstance(y, tuple) or isinstance(y, list):
+        elif isinstance(y, (tuple, list)):
             # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
             if list(y_pred.keys())[0] == "loss":
                 y_pred = y_pred.to_tuple()[1:]
@@ -2386,7 +2386,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Whether to save the model using `safetensors` or the traditional TensorFlow way (that uses `h5`).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -2464,11 +2464,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
             # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
             # in distributed settings to avoid race conditions.
             weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
-            if (
-                filename.startswith(weights_no_suffix)
-                and os.path.isfile(full_filename)
-                and filename not in shards.keys()
-            ):
+            if filename.startswith(weights_no_suffix) and os.path.isfile(full_filename) and filename not in shards:
                 os.remove(full_filename)
 
         if index is None:
@@ -2600,7 +2596,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Whether or not to only look at local files (e.g., not try downloading the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -3145,7 +3141,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard

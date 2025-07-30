@@ -449,16 +449,16 @@ class Glm4vImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            t=self.temporal_patch_size,
+            num_frames=self.temporal_patch_size,
             height=height,
             width=width,
             factor=factor,
-            t_factor=self.temporal_patch_size,
+            temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w

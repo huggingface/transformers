@@ -35,7 +35,6 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
-    Qwen2RMSNorm,
     eager_attention_forward,
 )
 from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
@@ -49,7 +48,9 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     check_torch_load_is_safe,
     logging,
@@ -1132,28 +1133,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5OmniConfig
-    _supports_static_cache = False
-
-    def _init_weights(self, module):
-        # important: this ported version of Qwen2.5OmniThinker isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else 0.02
-
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if module.weight is not None:
-                module.weight.data.fill_(1.0)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Qwen2RMSNorm):
-            module.weight.data.fill_(1.0)
+    _can_compile_fullgraph = False
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -2140,6 +2120,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
+    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
@@ -2259,6 +2240,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_audio_in_video: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         video_second_per_grid: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Qwen2_5OmniThinkerCausalLMOutputWithPast]:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -2414,6 +2396,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -3529,7 +3512,7 @@ class TorchActivation1d(nn.Module):
     ):
         super().__init__()
         if not callable(activation):
-            raise ValueError("Activation function must be callable")
+            raise TypeError("Activation function must be callable")
         self.act = activation
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
@@ -4186,7 +4169,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         # 2. Generate speech tokens from talker module
         embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(input_ids.device)
-        if thinker_kwargs.get("input_features", None) is not None:
+        if thinker_kwargs.get("input_features") is not None:
             audio_ids_mask = input_ids == self.config.thinker_config.audio_token_index
             audio_mask = audio_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             audio_mask_tensor = torch.zeros(
@@ -4195,7 +4178,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 device=input_ids.device,
             )
             embeds_to_talker.masked_scatter_(audio_mask, audio_mask_tensor)
-        if thinker_kwargs.get("pixel_values", None) is not None:
+        if thinker_kwargs.get("pixel_values") is not None:
             image_ids_mask = input_ids == self.config.thinker_config.image_token_index
             image_mask = image_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             image_mask_tensor = torch.zeros(
@@ -4204,7 +4187,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 device=input_ids.device,
             )
             embeds_to_talker.masked_scatter_(image_mask, image_mask_tensor)
-        if thinker_kwargs.get("pixel_values_videos", None) is not None:
+        if thinker_kwargs.get("pixel_values_videos") is not None:
             video_ids_mask = input_ids == self.config.thinker_config.video_token_index
             video_mask = video_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             video_mask_tensor = torch.zeros(

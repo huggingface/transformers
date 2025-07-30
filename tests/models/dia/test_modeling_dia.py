@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -399,12 +399,12 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         if isinstance(decoder_past_key_values, Cache):
             self.assertListEqual(
-                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-                [expected_shape] * len(decoder_past_key_values.key_cache),
+                [layer.keys.shape for layer in decoder_past_key_values.layers],
+                [expected_shape] * len(decoder_past_key_values.layers),
             )
             self.assertListEqual(
-                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
-                [expected_shape] * len(decoder_past_key_values.value_cache),
+                [layer.values.shape for layer in decoder_past_key_values.layers],
+                [expected_shape] * len(decoder_past_key_values.layers),
             )
 
     def _check_scores(self, batch_size, scores, generated_length, config):
@@ -512,7 +512,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self._check_similar_generate_outputs(outputs, outputs_cached)
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(

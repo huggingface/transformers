@@ -132,10 +132,10 @@ def expand_inputs_for_generation(
         torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
     )
     input_ids = input_ids.index_select(0, expanded_return_idx)
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
-    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
-    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
-    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values")
+    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings")
+    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings")
+    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask")
 
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
@@ -880,7 +880,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _supports_flash_attn = True
-    _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
+    _can_compile_fullgraph = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -992,12 +992,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1343,18 +1337,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
