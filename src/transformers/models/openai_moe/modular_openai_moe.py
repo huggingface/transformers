@@ -19,6 +19,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     MoeModelOutputWithPast,
@@ -29,7 +30,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
-    use_kernel_forward_from_hub,
 )
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..llama.modeling_llama import (
@@ -125,7 +125,7 @@ class OpenAIMoeExperts(nn.Module):
         return next_states
 
 
-class OpenAiMoeTopKRouter(nn.Module):
+class OpenAIMoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -147,7 +147,7 @@ class OpenAiMoeTopKRouter(nn.Module):
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.router = OpenAiMoeTopKRouter(config)
+        self.router = OpenAIMoeTopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
@@ -299,7 +299,7 @@ class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attention = False
     _can_record_outputs = {
-        "router_logits": OutputRecorder(OpenAiMoeTopKRouter, index=2),
+        "router_logits": OutputRecorder(OpenAIMoeTopKRouter, index=2),
         "hidden_states": OpenAIMoeDecoderLayer,
         "attentions": OpenAIMoeAttention,
     }

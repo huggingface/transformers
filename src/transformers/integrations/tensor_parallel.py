@@ -18,12 +18,12 @@ import operator
 import os
 import re
 from functools import partial, reduce
+from typing import Optional
 
 import torch
 import torch.distributed as dist
 from torch import nn
 
-from typing import Optional
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface

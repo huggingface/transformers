@@ -18,7 +18,7 @@ import os
 import subprocess
 import tempfile
 import textwrap
-from typing import Optional
+
 from transformers import is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (

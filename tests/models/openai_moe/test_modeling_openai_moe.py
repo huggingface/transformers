@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch OpenaiMoe model."""
+"""Testing suite for the PyTorch OpenAIMoe model."""
 
 import unittest
 
@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from tests.tensor_parallel.test_tensor_parallel import TensorParallelTestBase
-from transformers import AutoModelForCausalLM, AutoTokenizer, OpenaiMoeConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, OpenAIMoeConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -43,16 +43,16 @@ if is_torch_available():
     )
 
 
-class OpenaiMoeModelTester(CausalLMModelTester):
+class OpenAIMoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = OpenaiMoeConfig
+        config_class = OpenAIMoeConfig
         base_model_class = OpenAIMoeModel
         causal_lm_class = OpenAIMoeForCausalLM
 
     pipeline_model_mapping = (
         {
-            "feature-extraction": OpenaiMoeModel,
-            "text-generation": OpenaiMoeForCausalLM,
+            "feature-extraction": OpenAIMoeModel,
+            "text-generation": OpenAIMoeForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -60,12 +60,12 @@ class OpenaiMoeModelTester(CausalLMModelTester):
 
 
 @require_torch
-class OpenaiMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (OpenaiMoeModel, OpenaiMoeForCausalLM) if is_torch_available() else ()
+class OpenAIMoeModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (OpenAIMoeModel, OpenAIMoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": OpenaiMoeModel,
-            "text-generation": OpenaiMoeForCausalLM,
+            "feature-extraction": OpenAIMoeModel,
+            "text-generation": OpenAIMoeForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -75,68 +75,68 @@ class OpenaiMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-    model_tester_class = OpenaiMoeModelTester
+    model_tester_class = OpenAIMoeModelTester
 
     def setUp(self):
-        self.model_tester = OpenaiMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OpenaiMoeConfig, hidden_size=37)
+        self.model_tester = OpenAIMoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=OpenAIMoeConfig, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    @unittest.skip("OpenaiMoe's forcefully disables sdpa due to Sink")
+    @unittest.skip("OpenAIMoe's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @unittest.skip("OpenaiMoe's eager attn/sdpa attn outputs are expected to be different")
+    @unittest.skip("OpenAIMoe's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("OpenaiMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("OpenaiMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache which is not compatible with dola decoding")
+    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with dola decoding")
     def test_dola_decoding_sample(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support continue from past kv")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -147,18 +147,18 @@ class OpenaiMoeModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("OpenaiMoe has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    @unittest.skip("OpenAIMoe has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
         pass
 
-    @unittest.skip("OpenaiMoe eager/FA2 attention outputs are expected to be different")
+    @unittest.skip("OpenAIMoe eager/FA2 attention outputs are expected to be different")
     def test_flash_attn_2_equivalence(self):
         pass
 
 
 @slow
 @require_torch_accelerator
-class OpenaiMoeIntegrationTest(unittest.TestCase):
+class OpenAIMoeIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def setUp(self):

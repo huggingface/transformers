@@ -26,13 +26,14 @@ from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, use_kernel_forward_from_hub
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_openai_moe import OpenAIMoeConfig
 
@@ -127,7 +128,7 @@ class OpenAIMoeExperts(nn.Module):
         return next_states
 
 
-class OpenAiMoeTopKRouter(nn.Module):
+class OpenAIMoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -149,7 +150,7 @@ class OpenAiMoeTopKRouter(nn.Module):
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.router = OpenAiMoeTopKRouter(config)
+        self.router = OpenAIMoeTopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
@@ -382,7 +383,7 @@ class OpenAIMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(OpenAiMoeTopKRouter, index=2),
+        "router_logits": OutputRecorder(OpenAIMoeTopKRouter, index=2),
         "hidden_states": OpenAIMoeDecoderLayer,
         "attentions": OpenAIMoeAttention,
     }
