@@ -679,6 +679,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         audio_ds = load_dataset("etechgrid/28.5k_wavfiles_dataset")
         self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
