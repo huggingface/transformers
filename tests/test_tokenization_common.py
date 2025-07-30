@@ -427,7 +427,7 @@ class TokenizerTesterMixin:
         # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
         # to the list of examples/ encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
         return [
-            {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
+            {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
@@ -1375,9 +1375,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 for i, conv in enumerate(conversations):
-                    chat_string = tokenizer_r.apply_chat_template(
-                        conversations[i], tokenize=False, chat_template=dummy_template
-                    )
+                    chat_string = tokenizer_r.apply_chat_template(conv, tokenize=False, chat_template=dummy_template)
                     assistant_start = output.char_to_token(i, chat_string.index(assistant_prefix_suffix[i][0][0]))
                     assistant_end = output.char_to_token(
                         i,
@@ -2794,7 +2792,7 @@ class TokenizerTesterMixin:
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     sequences, max_length=maximum_length + 10, padding="longest"
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -2805,7 +2803,7 @@ class TokenizerTesterMixin:
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     sequences, max_length=maximum_length + 10, padding=False
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -2935,11 +2933,11 @@ class TokenizerTesterMixin:
                 # Test encode_plus for pretokenized inputs
                 output = tokenizer.encode_plus(token_sequence, is_split_into_words=True, add_special_tokens=False)
                 output_sequence = tokenizer.encode_plus(sequence, add_special_tokens=False)
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.encode_plus(token_sequence, is_split_into_words=True, add_special_tokens=True)
                 output_sequence = tokenizer.encode_plus(sequence, add_special_tokens=True)
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
 
                 # Test batch_encode_plus for pretokenized inputs
@@ -2953,7 +2951,7 @@ class TokenizerTesterMixin:
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_batch_cleaned_up_spaces, add_special_tokens=False
                 )
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.batch_encode_plus(
                     token_sequence_batch, is_split_into_words=True, add_special_tokens=True
@@ -2961,7 +2959,7 @@ class TokenizerTesterMixin:
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_batch_cleaned_up_spaces, add_special_tokens=True
                 )
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
 
                 # Test encode for pretokenized inputs pairs
@@ -2981,13 +2979,13 @@ class TokenizerTesterMixin:
                     token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=False
                 )
                 output_sequence = tokenizer.encode_plus(sequence, sequence, add_special_tokens=False)
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.encode_plus(
                     token_sequence, token_sequence, is_split_into_words=True, add_special_tokens=True
                 )
                 output_sequence = tokenizer.encode_plus(sequence, sequence, add_special_tokens=True)
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
 
                 # Test batch_encode_plus for pretokenized inputs pairs
@@ -3005,7 +3003,7 @@ class TokenizerTesterMixin:
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_pair_batch_cleaned_up_spaces, add_special_tokens=False
                 )
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
                 output = tokenizer.batch_encode_plus(
                     token_sequence_pair_batch, is_split_into_words=True, add_special_tokens=True
@@ -3013,7 +3011,7 @@ class TokenizerTesterMixin:
                 output_sequence = tokenizer.batch_encode_plus(
                     sequence_pair_batch_cleaned_up_spaces, add_special_tokens=True
                 )
-                for key in output.keys():
+                for key in output:
                     self.assertEqual(output[key], output_sequence[key])
 
     def test_prepare_for_model(self):
@@ -3705,14 +3703,14 @@ class TokenizerTesterMixin:
                 # Test encode_plus for pretokenized inputs
                 output_r = tokenizer_r.encode_plus(pretokenized_input_simple, **kwargs)
                 output_p = tokenizer_p.encode_plus(pretokenized_input_simple, **kwargs)
-                for key in output_p.keys():
+                for key in output_p:
                     self.assertEqual(output_p[key], output_r[key])
 
                 # Test batch_encode_plus for pretokenized inputs
                 input_batch = ([pretokenized_input_simple] * 2) + [pretokenized_input_simple + pretokenized_input_pair]
                 output_r = tokenizer_r.batch_encode_plus(input_batch, **batch_kwargs)
                 output_p = tokenizer_p.batch_encode_plus(input_batch, **batch_kwargs)
-                for key in output_p.keys():
+                for key in output_p:
                     self.assertEqual(output_p[key], output_r[key])
 
                 # Test encode for pretokenized inputs pairs
@@ -3727,7 +3725,7 @@ class TokenizerTesterMixin:
                 # Test encode_plus for pretokenized inputs
                 output_r = tokenizer_r.encode_plus(pretokenized_input_simple, pretokenized_input_pair, **kwargs)
                 output_p = tokenizer_p.encode_plus(pretokenized_input_simple, pretokenized_input_pair, **kwargs)
-                for key in output_p.keys():
+                for key in output_p:
                     self.assertEqual(output_p[key], output_r[key])
 
                 # Test batch_encode_plus for pretokenized inputs
@@ -3737,7 +3735,7 @@ class TokenizerTesterMixin:
                 ]
                 output_r = tokenizer_r.batch_encode_plus(input_batch_pair, **batch_kwargs)
                 output_p = tokenizer_p.batch_encode_plus(input_batch_pair, **batch_kwargs)
-                for key in output_p.keys():
+                for key in output_p:
                     self.assertEqual(output_p[key], output_r[key])
 
     def test_create_token_type_ids(self):
@@ -4127,7 +4125,7 @@ class TokenizerTesterMixin:
                     add_special_tokens=True,
                 )
 
-                for key in tokens_p.keys():
+                for key in tokens_p:
                     self.assertEqual(tokens_r[key], tokens_p[key])
 
                 if "token_type_ids" in tokens_r:
@@ -4163,7 +4161,7 @@ class TokenizerTesterMixin:
                     # encode_plus()
                     no_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=False)
                     with_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=True)
-                    for key in no_special_tokens.keys():
+                    for key in no_special_tokens:
                         self.assertEqual(
                             len(no_special_tokens[key]),
                             len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
@@ -4172,7 +4170,7 @@ class TokenizerTesterMixin:
                     # # batch_encode_plus
                     no_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=False)
                     with_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=True)
-                    for key in no_special_tokens.keys():
+                    for key in no_special_tokens:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 

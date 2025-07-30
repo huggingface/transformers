@@ -413,11 +413,7 @@ class ModelOutput(OrderedDict):
             # set the associated fields
             if first_field_iterator:
                 for idx, element in enumerate(iterator):
-                    if (
-                        not isinstance(element, (list, tuple))
-                        or not len(element) == 2
-                        or not isinstance(element[0], str)
-                    ):
+                    if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
                             # If we do not have an iterator of key/values, set it as attribute
                             self[class_fields[0].name] = first_field
@@ -830,7 +826,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message
@@ -993,7 +989,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", None)
+        use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
 
@@ -1032,6 +1028,8 @@ def check_model_inputs(func):
         def make_capture_wrapper(module, orig_forward, key, index):
             @wraps(orig_forward)
             def wrapped_forward(*args, **kwargs):
+                if key == "hidden_states" and len(collected_outputs[key]) == 0:
+                    collected_outputs[key] += (args[0],)
                 output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
@@ -1065,7 +1063,6 @@ def check_model_inputs(func):
                         monkey_patched_layers.append((module, original_forward))
 
         outputs = func(self, *args, **kwargs)
-
         # Restore original forward methods
         for module, original_forward in monkey_patched_layers:
             module.forward = original_forward
@@ -1073,10 +1070,12 @@ def check_model_inputs(func):
         # Inject collected outputs into model output
         for key in collected_outputs:
             if key == "hidden_states":
+                collected_outputs[key] = collected_outputs[key][:-1]
                 if hasattr(outputs, "vision_hidden_states"):
                     collected_outputs[key] += (outputs.vision_hidden_states,)
-                else:
+                elif hasattr(outputs, "last_hidden_state"):
                     collected_outputs[key] += (outputs.last_hidden_state,)
+
                 outputs[key] = collected_outputs[key]
             elif key == "attentions":
                 if isinstance(capture_flags[key], list) and len(capture_flags[key]) == 2:

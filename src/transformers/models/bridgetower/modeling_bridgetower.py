@@ -37,7 +37,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -430,14 +429,12 @@ class BridgeTowerSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -448,13 +445,7 @@ class BridgeTowerSelfAttention(nn.Module):
             1, 2
         )
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-        if is_cross_attention and encoder_attention_mask is not None:
-            attention_mask = encoder_attention_mask
-
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -469,8 +460,8 @@ class BridgeTowerSelfAttention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
+            key_layer = curr_past_key_value.layers[self.layer_idx].keys
+            value_layer = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_layer = self.key(current_states)
             key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
@@ -576,14 +567,12 @@ class BridgeTowerAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -593,7 +582,6 @@ class BridgeTowerAttention(nn.Module):
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -949,30 +937,30 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
 
-    def _init_weights(self, module):
-        if isinstance(module, BridgeTowerVisionModel):
-            proj_std = (module.visual.transformer.hidden_size**-0.5) * (
-                (2 * module.visual.transformer.num_hidden_layers) ** -0.5
-            )
-            attn_std = module.visual.transformer.hidden_size**-0.5
-            fc_std = (2 * module.visual.transformer.hidden_size) ** -0.5
-            for block in module.visual.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * self.config.initializer_factor)
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * self.config.initializer_factor)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * self.config.initializer_factor)
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_factor
+        if isinstance(module, BridgeTowerVisionTransformer):
+            proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5)
+            attn_std = self.config.hidden_size**-0.5
+            fc_std = (2 * self.config.hidden_size) ** -0.5
+            for block in module.transformer.resblocks:
+                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
+                block.attn.in_proj_bias.data.zero_()
+                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
+                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
 
-            nn.init.normal_(module.visual.embeddings.class_embedding, std=attn_std * self.config.initializer_factor)
-            nn.init.normal_(
-                module.visual.embeddings.position_embedding.weight, std=attn_std * self.config.initializer_factor
-            )
+            nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
+            nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.05 * self.config.initializer_factor)
+            module.weight.data.normal_(mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, BridgeTowerForContrastiveLearning):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
 
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
             module.bias.data.zero_()
 
 

@@ -315,7 +315,7 @@ def get_gguf_hf_weights_map(
     # hf => gguf and gguf => hf mappings are reversed
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
-    for hf_name in state_dict.keys():
+    for hf_name in state_dict:
         # An exception for qwen2moe model, where the expert layers are packed
         if model_type == "qwen2moe" and "mlp.experts." in hf_name:
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
@@ -428,8 +428,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         if isinstance(value, str) and architecture in value:
             value = value.replace(architecture, updated_architecture)
 
-        for parameter in GGUF_TO_TRANSFORMERS_MAPPING:
-            parameter_renames = GGUF_TO_TRANSFORMERS_MAPPING[parameter]
+        for parameter, parameter_renames in GGUF_TO_TRANSFORMERS_MAPPING.items():
             if prefix in parameter_renames and config_key in parameter_renames[prefix]:
                 renamed_config_key = parameter_renames[prefix][config_key]
                 if renamed_config_key == -1:

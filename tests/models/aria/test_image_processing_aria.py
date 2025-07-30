@@ -302,3 +302,19 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
             )
             self.assertEqual(encoded_image_shape, image_shape)
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"split_image": True}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"split_image": True, "max_image_size": 200}
+            )
+            self.assertEqual(num_patches, 19)
