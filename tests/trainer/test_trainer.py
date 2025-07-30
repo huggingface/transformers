@@ -240,6 +240,17 @@ class RegressionDataset:
         return result
 
 
+# A class to test Trainer with an evaluation dataset limit
+class TrainerEvalSampleLimit(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.observed_num_batches = 0
+
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        self.observed_num_batches += 1
+        return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys)
+
+
 # Converting Bytes to Megabytes
 def bytes2megabytes(x):
     return int(x / 2**20)
@@ -1333,6 +1344,76 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         result = trainer.predict(eval_dataset, ignore_keys=[])
         self.assertTrue(isinstance(result.predictions, tuple))
         self.assertEqual(len(result.predictions), 2)
+
+    def test_number_of_eval_samples_set(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        eval_dataset = RepeatDataset(x)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_eval_batches=4,
+            eval_strategy="epoch",  # Enable evaluation at the end of each epoch
+            num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is
+            # prediction batch limit per epoch
+            per_device_train_batch_size=4,  # You'll likely want to set your batch size
+            per_device_eval_batch_size=4,  # You'll likely want to set your evaluation batch size
+        )
+
+        trainer = TrainerEvalSampleLimit(
+            model=tiny_llama,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )
+
+        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method
+        trainer.train()
+        self.assertEqual(args.max_eval_batches, trainer.observed_num_batches)
+
+        # reset number of batches seen
+        trainer.observed_num_batches = 0
+
+        # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False
+        trainer.evaluate()
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
+
+    def test_number_of_eval_samples_unset(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        eval_dataset = RepeatDataset(x)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            eval_strategy="epoch",  # Enable evaluation at the end of each epoch
+            num_train_epochs=1,  # leave 1 so that testing works. If > 1, test below will fail. Since it is
+            # prediction batch limit per epoch
+            per_device_train_batch_size=4,  # You'll likely want to set your batch size
+            per_device_eval_batch_size=4,  # You'll likely want to set your evaluation batch size
+        )
+
+        trainer = TrainerEvalSampleLimit(
+            model=tiny_llama,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )
+
+        # when calling train, we will limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=True in _evaluate method
+        trainer.train()
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
+
+        # reset number of batches seen
+        trainer.observed_num_batches = 0
+
+        # when calling evaluate directly, we won't limit the eval sample size if max_eval_batches is defined as we have limit_eval_sample_size=False
+        trainer.evaluate()
+        self.assertEqual(trainer.observed_num_batches, len(eval_dataset) / args.eval_batch_size)
 
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -3063,9 +3144,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")), (
-            f"Could not find checkpoint-{trainer.state.max_steps}"
-        )
+        assert os.path.exists(
+            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
+        ), f"Could not find checkpoint-{trainer.state.max_steps}"
         # And then check the last step
         assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
