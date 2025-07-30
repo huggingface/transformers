@@ -16,15 +16,18 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, Cohere2VisionProcessor
+from transformers import AutoProcessor, AutoTokenizer, Cohere2VisionProcessor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
     import torch
+
+if is_torchvision_available():
+    from transformers import Cohere2VisionImageProcessorFast
 
 
 @require_vision
@@ -34,12 +37,32 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
+        image_processor = Cohere2VisionImageProcessorFast(
+            size={"height": 20, "width": 20},
+            max_patches=3,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b",
+            extra_special_tokens={
+                "image_token": "<image>",
+                "boi_token": "<image_start>",
+                "eoi_token": "<image_end>",
+                "img_line_break_token": "<image_break>",
+            },
+        )
 
-        processor = Cohere2VisionProcessor.from_pretrained(
-            "model-checkpoint",
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = Cohere2VisionProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            **processor_kwargs,
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {}
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

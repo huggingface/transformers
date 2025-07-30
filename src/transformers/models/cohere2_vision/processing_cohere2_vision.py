@@ -131,16 +131,19 @@ class Cohere2VisionProcessor(ProcessorMixin):
         image_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            num_patches = iter(image_inputs.pop("num_patches"))
+            batch_num_patches = iter(image_inputs.pop("num_patches"))
             processed_text = []
             for sample in text:
                 while self.image_token in sample:
-                    img_patches_per_tile = self.patch_size**0.5
+                    num_patches = next(batch_num_patches)
+                    img_patches_per_tile = int(self.patch_size**0.5)
+
                     img_string = f"{self.boi_token}"
                     for idx in range(1, num_patches):
                         img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
                     img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
                     img_string += f"{self.eoi_token}"
+
                     sample = sample.replace(self.image_token, img_string, 1)
                 processed_text.append(sample)
             text = [sample.replace("<placeholder>", self.image_token) for sample in processed_text]

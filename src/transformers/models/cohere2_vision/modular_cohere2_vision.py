@@ -417,56 +417,6 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     max_patches = 12
     crop_to_patches = True
 
-    def get_optimal_tiled_canvas(
-        self,
-        image_height: int,
-        image_width: int,
-        patch_size: int,
-        possible_resolutions: list[tuple[int]],
-    ) -> np.ndarray:
-        candidate_resolutions = np.array(possible_resolutions) * patch_size
-        original_size = np.stack([image_height, image_width])
-
-        required_scales = candidate_resolutions / original_size
-        required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
-
-        if np.all(required_scale < 1):
-            # We are forced to downscale, so try to minimize the amount of downscaling
-            best_grid = possible_resolutions[np.argmax(required_scale)]
-        else:
-            # Pick the resolution that required the least upscaling so that it most closely fits the image
-            required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-            best_grid = possible_resolutions[np.argmin(required_scale)]
-        return best_grid
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        """
-        A utility that returns number patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of patches per image.
-        """
-        min_patches = images_kwargs.get("min_patches", None) or self.min_patches
-        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        patch_size = images_kwargs.get("size", None) or self.size
-        crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
-
-        num_patches = 1
-        if crop_to_patches and max_patches > 1:
-            num_columns, num_rows = self.get_optimal_tiled_canvas(
-                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
-            )
-            num_patches += num_columns * num_rows
-
-        return num_patches
-
 
 __all__ = [
     "Cohere2VisionForConditionalGeneration",
