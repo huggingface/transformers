@@ -21,9 +21,9 @@ from functools import partial, reduce
 
 import torch
 import torch.distributed as dist
-from torch.autograd import Function
 from torch import nn
 
+from typing import Optional
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
@@ -152,7 +152,6 @@ str_to_torch_dtype = {
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
     "F8_E5M2": torch.float8_e5m2,
-    
 }
 
 

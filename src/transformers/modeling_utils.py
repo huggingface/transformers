@@ -821,16 +821,22 @@ def _load_state_dict_into_meta_model(
                     device_mesh.get_local_rank(),
                     device_mesh,
                 )
-            else: # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
                 sharding_kwargs = {
                     "empty_param": empty_param,
                     "casting_dtype": casting_dtype,
                     "to_contiguous": to_contiguous,
                     "rank": device_mesh.get_local_rank(),
-                    "device_mesh": device_mesh
+                    "device_mesh": device_mesh,
                 }
                 hf_quantizer.create_quantized_param(
-                        model, param, param_name, device_mesh.get_local_rank(), state_dict, unexpected_keys, **sharding_kwargs
+                    model,
+                    param,
+                    param_name,
+                    device_mesh.get_local_rank(),
+                    state_dict,
+                    unexpected_keys,
+                    **sharding_kwargs,
                 )
         else:
             param = param[...]

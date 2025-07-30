@@ -18,7 +18,7 @@ import os
 import subprocess
 import tempfile
 import textwrap
-
+from typing import Optional
 from transformers import is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
@@ -64,36 +64,68 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
-class TestTensorParallel(TestCasePlus):
+class TensorParallelTestBase(TestCasePlus):
     nproc_per_node = 2
 
-    def torchrun(self, script: str, is_torchrun: bool = True):
-        """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
+    def run_torch_distributed_test(self, script: str, is_torchrun: bool = True):
+        """Run the given Python script in a subprocess using torchrun or python3."""
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
             tmp.write(script)
             tmp.flush()
             tmp.seek(0)
-            if is_torchrun:
-                cmd = (
-                    f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+            cmd = (
+                (
+                    f"torchrun --nproc_per_node {self.nproc_per_node} "
+                    f"--master_port {get_torch_dist_unique_port()} {tmp.name}"
                 ).split()
-            else:
-                cmd = ["python3", tmp.name]
+                if is_torchrun
+                else ["python3", tmp.name]
+            )
 
-            # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
-                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+                subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
             except subprocess.CalledProcessError as e:
-                raise Exception(f"The following error was captured: {e.stderr}")
+                raise Exception(f"Subprocess failed with:\nSTDOUT:\n{e.stdout}\n\nSTDERR:\n{e.stderr}")
 
-    def test_model_forward(self):
-        script_to_run = textwrap.dedent(
+    def run_tensor_parallel_test(self, model_id: str, mode: str = "training", expected_output: str = None):
+        """
+        Runs a tensor-parallel test for either training (forward) or generate mode.
+
+        Args:
+            model_id: The model to test.
+            mode: "training" or "generate".
+            expected_output: Token or string to assert for training mode.
+        """
+        if mode not in ("training", "generate"):
+            raise ValueError(f"Invalid mode '{mode}', must be 'training' or 'generate'")
+
+        # Only the outputs line changes between training and generate
+        outputs_line = (
+            "outputs = model(inputs)"
+            if mode == "training"
+            else 'outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")'
+        )
+
+        # Expected assertion differs slightly depending on the mode
+        if mode == "training":
+            assertion = f"""
+            next_token_logits = outputs[0][:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1)
+            response = tokenizer.decode(next_token)
+            assert response == "{expected_output}", f"Expected token '{{expected_output}}', got '{{response}}'"
             """
+        else:
+            assertion = """
+            output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
+            """
+
+        script = f"""
             import torch
             import os
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            model_id = "JackFram/llama-68m"
+            model_id = "{model_id}"
 
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
@@ -101,70 +133,24 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must has DTensor"
+            has_dtensor = any(
+                isinstance(p.data, torch.distributed.tensor.DTensor)
+                for _, p in model.named_parameters()
+            )
+            assert has_dtensor, "TP model must have DTensor"
 
             tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
             prompt = "Can I help"
 
             inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model(inputs)
+            {outputs_line}
 
-            next_token_logits = outputs[0][:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)
-            response = tokenizer.decode(next_token)
-            assert response == "with"
+            {assertion}
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
-            """
-        )
-        self.torchrun(script_to_run)
-
-    def test_model_generate(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            import os
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-
-            model_id = "JackFram/llama-68m"
-
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
-            torch.distributed.barrier()
-
-            model.forward = torch.compile(model.forward)
-
-            has_dtensor = 0
-            for name, parameter in model.named_parameters():
-                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
-                    has_dtensor = 1
-                    break
-
-            assert has_dtensor == 1, "TP model must has DTensor"
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            prompt = "Can I help"
-
-            inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-            outputs = model.generate(inputs, max_new_tokens=10, cache_implementation="static")
-
-            output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-            assert output_text[0].startswith(prompt), f"Expected output to start with '{prompt}', got '{output_text[0]}'"
-
-            torch.distributed.barrier()
-            torch.distributed.destroy_process_group()
-            """
-        )
-        self.torchrun(script_to_run)
+        """
+        self.run_torch_distributed_test(textwrap.dedent(script))
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     def test_model_save(self):
@@ -207,6 +193,14 @@ class TestTensorParallel(TestCasePlus):
                     tp_tensor = tp_model.get_tensor(non_tp_key)
                     assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
                     del non_tp_tensor, tp_tensor
+
+
+class TestTensorParallel(TensorParallelTestBase):
+    def test_model_training(self):
+        self.run_tensor_parallel_test(model_id="JackFram/llama-68m", mode="training", expected_output="with")
+
+    def test_model_generate(self):
+        self.run_tensor_parallel_test(model_id="JackFram/llama-68m", mode="generate")
 
 
 @require_torch_multi_accelerator

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import torch
 from torch import nn
@@ -26,12 +26,12 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import dynamic_rope_update
 from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     logging,
-    TransformersKwargs,
     use_kernel_forward_from_hub,
 )
-from ...utils.generic import check_model_inputs, OutputRecorder
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
@@ -147,7 +147,7 @@ class OpenAiMoeTopKRouter(nn.Module):
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.router = TopKRouter(config)
+        self.router = OpenAiMoeTopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
@@ -335,7 +335,7 @@ class OpenAIMoeModel(MixtralModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,

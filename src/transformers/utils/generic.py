@@ -1039,7 +1039,7 @@ def check_model_inputs(func):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
                     if key not in collected_outputs:
-                        collected_outputs[key] =(output[index],) 
+                        collected_outputs[key] = (output[index],)
                     else:
                         collected_outputs[key] += (output[index],)
                 return output

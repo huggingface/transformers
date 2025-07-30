@@ -17,7 +17,7 @@ import gc
 import json
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import regex as re
 import tiktoken
@@ -74,10 +74,26 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
 
+
 FP4_VALUES = [
-    +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0,
-    -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
+    +0.0,
+    +0.5,
+    +1.0,
+    +1.5,
+    +2.0,
+    +3.0,
+    +4.0,
+    +6.0,
+    -0.0,
+    -0.5,
+    -1.0,
+    -1.5,
+    -2.0,
+    -3.0,
+    -4.0,
+    -6.0,
 ]
+
 
 def convert_moe_packed_tensors(
     blocks,
@@ -87,16 +103,15 @@ def convert_moe_packed_tensors(
     rows_per_chunk: int = 32768 * 1024,
 ) -> torch.Tensor:
     import math
+
     scales = scales.to(torch.int32) - 127
 
-    assert blocks.shape[:-1] == scales.shape, (
-        f"{blocks.shape=} does not match {scales.shape=}"
-    )
+    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
 
     lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
     *prefix_shape, G, B = blocks.shape
-    rows_total   = math.prod(prefix_shape) * G
+    rows_total = math.prod(prefix_shape) * G
 
     blocks = blocks.reshape(rows_total, B)
     scales = scales.reshape(rows_total, 1)
@@ -141,13 +156,15 @@ def write_model(
     rope_scaling = {
         "beta_fast": float(original_config.pop("rope_ntk_beta")),
         "beta_slow": float(original_config.pop("rope_ntk_alpha")),
-        "factor": float(original_config.pop('rope_scaling_factor')),
+        "factor": float(original_config.pop("rope_scaling_factor")),
         "rope_type": "yarn",
         "truncate": False,
-        "original_max_position_embeddings": 4096
-      }
+        "original_max_position_embeddings": 4096,
+    }
 
-    config = OpenAIMoeConfig(num_local_experts=num_local_experts, rope_scaling=rope_scaling, eos_token_id=eos_token_id, **original_config)
+    config = OpenAIMoeConfig(
+        num_local_experts=num_local_experts, rope_scaling=rope_scaling, eos_token_id=eos_token_id, **original_config
+    )
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
@@ -188,12 +205,12 @@ def write_model(
                     # deal with packed weights
                     blocks = final_[key]
                     scales = final_[key.replace("blocks", "scales")]
-                    new_key = new_key.replace(".blocks","")
+                    new_key = new_key.replace(".blocks", "")
                     unpacked_tensors = convert_moe_packed_tensors(blocks, scales, dtype=torch.bfloat16)
                     unpacked_tensors = unpacked_tensors.permute(0, 2, 1).contiguous()  # einsum in orignal, I use bmm
                     state_dict[new_key] = unpacked_tensors
                 else:
-                    raise(f"Unidentified {key}, please double check the state dict")
+                    raise (f"Unidentified {key}, please double check the state dict")
             else:
                 if "scales" in new_key:
                     new_key = new_key.replace(".scales", "_scales")
@@ -202,7 +219,7 @@ def write_model(
                     new_key = new_key.replace(".blocks", "_blocks")
                     state_dict[new_key] = final_[key].contiguous()
                 else:
-                    raise(f"Unidentified {key}, please double check the state dict")
+                    raise (f"Unidentified {key}, please double check the state dict")
         else:
             weight = final_[key]
             if not re.search("norm", new_key):
@@ -227,13 +244,14 @@ def write_model(
     else:
         print("Saving the checkpoint in mxfp4 format")
         config.quantization_config = {
-                                        "quant_method": "mxfp4",
-                                        "modules_to_not_convert":[
-                                            "model.layers.*.self_attn",
-                                            "model.layers.*.mlp.router",
-                                            "model.embed_tokens",
-                                            "lm_head"
-                                    ]}
+            "quant_method": "mxfp4",
+            "modules_to_not_convert": [
+                "model.layers.*.self_attn",
+                "model.layers.*.mlp.router",
+                "model.embed_tokens",
+                "lm_head",
+            ],
+        }
         config.save_pretrained(model_path)
         save_sharded_model(state_dict, model_path)
         del state_dict
@@ -263,7 +281,7 @@ def write_model(
 def save_sharded_model(state_dict, model_path):
     from safetensors.torch import save_file
 
-    max_shard_size = 4800000000 # 4.8 GB
+    max_shard_size = 4800000000  # 4.8 GB
     os.makedirs(model_path, exist_ok=True)
     shard_size_counter = 0
     shard_id = 0
@@ -273,7 +291,7 @@ def save_sharded_model(state_dict, model_path):
     safetensors_index["metadata"] = {"total_size": 0}
     safetensors_index["weight_map"] = {}
     for key in state_dict.keys():
-        size = state_dict[key].numel()*state_dict[key].element_size()
+        size = state_dict[key].numel() * state_dict[key].element_size()
         safetensors_index["metadata"]["total_size"] += size
         safetensors_index["weight_map"][key] = shard_id
         if shard_size_counter + size > max_shard_size:
@@ -286,11 +304,9 @@ def save_sharded_model(state_dict, model_path):
     total_sharded_dict[shard_id] = shard_state_dict
     num_shards = len(total_sharded_dict) - 1
     for shard_id, shard_state_dict in total_sharded_dict.items():
-        save_file(
-            shard_state_dict,
-            os.path.join(model_path, f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors")
-        )
+        save_file(shard_state_dict, os.path.join(model_path, f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors"))
     create_safetensors_index(safetensors_index, num_shards, model_path)
+
 
 def create_safetensors_index(safetensors_index, num_shards, model_path):
     for key in safetensors_index["weight_map"].keys():
@@ -386,9 +402,7 @@ class OpenAIMoeConverter(TikTokenConverter):
             special_tokens_map.setdefault(f"<|reserved_{k}|>", k)
 
         # Keep only token strings (sorted by ID) for TikTokenConverter.
-        self.additional_special_tokens = [
-            tok for tok, _ in sorted(special_tokens_map.items(), key=lambda x: x[1])
-        ]
+        self.additional_special_tokens = [tok for tok, _ in sorted(special_tokens_map.items(), key=lambda x: x[1])]
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
@@ -401,6 +415,7 @@ class OpenAIMoeConverter(TikTokenConverter):
             model_max_length=model_max_length,
             **kwargs,
         )
+
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     # Updated Harmony chat template
@@ -505,7 +520,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the ",
     )
 

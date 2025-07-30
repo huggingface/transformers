@@ -60,9 +60,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             raise RuntimeError("Using MXFP4 quantized models requires a GPU")
 
         if not is_accelerate_available():
-            raise ImportError(
-                "Using mxfp4 requires Accelerate: `pip install accelerate`"
-        )
+            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
         if self.quantization_config.dequantize:
             return
@@ -79,11 +77,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return
             else:
                 # we can't quantize the model in this case so we raise an error
-                raise ValueError(
-                    "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed"
-                )
+                raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
 
-        if major < 9 :
+        if major < 9:
             raise ValueError(
                 "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
             )
@@ -106,6 +102,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
         from triton_kernels.numerics_details.mxfp import SwizzlingType
+
         # TODO: Explain what swizzle_mx_value and swizzle_mx_scale are
         if major < 9:
             # NYI for Ampere
@@ -146,11 +143,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
-            module, tensor_name = get_module_from_name(model, param_name[:-len("_blocks")])
+            module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
         else:
             module, tensor_name = get_module_from_name(model, param_name)
 
-        if isinstance(module, Mxfp4OpenAIMoeExperts) or (isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize):
+        if isinstance(module, Mxfp4OpenAIMoeExperts) or (
+            isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize
+        ):
             if tensor_name in ["down_proj_bias", "gate_up_proj_bias"]:
                 return False
             return True
@@ -179,28 +178,24 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     if "gate_up_proj" in param_name:
                         right_pad = module.gate_up_proj_right_pad
                         bottom_pad = module.gate_up_proj_bottom_pad
-                        loaded_weight = torch.nn.functional.pad(param_value,
-                                                (0, right_pad, 0, bottom_pad, 0, 0),
-                                                mode="constant",
-                                                value=0)
-                        loaded_weight, flex, mx = quantize_to_mxfp4(
-                            loaded_weight,
-                            self.swizzle_mx_value,
-                            self.swizzle_mx_scale
+                        loaded_weight = torch.nn.functional.pad(
+                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         )
-                        module.gate_up_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
+                        loaded_weight, flex, mx = quantize_to_mxfp4(
+                            loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale
+                        )
+                        module.gate_up_proj_precision_config = PrecisionConfig(
+                            mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex)
+                        )
                         module.gate_up_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
                     elif "down_proj" in param_name:
                         right_pad = module.down_proj_right_pad
                         bottom_pad = module.down_proj_bottom_pad
-                        loaded_weight = torch.nn.functional.pad(param_value,
-                                                (0, right_pad, 0, bottom_pad, 0, 0),
-                                                mode="constant",
-                                                value=0).to(target_device)
+                        loaded_weight = torch.nn.functional.pad(
+                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
+                        ).to(target_device)
                         loaded_weight, flex, mx = quantize_to_mxfp4(
-                            loaded_weight,
-                            self.swizzle_mx_value,
-                            self.swizzle_mx_scale
+                            loaded_weight, self.swizzle_mx_value, self.swizzle_mx_scale
                         )
                         module.down_proj_precision_config = PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex))
                         module.down_proj = torch.nn.Parameter(loaded_weight, requires_grad=False)
@@ -214,32 +209,27 @@ class Mxfp4HfQuantizer(HfQuantizer):
             device_mesh = kwargs.get("device_mesh", None)
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
                 # blocks and scales have the same length that's this works for both
-                module, _ = get_module_from_name(model, param_name[:-len("_blocks")])
+                module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
             else:
                 module, _ = get_module_from_name(model, param_name)
 
             shard_kwargs = {
-                        "empty_param": empty_param,
-                        "casting_dtype": casting_dtype,
-                        "to_contiguous": to_contiguous,
-                        "rank": rank,
-                        "device_mesh": device_mesh,
-                        "model": model,
+                "empty_param": empty_param,
+                "casting_dtype": casting_dtype,
+                "to_contiguous": to_contiguous,
+                "rank": rank,
+                "device_mesh": device_mesh,
+                "model": model,
             }
 
-            if isinstance(module, Mxfp4OpenAIMoeExperts) or (isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize):
+            if isinstance(module, Mxfp4OpenAIMoeExperts) or (
+                isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize
+            ):
                 if self.quantization_config.dequantize:
                     # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
                     # so we only have the original param name
-                    dq_param_name = param_name[:-len("_blocks")]
-                    dequantize(
-                        module,
-                        param_name,
-                        param_value,
-                        target_device,
-                        dq_param_name,
-                        **shard_kwargs
-                    )
+                    dq_param_name = param_name[: -len("_blocks")]
+                    dequantize(module, param_name, param_value, target_device, dq_param_name, **shard_kwargs)
                 else:
                     dequantize_and_quantize(
                         module,
@@ -248,8 +238,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         target_device,
                         self.swizzle_mx_value,
                         self.swizzle_mx_scale,
-                        **shard_kwargs
-                )
+                        **shard_kwargs,
+                    )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # we are not really dequantizing, we are just removing everthing related to quantization here
@@ -261,11 +251,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         new_expected_keys = []
         for key in expected_keys:
             if key.endswith(".mlp.experts.gate_up_proj"):
-                base = key[:-len("gate_up_proj")]
+                base = key[: -len("gate_up_proj")]
                 new_expected_keys.append(base + "gate_up_proj_blocks")
                 new_expected_keys.append(base + "gate_up_proj_scales")
             elif key.endswith(".mlp.experts.down_proj"):
-                base = key[:-len("down_proj")]
+                base = key[: -len("down_proj")]
                 new_expected_keys.append(base + "down_proj_blocks")
                 new_expected_keys.append(base + "down_proj_scales")
             else:
@@ -311,27 +301,32 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def update_tp_plan(self, config):
         if "OpenAIMoeConfig" in config.__class__.__name__:
-            if (not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None) or (not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None):
+            if (not hasattr(config, "base_model_tp_plan") or config.base_model_tp_plan is None) or (
+                not hasattr(config, "base_model_ep_plan") or config.base_model_ep_plan is None
+            ):
                 return config
 
             # Update TP plan with scales and blocks
-            config.base_model_tp_plan.update({
-                "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
-                "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
-                "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
-                "layers.*.mlp.experts.down_proj_scales": "local_colwise",
-            })
+            config.base_model_tp_plan.update(
+                {
+                    "layers.*.mlp.experts.gate_up_proj_blocks": "local_packed_rowwise",
+                    "layers.*.mlp.experts.gate_up_proj_scales": "local_packed_rowwise",
+                    "layers.*.mlp.experts.down_proj_blocks": "local_colwise",
+                    "layers.*.mlp.experts.down_proj_scales": "local_colwise",
+                }
+            )
 
             # Update EP plan with scales and blocks
-            config.base_model_ep_plan.update({
-                "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
-                "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
-                "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
-                "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
-            })
+            config.base_model_ep_plan.update(
+                {
+                    "layers.*.mlp.experts.gate_up_proj_blocks": "grouped_gemm",
+                    "layers.*.mlp.experts.gate_up_proj_scales": "grouped_gemm",
+                    "layers.*.mlp.experts.down_proj_blocks": "grouped_gemm",
+                    "layers.*.mlp.experts.down_proj_scales": "grouped_gemm",
+                }
+            )
 
         return config
-
 
     def update_param_name(self, param_name: str) -> str:
         if self.quantization_config.dequantize:

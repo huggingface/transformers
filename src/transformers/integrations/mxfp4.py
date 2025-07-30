@@ -28,9 +28,24 @@ import re
 logger = logging.get_logger(__name__)
 
 FP4_VALUES = [
-    +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0,
-    -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
+    +0.0,
+    +0.5,
+    +1.0,
+    +1.5,
+    +2.0,
+    +3.0,
+    +4.0,
+    +6.0,
+    -0.0,
+    -0.5,
+    -1.0,
+    -1.5,
+    -2.0,
+    -3.0,
+    -4.0,
+    -6.0,
 ]
+
 
 # Copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -47,15 +62,20 @@ def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
         axis=1,
         swizzle_axis=swizzle_axis,
         swizzle_scale=swizzle_mx_scale,
-        swizzle_value=swizzle_mx_value
+        swizzle_value=swizzle_mx_value,
     )
 
-    return w, InFlexData(), MicroscalingCtx(
-        weight_scale=mx_scales,
-        swizzle_scale=swizzle_mx_scale,
-        swizzle_value=swizzle_mx_value,
-        actual_weight_scale_shape=weight_scale_shape
+    return (
+        w,
+        InFlexData(),
+        MicroscalingCtx(
+            weight_scale=mx_scales,
+            swizzle_scale=swizzle_mx_scale,
+            swizzle_value=swizzle_mx_value,
+            actual_weight_scale_shape=weight_scale_shape,
+        ),
     )
+
 
 # Copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -70,14 +90,12 @@ def convert_moe_packed_tensors(
 
     scales = scales.to(torch.int32) - 127
 
-    assert  blocks.shape[:-1] == scales.shape, (
-        f"{blocks.shape=} does not match {scales.shape=}"
-    )
+    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
 
     lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
     *prefix_shape, G, B = blocks.shape
-    rows_total   = math.prod(prefix_shape) * G
+    rows_total = math.prod(prefix_shape) * G
 
     blocks = blocks.reshape(rows_total, B)
     scales = scales.reshape(rows_total, 1)
@@ -105,9 +123,9 @@ def convert_moe_packed_tensors(
 
     return out
 
+
 class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
-
         super().__init__()
 
         self.num_experts = config.num_local_experts
@@ -116,22 +134,29 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         self.expert_dim = self.intermediate_size
 
         self.gate_up_proj_blocks = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size//32, 16, dtype=torch.uint8), requires_grad=False,
+            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size // 32, 16, dtype=torch.uint8),
+            requires_grad=False,
         )
         self.gate_up_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size//32, dtype=torch.uint8), requires_grad=False,
+            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size // 32, dtype=torch.uint8),
+            requires_grad=False,
         )
-        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim, dtype=torch.float32), requires_grad=False)
+        self.gate_up_proj_bias = nn.Parameter(
+            torch.zeros(self.num_experts, 2 * self.expert_dim, dtype=torch.float32), requires_grad=False
+        )
 
         self.down_proj_blocks = nn.Parameter(
-            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size//32, 16), dtype=torch.uint8), requires_grad=False,
+            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size // 32, 16), dtype=torch.uint8),
+            requires_grad=False,
         )
         self.down_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, self.expert_dim, self.hidden_size//32, dtype=torch.uint8), requires_grad=False,
+            torch.zeros(self.num_experts, self.expert_dim, self.hidden_size // 32, dtype=torch.uint8),
+            requires_grad=False,
         )
-        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.expert_dim, dtype=torch.float32), requires_grad=False)
+        self.down_proj_bias = nn.Parameter(
+            torch.zeros(self.num_experts, self.expert_dim, dtype=torch.float32), requires_grad=False
+        )
         self.alpha = 1.702
-
 
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
@@ -139,25 +164,24 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
         # TODO: To remove once we make sure that we don't need this
         # smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
 
-        self.gate_up_proj_right_pad = 0 #smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        self.gate_up_proj_right_pad = (
+            0  # smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
+        )
         self.gate_up_proj_bottom_pad = 0
-        self.down_proj_right_pad = 0 #smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
-        self.down_proj_bottom_pad = 0 #self.gate_up_proj_right_pad // 2
-        self.hidden_size_pad = 0 #smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
+        self.down_proj_right_pad = 0  # smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
+        self.down_proj_bottom_pad = 0  # self.gate_up_proj_right_pad // 2
+        self.hidden_size_pad = 0  # smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
         from triton_kernels.swiglu import swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
-            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")),(self.alpha, None), 2)
+            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
 
             if self.hidden_size_pad is not None:
                 hidden_states = torch.nn.functional.pad(
-                    hidden_states,
-                    (0, self.hidden_size_pad, 0, 0),
-                    mode="constant",
-                    value=0
+                    hidden_states, (0, self.hidden_size_pad, 0, 0), mode="constant", value=0
                 )
 
             intermediate_cache1 = matmul_ogs(
@@ -168,7 +192,7 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                 gather_indx=gather_idx,
                 precision_config=self.gate_up_proj_precision_config,
                 gammas=None,
-                fused_activation=act
+                fused_activation=act,
             )
 
             intermediate_cache3 = matmul_ogs(
@@ -178,9 +202,11 @@ class Mxfp4OpenAIMoeExperts(nn.Module):
                 routing_data,
                 scatter_indx=scatter_idx,
                 precision_config=self.down_proj_precision_config,
-                gammas=routing_data.gate_scal)
+                gammas=routing_data.gate_scal,
+            )
 
         return intermediate_cache3
+
 
 # Adapted from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -217,11 +243,10 @@ def routing_torch_dist(
         expt_indx, sort_indices = torch.sort(expt_indx, dim=1)
         expt_scal = torch.gather(expt_scal, 1, sort_indices)
 
-
         # Flatten and mask for local experts
         expt_scal = expt_scal.reshape(-1)
 
-        hist = torch.histc(expt_indx, bins=n_expts_tot, max=n_expts_tot - 1)[local_expert_start : local_expert_end]
+        hist = torch.histc(expt_indx, bins=n_expts_tot, max=n_expts_tot - 1)[local_expert_start:local_expert_end]
 
         expt_indx = expt_indx.view(-1).to(torch.int32)
 
@@ -238,7 +263,6 @@ def routing_torch_dist(
 
         topk_indx = torch.where(gate_indx[topk_indx] == replace_value, replace_value, topk_indx)
 
-
         # # Routing metadata for local expert computation
         gather_indx = GatherIndx(src_indx=topk_indx.int(), dst_indx=gate_indx.int())
         scatter_indx = ScatterIndx(src_indx=gate_indx.int(), dst_indx=topk_indx.int())
@@ -248,12 +272,15 @@ def routing_torch_dist(
         hitted_experts = n_expts_act
     return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
 
+
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
+
     if dist.is_available() and dist.is_initialized():
         routing = routing_torch_dist
     else:
         from triton_kernels.routing import routing
+
         routing = routing
 
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
@@ -262,6 +289,7 @@ def mlp_forward(self, hidden_states):
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     return routed_out, router_logits
 
+
 def should_convert_module(current_key_name, patterns):
     current_key_name_str = ".".join(current_key_name)
     if not any(
@@ -269,6 +297,7 @@ def should_convert_module(current_key_name, patterns):
     ):
         return True
     return False
+
 
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
@@ -284,7 +313,15 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
         if proj in param_name:
             if device_mesh is not None:
                 param_value = shard_and_distribute_module(
-                    model, param_value, empty_param, dq_param_name, casting_dtype, to_contiguous, rank, device_mesh, set_param=False
+                    model,
+                    param_value,
+                    empty_param,
+                    dq_param_name,
+                    casting_dtype,
+                    to_contiguous,
+                    rank,
+                    device_mesh,
+                    set_param=False,
                 )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
@@ -300,7 +337,10 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, scales_attr)
                 return
 
-def dequantize_and_quantize(module, param_name, param_value, target_device, swizzle_mx_value, swizzle_mx_scale, **kwargs):
+
+def dequantize_and_quantize(
+    module, param_name, param_value, target_device, swizzle_mx_value, swizzle_mx_scale, **kwargs
+):
     from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
 
     from ..integrations.tensor_parallel import shard_and_distribute_module
@@ -327,14 +367,7 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
             if blocks.device.type == "meta" and scales.device.type == "meta":
                 if device_mesh is not None:
                     shard_and_distribute_module(
-                        model,
-                        param_value,
-                        empty_param,
-                        param_name,
-                        casting_dtype,
-                        to_contiguous,
-                        rank,
-                        device_mesh
+                        model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
                     )
                 else:
                     _load_parameter_into_model(model, param_name, param_value)
@@ -343,14 +376,7 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
                 # One of the params is already loaded, so load the other
                 if device_mesh is not None:
                     shard_and_distribute_module(
-                        model,
-                        param_value,
-                        empty_param,
-                        param_name,
-                        casting_dtype,
-                        to_contiguous,
-                        rank,
-                        device_mesh
+                        model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
                     )
                 else:
                     _load_parameter_into_model(model, param_name, param_value)
@@ -361,10 +387,7 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
                 right_pad = getattr(module, right_pad_attr)
                 bottom_pad = getattr(module, bottom_pad_attr)
                 loaded_weight = torch.nn.functional.pad(
-                    dequantized,
-                    (0, right_pad, 0, bottom_pad, 0, 0),
-                    mode="constant",
-                    value=0
+                    dequantized, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                 )
                 del dequantized
                 with torch.cuda.device(target_device):
@@ -374,6 +397,7 @@ def dequantize_and_quantize(module, param_name, param_value, target_device, swiz
                 setattr(module, proj, torch.nn.Parameter(loaded_weight, requires_grad=False))
 
             return
+
 
 def _replace_with_mxfp4_linear(
     model,
@@ -394,9 +418,10 @@ def _replace_with_mxfp4_linear(
         if module.__class__.__name__ == "OpenAIMoeExperts" and not quantization_config.dequantize:
             with init_empty_weights():
                 model._modules[name] = Mxfp4OpenAIMoeExperts(config)
-                has_been_replaced=True
+                has_been_replaced = True
         if module.__class__.__name__ == "OpenAIMoeMLP" and not quantization_config.dequantize:
             from types import MethodType
+
             module.forward = MethodType(mlp_forward, module)
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_mxfp4_linear(
@@ -418,7 +443,6 @@ def replace_with_mxfp4_linear(
     quantization_config=None,
     config=None,
 ):
-
     if quantization_config.dequantize:
         return model
 
@@ -434,7 +458,7 @@ def replace_with_mxfp4_linear(
         quantization_config,
         config=config,
     )
-    if not has_been_replaced :
+    if not has_been_replaced:
         logger.warning(
             "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"

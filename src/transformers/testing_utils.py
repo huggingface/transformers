@@ -457,23 +457,26 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
 
+
 def require_triton(min_version: str = TRITON_MIN_VERSION):
     """
     Decorator marking a test that requires triton. These tests are skipped when triton isn't installed.
     """
+
     def decorator(test_case):
         return unittest.skipUnless(is_triton_available(min_version), f"test requires triton version >= {min_version}")(
             test_case
         )
+
     return decorator
+
 
 def require_triton_kernels(test_case):
     """
     Decorator marking a test that requires triton_kernels. These tests are skipped when triton_kernels isn't installed.
     """
-    return unittest.skipUnless(is_triton_kernels_availalble(), "test requires triton_kernels")(
-        test_case
-    )
+    return unittest.skipUnless(is_triton_kernels_availalble(), "test requires triton_kernels")(test_case)
+
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
     """

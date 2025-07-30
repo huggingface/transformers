@@ -149,7 +149,7 @@ class OpenAiMoeTopKRouter(nn.Module):
 class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.router = TopKRouter(config)
+        self.router = OpenAiMoeTopKRouter(config)
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
