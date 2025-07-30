@@ -60,12 +60,12 @@ def run_benchmark(
 
         logger.info("downloading weights")
         # This is to avoid counting download in model load time measurement
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
         gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
         logger.info("loading model")
         start = perf_counter()
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, generation_config=gen_config
+            model_id, dtype=torch.float16, generation_config=gen_config
         ).eval()
         model.to(device)
         torch.cuda.synchronize()

@@ -950,13 +950,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
-        args_parser: ArgumentHandler = None,
         device: Union[int, "torch.device"] = None,
         binary_output: bool = False,
         **kwargs,
     ):
         _ = kwargs.pop("dtype", None)
         _ = kwargs.pop("torch_dtype", None)
+        _ = kwargs.pop("args_parser", None)
 
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)

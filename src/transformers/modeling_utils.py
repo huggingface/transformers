@@ -500,7 +500,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-str_to_dtype = {
+str_to_torch_dtype = {
     "BOOL": torch.bool,
     "U8": torch.uint8,
     "I8": torch.int8,
@@ -517,9 +517,9 @@ str_to_dtype = {
 
 
 if is_torch_greater_or_equal("2.3.0"):
-    str_to_dtype["U16"] = torch.uint16
-    str_to_dtype["U32"] = torch.uint32
-    str_to_dtype["U64"] = torch.uint64
+    str_to_torch_dtype["U16"] = torch.uint16
+    str_to_torch_dtype["U32"] = torch.uint32
+    str_to_torch_dtype["U64"] = torch.uint64
 
 
 def load_state_dict(
@@ -546,8 +546,8 @@ def load_state_dict(
                 if map_location == "meta":
                     _slice = f.get_slice(k)
                     k_dtype = _slice.get_dtype()
-                    if k_dtype in str_to_dtype:
-                        dtype = str_to_dtype[k_dtype]
+                    if k_dtype in str_to_torch_dtype:
+                        dtype = str_to_torch_dtype[k_dtype]
                     else:
                         raise ValueError(f"Cannot load safetensors of unknown dtype {k_dtype}")
                     state_dict[k] = torch.empty(size=_slice.get_shape(), dtype=dtype, device="meta")
