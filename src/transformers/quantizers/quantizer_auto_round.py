@@ -42,7 +42,7 @@ class AutoRoundQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        self.device_map = kwargs.get("device_map", None)
+        self.device_map = kwargs.get("device_map")
         if not is_auto_round_available():
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"

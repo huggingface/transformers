@@ -1707,8 +1707,6 @@ class TrainingArguments:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
-        if self.run_name is None:
-            self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
             if self.fp16_backend and self.fp16_backend != "auto":
                 warnings.warn(
@@ -2532,7 +2530,7 @@ class TrainingArguments:
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):

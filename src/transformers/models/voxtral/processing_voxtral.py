@@ -166,7 +166,7 @@ class VoxtralProcessor(ProcessorMixin):
         }
 
         for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)

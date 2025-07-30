@@ -424,7 +424,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
 
     if "vocab_size" in model_tester_kwargs:
-        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters.keys():
+        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters:
             vocab_size = model_tester_kwargs.pop("vocab_size")
             model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
 

@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -1327,22 +1327,20 @@ class Gemma3nTextAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.layers[self.kv_shared_layer_index].keys.device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
-            if isinstance(past_key_value, HybridCache) and self.is_sliding:
-                max_length = past_key_value.sliding_window
-                indices = (
-                    slice(0, max_length)
-                    if cache_position.shape[0] > max_length
-                    else cache_position.clamp(min=0, max=max_length - 1)
-                )
+            layer = past_key_value.layers[self.kv_shared_layer_index]
+            # Device of past layer may be different from current one
+            indices = cache_position.to(layer.keys.device)
+            # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
+            if isinstance(layer, SlidingWindowLayer):
+                if cache_position.shape[0] > layer.get_max_cache_shape():
+                    indices = slice(0, layer.get_max_cache_shape())
+                else:
+                    indices = indices.clamp(min=0, max=layer.get_max_cache_shape() - 1)
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.layers[self.kv_shared_layer_index].keys[:, :, indices].to(query_states.device)
-            value_states = (
-                past_key_value.layers[self.kv_shared_layer_index].values[:, :, indices].to(query_states.device)
-            )
+            key_states = layer.keys[:, :, indices].to(query_states.device)
+            value_states = layer.values[:, :, indices].to(query_states.device)
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
