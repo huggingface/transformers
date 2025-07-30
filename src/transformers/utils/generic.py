@@ -1051,14 +1051,16 @@ def check_model_inputs(func):
                 for specs in layer_specs:
                     if not isinstance(specs, OutputRecorder):
                         index = 0 if "hidden_states" in key else 1
-                        specs = OutputRecorder(target_class=specs, index=index)
+                        layer_name = specs.__name__ if not isinstance(specs, str) else specs
+                        target_class = specs if not isinstance(specs, str) else None
+                        specs = OutputRecorder(target_class=target_class, index=index, layer_name=layer_name)
                     capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
-                    if isinstance(module, specs.target_class):
-                        if specs.layer_name is not None and specs.layer_name not in name:
-                            continue
+                    if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
+                        specs.layer_name is None and specs.layer_name in name
+                    ):
                         # Monkey patch forward
                         original_forward = module.forward
                         module.forward = make_capture_wrapper(module, original_forward, key, specs.index)

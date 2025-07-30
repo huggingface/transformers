@@ -37,9 +37,9 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
     logging,
 )
+from ...utils.generic import check_model_inputs
 
 
 logger = logging.get_logger(__name__)
@@ -137,6 +137,8 @@ class Cohere2VisionCausalLMOutputWithPast(AyaVisionCausalLMOutputWithPast):
 
 
 class Cohere2VisionModel(AyaVisionModel):
+    _checkpoint_conversion_mapping = {}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -158,25 +160,9 @@ class Cohere2VisionModel(AyaVisionModel):
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = torch.split(image_features, image_num_patches.tolist(), dim=0)
+        return image_features
 
-        # pad image_features to the same length and stack them
-        padded_image_features = []
-        max_patch_len = max([img.shape[0] for img in image_features])
-        for img in image_features:
-            padded_image_features.append(
-                torch.cat(
-                    [
-                        img,
-                        torch.zeros(max_patch_len - img.shape[0], *img.shape[1:], device=img.device, dtype=img.dtype),
-                    ],
-                    dim=0,
-                )
-            )
-        padded_image_features = torch.stack(padded_image_features, dim=0)
-        return padded_image_features
-
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -244,6 +230,8 @@ class Cohere2VisionModel(AyaVisionModel):
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -254,7 +242,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             image_num_patches=image_num_patches,
         )
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
