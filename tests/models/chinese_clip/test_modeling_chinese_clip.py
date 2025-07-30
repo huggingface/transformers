@@ -585,9 +585,6 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        for sub_config_key in ("vision_config", "text_config"):
-            sub_config = getattr(configs_no_init, sub_config_key, {})
-            setattr(configs_no_init, sub_config_key, _config_zero_init(sub_config))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
