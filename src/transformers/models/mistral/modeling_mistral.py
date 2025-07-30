@@ -210,7 +210,8 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx] if config.layer_types is not None else None
+        layer_types = getattr(config, "layer_types", None)
+        self.attention_type = layer_types[layer_idx] if layer_types is not None else None
 
     def forward(
         self,
@@ -349,7 +350,7 @@ class MistralModel(MistralPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(attention_mask, dict) and self.config.layer_types is not None:
+        if not isinstance(attention_mask, dict) and getattr(self.config, "layer_types", None) is not None:
             attention_mask = create_masks_for_generate(
                 config=self.config,
                 input_embeds=inputs_embeds,

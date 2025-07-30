@@ -100,7 +100,8 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MistralMLP(config)
-        self.attention_type = config.layer_types[layer_idx] if config.layer_types is not None else None
+        layer_types = getattr(config, "layer_types", None)
+        self.attention_type = layer_types[layer_idx] if layer_types is not None else None
 
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
@@ -143,7 +144,7 @@ class MistralModel(LlamaModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(attention_mask, dict) and self.config.layer_types is not None:
+        if not isinstance(attention_mask, dict) and getattr(self.config, "layer_types", None) is not None:
             attention_mask = create_masks_for_generate(
                 config=self.config,
                 input_embeds=inputs_embeds,
