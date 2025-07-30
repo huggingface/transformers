@@ -18,7 +18,8 @@ env:
 jobs:
   check_tiny_models:
     name: Check tiny models
-    runs-on: aws-general-8-plus
+    runs-on:
+      group: aws-general-8-plus
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v4
