@@ -644,8 +644,8 @@ class Glm4v_moeTextAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
-            self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
