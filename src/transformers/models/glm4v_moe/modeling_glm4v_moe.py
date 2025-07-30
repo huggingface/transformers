@@ -39,7 +39,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig
+from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig, Glm4VMoeTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -719,65 +719,192 @@ class Glm4v_moeTextMLP(nn.Module):
         return down_proj
 
 
+class Glm4VMoeTextMLP(nn.Module):
+    def __init__(self, config, hidden_size=None, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class Glm4VMoeTextTopkRouter(nn.Module):
+    def __init__(self, config: Glm4VMoeTextConfig):
+        super().__init__()
+        self.config = config
+        self.top_k = config.num_experts_per_tok
+        self.n_routed_experts = config.n_routed_experts
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
+
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        group_scores = (
+            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return topk_indices
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        scores = router_logits.sigmoid()
+        topk_indices = self.get_topk_indices(scores)
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class Glm4VMoeTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Glm4VMoeTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class Glm4VMoeTextMoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.experts = nn.ModuleList(
+            [
+                Glm4VMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
+                for _ in range(config.n_routed_experts)
+            ]
+        )
+        self.gate = Glm4VMoeTextTopkRouter(config)
+        self.shared_experts = Glm4VMoeTextMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
+    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        r"""
+        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
+        to not have to do a loop here (deepseek has 256 experts soooo yeah).
+        """
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
+        expert_mask = expert_mask.permute(2, 0, 1)
+
+        for expert_idx in range(len(self.experts)):
+            expert = self.experts[expert_idx]
+            mask = expert_mask[expert_idx]
+            token_indices, weight_indices = torch.where(mask)
+
+            if token_indices.numel() > 0:
+                expert_weights = topk_weights[token_indices, weight_indices]
+                expert_input = hidden_states[token_indices]
+                expert_output = expert(expert_input)
+                weighted_output = expert_output * expert_weights.unsqueeze(-1)
+                final_hidden_states.index_add_(0, token_indices, weighted_output)
+
+        # in original deepseek, the output of the experts are gathered once we leave this module
+        # thus the moe module is itelsf an IsolatedParallel module
+        # and all expert are "local" meaning we shard but we don't gather
+        return final_hidden_states.type(hidden_states.dtype)
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        topk_indices, topk_weights = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
+
+
 class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Glm4v_moeTextAttention(config, layer_idx)
-        self.mlp = Glm4v_moeTextMLP(config)
-        self.input_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
+
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = Glm4VMoeTextMoE(config)
+        else:
+            self.mlp = Glm4VMoeTextMLP(config)
+
+        self.input_layernorm = Glm4VMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4VMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
+        past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+        return hidden_states
 
 
 @dataclass
