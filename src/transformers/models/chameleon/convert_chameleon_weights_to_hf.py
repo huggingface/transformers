@@ -400,7 +400,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
     model = ChameleonForConditionalGeneration.from_pretrained(
-        model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
+        model_path, attn_implementation="eager", dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)
 

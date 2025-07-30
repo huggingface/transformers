@@ -208,7 +208,7 @@ def convert_checkpoint(
     """
     device = _grab_best_device()
 
-    mimi_model = MimiModel.from_pretrained(mimi_repo_id, torch_dtype=torch.bfloat16)
+    mimi_model = MimiModel.from_pretrained(mimi_repo_id, dtype=torch.bfloat16)
 
     if config_path is not None:
         config = MoshiConfig.from_pretrained(config_path)
