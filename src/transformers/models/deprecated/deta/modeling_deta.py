@@ -2042,7 +2042,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 aux_weight_dict.update({k + "_enc": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
 
         if not return_dict:
             if auxiliary_outputs is not None:

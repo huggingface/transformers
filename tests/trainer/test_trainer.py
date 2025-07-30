@@ -555,7 +555,7 @@ if is_torch_available():
         output_dir=None,
         **kwargs,
     ):
-        label_names = kwargs.get("label_names", None)
+        label_names = kwargs.get("label_names")
         gradient_checkpointing = kwargs.get("gradient_checkpointing", False)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
@@ -1340,7 +1340,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
-        for key in dict1.keys():
+        for key in dict1:
             # Logging dir can be slightly different as they default to something with the time.
             if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])

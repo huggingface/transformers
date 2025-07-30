@@ -438,7 +438,7 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         if args.batch_eval_metrics and compute_metrics is not None:
-            if "compute_result" not in inspect.signature(compute_metrics).parameters.keys():
+            if "compute_result" not in inspect.signature(compute_metrics).parameters:
                 raise ValueError(
                     "When using `batch_eval_metrics`, your `compute_metrics` function must take a `compute_result`"
                     " boolean argument which will be triggered after the last batch of the eval set to signal that the"
@@ -2530,6 +2530,9 @@ class Trainer:
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
+                # Store the number of batches for current gradient accumulation
+                # This is used to correctly scale the loss when the last accumulation step has fewer batches
+                self.current_gradient_accumulation_steps = len(batch_samples)
                 for i, inputs in enumerate(batch_samples):
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
@@ -3830,7 +3833,8 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                loss = loss / self.args.gradient_accumulation_steps
+                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+                loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
             # https://github.com/huggingface/transformers/pull/35808
@@ -4614,7 +4618,7 @@ class Trainer:
         # For CLIP-like models capable of returning loss values.
         # If `return_loss` is not specified or being `None` in `inputs`, we check if the default value of `return_loss`
         # is `True` in `model.forward`.
-        return_loss = inputs.get("return_loss", None)
+        return_loss = inputs.get("return_loss")
         if return_loss is None:
             return_loss = self.can_return_loss
         loss_without_labels = True if len(self.label_names) == 0 and return_loss else False
@@ -5259,7 +5263,7 @@ class Trainer:
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics
 
-        if "use_gather_object" in inspect.signature(self.gather_function).parameters.keys():
+        if "use_gather_object" in inspect.signature(self.gather_function).parameters:
             self.gather_function = functools.partial(
                 self.gather_function, use_gather_object=self.args.eval_use_gather_object
             )

@@ -14,6 +14,8 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<!-- TODO: this was copied from the korean version of `gpu_selection.md`, and is not up to date with the english version of `accelerator_selection.md` -->
+
 # GPU 선택하기 [[gpu-selection]]
 
 분산 학습 과정에서 사용할 GPU의 개수와 순서를 정할 수 있습니다. 이 방법은 서로 다른 연산 성능을 가진 GPU가 있을 때 더 빠른 GPU를 우선적으로 사용하거나, 사용 가능한 GPU 중 일부만 선택하여 활용하고자 할 때 유용합니다. 이 선택 과정은 [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html)과 [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html)에서 모두 작동합니다. Accelerate나 [DeepSpeed 통합](./main_classes/deepspeed)은 필요하지 않습니다.
