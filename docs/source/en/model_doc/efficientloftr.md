@@ -10,84 +10,114 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
-
 -->
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+    </div>
+</div>
 
 # EfficientLoFTR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[EfficientLoFTR](https://huggingface.co/papers/2403.04765) is an efficient detector-free local feature matching method that produces semi-dense matches across images with sparse-like speed. It builds upon the original [LoFTR](https://huggingface.co/papers/2104.00680) architecture but introduces significant improvements for both efficiency and accuracy. The key innovation is an aggregated attention mechanism with adaptive token selection that makes the model ~2.5× faster than LoFTR while achieving higher accuracy. EfficientLoFTR can even surpass state-of-the-art efficient sparse matching pipelines like [SuperPoint](./superpoint) + [LightGlue](./lightglue) in terms of speed, making it suitable for large-scale or latency-sensitive applications such as image retrieval and 3D reconstruction.
 
-## Overview
+> [!TIP]
+> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
+>
+> Click on the EfficientLoFTR models in the right sidebar for more examples of how to apply EfficientLoFTR to different computer vision tasks.
 
-The EfficientLoFTR model was proposed in [Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed](https://arxiv.org/abs/2403.04765) by Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
+The example below demonstrates how to match keypoints between two images with the [`AutoModel`] class.
 
-This model consists of matching two images together by finding pixel correspondences. It can be used to estimate the pose between them. 
-This model is useful for tasks such as image matching, homography estimation, etc.
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The abstract from the paper is the following:
-
-*We present a novel method for efficiently producing semidense matches across images. Previous detector-free matcher 
-LoFTR has shown remarkable matching capability in handling large-viewpoint change and texture-poor scenarios but suffers
-from low efficiency. We revisit its design choices and derive multiple improvements for both efficiency and accuracy. 
-One key observation is that performing the transformer over the entire feature map is redundant due to shared local 
-information, therefore we propose an aggregated attention mechanism with adaptive token selection for efficiency. 
-Furthermore, we find spatial variance exists in LoFTR’s fine correlation module, which is adverse to matching accuracy. 
-A novel two-stage correlation layer is proposed to achieve accurate subpixel correspondences for accuracy improvement. 
-Our efficiency optimized model is ∼ 2.5× faster than LoFTR which can even surpass state-of-the-art efficient sparse 
-matching pipeline SuperPoint + LightGlue. Moreover, extensive experiments show that our method can achieve higher 
-accuracy compared with competitive semi-dense matchers, with considerable efficiency benefits. This opens up exciting 
-prospects for large-scale or latency-sensitive applications such as image retrieval and 3D reconstruction. 
-Project page: [https://zju3dv.github.io/efficientloftr/](https://zju3dv.github.io/efficientloftr/).*
-
-## How to use
-
-Here is a quick example of using the model. 
-```python
-import torch
-
+```py
 from transformers import AutoImageProcessor, AutoModelForKeypointMatching
-from transformers.image_utils import load_image
+import torch
+from PIL import Image
+import requests
 
-
-image1 = load_image("https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg")
-image2 = load_image("https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg")
+url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+image1 = Image.open(requests.get(url_image1, stream=True).raw)
+url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+image2 = Image.open(requests.get(url_image2, stream=True).raw)
 
 images = [image1, image2]
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficientloftr")
-model = AutoModelForKeypointMatching.from_pretrained("stevenbucaille/efficientloftr")
+processor = AutoImageProcessor.from_pretrained("zju-community/efficientloftr")
+model = AutoModelForKeypointMatching.from_pretrained("zju-community/efficientloftr")
 
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
-```
 
-You can use the `post_process_keypoint_matching` method from the `ImageProcessor` to get the keypoints and matches in a more readable format:
-
-```python
+# Post-process to get keypoints and matches
 image_sizes = [[(image.height, image.width) for image in images]]
-outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
-for i, output in enumerate(outputs):
-    print("For the image pair", i)
-    for keypoint0, keypoint1, matching_score in zip(
-            output["keypoints0"], output["keypoints1"], output["matching_scores"]
-    ):
-        print(
-            f"Keypoint at coordinate {keypoint0.numpy()} in the first image matches with keypoint at coordinate {keypoint1.numpy()} in the second image with a score of {matching_score}."
-        )
+processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
 ```
 
-From the post processed outputs, you can visualize the matches between the two images using the following code:
-```python
-images_with_matching = processor.visualize_keypoint_matching(images, outputs)
-```
+</hfoption>
+</hfoptions>
 
-![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/2nJZQlFToCYp_iLurvcZ4.png)
+## Notes
 
-This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
-The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
+- EfficientLoFTR is designed for efficiency while maintaining high accuracy. It uses an aggregated attention mechanism with adaptive token selection to reduce computational overhead compared to the original LoFTR.
+
+    ```py
+    from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+    import torch
+    from PIL import Image
+    import requests
+    
+    processor = AutoImageProcessor.from_pretrained("zju-community/efficientloftr")
+    model = AutoModelForKeypointMatching.from_pretrained("zju-community/efficientloftr")
+    
+    # EfficientLoFTR requires pairs of images
+    images = [image1, image2]
+    inputs = processor(images, return_tensors="pt")
+    outputs = model(**inputs)
+    
+    # Extract matching information
+    keypoints = outputs.keypoints        # Keypoints in both images
+    matches = outputs.matches            # Matching indices 
+    matching_scores = outputs.matching_scores  # Confidence scores
+    ```
+
+- The model produces semi-dense matches, offering a good balance between the density of matches and computational efficiency. It excels in handling large viewpoint changes and texture-poor scenarios.
+
+- For better visualization and analysis, use the [`~EfficientLoFTRImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
+
+    ```py
+    # Process outputs for visualization
+    image_sizes = [[(image.height, image.width) for image in images]]
+    processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+    
+    for i, output in enumerate(processed_outputs):
+        print(f"For the image pair {i}")
+        for keypoint0, keypoint1, matching_score in zip(
+                output["keypoints0"], output["keypoints1"], output["matching_scores"]
+        ):
+            print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
+    ```
+
+- Visualize the matches between the images using the built-in plotting functionality.
+
+    ```py
+    # Easy visualization using the built-in plotting method
+    visualized_images = processor.visualize_keypoint_matching(images, processed_outputs)
+    ```
+
+- EfficientLoFTR uses a novel two-stage correlation layer that achieves accurate subpixel correspondences, improving upon the original LoFTR's fine correlation module.
+
+<div class="flex justify-center">
+    <img src="https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/2nJZQlFToCYp_iLurvcZ4.png">
+</div>
+
+## Resources
+
+- Refer to the [original EfficientLoFTR repository](https://github.com/zju3dv/EfficientLoFTR) for more examples and implementation details.
+- [EfficientLoFTR project page](https://zju3dv.github.io/efficientloftr/) with interactive demos and additional information.
 
 ## EfficientLoFTRConfig
 
@@ -101,6 +131,8 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 - post_process_keypoint_matching
 - visualize_keypoint_matching
 
+<frameworkcontent>
+<pt>
 ## EfficientLoFTRModel
 
 [[autodoc]] EfficientLoFTRModel
@@ -112,3 +144,6 @@ The original code can be found [here](https://github.com/zju3dv/EfficientLoFTR).
 [[autodoc]] EfficientLoFTRForKeypointMatching
 
 - forward
+
+</pt>
+</frameworkcontent>
