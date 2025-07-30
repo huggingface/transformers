@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           # Semantic version range syntax or exact version of a Python version
-          python-version: '3.8'
+          python-version: '3.9'
           # Optional - x64 or x86 architecture, defaults to x64
           architecture: 'x64'
 
