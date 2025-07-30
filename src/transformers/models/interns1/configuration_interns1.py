@@ -47,6 +47,9 @@ class InternS1VisionConfig(PretrainedConfig):
             Dropout probability for attention weights.
         projection_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the projection layer.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate for the Transformer encoder. It is applied to the residual connections
+            of each layer in the Transformer encoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         norm_type (`str`, *optional*, defaults to `"layer_norm"`):
@@ -99,6 +102,7 @@ class InternS1VisionConfig(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_dropout=0.0,
         projection_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         norm_type="layer_norm",
         layer_norm_eps=1e-06,
@@ -126,6 +130,7 @@ class InternS1VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.norm_type = norm_type
         self.layer_norm_eps = layer_norm_eps
+        self.drop_path_rate = drop_path_rate
 
         image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)

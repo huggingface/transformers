@@ -24,6 +24,7 @@ import collections.abc
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -377,7 +378,7 @@ NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternS1VisionRMSNorm}
 class InternS1VisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: InternS1VisionConfig) -> None:
+    def __init__(self, config: InternS1VisionConfig, drop_path_rate=0.0) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -392,6 +393,17 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        if drop_path_rate > 0.0:
+            try:
+                from timm.layers import DropPath
+            except ImportError:
+                raise ImportError("timm is not installed, please install it to use DropPath by 'pip install timm'. ")
+            self.drop_path1 = DropPath(drop_path_rate)
+            self.drop_path2 = DropPath(drop_path_rate)
+        else:
+            self.drop_path1 = nn.Identity()
+            self.drop_path2 = nn.Identity()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -405,7 +417,7 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         attention_output = self.lambda_1 * attention_output
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = self.drop_path1(attention_output) + hidden_states
 
         # in InternS1Vision, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -417,7 +429,7 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
             layer_output = self.lambda_2 * layer_output
 
         # second residual connection
-        layer_output = layer_output + hidden_states
+        layer_output = self.drop_path2(layer_output) + hidden_states
 
         return layer_output, attention_weights
 
@@ -426,7 +438,8 @@ class InternS1VisionEncoder(nn.Module):
     def __init__(self, config: InternS1VisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([InternS1VisionLayer(config) for i in range(config.num_hidden_layers)])
+        dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
+        self.layer = nn.ModuleList([InternS1VisionLayer(config, dpr[idx]) for idx in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     @can_return_tuple
