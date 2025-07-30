@@ -132,7 +132,7 @@ class DataTrainingArguments:
 
     def __post_init__(self):
         self.task_name = self.task_name.lower()
-        if self.task_name not in task_to_keys.keys():
+        if self.task_name not in task_to_keys:
             raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
 
 
@@ -268,7 +268,7 @@ def main():
 
         data_files = {"data": data_args.predict_file}
 
-        for key in data_files.keys():
+        for key in data_files:
             logger.info(f"Loading a local file for {key}: {data_files[key]}")
 
         if data_args.predict_file.endswith(".csv"):
@@ -406,7 +406,7 @@ def main():
             "test_mismatched": data_args.max_predict_samples,
             "user_data": None,
         }
-        for key in datasets.keys():
+        for key in datasets:
             if key == "train" or key.startswith("validation"):
                 assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
@@ -495,7 +495,7 @@ def main():
 
         # region Training and validation
         if training_args.do_train:
-            if training_args.do_eval and not data_args.task_name == "mnli":
+            if training_args.do_eval and data_args.task_name != "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
                 validation_data = tf_data["validation"]

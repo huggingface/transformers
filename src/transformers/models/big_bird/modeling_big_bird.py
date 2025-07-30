@@ -96,9 +96,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
 
                 name_items[0] = f"bert/encoder/layer_{layer_name_items[2]}"
 
-            name = "/".join([_TRIVIA_QA_MAPPING[x] if x in _TRIVIA_QA_MAPPING else x for x in name_items])[
-                :-2
-            ]  # remove last :0 in variable
+            name = "/".join([_TRIVIA_QA_MAPPING.get(x, x) for x in name_items])[:-2]  # remove last :0 in variable
 
             if "self/attention/output" in name:
                 name = name.replace("self/attention/output", "output")
@@ -340,8 +338,8 @@ class BigBirdSelfAttention(nn.Module):
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
         if is_cross_attention and past_key_value is not None and past_key_value.get_seq_length(self.layer_idx) > 0:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.key_cache[self.layer_idx]
-            value_layer = past_key_value.value_cache[self.layer_idx]
+            key_layer = past_key_value.layers[self.layer_idx].keys
+            value_layer = past_key_value.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
