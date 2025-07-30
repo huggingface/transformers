@@ -177,7 +177,7 @@ class TensorParallelTestBase(TestCasePlus):
                     model.save_pretrained(result_dir)
                     """
                 )
-                self.torchrun(script_to_run, is_torchrun=is_torchrun)
+                self.run_torch_distributed_test(script_to_run, is_torchrun=is_torchrun)
 
             non_tp_model_path = os.path.join(tmp_dir, "nontp")
             tp_model_path = os.path.join(tmp_dir, "tp")

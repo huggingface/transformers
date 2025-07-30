@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -240,13 +241,20 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
 
+@require_torch_multi_accelerator
 class OpenAIMoeTPTest(TensorParallelTestBase):
     def test_model_training(self):
         self.run_tensor_parallel_test(
             model_id="openai/openai-moe-20b", mode="training", expected_output="you with something?"
         )
+        self.run_tensor_parallel_test(
+            model_id="openai/openai-moe-120b", mode="training", expected_output="you with something?"
+        )
 
     def test_model_generate(self):
         self.run_tensor_parallel_test(
             model_id="openai/openai-moe-20b", mode="generate", expected_output="with something"
+        )
+        self.run_tensor_parallel_test(
+            model_id="openai/openai-moe-120b", mode="generate", expected_output="with something"
         )
