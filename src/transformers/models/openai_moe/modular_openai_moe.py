@@ -153,7 +153,7 @@ class OpenAIMoeMLP(nn.Module):
     def forward(self, hidden_states):
         router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
         routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
-        return routed_out
+        return routed_out, router_scores
 
 
 class OpenAIMoeRotaryEmbedding(LlamaRotaryEmbedding):
@@ -273,8 +273,8 @@ class OpenAIMoeAttention(Qwen2Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,  # main diff with Llama
-            s_aux=self.sinks,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks,  # diff with Llama
             **kwargs,
         )
 
@@ -292,6 +292,39 @@ class OpenAIMoeDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)  # diff with llama: router scores
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
