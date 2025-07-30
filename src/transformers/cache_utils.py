@@ -1,7 +1,6 @@
 import copy
 import functools
 import importlib.metadata
-import inspect
 import json
 import os
 from abc import ABC, abstractmethod
@@ -16,6 +15,7 @@ from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
+
 
 if is_optimum_quanto_available():
     _optimum_quanto_version = version.parse(importlib.metadata.version("optimum-quanto"))
@@ -38,7 +38,9 @@ class CacheLayerMixin(ABC):
         self.keys, self.values = None, None
 
     @abstractmethod
-    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None) -> tuple[torch.Tensor, torch.Tensor]: ...
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor): ...
@@ -79,7 +81,10 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor):
         dtype, device = key_states.dtype, key_states.device
-        self.keys, self.values = torch.tensor([], dtype=dtype, device=device), torch.tensor([], dtype=dtype, device=device)
+        self.keys, self.values = (
+            torch.tensor([], dtype=dtype, device=device),
+            torch.tensor([], dtype=dtype, device=device),
+        )
 
     def update(
         self,
@@ -204,7 +209,7 @@ class StaticLayer(CacheLayerMixin):
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor):
         self.max_batch_size, self.num_heads, _, self.head_dim = key_states.shape
         self.dtype, self.device = key_states.dtype, key_states.device
-        
+
         self.keys = torch.zeros(
             (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
             dtype=self.dtype,
@@ -252,7 +257,7 @@ class StaticLayer(CacheLayerMixin):
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
         return self.keys, self.values
-    
+
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
@@ -457,7 +462,7 @@ class QuantizedLayer(DynamicLayer):
     precision cache is discarded and moved into the quantized cache. The quantization is done per-channel with a set `q_group_size`
     for both Keys and Values, in contrast to what was described in the paper.
     """
-    
+
     def __init__(
         self,
         nbits: int = 4,
@@ -472,10 +477,14 @@ class QuantizedLayer(DynamicLayer):
         self.axis_value = axis_value
         self.q_group_size = q_group_size
         self.residual_length = residual_length
+        self.cumulative_length = 0
 
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor):
         dtype, device = key_states.dtype, key_states.device
-        self.keys, self.values = torch.tensor([], dtype=dtype, device=device), torch.tensor([], dtype=dtype, device=device)
+        self.keys, self.values = (
+            torch.tensor([], dtype=dtype, device=device),
+            torch.tensor([], dtype=dtype, device=device),
+        )
         self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
         self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
 
@@ -499,6 +508,8 @@ class QuantizedLayer(DynamicLayer):
         Return:
             A tuple containing the updated key and value states.
         """
+        self.cumulative_length += key_states.shape[-2]
+
         # Lazy initialization
         if self.keys is None:
             self.lazy_initializion(key_states, value_states)
@@ -516,9 +527,13 @@ class QuantizedLayer(DynamicLayer):
         else:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
-        
+
         return keys_to_return, values_to_return
-    
+
+    def get_seq_length(self, cache_position=None) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
+
     @abstractmethod
     def _quantize(self, tensor, axis): ...
 
@@ -527,7 +542,6 @@ class QuantizedLayer(DynamicLayer):
 
 
 class QuantoQuantizedLayer(QuantizedLayer):
-
     def __init__(
         self,
         nbits: int = 4,
@@ -546,7 +560,7 @@ class QuantoQuantizedLayer(QuantizedLayer):
 
         if not is_optimum_quanto_available() or _optimum_quanto_version <= version.parse("0.2.5"):
             raise ImportError(
-                f"You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
+                "You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
                 "Detected version {optimum_quanto_version}."
             )
 
@@ -571,10 +585,9 @@ class QuantoQuantizedLayer(QuantizedLayer):
 
     def _dequantize(self, qtensor):
         return qtensor.dequantize()
-    
+
 
 class HQQQuantizedLayer(QuantizedLayer):
-
     def __init__(
         self,
         nbits: int = 4,
@@ -592,7 +605,7 @@ class HQQQuantizedLayer(QuantizedLayer):
         )
 
         if not is_hqq_available():
-            raise ImportError(f"You need to install `hqq` to use `HQQQuantizedLayer`")
+            raise ImportError("You need to install `hqq` to use `HQQQuantizedLayer`")
 
         if self.nbits not in [1, 2, 3, 4, 8]:
             raise ValueError(
@@ -626,6 +639,7 @@ class HQQQuantizedLayer(QuantizedLayer):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
+
 
 class CacheProcessor:
     """
@@ -832,6 +846,7 @@ LAYER_CLASS_MAP: dict[str, type[CacheLayerMixin]] = {
     "chunked_attention": ChunkedSlidingLayer,
 }
 
+
 class KeyValuesWrapper:
     """Helper class for Cache that simulates layer-indexed key/value lists from a layered cache.
     This allows for BC access and writing, e.g., cache.key_cache[idx] = ...
@@ -890,7 +905,7 @@ class Cache:
         layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
             A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
             provided, then it is used for all layers.
-        
+
         cache_processor (`CacheProcessor` or `str`, *optional*):
             Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized")
             or a CacheProcessor class.
@@ -904,9 +919,10 @@ class Cache:
     ):
         if layers is not None and layer_class_to_replicate is not None:
             raise ValueError(
-                "You can construct a Cache either from a list `layers` of all the predefined `CacheLayer`, or from a " 
+                "You can construct a Cache either from a list `layers` of all the predefined `CacheLayer`, or from a "
                 "`layer_class_to_replicate`, in which case the Cache will append a new layer corresponding to "
-                "`layer_class_to_replicate` for each new call to `update` with an idx not already in the Cache.")
+                "`layer_class_to_replicate` for each new call to `update` with an idx not already in the Cache."
+            )
         if layers is None and layer_class_to_replicate is None:
             raise ValueError(
                 "You should provide exactly one of `layers` or `layer_class_to_replicate` to initialize a Cache."
@@ -993,9 +1009,6 @@ class Cache:
         """Returns the sequence length of the cache for the given layer. TODO: deprecate in favor of cache_position"""
         if layer_idx >= len(self.layers):
             return 0
-        # Hack since QuantizedCache messes with keys shape as it becomes the residual cache
-        if self.cache_processor is not None and isinstance(self.cache_processor, QuantizedCacheProcessor):
-            return self.cache_processor.erased_length + self.layers[layer_idx].get_seq_length(cache_position)
         return self.layers[layer_idx].get_seq_length(cache_position)
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
@@ -1372,34 +1385,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         self.cache_processor = OffloadedCacheProcessor
 
 
-class QuantizedCache(DynamicCache):
-    """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`.
-
-    See `Cache` for details on common methods that are implemented by all cache classes.
-    """
-
-    def __init__(self, backend) -> None:
-        if backend == "quanto":
-            processor = QuantoQuantizedCacheProcessor
-        elif backend == "hqq":
-            processor = HQQQuantizedCacheProcessor
-        else:
-            raise ValueError(f"Unknown quantization backend `{backend}`")
-        super().__init__()
-        self.cache_processor = processor
-
-
-class QuantoQuantizedCache(QuantizedCache):
+class QuantoQuantizedCache(Cache):
     """
     A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
@@ -1407,12 +1393,6 @@ class QuantoQuantizedCache(QuantizedCache):
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
     original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
     quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
-
-    Uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
@@ -1436,11 +1416,23 @@ class QuantoQuantizedCache(QuantizedCache):
         ```
     """
 
-    def __init__(self):
-        super().__init__(backend="quanto")
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        nbits: int = 4,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+    ):
+        layers = [
+            QuantoQuantizedLayer(nbits, axis_key, axis_value, q_group_size, residual_length)
+            for _ in range(config.num_hidden_layers)
+        ]
+        super().__init__(layers=layers)
 
 
-class HQQQuantizedCache(QuantizedCache):
+class HQQQuantizedCache(Cache):
     """
     A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
@@ -1448,12 +1440,6 @@ class HQQQuantizedCache(QuantizedCache):
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
     original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
     quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
-
-    Uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
@@ -1477,8 +1463,20 @@ class HQQQuantizedCache(QuantizedCache):
         ```
     """
 
-    def __init__(self):
-        super().__init__(backend="HQQ")
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        nbits: int = 4,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+    ):
+        layers = [
+            HQQQuantizedLayer(nbits, axis_key, axis_value, q_group_size, residual_length)
+            for _ in range(config.num_hidden_layers)
+        ]
+        super().__init__(layers=layers)
 
 
 class EncoderDecoderCache(Cache):
@@ -1664,7 +1662,6 @@ class EncoderDecoderCache(Cache):
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
-
 
 
 ### Deprecated classes
