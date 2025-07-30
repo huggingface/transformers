@@ -295,16 +295,16 @@ def infer_framework_load_model(
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError, TypeError, RuntimeError):
-                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `torch_dtype`
+                # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `dtype`
                 # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
                 # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
-                if is_torch_available() and ("torch_dtype" in kwargs):
+                if is_torch_available() and ("dtype" in kwargs):
                     import torch  # local import to avoid unnecessarily importing torch for TF/JAX users
 
                     fallback_tried = True
                     fp32_kwargs = kwargs.copy()
-                    fp32_kwargs["torch_dtype"] = torch.float32
+                    fp32_kwargs["dtype"] = torch.float32
 
                     try:
                         model = model_class.from_pretrained(model, **fp32_kwargs)
@@ -858,7 +858,7 @@ def build_pipeline_init_args(
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id. You can pass native `torch.device` or a `str` too
-        torch_dtype (`str` or `torch.dtype`, *optional*):
+        dtype (`str` or `torch.dtype`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
             (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
     if supports_binary_output:
@@ -952,10 +952,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, "torch.device"] = None,
-        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
+        _ = kwargs.pop("dtype", None)
+        _ = kwargs.pop("torch_dtype", None)
+
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
         if framework in ("tf", "jax"):
@@ -1201,10 +1203,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         return self(X)
 
     @property
+    def dtype(self) -> Optional["torch.dtype"]:
+        """
+        Dtype of the model (if it's Pytorch model), `None` otherwise.
+        """
+        return getattr(self.model, "dtype", None)
+    
+    @property
     def torch_dtype(self) -> Optional["torch.dtype"]:
         """
         Torch dtype of the model (if it's Pytorch model), `None` otherwise.
         """
+        logger.warning_once("`torch_dtype` attribute is deprecated. Use `dtype` instead!")
         return getattr(self.model, "dtype", None)
 
     @contextmanager

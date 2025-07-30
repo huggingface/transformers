@@ -94,20 +94,20 @@ class AwqQuantizer(HfQuantizer):
                         " This is not supported. Please remove the CPU or disk device from the device_map."
                     )
 
-    def update_torch_dtype(self, torch_dtype):
-        if torch_dtype is None:
-            torch_dtype = torch.float16
-            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
-        elif torch_dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+    def update_dtype(self, dtype):
+        if dtype is None:
+            dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `dtype` manually.")
+        elif dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
             logger.warning(
                 "`torch.bfloat16` is not supported for AWQ CUDA/XPU kernels yet. Casting to `torch.float16`."
             )
-            torch_dtype = torch.float16
-        elif torch_dtype != torch.float16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+            dtype = torch.float16
+        elif dtype != torch.float16 and (torch.cuda.is_available() or torch.xpu.is_available()):
             logger.warning(
-                "We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ."
+                "We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ."
             )
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs

@@ -166,7 +166,7 @@ class AttentionMaskVisualizer:
                 self.config = config
 
         self.model = _ModelWrapper(config, model_name)
-        self.model.to(config.torch_dtype)
+        self.model.to(config.dtype)
         self.repo_id = model_name
         self.config = config
 

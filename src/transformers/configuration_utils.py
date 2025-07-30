@@ -179,16 +179,11 @@ class PretrainedConfig(PushToHubMixin):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
-        torch_dtype (`str`, *optional*):
+        dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
             model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
-            `float16` weights. Since the config object is stored in plain text, this attribute contains just the
-            floating type string without the `torch.` prefix. For example, for `torch.float16` ``torch_dtype` is the
-            `"float16"` string.
-
-            This attribute is currently not being used during model loading time, but this may change in the future
-            versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
+            `float16` weights.
     """
 
     model_type: str = ""
@@ -218,7 +213,7 @@ class PretrainedConfig(PushToHubMixin):
         output_attentions: bool = False,
         return_dict: bool = True,
         torchscript: bool = False,
-        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
+        dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
         pruned_heads: Optional[dict[int, list[int]]] = None,
         tie_word_embeddings: bool = True,
@@ -265,18 +260,21 @@ class PretrainedConfig(PushToHubMixin):
                 f"The config parameter `problem_type` was not understood: received {problem_type} "
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
-        if torch_dtype is not None and isinstance(torch_dtype, str) and is_torch_available():
-            # we will start using self.torch_dtype in v5, but to be consistent with
-            # from_pretrained's torch_dtype arg convert it to an actual torch.dtype object
+        # BC for the `torch_dtype` argument instead of the simpler `dtype`
+        if torch_dtype := kwargs.get("torch_dtype", None) is not None:
+            dtype = dtype if dtype is not None else torch_dtype
+        if dtype is not None and isinstance(dtype, str) and is_torch_available():
+            # we will start using self.dtype in v5, but to be consistent with
+            # from_pretrained's dtype arg convert it to an actual torch.dtype object
             import torch
 
-            torch_dtype = getattr(torch, torch_dtype)
+            dtype = getattr(torch, dtype)
 
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
         self.torchscript = torchscript
-        self.torch_dtype = torch_dtype
+        self.dtype = dtype
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
@@ -809,7 +807,7 @@ class PretrainedConfig(PushToHubMixin):
                 if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
                     value = current_attr.__class__(**value)
                 setattr(config, key, value)
-                if key != "torch_dtype":
+                if key != "dtype":
                     to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
@@ -909,7 +907,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-        self.dict_torch_dtype_to_str(serializable_config_dict)
+        self.dict_dtype_to_str(serializable_config_dict)
 
         return serializable_config_dict
 
@@ -943,7 +941,7 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-        self.dict_torch_dtype_to_str(output)
+        self.dict_dtype_to_str(output)
 
         return output
 
@@ -1027,20 +1025,20 @@ class PretrainedConfig(PushToHubMixin):
 
             setattr(self, k, v)
 
-    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None:
-            if isinstance(d["torch_dtype"], dict):
-                d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
-            elif not isinstance(d["torch_dtype"], str):
-                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None:
+            if isinstance(d["dtype"], dict):
+                d["dtype"] = {k: str(v).split(".")[-1] for k, v in d["dtype"].items()}
+            elif not isinstance(d["dtype"], str):
+                d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
+                self.dict_dtype_to_str(value)
 
     def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
         """

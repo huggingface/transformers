@@ -247,6 +247,13 @@ class ChatArguments:
     )
     device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "`torch_dtype` is deprecated! Please use `dtype` argument instead.
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    dtype: Optional[str] = field(
         default="auto",
         metadata={
             "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
@@ -278,6 +285,12 @@ class ChatArguments:
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+
+    def __post_init__(self):
+        """Only used for BC `torch_dtype` argument."""
+        # In this case only the BC torch_dtype was given
+        if self.torch_dtype is not None and self.dtype == "auto":
+            self.dtype = self.torch_dtype
 
 
 def chat_command_factory(args: Namespace):
@@ -513,11 +526,11 @@ class ChatCommand(BaseTransformersCLICommand):
         if model_args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `torch_dtype`
-                bnb_4bit_compute_dtype=model_args.torch_dtype,
+                # For consistency with model weights, we use the same value as `dtype`
+                bnb_4bit_compute_dtype=model_args.dtype,
                 bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
                 bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=model_args.torch_dtype,
+                bnb_4bit_quant_storage=model_args.dtype,
             )
         elif model_args.load_in_8bit:
             quantization_config = BitsAndBytesConfig(
@@ -535,12 +548,12 @@ class ChatCommand(BaseTransformersCLICommand):
             trust_remote_code=args.trust_remote_code,
         )
 
-        torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
         model_kwargs = {
             "revision": args.model_revision,
             "attn_implementation": args.attn_implementation,
-            "torch_dtype": torch_dtype,
+            "dtype": dtype,
             "device_map": "auto",
             "quantization_config": quantization_config,
         }
@@ -646,7 +659,7 @@ class ChatCommand(BaseTransformersCLICommand):
         if self.spawn_backend:
             serve_args = ServeArguments(
                 device=self.args.device,
-                torch_dtype=self.args.torch_dtype,
+                dtype=self.args.dtype,
                 trust_remote_code=self.args.trust_remote_code,
                 attn_implementation=self.args.attn_implementation,
                 load_in_8bit=self.args.load_in_8bit,
