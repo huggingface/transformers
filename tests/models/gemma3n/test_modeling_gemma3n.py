@@ -688,8 +688,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -713,8 +713,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages = [
             [
@@ -750,8 +750,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=False, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, low_cpu_mem_usage=False, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -787,8 +787,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -810,8 +810,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -843,8 +843,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3nForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
+        model = Gemma3nForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
@@ -864,8 +864,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        ).to(torch_device)
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map=torch_device
+        )
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -897,8 +897,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
-        ).to(torch_device)
+            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16, device_map=torch_device
+        )
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
@@ -928,8 +928,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16
-        ).to(torch_device)
+            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16, device_map=torch_device
+        )
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
