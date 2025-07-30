@@ -1374,7 +1374,7 @@ def create_tiny_models(
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
 
-    config_classes = sorted(config_classes)
+    config_classes = sorted(config_classes, key=lambda x: x.__name__)
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
