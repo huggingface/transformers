@@ -1076,6 +1076,8 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
+    print(f"Create models for {config_class.__name__} ...")
+
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         data["training_ds"] = ds["train"]
@@ -1206,6 +1208,9 @@ def build(config_class, models_to_create, output_dir):
         del result["error"]
     if not result["warnings"]:
         del result["warnings"]
+
+    print(f"Finished building models for {config_class.__name__} ...")
+    print("=" * 40)
 
     return result
 
