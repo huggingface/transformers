@@ -663,36 +663,36 @@ def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tens
 
     for (path, param), value in tree.flatten_with_path(ckpt):
         if param == "audio_input_embedding_extra":
-            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_embedding_norm"):
-            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_input_projection"):
             update_tree(
-                "model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.torch_dtype
+                "model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype
             )
         elif path.endswith("audio_soft_embedding_norm"):
-            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.dtype)
         elif param == "mm_input_embedding_extra":
-            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_hard_embedding_norm"):
-            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_input_projection"):
             update_tree(
-                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.torch_dtype
+                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.dtype
             )
         elif path.endswith("mm_soft_embedding_norm"):
-            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.startswith(_TRANSFORMER_PARAMETER):
             for path, weights in convert_transformer_weights(config.text_config, path, param, value):
-                update_tree(f"model.language_model.{path}", weights, config.text_config.torch_dtype)
+                update_tree(f"model.language_model.{path}", weights, config.text_config.dtype)
         elif _MOBILE_NET_PREFIX in path:
             mobilenet_prefix_idx = path.index(_MOBILE_NET_PREFIX)
             path = path[mobilenet_prefix_idx:]
             for path, weights in convert_vision_weights(config.vision_config, path, param, value):
-                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.torch_dtype)
+                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.dtype)
         elif path.startswith(_AUDIO_ENCODER_PARAMETER):
             for path, weights in convert_audio_encoder_weights(config.audio_config, path, param, value):
-                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.torch_dtype)
+                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.dtype)
 
     hf_tree["lm_head.weight"] = hf_tree["model.language_model.embed_tokens.weight"]
 
@@ -706,9 +706,9 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.audio_config.torch_dtype = getattr(torch, _AUDIO_DTYPE.value)
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
-    config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+    config.audio_config.dtype = getattr(torch, _AUDIO_DTYPE.value)
+    config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
+    config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
         # both "<eos>" and "<end_of_turn>" as generation stoppers.
