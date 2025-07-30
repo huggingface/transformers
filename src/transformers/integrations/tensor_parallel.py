@@ -939,7 +939,7 @@ class RouterParallel(TensorParallelLayer):
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
         num_local_experts = mod.num_experts // ep_size
-        router_scores, router_indices = outputs
+        router_scores, router_indices = outputs[0], outputs[1]
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
         router_indices = router_indices % num_local_experts
