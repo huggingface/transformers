@@ -233,7 +233,7 @@ def chunk_layer(
 
     def _prep_inputs(t: torch.Tensor) -> torch.Tensor:
         if not low_mem:
-            if not sum(t.shape[:no_batch_dims]) == no_batch_dims:
+            if sum(t.shape[:no_batch_dims]) != no_batch_dims:
                 t = t.expand(orig_batch_dims + t.shape[no_batch_dims:])
             t = t.reshape(-1, *t.shape[no_batch_dims:])
         else:
