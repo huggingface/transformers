@@ -31,6 +31,7 @@ from ..utils.quantization_config import (
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -54,6 +55,7 @@ from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
@@ -81,6 +83,7 @@ AUTO_QUANTIZER_MAPPING = {
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
+    "mxfp4": Mxfp4HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -103,6 +106,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
+    "mxfp4": Mxfp4Config,
 }
 
 logger = logging.get_logger(__name__)
@@ -211,7 +215,8 @@ class AutoHfQuantizer:
 
         if (
             isinstance(
-                quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig)
+                quantization_config,
+                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
             )
             and quantization_config_from_args is not None
         ):

@@ -26,25 +26,12 @@ class OpenAIMoeConfig(PretrainedConfig):
     """
 
     model_type = "openai_moe"
-    base_model_tp_plan = {
-        # "embed_tokens": "vocab_parallel_rowwise",
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "local_rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
-        "layers.*.mlp.experts.gate_up_proj_bias": "local_packed_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_colwise",
-        "layers.*.mlp.experts.down_proj_bias": "local",  # TODO: add smthg that says bias exists only once for all TPs
-        # "layers.*.mlp": "gather",
-    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    base_model_ep_plan = {
+    base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
