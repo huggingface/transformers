@@ -825,7 +825,13 @@ class ServeCommand(BaseTransformersCLICommand):
 
             if modality == Modality.LLM:
                 # If we're working with LLMs, then "content" is a single string.
-                content = message["content"] if isinstance(message["content"], str) else message["content"]["text"]
+                if isinstance(message["content"], str):
+                    content = message["content"]
+                elif isinstance(message["content"], list):
+                    content = message["content"][0]["text"]
+                else:
+                    content = message["content"]["text"]
+
                 parsed_message["content"] = content
 
             elif modality == Modality.VLM:
