@@ -641,17 +641,13 @@ class KyutaiSpeechToTextBf16Test(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-                model_checkpoint, dtype=torch.float16
-            )
+            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_checkpoint, dtype=torch.float16)
             self.assertTrue(model.codec_model.dtype == torch.float32)
             self.assertTrue(model.model.dtype == torch.float16)
             self.assertTrue(model.lm_head.weight.data.dtype == torch.float16)
 
             # Load without in bf16
-            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-                model_checkpoint, dtype=torch.bfloat16
-            )
+            model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_checkpoint, dtype=torch.bfloat16)
             self.assertTrue(model.codec_model.dtype == torch.float32)
             self.assertTrue(model.model.dtype == torch.bfloat16)
             self.assertTrue(model.lm_head.weight.data.dtype == torch.bfloat16)

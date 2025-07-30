@@ -2426,17 +2426,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_speculative_decoding_distil(self):
         dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, dtype=dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "distil-whisper/distil-large-v2"
-        assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, dtype=dtype, use_safetensors=True
-        )
+        assistant_model = WhisperForCausalLM.from_pretrained(assistant_model_id, dtype=dtype, use_safetensors=True)
         assistant_model.to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -2476,9 +2472,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_speculative_decoding_non_distil(self):
         dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, dtype=dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)

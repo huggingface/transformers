@@ -244,9 +244,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/deepseek-vl-1.3b-chat"
 
     def test_model_text_generation(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -278,9 +276,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         )
 
     def test_model_text_generation_batched(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -326,9 +322,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, text)
 
     def test_model_text_generation_with_multi_image(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)

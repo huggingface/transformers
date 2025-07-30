@@ -667,9 +667,7 @@ def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tens
         elif path.endswith("audio_embedding_norm"):
             update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_input_projection"):
-            update_tree(
-                "model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype
-            )
+            update_tree("model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype)
         elif path.endswith("audio_soft_embedding_norm"):
             update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.dtype)
         elif param == "mm_input_embedding_extra":

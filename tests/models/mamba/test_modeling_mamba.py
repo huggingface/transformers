@@ -522,9 +522,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(
-            torch_device
-        )
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())

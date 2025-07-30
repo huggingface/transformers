@@ -257,9 +257,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
-        model = Qwen2MoeForCausalLM.from_pretrained(
-            "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
-        )
+        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
         assistant_model = Qwen2MoeForCausalLM.from_pretrained(
             "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
         )

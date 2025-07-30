@@ -186,9 +186,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", dtype=torch.float16
-        )
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto", dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))

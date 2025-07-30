@@ -428,11 +428,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        dtype = (
-            model_args.dtype
-            if model_args.dtype in ["auto", None]
-            else getattr(torch, model_args.dtype)
-        )
+        dtype = model_args.dtype if model_args.dtype in ["auto", None] else getattr(torch, model_args.dtype)
         model = AutoModelForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),

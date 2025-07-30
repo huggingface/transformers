@@ -768,9 +768,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager"
-                )
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)

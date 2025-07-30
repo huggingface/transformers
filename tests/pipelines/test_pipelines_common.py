@@ -523,9 +523,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         # Case 1: Model is manually moved to device
-        model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-bert", dtype=torch.float16).to(
+            torch_device
+        )
         model_device = model.device
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
         self.assertEqual(pipe.model.device, model_device)
@@ -552,9 +552,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         model_device = f"{torch_device}:1"
-        model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", dtype=torch.float16
-        ).to(model_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-bert", dtype=torch.float16).to(
+            model_device
+        )
         target_device = f"{torch_device}:0"
         self.assertNotEqual(model_device, target_device)
         pipe = pipeline("text-generation", model=model, device=target_device, tokenizer=tokenizer)

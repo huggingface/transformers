@@ -88,9 +88,9 @@ class GlmIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, dtype=torch.float16, revision=self.revision
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16, revision=self.revision).to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -106,9 +106,9 @@ class GlmIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, revision=self.revision
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, revision=self.revision).to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

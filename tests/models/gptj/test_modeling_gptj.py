@@ -495,9 +495,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gptj(self):
         # Marked as @tooslow due to GPU OOM
         for checkpointing in [True, False]:
-            model = GPTJForCausalLM.from_pretrained(
-                "EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16
-            )
+            model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16)
             if checkpointing:
                 model.gradient_checkpointing_enable()
             else:
@@ -551,9 +549,9 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
-        model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16
-        ).to(torch_device)
+        model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", dtype=torch.float16).to(
+            torch_device
+        )
         input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)

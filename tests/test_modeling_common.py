@@ -1198,9 +1198,7 @@ class ModelTesterMixin:
                         model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
-                    model = AutoModelForCausalLM.from_pretrained(
-                        tmpdir, dtype=torch.float32, device_map=torch_device
-                    )
+                    model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
                     inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
                     inputs_dict["labels"] = inputs_dict["input_ids"]
                     _ = model(**inputs_dict, return_dict=False)
@@ -4116,9 +4114,7 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(
-            device=torch_device, dtype=dtype
-        )
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),

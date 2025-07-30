@@ -318,9 +318,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     @slow
     def test_inference_fp16(self):
-        model = EomtForUniversalSegmentation.from_pretrained(
-            self.model_id, dtype=torch.float16, device_map="auto"
-        )
+        model = EomtForUniversalSegmentation.from_pretrained(self.model_id, dtype=torch.float16, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(self.model_id)
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
