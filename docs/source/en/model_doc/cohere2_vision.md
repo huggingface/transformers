@@ -1,4 +1,4 @@
-# command-A-vision
+# Command A Vision
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -9,19 +9,18 @@
 
 ## Overview
 
-Command Vision is a state-of-the-art multimodal model designed to seamlessly integrate visual and textual information for a wide range of applications. By combining advanced computer vision techniques with natural language processing capabilities, Command Vision enables users to analyze, understand, and generate insights from both visual and textual data.
+Command A Vision is a state-of-the-art multimodal model designed to seamlessly integrate visual and textual information for a wide range of applications. By combining advanced computer vision techniques with natural language processing capabilities, Command A Vision enables users to analyze, understand, and generate insights from both visual and textual data.
 
 The model excels at tasks including image captioning, visual question answering, document understanding, and chart understanding. This makes it a versatile tool for AI practitioners. Its ability to process complex visual and textual inputs makes it useful in settings where text-only representations are imprecise or unavailable, like real-world image understanding and graphics-heavy document processing.
 
-Command Vision is built upon a robust architecture that leverages the latest advancements in VLMs. It's highly performant and efficient, even when dealing with large-scale datasets. The model's flexibility makes it suitable for a wide range of use cases, from content moderation and image search to medical imaging analysis and robotics.
+Command A Vision is built upon a robust architecture that leverages the latest advancements in VLMs. It's highly performant and efficient, even when dealing with large-scale datasets. The model's flexibility makes it suitable for a wide range of use cases, from content moderation and image search to medical imaging analysis and robotics.
 
 ## Usage tips
 
 The model and image processor can be loaded as follows:
 
 ```python
-# TODO(julian) match model card snippet
-# pip install 'git+https://github.com/huggingface/transformers.git'
+# pip install "transformers[dev-torch]@git+https://github.com/huggingface/transformers.git"
 
 import torch
 
@@ -34,33 +33,41 @@ model = AutoModelForImageTextToText.from_pretrained(
     model_id, device_map="auto", torch_dtype=torch.float16
 )
 
-# Format message with the command-A-vision chat template
+# Format message with the Command-A-Vision chat template
 messages = [
     {
         "role": "user",
         "content": [
             {
                 "type": "image",
-                "url": "https://media.istockphoto.com/id/458012057/photo/istanbul-turkey.jpg?s=612x612&w=0&k=20&c=qogAOVvkpfUyqLUMr_XJQyq-HkACXyYUSZbKhBlPrxo=",
+                "url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
             },
-            {"type": "text", "text": "Which monument is shown in this image?"},
+            {"type": "text", "text": "what is in this image?"},
         ],
     },
 ]
 
-
 inputs = processor.apply_chat_template(
-    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+    messages,
+    padding=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
 ).to(model.device)
 
 gen_tokens = model.generate(
-    **inputs, 
-    max_new_tokens=300, 
-    do_sample=True, 
+    **inputs,
+    max_new_tokens=300,
+    do_sample=True,
     temperature=0.3,
 )
 
-print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+print(
+    processor.tokenizer.decode(
+        gen_tokens[0][inputs.input_ids.shape[1] :], skip_special_tokens=True
+    )
+)
 ```
 
 ## Cohere2VisionConfig

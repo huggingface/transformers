@@ -27,8 +27,8 @@ import torch
 from transformers.models.cohere2_vision.processing_cohere2_vision import (
     Cohere2VisionProcessor,
 )
-from transformers.models.cohere2_vision.image_processing_cohere2_vision import (
-    Cohere2VisionImageProcessor,
+from transformers.models.cohere2_vision.image_processing_cohere2_vision_fast import (
+    Cohere2VisionImageProcessorFast,
 )
 from transformers import Cohere2VisionForConditionalGeneration
 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     img_processor = AutoImageProcessor.from_pretrained(model_id, use_auth_token=True)
 
     assert isinstance(processor, Cohere2VisionProcessor)
-    assert isinstance(processor.image_processor, Cohere2VisionImageProcessor)
+    assert isinstance(processor.image_processor, Cohere2VisionImageProcessorFast)
 
     print("processor loaded")
     if args.small:
