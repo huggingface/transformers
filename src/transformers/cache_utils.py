@@ -81,10 +81,8 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor):
         dtype, device = key_states.dtype, key_states.device
-        self.keys, self.values = (
-            torch.tensor([], dtype=dtype, device=device),
-            torch.tensor([], dtype=dtype, device=device),
-        )
+        self.keys = torch.tensor([], dtype=dtype, device=device)
+        self.values = torch.tensor([], dtype=dtype, device=device)
 
     def update(
         self,
@@ -481,10 +479,8 @@ class QuantizedLayer(DynamicLayer):
 
     def lazy_initializion(self, key_states: torch.Tensor, value_states: torch.Tensor):
         dtype, device = key_states.dtype, key_states.device
-        self.keys, self.values = (
-            torch.tensor([], dtype=dtype, device=device),
-            torch.tensor([], dtype=dtype, device=device),
-        )
+        self.keys = torch.tensor([], dtype=dtype, device=device)
+        self.values = torch.tensor([], dtype=dtype, device=device)
         self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
         self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
 
