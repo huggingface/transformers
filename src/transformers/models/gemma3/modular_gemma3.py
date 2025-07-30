@@ -1083,6 +1083,12 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        "^language_model.model": "model.language_model",
+        "^vision_tower": "model.vision_tower",
+        "^multi_modal_projector": "model.multi_modal_projector",
+    }
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
