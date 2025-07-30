@@ -487,9 +487,10 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
-    def apply_weight_norm(self):
+    def apply_weight_norm(self, old_weight_norm=False):
+        # original version of DAC uses old weight norm
         weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not old_weight_norm:
             weight_norm = nn.utils.parametrizations.weight_norm
 
         for layer in self.quantizer.quantizers:
@@ -520,34 +521,38 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
             weight_norm(layer.res_unit3.conv1)
             weight_norm(layer.res_unit3.conv2)
 
-    def remove_weight_norm(self):
-        for layer in self.quantizer.quantizers:
-            nn.utils.remove_weight_norm(layer.in_proj)
-            nn.utils.remove_weight_norm(layer.out_proj)
+    def remove_weight_norm(self, old_weight_norm=False):
+        remove_weight_norm = nn.utils.remove_weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not old_weight_norm:
+            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
 
-        nn.utils.remove_weight_norm(self.encoder.conv1)
-        nn.utils.remove_weight_norm(self.encoder.conv2)
+        for layer in self.quantizer.quantizers:
+            remove_weight_norm(layer.in_proj, "weight")
+            remove_weight_norm(layer.out_proj, "weight")
+
+        remove_weight_norm(self.encoder.conv1, "weight")
+        remove_weight_norm(self.encoder.conv2, "weight")
 
         for layer in self.encoder.block:
-            nn.utils.remove_weight_norm(layer.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit1.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit1.conv2)
-            nn.utils.remove_weight_norm(layer.res_unit2.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit2.conv2)
-            nn.utils.remove_weight_norm(layer.res_unit3.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit3.conv2)
+            remove_weight_norm(layer.conv1, "weight")
+            remove_weight_norm(layer.res_unit1.conv1, "weight")
+            remove_weight_norm(layer.res_unit1.conv2, "weight")
+            remove_weight_norm(layer.res_unit2.conv1, "weight")
+            remove_weight_norm(layer.res_unit2.conv2, "weight")
+            remove_weight_norm(layer.res_unit3.conv1, "weight")
+            remove_weight_norm(layer.res_unit3.conv2, "weight")
 
-        nn.utils.remove_weight_norm(self.decoder.conv1)
-        nn.utils.remove_weight_norm(self.decoder.conv2)
+        remove_weight_norm(self.decoder.conv1, "weight")
+        remove_weight_norm(self.decoder.conv2, "weight")
 
         for layer in self.decoder.block:
-            nn.utils.remove_weight_norm(layer.conv_t1)
-            nn.utils.remove_weight_norm(layer.res_unit1.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit1.conv2)
-            nn.utils.remove_weight_norm(layer.res_unit2.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit2.conv2)
-            nn.utils.remove_weight_norm(layer.res_unit3.conv1)
-            nn.utils.remove_weight_norm(layer.res_unit3.conv2)
+            remove_weight_norm(layer.conv_t1, "weight")
+            remove_weight_norm(layer.res_unit1.conv1, "weight")
+            remove_weight_norm(layer.res_unit1.conv2, "weight")
+            remove_weight_norm(layer.res_unit2.conv1, "weight")
+            remove_weight_norm(layer.res_unit2.conv2, "weight")
+            remove_weight_norm(layer.res_unit3.conv1, "weight")
+            remove_weight_norm(layer.res_unit3.conv2, "weight")
 
 
 @auto_docstring(
