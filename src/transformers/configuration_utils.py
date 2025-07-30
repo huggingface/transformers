@@ -425,7 +425,7 @@ class PretrainedConfig(PushToHubMixin):
     def torch_dtype(self):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         return self.dtype
-    
+
     @torch_dtype.setter
     def torch_dtype(self, value):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
