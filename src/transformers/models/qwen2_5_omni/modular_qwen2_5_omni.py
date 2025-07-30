@@ -43,7 +43,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbeddin
 
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...generation import GenerationMixin
+from ...generation import GenerateDecoderOnlyOutput, GenerationMixin
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
@@ -3966,6 +3966,38 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 ############################
 
 
+@dataclass
+class Qwen2_5OmniGenerateOutput(GenerateDecoderOnlyOutput):
+    """
+    Outputs of Qwen2_5OmniForConditionalGeneration.generate.
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+            Returns the model cache, used to speed up decoding. Different models have a different cache format, check
+        audio (`torch.FloatTensor` of shape `(sequence_length)`):
+            The generated audio. Qwen2.5Omni does not support batched inference with audio output.
+    """
+
+    audio: Optional[torch.Tensor] = None
+
+
 @auto_docstring(
     custom_intro="""
     The full Qwen2.5Omni model, a multimodal model composed of 3 sub-models:
@@ -4078,8 +4110,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_temperature: float = 0.9,
         talker_eos_token_id: list[int] = [8292, 8294],
         talker_repetition_penalty: float = 1.05,
+        return_dict_in_generate: bool = False,
         **kwargs,
-    ):
+    ) -> Union[Qwen2_5OmniGenerateOutput, torch.LongTensor, tuple[torch.LongTensor, torch.FloatTensor]]:
         r"""
         Generate text response and audio from input.
 
@@ -4097,6 +4130,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - With a *thinker_*, *talker_*, *token2wav_* prefix, they will be input for the `generate` method of the
                 thinker, talker and token2wav respectively. It has the priority over the keywords without a prefix.
         Returns:
+            A `Qwen2_5OmniGenerateOutput` when `return_dict_in_generate=True`, otherwise:
             When `return_audio=False`:
                 - **Text** (`torch.Tensor`): Generated text token sequence.
             When `return_audio=True`:
@@ -4165,7 +4199,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
 
         if not generate_audio:
-            return thinker_result
+            if return_dict_in_generate:
+                return Qwen2_5OmniGenerateOutput(sequences=thinker_result)
+            else:
+                return thinker_result
 
         # 2. Generate speech tokens from talker module
         embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(input_ids.device)
@@ -4286,7 +4323,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             **token2wav_kwargs,
         )
 
-        return thinker_result.sequences, wav.float()
+        if return_dict_in_generate:
+            return Qwen2_5OmniGenerateOutput(sequences=thinker_result.sequences, audio=wav.float())
+        else:
+            return thinker_result.sequences, wav.float()
 
 
 __all__ = [

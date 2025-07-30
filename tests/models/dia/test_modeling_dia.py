@@ -218,9 +218,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_model_classes = (DiaModel, DiaForConditionalGeneration) if is_torch_available() else ()
     # We only allow greedy search / sampling with one sequence; see `skip_non_greedy_generate`
     all_generative_model_classes = (DiaForConditionalGeneration,)
-    # TODO: support new pipeline behavior in tests
-    pipeline_model_mapping = {}
-    # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False

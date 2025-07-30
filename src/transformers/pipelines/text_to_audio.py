@@ -120,20 +120,24 @@ class TextToAudioPipeline(Pipeline):
         self.sampling_rate = self._get_sampling_rate(sampling_rate)
 
         # Text to audio models are a diverse bunch: this section contains a best-effort to attempt to identify types
-        # of models, to control the behavior of the pipeline (set `generate` flags, preprocess differently, etc.)
+        # of models, to control and standardize the behavior of the pipeline (set `generate` flags, preprocess
+        # differently, etc.)
+        generate_parameters = inspect.signature(self.model.generate).parameters if self.model.can_generate() else []
+        processor_parameters = inspect.signature(self.processor).parameters if self.processor is not None else []
         # 1 - audio output: some models can output audio directly from `generate`, but need a flag to do so. E.g. CSM
-        self._has_output_audio_in_generate = (
-            self.model.can_generate() and "output_audio" in inspect.signature(self.model.generate).parameters
-        )
+        output_audio_flags_list = [arg for arg in ["output_audio", "return_audio"] if arg in generate_parameters]
+        self._output_audio_flag = output_audio_flags_list[0] if len(output_audio_flags_list) == 1 else None
         # 2 - voice selection: some TTS models use the `role` field of the chat template to select the voice, as a
         # digit. E.g. CSM
         chat_template = getattr(self.tokenizer, "chat_template", None)
         self._has_voice_digit_in_chat_role = "isdigit()" in chat_template if chat_template is not None else False
         # 3 - voice selection: some TTS models use speaker embeddings and have a `voice_preset` parameter in the
         # processor. E.g. Bark
-        self._has_voice_preset_in_processor = (
-            "voice_preset" in inspect.signature(self.processor).parameters if self.processor is not None else False
-        )
+        self._has_voice_preset_in_processor = "voice_preset" in processor_parameters
+        self._accepts_voice_in_processor = self._has_voice_digit_in_chat_role or self._has_voice_preset_in_processor
+        # 4 - voice selection: some TTS models accept `voice` or `speaker` in their `generate` kwargs
+        voice_kwargs_in_model_list = [arg for arg in ["voice", "speaker"] if arg in generate_parameters]
+        self._voice_kwarg_in_model = voice_kwargs_in_model_list[0] if len(voice_kwargs_in_model_list) == 1 else None
 
     def _get_sampling_rate(self, sampling_rate: Optional[int] = None) -> Optional[int]:
         """
@@ -164,9 +168,9 @@ class TextToAudioPipeline(Pipeline):
             sampling_rate = self.processor.feature_extractor.sampling_rate
         return sampling_rate
 
-    def _get_audio_channels(self) -> Optional[int]:
+    def _get_audio_channels(self) -> int:
         """
-        Get the number of audio channels from the model config.
+        Get the number of audio channels from the model config. If the attribute is not found, defaults to 1.
         """
         # the number of audio channels is stored in different places in the config, depending on the model
         for nested_name in [None, "audio_config", "codec_config"]:
@@ -181,6 +185,9 @@ class TextToAudioPipeline(Pipeline):
                 audio_channels = getattr(obj, attr, None)
                 if audio_channels is not None:
                     break
+        # WARNING: this default may cause issues in the future. We may need a more precise way of detecting the number
+        # of channels.
+        audio_channels = audio_channels or 1
         return audio_channels
 
     def preprocess(self, text, **kwargs):
@@ -199,7 +206,7 @@ class TextToAudioPipeline(Pipeline):
             new_kwargs.update(kwargs)
             kwargs = new_kwargs
 
-        # Different ways to select the voice (TTS models)
+        # Different ways to preprocess the voice (TTS models)
         if self._has_voice_digit_in_chat_role:
             voice = str(kwargs.pop("voice", "0"))
             if not voice.isdigit():
@@ -209,15 +216,16 @@ class TextToAudioPipeline(Pipeline):
                 )
                 voice = "0"
             conversation = [{"role": voice, "content": [{"type": "text", "text": text[0]}]}]
-            output = self.tokenizer.apply_chat_template(
+            output = self.processor.apply_chat_template(
                 conversation, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
             )
         elif self._has_voice_preset_in_processor:
             voice = kwargs.pop("voice", None)
             output = self.processor(text, voice_preset=voice, **kwargs)
-        # Default: no voice selection
+        # Default: no voice preprocessing
         else:
-            output = self.tokenizer(text, **kwargs, return_tensors="pt")
+            processor_object = self.processor if self.processor is not None else self.tokenizer
+            output = processor_object(text=text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -246,9 +254,9 @@ class TextToAudioPipeline(Pipeline):
         Args:
             text_inputs (`str` or `list[str]`):
                 The text(s) to generate audio from.
-            voice (`str`):
+            voice (`str`, *optional*):
                 The voice to use for the generation, if the model is a text-to-speech model that supports multiple
-                voices.
+                voices. Please refer to the model docs in transformers for model-specific examples.
             kwargs (`dict`, *optional*):
                 Parameters passed to the model generation (if the model supports generation) or forward method
                 (if not). `kwargs` are always passed to the underlying model. For a complete overview of
@@ -264,9 +272,15 @@ class TextToAudioPipeline(Pipeline):
 
     def _sanitize_parameters(
         self,
-        voice=None,
+        voice: Optional[str] = None,
         **kwargs,
     ):
+        if voice is not None and not (self._voice_kwarg_in_model is not None or self._accepts_voice_in_processor):
+            raise ValueError(
+                f"The {self.model.name_or_path} model does not support voice selection through the `voice` "
+                "parameter. Please remove the `voice` parameter."
+            )
+
         # BC: we accepted `generate_kwargs` as a parameter. This was a more complex way of directly passing generation
         # parameters, `pipe(..., generate_kwargs={"max_new_tokens"=100})` vs `pipe(..., max_new_tokens=100)`. If the
         # model can't generate, these kwargs are forwarded to the model's `forward` method.
@@ -277,7 +291,8 @@ class TextToAudioPipeline(Pipeline):
         preprocess_params = {}
         if "preprocess_params" in kwargs:  # BC
             preprocess_params.update(kwargs.pop("preprocess_params"))
-        if voice is not None:
+
+        if voice is not None and self._accepts_voice_in_processor:
             preprocess_params["voice"] = voice
 
         forward_params = {}
@@ -294,10 +309,16 @@ class TextToAudioPipeline(Pipeline):
             if getattr(self, "assistant_tokenizer", None) is not None:
                 forward_params["tokenizer"] = self.tokenizer
                 forward_params["assistant_tokenizer"] = self.assistant_tokenizer
-            if getattr(self, "_has_output_audio_in_generate", False) and "output_audio" not in forward_params:
-                forward_params["output_audio"] = True
+            if getattr(self, "_output_audio_flag", None) is not None:
+                forward_params[self._output_audio_flag] = True
+                # Without `return_dict_in_generate`, these models have a non-standard output format. By returning a
+                # dictionary, we can easily look for the right keys in `postprocess`
+                forward_params["return_dict_in_generate"] = True
             if "generation_config" not in forward_params:
                 forward_params["generation_config"] = self.generation_config
+
+        if voice is not None and self._voice_kwarg_in_model is not None:
+            forward_params[self._voice_kwarg_in_model] = voice
 
         forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
 
@@ -307,27 +328,45 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, audio):
         output_dict = {}
 
-        # Extract the waveform(s) from the possible formats
+        # Extract the waveform(s) from the possible formats. This waveform may need further processing.
         if isinstance(audio, dict):
-            waveform = audio.get("waveform") if "waveform" in audio else audio.get("audio")
+            if "waveform" in audio:  # e.g. SpeechT5
+                waveform = audio["waveform"]
+            elif "audio" in audio:  # e.g. CSM (may need stacking if in List[torch.FloatTensor] format)
+                waveform = torch.stack(audio["audio"]) if isinstance(audio["audio"], list) else audio["audio"]
+            elif "sequences" in audio:  # E.g Dia (these models will need the processor to postprocess)
+                waveform = audio["sequences"]
+            else:
+                raise ValueError(
+                    f"Unexpected keys in the audio output format: {audio.keys()}. Expected one of "
+                    "`waveform` or `audio`"
+                )
         elif isinstance(audio, (tuple, list)):
             waveform = audio[0]
         else:
             waveform = audio
 
-        if not 1 <= len(waveform.shape) <= 3:
+        # If the data is a LongTensor, then it is a codebook that needs to be decoded. If the model is not doing the
+        # decoding itself, then it's because the decoding happens in the processor.
+        if isinstance(waveform, torch.LongTensor):
+            waveform = self.processor.decode(waveform)
+
+        # If we know there is only one audio channel, we can infer missing dimensions
+        if self.audio_channels == 1:
+            if len(waveform.shape) == 1:  # (audio_length) -> (bsz=1, audio_length)
+                waveform = waveform.unsqueeze(0)
+            if len(waveform.shape) == 2:  # (bsz, audio_length) -> (bsz, audio_channels=1, audio_length)
+                waveform = waveform.unsqueeze(1)
+
+        # The waveform MUST have shape (batch_size, audio_channels, audio_length) at this point
+        if len(waveform.shape) != 3:
             raise ValueError(
-                f"Invalid waveform shape: {waveform.shape}, expected (batch_size [optional, implicitly 1], "
-                "nb_channels [optional if audio_channels is 1], audio_length)"
+                f"Unexpected waveform shape: {waveform.shape}. Expected (batch_size, audio_channels, audio_length)"
             )
 
         # bsz == 1 -> output a single dict
-        if len(waveform.shape) == 3 and waveform.shape[0] == 1:
-            waveform = waveform[0]
-        if len(waveform.shape) == 1 and self.audio_channels == 1:
-            waveform = waveform.unsqueeze(0)
-        if len(waveform.shape) == 2:
-            output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
+        if waveform.shape[0] == 1:
+            output_dict["audio"] = waveform[0].to(device="cpu", dtype=torch.float).numpy()
             output_dict["sampling_rate"] = self.sampling_rate
             return output_dict
         # bsz > 1 -> output a list of dicts

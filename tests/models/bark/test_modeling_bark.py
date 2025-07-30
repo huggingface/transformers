@@ -23,7 +23,6 @@ import pytest
 from transformers import (
     BarkCausalModel,
     BarkCoarseConfig,
-    BarkConfig,
     BarkFineConfig,
     BarkSemanticConfig,
     is_torch_available,
@@ -48,7 +47,6 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ..encodec.test_modeling_encodec import EncodecModelTester
 
 
 if is_torch_available():
@@ -473,56 +471,6 @@ class BarkFineModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-
-class BarkModelTester:
-    def __init__(
-        self,
-        parent,
-        semantic_kwargs=None,
-        coarse_acoustics_kwargs=None,
-        fine_acoustics_kwargs=None,
-        codec_kwargs=None,
-        is_training=False,  # for now training is not supported
-    ):
-        if semantic_kwargs is None:
-            semantic_kwargs = {}
-        if coarse_acoustics_kwargs is None:
-            coarse_acoustics_kwargs = {}
-        if fine_acoustics_kwargs is None:
-            fine_acoustics_kwargs = {}
-        if codec_kwargs is None:
-            codec_kwargs = {}
-
-        self.parent = parent
-        self.semantic_model_tester = BarkSemanticModelTester(parent, **semantic_kwargs)
-        self.coarse_acoustics_model_tester = BarkCoarseModelTester(parent, **coarse_acoustics_kwargs)
-        self.fine_acoustics_model_tester = BarkFineModelTester(parent, **fine_acoustics_kwargs)
-        self.codec_model_tester = EncodecModelTester(parent, **codec_kwargs)
-
-        self.is_training = is_training
-
-    def get_config(self):
-        return BarkConfig.from_sub_model_configs(
-            self.semantic_model_tester.get_config(),
-            self.coarse_acoustics_model_tester.get_config(),
-            self.fine_acoustics_model_tester.get_config(),
-            self.codec_model_tester.get_config(),
-        )
-
-    def get_pipeline_config(self):
-        config = self.get_config()
-
-        # follow the `get_pipeline_config` of the sub component models
-        config.semantic_config.vocab_size = 300
-        config.coarse_acoustics_config.vocab_size = 300
-        config.fine_acoustics_config.vocab_size = 300
-
-        config.semantic_config.output_vocab_size = 300
-        config.coarse_acoustics_config.output_vocab_size = 300
-        config.fine_acoustics_config.output_vocab_size = 300
-
-        return config
 
 
 @require_torch
@@ -1042,6 +990,10 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
+
+# NOTE: a `BarkModelTest` class is missing here, but `BarkModel` does not have a `forward` method. `BarkModel.generate`
+# is tested in the integration tests below, and there are Bark pipeline tests in `test_pipelines_test_to_audio.py`.
 
 
 @require_torch
