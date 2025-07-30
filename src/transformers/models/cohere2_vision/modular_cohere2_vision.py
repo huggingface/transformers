@@ -275,9 +275,8 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         >>> from transformers import AutoProcessor, Cohere2VisionForConditionalGeneration
         >>> import torch
 
-        >>> torch_device = "cuda:0"
-        >>> processor = AutoProcessor.from_pretrained("CohereForAI/Cohere2-VIsion-8b", use_fast=True)
-        >>> model = Cohere2VisionForConditionalGeneration.from_pretrained("CohereForAI/Cohere2-VIsion-8b", device_map=torch_device)
+        >>> processor = AutoProcessor.from_pretrained("CohereLabs/command-a-vision-07-2025", use_fast=True)
+        >>> model = Cohere2VisionForConditionalGeneration.from_pretrained("CohereLabs/command-a-vision-07-2025", device_map="auto")
 
         >>> messages = [
         ...     {
@@ -285,15 +284,15 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         ...         "content": [
         ...             {
         ...                 "type": "image",
-        ...                 "url": "https://pbs.twimg.com/media/Fx7YvfQWYAIp6rZ?format=jpg&name=medium",
+        ...                 "url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
         ...             },
-        ...             {"type": "text", "text": "चित्र में लिखा पाठ क्या कहता है?"},
+        ...             {"type": "text", "text": "what is in this image?"},
         ...         ],
-        ...     }
+        ...     },
         ... ]
 
         >>> inputs = processor.apply_chat_template(
-        ...     messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", device=torch_device
+        ...     messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt",
         ... ).to(model.device)
 
         >>> gen_tokens = model.generate(**inputs, max_new_tokens=300, do_sample=True, temperature=0.3)
