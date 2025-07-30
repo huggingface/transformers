@@ -20,7 +20,7 @@
 # limitations under the License.
 import itertools
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union, Unpack
+from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -37,6 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig
 
