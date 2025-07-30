@@ -140,7 +140,7 @@ class OpenAIMoeTopKRouter(nn.Module):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices, router_logits
+        return router_scores, router_indices
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
@@ -151,7 +151,7 @@ class OpenAIMoeMLP(nn.Module):
         self.experts = OpenAIMoeExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices, _ = self.router(hidden_states)  # (num_experts, seq_len)
+        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
         routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
         return routed_out
 
@@ -299,7 +299,7 @@ class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attention = False
     _can_record_outputs = {
-        "router_logits": OutputRecorder(OpenAIMoeTopKRouter, index=2),
+        "router_logits": OutputRecorder(OpenAIMoeTopKRouter, index=0),
         "hidden_states": OpenAIMoeDecoderLayer,
         "attentions": OpenAIMoeAttention,
     }
