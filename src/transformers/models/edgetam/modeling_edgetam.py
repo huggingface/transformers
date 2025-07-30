@@ -1498,7 +1498,6 @@ class EdgeTamRoPEAttentionV2(EdgeTamAttention):
         seq_len_k = key.shape[-2]
         width_k = height_k = int(math.sqrt(seq_len_k))
         current_feat_sizes_k = (width_k, height_k)
-
         # Generate or use cached position embeddings
         if (
             self._cached_cos_q is None
@@ -4100,9 +4099,6 @@ class EdgeTamVideoModel(EdgeTamModel):
                 temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
                 # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
                 object_pointers = torch.stack(object_pointers_list, dim=0)
-                object_pointers_pos_embed = object_pointers.new_zeros(
-                    len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
-                )
 
                 if self.enable_temporal_pos_encoding_for_object_pointers:
                     max_temporal_diff = float(max_object_pointers_to_use - 1)
@@ -4118,6 +4114,10 @@ class EdgeTamVideoModel(EdgeTamModel):
                     sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
                     projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
                     object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
+                else:
+                    object_pointers_pos_embed = object_pointers.new_zeros(
+                        len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
+                    )
 
                 if self.mem_dim < num_channels:
                     # If memory dimension is smaller, reshape/split pointers and repeat positional encoding
