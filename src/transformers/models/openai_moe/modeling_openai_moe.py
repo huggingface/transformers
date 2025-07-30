@@ -248,7 +248,7 @@ def eager_attention_forward(
     # TODO: check wether both produce the same results or not!
     # scale the logits to prevent overflows
 
-    # combine sinks with K-logits to prevent overflow in BF16/FP16 when training with bsz>1
+    # combine sinks with attention weight to prevent overflow in BF16/FP16 when training with bsz>1
     # subtract per‑row max, then soft‑max once (soft-max trick)
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)   
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
