@@ -276,7 +276,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
             data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number patches for a given image size.
 
