@@ -53,13 +53,12 @@ class Cohere2VisionText2TextModelTester:
         parent,
         batch_size=3,
         seq_length=7,
-        vision_feature_layer=-1,
         downsample_factor=2,
+        alignment_intermediate_size=32,
         ignore_index=-100,
         image_token_id=2,
         num_channels=3,
         image_size=64,
-        model_type="aya_vision",
         is_training=True,
         text_config={
             "model_type": "cohere2",
@@ -93,16 +92,15 @@ class Cohere2VisionText2TextModelTester:
         self.eos_token_id = text_config["eos_token_id"]
         self.pad_token_id = text_config["pad_token_id"]
         self.image_token_id = image_token_id
-        self.model_type = model_type
         self.text_config = text_config
         self.vision_config = vision_config
         self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
         self.downsample_factor = downsample_factor
+        self.alignment_intermediate_size = alignment_intermediate_size
         self.is_training = is_training
         self.num_channels = num_channels
         self.image_size = image_size
-        self.image_seq_length = (image_size // (vision_config["patch_size"] * downsample_factor)) ** 2
+        self.image_seq_length = 16
         self.seq_length = seq_length + self.image_seq_length
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -116,6 +114,7 @@ class Cohere2VisionText2TextModelTester:
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
             downsample_factor=self.downsample_factor,
+            alignment_intermediate_size=self.alignment_intermediate_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -172,6 +171,10 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Siglip backbone uses the same initialization scheme as the Flax original implementation")
+    def test_initialization(self):
+        pass
 
 
 @require_read_token

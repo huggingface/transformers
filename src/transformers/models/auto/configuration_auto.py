@@ -473,7 +473,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
         ("cohere2_vision", "Cohere2Vision"),
-        ("cohere2vision", "Cohere2Vision"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
         ("conditional_detr", "Conditional DETR"),

@@ -69,6 +69,7 @@ class Cohere2VisionConfig(AyaVisionConfig):
     """
 
     model_type = "cohere2_vision"
+    attribute_map = {}
 
     def __init__(
         self,
@@ -147,25 +148,18 @@ class Cohere2VisionModel(AyaVisionModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
                The tensors corresponding to the input images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
+            image_num_patches (`torch.Tensor` of shape `(num_images)`)
+                Number of patches for each image.
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
 
-        if pixel_values.dim() == 5:
-            # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
-        elif pixel_values.dim() != 4:
-            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
-
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches.tolist(), dim=0)
+
         # pad image_features to the same length and stack them
         padded_image_features = []
         max_patch_len = max([img.shape[0] for img in image_features])
@@ -213,8 +207,19 @@ class Cohere2VisionModel(AyaVisionModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_num_patches)
-            inputs_embeds = self._merge_image_text_embeddings(input_ids, image_features, inputs_embeds)
+            image_features = self.get_image_features(pixel_values, image_num_patches=image_num_patches)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -237,32 +242,18 @@ class Cohere2VisionModel(AyaVisionModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    def _merge_image_text_embeddings(self, input_ids, image_features, inputs_embeds):
-        is_img_patch = input_ids == self.config.image_token_id
-        image_encoding_to_sequence_map = (is_img_patch.cumsum(axis=1) * is_img_patch).to(torch.int64)  # [bsz, seqlen]
-
-        if len(image_features.shape) == 4:
-            image_features = image_features.unsqueeze(0)  # add batch dimension
-        B, I, H, W, D = image_features.shape
-        image_features = image_features.reshape(B, I * W * H, D)
-
-        dev_img = image_features.device
-        pad_tensor = torch.zeros((B, 1, D), dtype=image_features.dtype, device=dev_img)
-        image_features = torch.cat((pad_tensor, image_features), dim=1)
-
-        batch_indices = torch.arange(B, device=dev_img).unsqueeze(1).expand(B, image_encoding_to_sequence_map.shape[1])
-        image_encoding_to_sequence_map = image_encoding_to_sequence_map.to(dev_img, non_blocking=True)
-        gathered = image_features[batch_indices, image_encoding_to_sequence_map]  # [B, S, D]
-
-        dev_out = inputs_embeds.device
-        gathered = gathered.to(dev_out, dtype=inputs_embeds.dtype, non_blocking=True)
-        is_img_patch = is_img_patch.to(dev_out, non_blocking=True)
-
-        output = inputs_embeds * (~is_img_patch).unsqueeze(-1) + gathered * is_img_patch.unsqueeze(-1)
-        return output
-
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_num_patches: torch.Tensor,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            image_num_patches=image_num_patches,
+        )
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -297,8 +288,8 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         >>> import torch
 
         >>> torch_device = "cuda:0"
-        >>> processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b", use_fast=True)
-        >>> model = Cohere2VisionForConditionalGeneration.from_pretrained("CohereForAI/aya-vision-8b", device_map=torch_device)
+        >>> processor = AutoProcessor.from_pretrained("CohereForAI/Cohere2-VIsion-8b", use_fast=True)
+        >>> model = Cohere2VisionForConditionalGeneration.from_pretrained("CohereForAI/Cohere2-VIsion-8b", device_map=torch_device)
 
         >>> messages = [
         ...     {

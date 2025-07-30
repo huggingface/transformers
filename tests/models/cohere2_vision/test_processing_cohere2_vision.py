@@ -18,17 +18,13 @@ import unittest
 
 from transformers import AutoProcessor, Cohere2VisionProcessor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
     import torch
-
-
-if is_torchvision_available():
-    pass
 
 
 @require_vision
