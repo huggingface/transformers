@@ -25,7 +25,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, Glm4MoeRMSNorm, eager_attention_forward, Glm4MoeDecoderLayer
+from ..glm4_moe.modeling_glm4_moe import (
+    Glm4MoeDecoderLayer,
+    Glm4MoeMLP,
+    Glm4MoeMoE,
+    Glm4MoeRMSNorm,
+    eager_attention_forward,
+)
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -483,15 +489,27 @@ class Glm4v_moeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Glm4v_moeTextMoE(Glm4MoeMoE):
+    pass
+
+
 class Glm4v_moeTextMLP(Glm4MoeMLP):
     pass
 
 
 class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
+
+        if layer_idx >= config.first_k_dense_replace:
+            self.mlp = Glm4v_moeTextMoE(config)
+        else:
+            self.mlp = Glm4v_moeTextMLP(config)
+
+        self.input_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Glm4v_moeModelOutputWithPast(Glm4vModelOutputWithPast):
