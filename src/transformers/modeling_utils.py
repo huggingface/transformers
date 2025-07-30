@@ -2421,7 +2421,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
         # a warning is raised that dtype should be fp16. Since we never pass dtype from within
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
+        # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
+        if torch_dtype := kwargs.pop("torch_dtype", None) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # if both kwargs are provided, use `dtype`
+            dtype = dtype if dtype != config.dtype else torch_dtype
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
@@ -4773,7 +4778,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("low_cpu_mem_usage", None)
 
         # For BC on torch_dtype argument
-        dtype = dtype if dtype is not None else torch_dtype
+        if torch_dtype is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both kwargs are provided, use `dtype`
+            dtype = dtype if dtype is not None else torch_dtype
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
