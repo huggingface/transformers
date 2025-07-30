@@ -351,7 +351,9 @@ class SlidingWindowLayer(StaticLayer):
 
         # Sliding window logic for generation phase or prefill < window
         slicing = torch.arange(self.max_cache_len, device=value_states.device)
-        current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
+        current_seq_len = (cache_position[-1] + 1).to(
+            device=value_states.device
+        )  # Use last position to determine current length
         to_shift = current_seq_len > self.max_cache_len
         indices = (slicing + to_shift.sum()) % self.max_cache_len
 
@@ -1135,7 +1137,7 @@ class Cache:
         while len(self.layers) <= layer_idx:
             kwargs = self.layer_init_kwargs.copy()
             if self.layer_init_kwargs.get("layer_device_map", None) is not None:
-                kwargs["device"] = kwargs.pop("layer_device_map")[layer_idx]
+                kwargs["device"] = kwargs.pop("layer_device_map")[len(self.layers)]
 
             new_layer_class = (
                 self.layer_classes[len(self.layers)] if isinstance(self.layer_classes, list) else self.layer_classes
