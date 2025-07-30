@@ -4933,9 +4933,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "language_model": "cpu",
         }
 
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_id, device_map=device_map, dtype=torch.bfloat16
-        )
+        model = AutoModelForImageTextToText.from_pretrained(model_id, device_map=device_map, dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
 

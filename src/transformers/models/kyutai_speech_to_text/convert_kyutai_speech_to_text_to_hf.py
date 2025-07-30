@@ -259,9 +259,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        output_dir, dtype=torch.bfloat16, device_map="auto"
-    )
+    KyutaiSpeechToTextForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 

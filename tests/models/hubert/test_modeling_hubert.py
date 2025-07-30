@@ -772,9 +772,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         return ds[:num_samples]
 
     def test_inference_ctc_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16).to(
-            torch_device
-        )
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16).to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)

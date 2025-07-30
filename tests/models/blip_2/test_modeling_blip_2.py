@@ -1642,9 +1642,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1673,9 +1673,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
         processor.image_processor.size = {"height": 500, "width": 500}
 
         image = prepare_img()
@@ -1690,9 +1690,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1707,9 +1707,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1763,9 +1763,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()

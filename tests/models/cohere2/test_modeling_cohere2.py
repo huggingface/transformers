@@ -147,9 +147,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
             "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -172,9 +172,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         # fmt: on
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.float16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

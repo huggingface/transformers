@@ -197,9 +197,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -218,9 +218,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.float16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

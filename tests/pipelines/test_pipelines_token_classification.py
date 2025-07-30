@@ -893,9 +893,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_fp16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", dtype=torch.float16
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt", dtype=torch.float16)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
