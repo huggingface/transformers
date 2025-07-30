@@ -6,7 +6,7 @@ from torch import nn
 from transformers.utils.generic import check_model_inputs
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -100,6 +100,7 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MistralMLP(config)
+        self.attention_type = config.layer_types[layer_idx] if config.layer_types is not None else None
 
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
@@ -141,20 +142,26 @@ class MistralModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(attention_mask, dict) and self.config.layer_types is not None:
+            attention_mask = create_masks_for_generate(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            causal_mask = (
+                attention_mask[decoder_layer.attention_type]
+                if decoder_layer.attention_type is not None
+                else attention_mask
+            )
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
