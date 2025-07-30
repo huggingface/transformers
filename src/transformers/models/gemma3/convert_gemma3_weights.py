@@ -123,7 +123,7 @@ _VISION_CONFIG = {
 }
 
 _VARIANT_GEMMA_3_EMBEDDING = "gemma3_embedding"
-_VARIANT_GEMMA_3_500M = "gemma3_500m"
+_VARIANT_GEMMA_3_270M = "gemma3_270m"
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
 _VARIANT_GEMMA_3_12B = "gemma3_12b"
@@ -146,13 +146,13 @@ _VARIANTS = {
         ),
         vision_config=None,
     ),
-    _VARIANT_GEMMA_3_500M: Gemma3Config(
+    _VARIANT_GEMMA_3_270M: Gemma3Config(
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
-            hidden_size=768,
-            intermediate_size=1152,
-            num_hidden_layers=24,
-            num_attention_heads=3,
+            hidden_size=640,
+            intermediate_size=2048,
+            num_hidden_layers=18,
+            num_attention_heads=4,
             num_key_value_heads=1,
             head_dim=256,
             max_position_embeddings=32768,
@@ -236,7 +236,7 @@ _VARIANTS = {
     ),
 }
 
-_TEXT_ONLY_VARIANTS = (_VARIANT_GEMMA_3_EMBEDDING, _VARIANT_GEMMA_3_500M, _VARIANT_GEMMA_3_1B)
+_TEXT_ONLY_VARIANTS = (_VARIANT_GEMMA_3_EMBEDDING, _VARIANT_GEMMA_3_270M, _VARIANT_GEMMA_3_1B)
 
 # ==== Flags ====
 
@@ -468,6 +468,7 @@ def convert_transformer_weights(
             converted_paths = [f"{base_path}.self_attn.q_norm.weight"]
             converted_weights = [weights]
         elif path.endswith("mlp/gating_einsum"):
+
             converted_paths = [
                 f"{base_path}.mlp.gate_proj.weight",
                 f"{base_path}.mlp.up_proj.weight",
@@ -601,7 +602,7 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(
         _TOKENIZER_PATH.value,
         add_bos_token=True,
-        padding_side="right" if variant == _VARIANT_GEMMA_3_EMBEDDING else "left"
+        padding_side="right" if variant == _VARIANT_GEMMA_3_EMBEDDING else "left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
