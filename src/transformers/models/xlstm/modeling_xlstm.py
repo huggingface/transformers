@@ -1037,17 +1037,17 @@ else:
             self.qk_dim = int(config.hidden_size * config.qk_dim_factor)
 
             if self.config.weight_mode == "single":
-                self.query = nn.Linear(
+                self.q = nn.Linear(
                     in_features=self.config.hidden_size,
                     out_features=self.qk_dim,
                     bias=self.config.use_bias,
                 )
-                self.key = nn.Linear(
+                self.k = nn.Linear(
                     in_features=self.config.hidden_size,
                     out_features=self.qk_dim,
                     bias=self.config.use_bias,
                 )
-                self.value = nn.Linear(
+                self.v = nn.Linear(
                     in_features=self.config.hidden_size,
                     out_features=self.v_dim,
                     bias=self.config.use_bias,
@@ -1104,9 +1104,9 @@ else:
                 raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
             batch_size, sequence_length, _ = x.shape
             if self.config.weight_mode == "single":
-                query = self.query(x)
-                key = self.key(x)
-                value = self.value(x)
+                query = self.q(x)
+                key = self.k(x)
+                value = self.v(x)
                 o_preact = self.ogate_preact(x)
                 i_preact = soft_cap(self.igate_preact(x), cap_value=self.config.gate_soft_cap)
                 f_preact = soft_cap(self.fgate_preact(x), cap_value=self.config.gate_soft_cap)
@@ -1535,6 +1535,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
         inputs_embeds=None,
         use_cache=None,
         cache_params: Optional[xLSTMCache] = None,
