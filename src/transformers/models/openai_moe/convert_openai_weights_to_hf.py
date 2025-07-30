@@ -252,17 +252,16 @@ def write_model(
                 "lm_head",
             ],
         }
+        # required as we don't save the model with save_pretrained
+        config.architectures = ["OpenAIMoeForCausalLM"]
         config.save_pretrained(model_path)
         save_sharded_model(state_dict, model_path)
         del state_dict
 
-    # Safety check: reload the converted model
     gc.collect()
-    # TODO: remove when mxfp4 pr is merged
-    if not mxfp4:
-        print("Reloading the model to check if it's saved correctly.")
-        OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
-        print("Model reloaded successfully.")
+    print("Reloading the model to check if it's saved correctly.")
+    OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
 
     # generation config
     if instruct:
