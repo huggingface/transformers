@@ -62,7 +62,7 @@ import torch
 from transformers import MllamaForConditionalGeneration, AutoProcessor
 
 model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -89,7 +89,7 @@ from PIL import Image
 from transformers import MllamaForConditionalGeneration, AutoProcessor
 
 model_id = "meta-llama/Llama-3.2-11B-Vision"
-model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
 processor = AutoProcessor.from_pretrained(model_id)
 
 prompt = "<|image|>If I had to write a haiku for this one"

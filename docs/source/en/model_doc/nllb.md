@@ -174,7 +174,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 >>> import torch
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda").eval()
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda").eval()
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
 
 >>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
@@ -207,7 +207,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```python
 from transformers import AutoModelForSeq2SeqLM
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
 

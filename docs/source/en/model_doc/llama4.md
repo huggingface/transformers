@@ -70,7 +70,7 @@ pipe = pipeline(
     "text-generation",
     model=model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 output = pipe(messages, do_sample=False, max_new_tokens=200)
@@ -96,7 +96,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
@@ -117,7 +117,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -161,7 +161,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 url1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -219,7 +219,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
     attn_implementation="flex_attention",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 messages = [
@@ -272,7 +272,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="flex_attention",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -287,7 +287,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="sdpa",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -301,7 +301,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 </hfoption>
@@ -338,7 +338,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     quantization_config=FbgemmFp8Config()
 )
 
@@ -368,7 +368,7 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     tp_plan="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
@@ -393,7 +393,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 

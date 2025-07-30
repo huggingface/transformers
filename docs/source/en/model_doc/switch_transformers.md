@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation", 
     model="google/switch-base-8",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 print(pipeline("The capital of France is <extra_id_0>."))
@@ -58,7 +58,7 @@ import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
-model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto", torch_dtype=torch.float16)
+model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto", dtype=torch.float16)
 
 input_text = "The capital of France is <extra_id_0>."
 input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)

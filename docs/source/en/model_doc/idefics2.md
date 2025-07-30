@@ -162,7 +162,7 @@ To load and run a model using Flash Attention-2, simply change the code snippet 
 ```diff
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,
++    dtype=torch.float16,
 +    attn_implementation="flash_attention_2",
 ).to(device)
 ```
@@ -184,7 +184,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 + )
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-+    torch_dtype=torch.float16,
++    dtype=torch.float16,
 +    quantization_config=quantization_config,
 ).to(device)
 ```

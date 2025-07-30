@@ -39,7 +39,7 @@ set_seed(555)
 pipe = pipeline(
     task="text-to-speech",
     model="facebook/mms-tts-eng",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 
@@ -63,7 +63,7 @@ from IPython.display import Audio
 from transformers import AutoTokenizer, VitsModel, set_seed
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16).to("cuda")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", dtype=torch.float16).to("cuda")
 inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
 
 set_seed(555)

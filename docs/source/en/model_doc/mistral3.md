@@ -52,7 +52,7 @@ messages = [
 pipeline = pipeline(
     task="image-text-to-text", 
     model="mistralai/Mistral-Small-3.1-24B-Instruct-2503", 
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
@@ -73,7 +73,7 @@ processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
     model_checkpoint, 
     device_map=torch_device, 
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 messages = [
@@ -111,7 +111,7 @@ import torch
 torch_device = "cuda"
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 SYSTEM_PROMPT = "You are a conversational agent that always answers straight to the point, always end your accurate response with an ASCII drawing of a cat."
 user_prompt = "Give me 5 non-formal ways to say 'See you later' in French."
@@ -148,7 +148,7 @@ import torch
 torch_device = "cuda"
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 messages = [
      [

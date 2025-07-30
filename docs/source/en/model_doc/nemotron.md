@@ -64,7 +64,7 @@ tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
 device = 'cuda'
 dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'

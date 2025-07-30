@@ -43,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="google/bigbird-roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -60,7 +60,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google/bigbird-roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")

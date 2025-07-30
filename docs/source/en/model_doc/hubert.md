@@ -74,7 +74,7 @@ Below is an expected speedup diagram comparing the pure inference time between t
 >>> from transformers import HubertModel
 >>> import torch
 
->>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
+>>> model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
 ...
 ```
 

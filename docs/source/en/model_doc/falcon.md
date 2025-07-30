@@ -43,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="tiiuae/falcon-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -64,7 +64,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa",
 )
@@ -80,7 +80,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat tiiuae/falcon-7b-instruct --torch_dtype auto --attn_implementation flash_attention_2 --device 0
+transformers chat tiiuae/falcon-7b-instruct --dtype auto --attn_implementation flash_attention_2 --device 0
 ```
 
 </hfoption>
@@ -104,7 +104,7 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )

@@ -54,7 +54,7 @@ The example below demonstrates how to translate text using [`Pipeline`] or the [
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", torch_dtype=torch.float16, device=0)
+pipeline = pipeline("translation_en_to_de", model="Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, device=0)
 pipeline("Hello, how are you?")
 
 ```
@@ -69,7 +69,7 @@ import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", torch_dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
 
 inputs = tokenizer("Hello, how are you?", return_tensors="pt").to("cuda")
 outputs = model.generate(**inputs, cache_implementation="static")

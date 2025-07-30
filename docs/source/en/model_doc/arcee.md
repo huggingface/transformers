@@ -43,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="arcee-ai/AFM-4.5B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 
@@ -61,7 +61,7 @@ from transformers import AutoTokenizer, ArceeForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/AFM-4.5B")
 model = ArceeForCausalLM.from_pretrained(
     "arcee-ai/AFM-4.5B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 

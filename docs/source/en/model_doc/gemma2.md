@@ -50,7 +50,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="google/gemma-2-9b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device="cuda",
 )
 
@@ -67,7 +67,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-9b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -101,7 +101,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-27b")
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-27b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

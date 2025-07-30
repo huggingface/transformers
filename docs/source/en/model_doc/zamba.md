@@ -56,7 +56,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba-7B-v1")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto", dtype=torch.bfloat16)
 
 input_text = "A funny prompt would be "
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")

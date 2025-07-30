@@ -46,7 +46,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/paligemma2-3b-mix-224",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -65,7 +65,7 @@ from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
 model = PaliGemmaForConditionalGeneration.from_pretrained(
     "google/paligemma2-3b-mix-224",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -99,7 +99,7 @@ from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGe
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = PaliGemmaForConditionalGeneration.from_pretrained(
     "google/paligemma2-28b-mix-224",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

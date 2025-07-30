@@ -38,7 +38,7 @@ generation_config = GenerationConfig(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B", pad_token="</s>", padding_side="right")
-model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="sdpa", generation_config=generation_config)
+model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B", device_map="auto", dtype=torch.bfloat16, attn_implementation="sdpa", generation_config=generation_config)
 
 exported_program = convert_and_export_with_cache(model)
 ```

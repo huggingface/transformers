@@ -44,7 +44,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
 </hfoption>
@@ -54,7 +54,7 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")

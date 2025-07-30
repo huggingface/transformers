@@ -58,7 +58,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="THUDM/GLM-4.1V-9B-Thinking",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -83,7 +83,7 @@ from transformers import Glm4vForConditionalGeneration, AutoProcessor
 
 model = Glm4vForConditionalGeneration.from_pretrained(
     "THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -135,7 +135,7 @@ import torch
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="cuda:0"
 )
 

@@ -42,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(  
     task="fill-mask",  
     model="facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device=0  
 )  
 pipeline("Bonjour, je suis un modèle <mask>.")
@@ -60,7 +60,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )  
 model = AutoModelForMaskedLM.from_pretrained(  
     "FacebookAI/xlm-mlm-en-2048",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device_map="auto",  
 )  
 inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to("cuda")
