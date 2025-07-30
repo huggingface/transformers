@@ -577,7 +577,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
         elif hasattr(module, "position_embeddings") and isinstance(module, PerceiverTrainablePositionEncoding):
             module.position_embeddings.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.ParameterDict):
-            for modality in module.keys():
+            for modality in module:
                 module[modality].data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)

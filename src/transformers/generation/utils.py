@@ -1867,7 +1867,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             decoder_mapped_modules = [
-                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+                module_name for module_name in execution_device_map if decoder_name in module_name
             ]
             # The decoder name may be present in `execution_device_map` in two forms:
             # a) each layer has a device mapping
@@ -2055,7 +2055,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(), "cache_implementation", None
+            self.config.get_text_config(decoder=True), "cache_implementation", None
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
@@ -5275,7 +5275,7 @@ def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConf
     # Use a dictionary comprehension to gather attributes from all objects and concatenate them
     concatenated_data = {
         k: _concat([getattr(model_output, k) for model_output in model_outputs])
-        for k in model_output_cls.__dataclass_fields__.keys()
+        for k in model_output_cls.__dataclass_fields__
     }
 
     # Return a new object of the inferred class with the concatenated attributes

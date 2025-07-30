@@ -130,7 +130,7 @@ def convert_esm_checkpoint_to_pytorch(
         num_attention_heads = esm.args.attention_heads
         intermediate_size = esm.args.ffn_embed_dim
         token_dropout = esm.args.token_dropout
-        emb_layer_norm_before = True if esm.emb_layer_norm_before else False
+        emb_layer_norm_before = bool(esm.emb_layer_norm_before)
         position_embedding_type = "absolute"
         is_folding_model = False
         esmfold_config = None

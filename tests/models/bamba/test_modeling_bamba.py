@@ -448,7 +448,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -551,6 +551,15 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                # Ensure inputs_dict also has labels in it, as their presence/absence can induce
+                # dtype conversions. This also lets us compare losses.
+                labels = inputs_dict["input_ids"].clone()
+                # Mask padding tokens
+                labels[~dummy_attention_mask.bool()] = -100
+                # Also need to mask the first non-trivial token to match the padding-free batch.
+                first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
+                labels[torch.arange(labels.size(0), device=labels.device), first_nonneg_idx] = -100
+                inputs_dict["labels"] = labels
 
                 model = (
                     model_class.from_pretrained(
@@ -585,6 +594,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # acceptable numerical instability
                 tol = torch.finfo(torch.float16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+                loss_padded = res_padded.loss
+                loss_padfree = res_padfree.loss
+                torch.testing.assert_close(loss_padded, loss_padfree)
 
 
 @slow

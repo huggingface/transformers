@@ -370,7 +370,7 @@ class SPMTokenizer:
         logger.warning_once(
             "The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`"
         )
-        return self.vocab[sym] if sym in self.vocab else 1
+        return self.vocab.get(sym, 1)
 
     def _encode_as_pieces(self, text):
         text = convert_to_unicode(text)

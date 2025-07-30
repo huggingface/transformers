@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import itertools
 from typing import Callable, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -822,6 +822,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)
@@ -1566,6 +1567,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
     }
 
@@ -1707,9 +1709,15 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
 
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 

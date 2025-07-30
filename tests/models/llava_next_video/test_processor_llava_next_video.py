@@ -75,12 +75,25 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "vision_feature_select_strategy": "default",
         }
 
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
     # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
         processor_dict_loaded = json.loads(processor_loaded.to_json_string())
         # chat templates aren't serialized to json in processors
-        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+        self.assertFalse("chat_template" in processor_dict_loaded)
 
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded

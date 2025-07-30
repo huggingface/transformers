@@ -247,8 +247,8 @@ class RoFormerSelfAttention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
+            key_layer = curr_past_key_value.layers[self.layer_idx].keys
+            value_layer = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
@@ -260,6 +260,17 @@ class RoFormerSelfAttention(nn.Module):
                 .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
                 .transpose(1, 2)
             )
+
+            # Apply RoPE if self attention
+            if not is_cross_attention and sinusoidal_pos is not None:
+                if self.rotary_value:
+                    query_layer, key_layer, value_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer, value_layer
+                    )
+                else:
+                    query_layer, key_layer = self.apply_rotary_position_embeddings(
+                        sinusoidal_pos, query_layer, key_layer
+                    )
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -381,13 +392,13 @@ class RoFormerAttention(nn.Module):
     ):
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            sinusoidal_pos,
-            head_mask,
-            encoder_hidden_states,
-            past_key_value,
-            output_attentions,
-            cache_position,
+            attention_mask=attention_mask,
+            sinusoidal_pos=sinusoidal_pos,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them

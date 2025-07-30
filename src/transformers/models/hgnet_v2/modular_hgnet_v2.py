@@ -407,7 +407,7 @@ class HGNetV2Stage(nn.Module):
                     mid_channels,
                     out_channels,
                     num_layers,
-                    residual=False if i == 0 else True,
+                    residual=(i != 0),
                     kernel_size=kernel_size,
                     light_block=light_block,
                     drop_path=drop_path,

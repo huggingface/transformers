@@ -135,7 +135,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_image_processor = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_image_processor.keys():
+        for key in input_image_processor:
             self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -150,7 +150,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         encoded_tok = tokenizer(input_str, return_token_type_ids=False)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_processor(self):
