@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch AyaVision model."""
 
+from functools import lru_cache
 from typing import Optional, Union
 
 import numpy as np
@@ -27,21 +28,12 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionModelOutputWithPast,
 )
 from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
-from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -58,9 +50,9 @@ if is_torch_available():
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
+        pass
     else:
-        from torchvision.transforms import functional as F
+        pass
 
 
 logger = logging.get_logger(__name__)
@@ -342,38 +334,67 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         )
 
 
-class Cohere2VisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
     """
-    TODO
-    max_patches (`int`, *optional*, defaults to 12):
-        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-    """
+    Computes all allowed aspect ratios for a given maximum number of input tiles.
 
-    max_patches: Optional[int]
-    patch_size: Optional[int]
-    image_size: Optional[int]
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(4)
+        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
+
+    """
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles:
+                aspect_ratios.append((width, height))
+    return aspect_ratios
+
+
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
+    possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
+    image_height, image_width = original_image_size
+    patch_size_height, patch_size_width = target_tile_size  # (height == width)
+
+    candidate_resolutions = np.array(possible_resolutions) * patch_size_height
+    original_size = np.stack([image_height, image_width])
+    required_scales = candidate_resolutions / original_size
+    required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
+    if np.all(required_scale < 1):
+        # We are forced to downscale, so try to minimize the amount of downscaling
+        best_grid = possible_resolutions[np.argmax(required_scale)]
+    else:
+        # Pick the resolution that required the least upscaling so that it most closely fits the image
+        required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
+        best_grid = possible_resolutions[np.argmin(required_scale)]
+    return best_grid
 
 
 @auto_docstring
 class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
-    resample = PILImageResampling.BICUBIC
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
-    size = {"longest_edge": 512}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
+    size = {"height": 512, "width": 512}
+    min_patches = 1
     max_patches = 12
-    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+    crop_to_patches = True
 
     def get_optimal_tiled_canvas(
         self,
@@ -397,104 +418,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
             best_grid = possible_resolutions[np.argmin(required_scale)]
         return best_grid
 
-    def crop_image_to_patches(
-        self,
-        images: "torch.Tensor",
-        max_patches: int,
-        patch_size: Optional[Union[tuple, int, dict]] = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
-    ):
-        possible_resolutions = get_all_supported_aspect_ratios(max_patches)
-        possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
-
-        original_height, original_width = images.shape[-2:]
-
-        num_columns, num_rows = self.get_optimal_tiled_canvas(
-            original_height, original_width, patch_size, possible_resolutions
-        )
-
-        target_height, target_width = (num_columns * patch_size, num_rows * patch_size)
-        resized_image = self.resize(
-            images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
-        )
-
-        # split the image into patches
-        processed_images = []
-        for i in range(num_columns * num_rows):
-            column = i % num_columns
-            row = i // num_columns
-            box = (
-                column * patch_size,
-                row * patch_size,
-                (column + 1) * patch_size,
-                (row + 1) * patch_size,
-            )
-            # split the image
-            patch_image = resized_image[..., box[0] : box[2], box[1] : box[3]]
-            processed_images.append(patch_image)
-
-        if num_columns * num_rows > 1:
-            thumbnail_image = self.resize(
-                images, SizeDict(height=patch_size, width=patch_size), interpolation=interpolation
-            )
-            processed_images.append(thumbnail_image)
-        processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
-        return processed_images
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        max_patches: int,
-        interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
-    ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        num_patches = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self.crop_image_to_patches(
-                stacked_images,
-                max_patches,
-                patch_size=size["longest_edge"],
-                interpolation=interpolation,
-            )
-            processed_images_grouped[shape] = stacked_images
-            num_patches[shape] = [stacked_images.shape[1]] * stacked_images.shape[0]
-        images = reorder_images(processed_images_grouped, grouped_images_index)
-        images = [image for images_list in images for image in images_list]
-        num_patches = reorder_images(num_patches, grouped_images_index)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-
-        return BatchFeature(
-            data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
-        )
-
-    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number patches for a given image size.
 

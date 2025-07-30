@@ -37,13 +37,12 @@ class Cohere2VisionImageProcessingTester(unittest.TestCase):
         do_resize=True,
         size=None,
         do_normalize=True,
-        do_pad=False,
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
         super().__init__()
-        size = size if size is not None else {"longest_edge": 30}
+        size = size if size is not None else {"height": 30, "width": 30}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -55,7 +54,6 @@ class Cohere2VisionImageProcessingTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
 
     def prepare_image_processor_dict(self):
@@ -66,11 +64,10 @@ class Cohere2VisionImageProcessingTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
-            "do_pad": self.do_pad,
         }
 
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["longest_edge"], self.size["longest_edge"]
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(

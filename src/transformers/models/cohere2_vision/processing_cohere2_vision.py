@@ -65,8 +65,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        self.image_size = self.image_processor.image_size
-        self.patch_size = self.image_processor.patch_size
+        self.patch_size = self.image_processor.size["height"]
         self.boi_token = tokenizer.boi_token
         self.eoi_token = tokenizer.eoi_token
         self.image_token = tokenizer.image_token
@@ -136,16 +135,15 @@ class Cohere2VisionProcessor(ProcessorMixin):
             processed_text = []
             for sample in text:
                 while self.image_token in sample:
-                    img_patches_per_tile = (self.image_size // self.patch_size) ** 2
+                    img_patches_per_tile = self.patch_size**0.5
                     img_string = f"{self.boi_token}"
                     for idx in range(1, num_patches):
-                        img_string += f"{self.image_token}" * img_patches_per_tile + self.img_line_break_token
-                    img_string += f"{self.image_token}" * img_patches_per_tile + self.img_line_break_token
+                        img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
+                    img_string += "<placeholder>" * img_patches_per_tile + self.img_line_break_token
                     img_string += f"{self.eoi_token}"
-
                     sample = sample.replace(self.image_token, img_string, 1)
                 processed_text.append(sample)
-            text = processed_text
+            text = [sample.replace("<placeholder>", self.image_token) for sample in processed_text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
