@@ -64,16 +64,14 @@ class Cohere2VisionProcessor(ProcessorMixin):
         **kwargs,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        assert self.image_processor is not None, "image_processor is required for Cohere2VisionProcessor"
-        assert self.tokenizer is not None, "tokenizer is required for Cohere2Vision"
 
-        self.patch_size = self.image_processor.size["height"]
+        self.patch_size = self.image_processor.patch_size
         self.boi_token = tokenizer.boi_token
         self.eoi_token = tokenizer.eoi_token
         self.image_token = tokenizer.image_token
         self.img_line_break_token = tokenizer.img_line_break_token
         self.image_token_id = tokenizer.image_token_id
-    
+
         self.image_ids = tokenizer.convert_tokens_to_ids(
             [
                 self.image_token,
@@ -139,7 +137,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     num_patches = next(batch_num_patches)
-                    img_patches_per_tile = int(self.patch_size**0.5)
+                    img_patches_per_tile = int(self.patch_size**2)
 
                     img_string = f"{self.boi_token}"
                     for idx in range(1, num_patches):
@@ -186,7 +184,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
                 for image_size in image_sizes
             ]
 
-            token_per_patch = int(self.patch_size**0.5)
+            token_per_patch = int(self.patch_size**2)
             num_image_tokens = [
                 2 + sum(token_per_patch + 1 for _ in range(num_patches)) for num_patches in num_image_patches
             ]  # Add +2 and +1 for BOI/EOI and image break tokens
