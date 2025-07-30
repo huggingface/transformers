@@ -98,6 +98,7 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3 import *
     from .distilbert import *
     from .dit import *
     from .donut import *
@@ -365,4 +366,6 @@ else:
     import sys
 
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, _file, define_import_structure(_file), module_spec=__spec__
+    )
