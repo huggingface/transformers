@@ -265,7 +265,7 @@ class TextToAudioPipeline(Pipeline):
 
         if isinstance(audio, list):
             output_dict["audio"] = [
-                waveform[i].to(device="cpu", dtype=torch.float).numpy() for i in range(len(waveform))
+                el.to(device="cpu", dtype=torch.float).numpy() for el in waveform
             ]
         else:
             output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
