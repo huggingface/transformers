@@ -113,6 +113,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         self.encoder = encoder
         self.decoder = decoder
+        self._can_compile_fullgraph = decoder._can_compile_fullgraph
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
@@ -449,6 +450,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
@@ -561,6 +563,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
+            cache_position=cache_position,
             **kwargs_decoder,
         )
 

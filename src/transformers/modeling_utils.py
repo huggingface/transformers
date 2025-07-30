@@ -2881,9 +2881,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
         # between modelings (because they are prefixed with the model name)
         elif (
-            isinstance(
-                module, (nn.LayerNorm, nn.RMSNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
-            )
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
             or "LayerNorm" in module.__class__.__name__
             or "RMSNorm" in module.__class__.__name__
         ):
@@ -6021,19 +6019,22 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
-        if device.type == "cuda":
-            index = device.index if device.index is not None else torch.cuda.current_device()
-            device_memory = torch.cuda.mem_get_info(index)[0]
+        if device.type in ["cuda", "xpu"]:
+            torch_accelerator_module = getattr(torch, device.type)
+            index = device.index if device.index is not None else torch_accelerator_module.current_device()
+            device_memory = torch_accelerator_module.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda/xpu OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is *unused* reserved cuda memory, we can skip/reduce the allocation.
-            unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
+            # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
+            unused_memory = torch_accelerator_module.memory_reserved(
+                index
+            ) - torch_accelerator_module.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)

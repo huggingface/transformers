@@ -234,9 +234,7 @@ class IdeficsProcessor(ProcessorMixin):
         )
 
         self.tokenizer_was_trained_with_end_of_utterance_token = (
-            True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
-            else False
+            "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
@@ -402,7 +400,7 @@ class IdeficsProcessor(ProcessorMixin):
             last_was_text = False
             for i, item in enumerate(sample):
                 if i > 0:
-                    last_was_text = True if not last_was_image else False
+                    last_was_text = bool(not last_was_image)
 
                 if isinstance(item, str):
                     item = item.strip(" ")
