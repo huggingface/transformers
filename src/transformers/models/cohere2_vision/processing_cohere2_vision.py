@@ -64,19 +64,23 @@ class Cohere2VisionProcessor(ProcessorMixin):
         **kwargs,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        assert self.image_processor is not None, "image_processor is required for Cohere2VisionProcessor"
+        assert self.tokenizer is not None, "tokenizer is required for Cohere2Vision"
 
         self.patch_size = self.image_processor.size["height"]
-        self.boi_token = tokenizer.boi_token
-        self.eoi_token = tokenizer.eoi_token
-        self.image_token = tokenizer.image_token
-        self.img_line_break_token = tokenizer.img_line_break_token
-
-        self.image_token_id = tokenizer.image_token_id
+        #TODO(julian) - read these out of the tokenizer
+        self.boi_token: str = "<|START_OF_IMG|>"
+        self.eoi_token: str = "<|END_OF_IMG|>"
+        self.image_token: str = "<|IMG_PATCH|>"
+        self.img_line_break_token: str = "<|IMG_LINE_BREAK|>"
+  
+        # self.image_token_id = tokenizer.image_token_id
         self.image_ids = tokenizer.convert_tokens_to_ids(
             [
-                tokenizer.image_token,
-                tokenizer.boi_token,
-                tokenizer.eoi_token,
+                self.image_token,
+                self.boi_token,
+                self.eoi_token,
+                self.img_line_break_token,
             ]
         )
 

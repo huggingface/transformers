@@ -43,12 +43,6 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(
             "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b",
-            extra_special_tokens={
-                "image_token": "<image>",
-                "boi_token": "<image_start>",
-                "eoi_token": "<image_end>",
-                "img_line_break_token": "<image_break>",
-            },
         )
 
         processor_kwargs = cls.prepare_processor_dict()
