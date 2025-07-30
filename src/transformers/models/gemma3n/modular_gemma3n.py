@@ -183,7 +183,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
             layers in the model "share" the KV values in that each local and global layer in this range uses the KV
             cache values computed for the last local or global layer, respectively, before entering this range. The
-            value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
+            value should be a multiple of the attention pattern size (see `layer_types` parameter).
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
         activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,)`):
