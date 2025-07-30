@@ -722,7 +722,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 

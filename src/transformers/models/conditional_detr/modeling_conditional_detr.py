@@ -961,7 +961,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 
