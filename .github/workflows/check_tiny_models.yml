@@ -43,7 +43,11 @@ jobs:
 
       - name: Create all tiny models (locally)
         run: |
-          python utils/create_dummy_models.py tiny_local_models --all --num_workers 7
+          free -g
+
+      - name: Create all tiny models (locally)
+        run: |
+          python utils/create_dummy_models.py tiny_local_models bert,gpt2,t5,bart,vit,clip,roberta --num_workers 7
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
