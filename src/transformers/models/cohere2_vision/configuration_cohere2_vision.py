@@ -40,7 +40,6 @@ class Cohere2VisionConfig(PretrainedConfig):
     """
 
     model_type = "cohere2_vision"
-    attribute_map = {}
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(

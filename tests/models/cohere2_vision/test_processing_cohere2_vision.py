@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, Cohere2VisionProcessor
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision, require_read_token
 from transformers.utils import is_torch_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -30,6 +30,7 @@ if is_torchvision_available():
     from transformers import Cohere2VisionImageProcessorFast
 
 
+@require_read_token
 @require_vision
 class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cohere2VisionProcessor

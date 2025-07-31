@@ -20,10 +20,8 @@ Command A Vision is built upon a robust architecture that leverages the latest a
 The model and image processor can be loaded as follows:
 
 ```python
-# pip install "transformers[dev-torch]@git+https://github.com/huggingface/transformers.git"
 
 import torch
-
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_id = "CohereLabs/command-a-vision-07-2025"
