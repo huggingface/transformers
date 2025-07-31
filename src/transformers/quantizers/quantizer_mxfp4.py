@@ -170,7 +170,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                             weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
                         )
                         module.gate_up_proj = triton_weight_tensor
-                        # module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
+                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
                     elif "down_proj" in param_name:
                         right_pad = module.down_proj_right_pad
                         bottom_pad = module.down_proj_bottom_pad
@@ -180,7 +180,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
                         module.down_proj_precision_config = PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData()))
                         module.down_proj = triton_weight_tensor
-                        # module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
+                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
 
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
