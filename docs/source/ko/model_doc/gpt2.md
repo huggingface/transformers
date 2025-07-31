@@ -24,18 +24,18 @@ rendered properly in your Markdown viewer.
 </div>
 
 
-# GPT-2
+# GPT-2[[gpt-2]]
 
-[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) is a scaled up version of GPT, a causal transformer language model, with 10x more parameters and training data. The model was pretrained on a 40GB dataset to predict the next word in a sequence based on all the previous words. This approach enabled the model to perform many downstream tasks in a zero-shot setting.
+[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)는 GPT의 확장 버전으로, 인과적 트랜스포머 언어 모델이며, 10배 더 많은 매개변수와 학습 데이터를 가지고 있습니다. 이 모델은 이전의 모든 단어를 기반으로 다음 단어를 예측하도록 40GB 데이터셋에서 사전 학습되었습니다. 이러한 접근 방식을 통해 모델은 제로샷 설정에서 많은 다운스트림 작업을 수행할 수 있게 되었습니다.
 
-The model architecture uses a unidirectional (causal) attention mechanism where each token can only attend to previous tokens, making it particularly effective for text generation tasks.
+모델 아키텍처는 각 토큰이 이전 토큰에만 주의를 기울일 수 있는 단방향(인과적) 어텐션 메커니즘을 사용하므로, 텍스트 생성 작업에 특히 효과적입니다.
 
-You can find all the original GPT-2 checkpoints under the [OpenAI community](https://huggingface.co/openai-community?search_models=gpt) organization.
+모든 원본 GPT-2 체크포인트는 [OpenAI community](https://huggingface.co/openai-community?search_models=gpt) 조직에서 찾을 수 있습니다.
 
 > [!TIP]
-> Click on the GPT-2 models in the right sidebar for more examples of how to apply GPT-2 to different language tasks.
+> 오른쪽 사이드바의 GPT-2 모델을 클릭하여 GPT-2를 다양한 언어 작업에 적용하는 더 많은 예시를 확인하세요.
 
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+아래 예시는 [`Pipeline`] 또는 [`AutoModel`], 그리고 명령줄에서 GPT-2로 텍스트를 생성하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -44,6 +44,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
+# 텍스트 생성을 위한 파이프라인 생성
 pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
@@ -54,11 +55,14 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# 사전 학습된 모델과 토크나이저 로드
 model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
+# 입력 텍스트를 토큰화하고 GPU로 이동
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
 
+# 텍스트 생성
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
@@ -73,20 +77,21 @@ echo -e "Hello, I'm a language model" | transformers run --task text-generation 
 </hfoption>
 </hfoptions>
 
-One can also serve the model using vLLM with the `transformers backend`.
+`transformers backend`를 사용하여 vLLM으로 모델을 서빙할 수도 있습니다.
 
 ```
 vllm serve openai-community/gpt2 --model-imp transformers
 ```
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 더 많은 양자화 백엔드에 대해서는 [Quantization](../quantization/overview) 개요를 참조하세요.
 
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
+아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 가중치만 4비트로 양자화합니다.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
 
+# 양자화 설정 구성
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -94,23 +99,25 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True
 )
 
+# 양자화된 모델 로드
 model = AutoModelForCausalLM.from_pretrained(
     "openai-community/gpt2-xl",
     quantization_config=quantization_config,
     device_map="auto"
 )
 
+# 토크나이저 로드 및 텍스트 생성
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2-xl")
 inputs = tokenizer("Once upon a time, there was a magical forest", return_tensors="pt").to("cuda")
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-## Notes
+## 참고사항[[notes]]
 
-- Pad inputs on the right because GPT-2 uses absolute position embeddings.
-- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) parameter in [`GPT2Model.forward`].
-- Enable the [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx) and [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) parameters to apply the training stability improvements from [Mistral](./mistral).
+- GPT-2는 절대 위치 임베딩을 사용하므로 입력을 오른쪽에 패딩하세요.
+- GPT-2는 이전에 계산된 키-값 어텐션 쌍을 재사용할 수 있습니다. [`GPT2Model.forward`]의 [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) 매개변수로 이 기능에 접근하세요.
+- [Mistral](./mistral)의 학습 안정성 개선 사항을 적용하려면 [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx)와 [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) 매개변수를 활성화하세요.
 
 ## GPT2Config
 
@@ -125,7 +132,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] GPT2TokenizerFast
 
-## GPT2 specific outputs
+## GPT2 특정 출력[[gpt2-specific-outputs]]
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
 
