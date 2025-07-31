@@ -23,6 +23,7 @@ import torch.nn.functional as F
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
@@ -40,7 +41,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
 
-
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
     MllamaPreTrainedModel,
@@ -55,39 +55,6 @@ from ..mllama.modeling_mllama import (
 
 
 logger = logging.get_logger(__name__)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    # TODO: not exactly equivalent to other transformers implementations,, need feedback
-    # Extract first head_dim//2 elements which correspond to the unique frequencies
-    # This matches the original Blt approach which uses head_dim//2 frequency pairs
-    head_dim = q.shape[-1]
-    cos_freqs = cos[..., : head_dim // 2]  # [B, S, D/2]
-    sin_freqs = sin[..., : head_dim // 2]  # [B, S, D/2]
-
-    # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
-    cos_freqs = cos_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    sin_freqs = sin_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-
-    # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
-    q_pairs = q.view(*q.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
-    k_pairs = k.view(*k.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
-
-    # Extract real and i parts
-    q_real, q_imag = q_pairs[..., 0], q_pairs[..., 1]  # [B, H, S, D/2]
-    k_real, k_imag = k_pairs[..., 0], k_pairs[..., 1]  # [B, H, S, D/2]
-
-    # Apply rotation: [real', imag'] = [cos*real - sin*imag, sin*real + cos*imag]
-    q_real_rot = cos_freqs * q_real - sin_freqs * q_imag
-    q_imag_rot = sin_freqs * q_real + cos_freqs * q_imag
-    k_real_rot = cos_freqs * k_real - sin_freqs * k_imag
-    k_imag_rot = sin_freqs * k_real + cos_freqs * k_imag
-
-    # Recombine pairs and reshape back to original format
-    q_rot = torch.stack([q_real_rot, q_imag_rot], dim=-1).view(*q.shape)  # [B, H, S, D]
-    k_rot = torch.stack([k_real_rot, k_imag_rot], dim=-1).view(*k.shape)  # [B, H, S, D]
-
-    return q_rot.type_as(q), k_rot.type_as(k)
 
 
 def rolling_polynomial_hash(token_tensor, hash_func_nb: int = 0):
@@ -300,6 +267,22 @@ class BltRotaryEmbedding(MllamaRotaryEmbedding):
             else "default"
         )
 
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        # Copied from Cohere2RotaryEmbedding.forward
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Use Cohere2 pattern for compatibility
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
 
 class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):
     def __init__(self, config, layer_idx: int):
@@ -311,9 +294,15 @@ class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):
         self.post_attention_layernorm = BltRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class BltSelfAttention(MllamaTextSelfAttention):
-    """Blt variant of MllamaTextSelfAttention. Inherits all logic directly."""
+def rotate_half(x):
+    # Split and rotate. Note that this function is different from e.g. Llama.
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
+    return rot_x
 
+
+class BltSelfAttention(MllamaTextSelfAttention):
     def __init__(self, config: BltConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = True
@@ -495,9 +484,7 @@ class BltLocalDecoder(nn.Module):
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
         if position_ids is None:
-            position_ids = (
-                torch.arange(embeds.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
-            )
+            position_ids = torch.arange(embeds.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         for i, layer in enumerate(self.layers):
@@ -522,6 +509,7 @@ class BltLocalDecoder(nn.Module):
             )
         logits = self.norm(hidden_states)
         return logits
+
 
 class BltCrossAttention(MllamaTextCrossAttention):
     """Cross-attention module for Blt, following transformers style"""
@@ -734,9 +722,7 @@ class BltModel(BltPreTrainedModel):
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        causal_mask = self._update_causal_mask(
-            attention_mask, encoder_embeds, cache_position, past_key_values
-        )
+        causal_mask = self._update_causal_mask(attention_mask, encoder_embeds, cache_position, past_key_values)
         cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
@@ -757,13 +743,9 @@ class BltModel(BltPreTrainedModel):
             **kwargs,
         )
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
-        global_cache_position = torch.arange(
-            0, global_hidden_states.shape[1], device=global_hidden_states.device
-        )
+        global_cache_position = torch.arange(0, global_hidden_states.shape[1], device=global_hidden_states.device)
         global_position_ids = global_cache_position.unsqueeze(0)
-        global_causal_mask = self._update_causal_mask(
-            None, global_hidden_states, global_cache_position, None
-        )
+        global_causal_mask = self._update_causal_mask(None, global_hidden_states, global_cache_position, None)
         global_hidden_states = self.global_transformer(
             input_embeds=global_hidden_states,
             attention_mask=global_causal_mask,
@@ -871,7 +853,9 @@ class BltPatcher(BltPreTrainedModel):
             )
 
             for i, layer in enumerate(self.layers):
-                layer_outputs = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=causal_mask)
+                layer_outputs = layer(
+                    hidden_states, position_embeddings=position_embeddings, attention_mask=causal_mask
+                )
                 hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
@@ -972,7 +956,6 @@ class BltForCausalLM(MllamaForCausalLM):
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
-
 
     @can_return_tuple
     @auto_docstring

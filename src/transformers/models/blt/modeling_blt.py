@@ -113,13 +113,14 @@ class BltRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        # Copied from Cohere2RotaryEmbedding.forward
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Use Cohere2 pattern for compatibility
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
@@ -238,41 +239,41 @@ def eager_attention_forward(
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    # TODO: not exactly equivalent to other transformers implementations,, need feedback
-    # Extract first head_dim//2 elements which correspond to the unique frequencies
-    # This matches the original Blt approach which uses head_dim//2 frequency pairs
-    head_dim = q.shape[-1]
-    cos_freqs = cos[..., : head_dim // 2]  # [B, S, D/2]
-    sin_freqs = sin[..., : head_dim // 2]  # [B, S, D/2]
+    """Applies Rotary Position Embedding to the query and key tensors.
 
-    # Expand cos/sin to match query/key tensor format [B, H, S, D/2]
-    cos_freqs = cos_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
-    sin_freqs = sin_freqs.unsqueeze(1)  # [B, 1, S, D/2] -> [B, H, S, D/2]
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
-    # Split q and k into pairs for rotation: (d0, d1), (d2, d3), ...
-    q_pairs = q.view(*q.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
-    k_pairs = k.view(*k.shape[:-1], head_dim // 2, 2)  # [B, H, S, D/2, 2]
 
-    # Extract real and i parts
-    q_real, q_imag = q_pairs[..., 0], q_pairs[..., 1]  # [B, H, S, D/2]
-    k_real, k_imag = k_pairs[..., 0], k_pairs[..., 1]  # [B, H, S, D/2]
-
-    # Apply rotation: [real', imag'] = [cos*real - sin*imag, sin*real + cos*imag]
-    q_real_rot = cos_freqs * q_real - sin_freqs * q_imag
-    q_imag_rot = sin_freqs * q_real + cos_freqs * q_imag
-    k_real_rot = cos_freqs * k_real - sin_freqs * k_imag
-    k_imag_rot = sin_freqs * k_real + cos_freqs * k_imag
-
-    # Recombine pairs and reshape back to original format
-    q_rot = torch.stack([q_real_rot, q_imag_rot], dim=-1).view(*q.shape)  # [B, H, S, D]
-    k_rot = torch.stack([k_real_rot, k_imag_rot], dim=-1).view(*k.shape)  # [B, H, S, D]
-
-    return q_rot.type_as(q), k_rot.type_as(k)
+def rotate_half(x):
+    # Split and rotate. Note that this function is different from e.g. Llama.
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
+    return rot_x
 
 
 class BltSelfAttention(nn.Module):
-    """Blt variant of MllamaTextSelfAttention. Inherits all logic directly."""
-
     def __init__(self, config: BltConfig, layer_idx: int):
         super().__init__()
         self.config = config
