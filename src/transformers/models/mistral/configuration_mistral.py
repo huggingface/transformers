@@ -14,7 +14,7 @@
 # limitations under the License.
 """Mistral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -81,7 +81,7 @@ class MistralConfig(PretrainedConfig):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        layer_types (`list`, *optional*, defaults to `["decoder"]`):
+        layer_types (`list`, *optional*):
             Attention pattern for each layer.
 
     ```python
@@ -160,6 +160,12 @@ class MistralConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.layer_types = layer_types
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if self.sliding_window is not None else "full_attention"
+            ] * num_hidden_layers
+        layer_type_validation(self.layer_types)
 
         super().__init__(
             pad_token_id=pad_token_id,

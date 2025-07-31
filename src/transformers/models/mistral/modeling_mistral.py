@@ -135,6 +135,8 @@ class MistralAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        self.sliding_window = config.sliding_window if self.is_sliding else None
 
     def forward(
         self,
@@ -172,7 +174,7 @@ class MistralAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -349,7 +351,10 @@ class MistralModel(MistralPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(attention_mask, dict) and self.config.layer_types is not None:
+        mask_already_prepared = isinstance(attention_mask, dict) or (
+            isinstance(attention_mask, torch.Tensor) and len(attention_mask.shape) > 2
+        )
+        if not mask_already_prepared:
             attention_mask = create_masks_for_generate(
                 config=self.config,
                 input_embeds=inputs_embeds,
