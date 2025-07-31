@@ -162,7 +162,6 @@ class Gemma3TextConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    attribute_map = {"local_rope_theta": "rope_local_base_freq"}
 
     def __init__(
         self,
