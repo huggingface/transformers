@@ -47,87 +47,35 @@ FP4_VALUES = [
 ]
 
 
-# Copied from GPT_OSS repo
-# TODO: Add absolute link when the repo is public
-# def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
-#     from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
-#     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
-
-#     swizzle_axis = 2 if swizzle_mx_scale or swizzle_mx_value else None
-#     w = w.to(torch.bfloat16)
-
-#     w, mx_scales, weight_scale_shape = downcast_to_mxfp(
-#         w,
-#         torch.uint8,
-#         axis=1,
-#         swizzle_axis=swizzle_axis,
-#         swizzle_scale=swizzle_mx_scale,
-#         swizzle_value=swizzle_mx_value,
-#     )
-
-#     return (
-#         w,
-#         InFlexData(),
-#         MicroscalingCtx(
-#             weight_scale=mx_scales,
-#             swizzle_scale=swizzle_mx_scale,
-#             swizzle_value=swizzle_mx_value,
-#             actual_weight_scale_shape=weight_scale_shape,
-#         ),
-#     )
-    
+# Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
     from triton_kernels.tensor import convert_layout
     from triton_kernels.tensor import wrap_torch_tensor, FP4
     from triton_kernels.tensor_details import layout
+    from triton_kernels.tensor_details.layout import StridedLayout
+    import triton_kernels.matmul_ogs_details.opt_flags as opt_flags
     
-    # FIXME warp need to be adjusted based on batch size
-    # only apply to  batched mode
-    num_warps = 8
-
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
-    scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1,num_warps=num_warps)
+    w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
     
-    #TODO: check if needed
-    # if current_platform.is_cuda() and \
-    #     torch.cuda.get_device_capability()[0] == 10:
+    # TODO : add that when we are actually sure that it works on B200
+    # if torch.cuda.get_device_capability()[0] == 10:
     #     constraints = {
     #         "is_persistent": True,
     #         "epilogue_subtile": 1,
     #     }
     #     opt_flags.update_opt_flags_constraints(constraints)
     # # transpose the tensor so that the quantization axis is on dim1
-    # quant_tensor = quant_tensor.transpose(-2, -1)
-    # scale = scale.transpose(-2, -1)
+
     
-    w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
+    # TODO: there is still an issue with the scales on hopper
+    # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
+    # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
+    w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
+    
     return w, w_scale
-
-# def swizzle_mxfp4(quant_tensor, scale, num_warps):
-#     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(
-#         mx_axis=1)
-#     scale_layout, scale_layout_opts = (
-#         layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1,
-#                                                         num_warps=num_warps))
-#     if current_platform.is_cuda() and \
-#         torch.cuda.get_device_capability()[0] == 10:
-#         constraints = {
-#             "is_persistent": True,
-#             "epilogue_subtile": 1,
-#         }
-#         opt_flags.update_opt_flags_constraints(constraints)
-#     # transpose the tensor so that the quantization axis is on dim1
-#     quant_tensor = quant_tensor.transpose(-2, -1)
-#     scale = scale.transpose(-2, -1)
-#     quant_tensor = convert_layout(wrap_torch_tensor(quant_tensor, dtype=FP4),
-#                                   value_layout, **value_layout_opts)
-#     scale = convert_layout(wrap_torch_tensor(scale), scale_layout,
-#                            **scale_layout_opts)
-#     return quant_tensor, InFlexData(), scale
-
 
 # Copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -434,7 +382,7 @@ def dequantize_and_quantize(
                     _load_parameter_into_model(model, param_name, param_value)
 
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).to(target_device)
+                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
 
                 right_pad = getattr(module, right_pad_attr)
                 bottom_pad = getattr(module, bottom_pad_attr)
@@ -444,7 +392,7 @@ def dequantize_and_quantize(
                 with torch.cuda.device(target_device):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
                 setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
-                setattr(module, proj, triton_weight_tensor) 
+                setattr(module, proj, triton_weight_tensor)
                 setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
             return
 
