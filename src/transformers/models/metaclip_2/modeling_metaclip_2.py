@@ -63,6 +63,89 @@ class MetaCLIP2TextEmbeddings(nn.Module):
         return embeddings
 
 
+class MetaCLIP2VisionEmbeddings(nn.Module):
+    def __init__(self, config: MetaCLIP2VisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -181,6 +264,74 @@ class MetaCLIP2MLP(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
+
+@auto_docstring
+class MetaCLIP2PreTrainedModel(PreTrainedModel):
+    config: MetaCLIP2Config
+    base_model_prefix = "metaclip_2"
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    # Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel._init_weights with CLIP->MetaCLIP2
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor
+        if isinstance(module, MetaCLIP2TextEmbeddings):
+            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        elif isinstance(module, MetaCLIP2VisionEmbeddings):
+            factor = self.config.initializer_factor
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, MetaCLIP2Attention):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, MetaCLIP2MLP):
+            factor = self.config.initializer_factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            nn.init.normal_(module.fc1.weight, std=fc_std)
+            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, MetaCLIP2Model):
+            nn.init.normal_(
+                module.text_projection.weight,
+                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
+            )
+            nn.init.normal_(
+                module.visual_projection.weight,
+                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, MetaCLIP2VisionModelWithProjection):
+            nn.init.normal_(
+                module.visual_projection.weight,
+                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, MetaCLIP2TextModelWithProjection):
+            nn.init.normal_(
+                module.text_projection.weight,
+                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, MetaCLIP2ForImageClassification):
+            nn.init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
+
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 
 class MetaCLIP2EncoderLayer(GradientCheckpointingLayer):
@@ -386,22 +537,61 @@ class MetaCLIP2TextTransformer(nn.Module):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    The text model from METACLIP_2 without any head or projection on top.
     """
 )
-class MetaCLIP2VisionModelOutput(ModelOutput):
-    r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-        The image embeddings obtained by applying the projection layer to the pooler_output.
-    """
+class MetaCLIP2TextModel(MetaCLIP2PreTrainedModel):
+    config: MetaCLIP2TextConfig
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
+
+    def __init__(self, config: MetaCLIP2TextConfig):
+        super().__init__(config)
+        self.text_model = MetaCLIP2TextTransformer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.token_embedding = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, MetaCLIP2TextModel
+
+        >>> model = MetaCLIP2TextModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
+
+        return self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
 
 
 @dataclass
@@ -420,6 +610,72 @@ class MetaCLIP2TextModelOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+
+
+@auto_docstring
+class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
+    config: MetaCLIP2TextConfig
+
+    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
+
+    def __init__(self, config: MetaCLIP2TextConfig):
+        super().__init__(config)
+
+        text_model = MetaCLIP2TextModel._from_config(config)
+        self.text_model = text_model.text_model
+
+        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.text_model.embeddings.token_embedding = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> MetaCLIP2TextModelOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, MetaCLIP2TextModelWithProjection
+
+        >>> model = MetaCLIP2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> text_embeds = outputs.text_embeds
+        ```"""
+
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        pooled_output = text_outputs.pooler_output
+        text_embeds = self.text_projection(pooled_output)
+
+        return MetaCLIP2TextModelOutput(
+            text_embeds=text_embeds,
+            last_hidden_state=text_outputs.last_hidden_state,
+            hidden_states=text_outputs.hidden_states,
+            attentions=text_outputs.attentions,
+        )
 
 
 @dataclass
@@ -457,89 +713,6 @@ class MetaCLIP2Output(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-
-
-class MetaCLIP2VisionEmbeddings(nn.Module):
-    def __init__(self, config: MetaCLIP2VisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        position_embedding = self.position_embedding.weight.unsqueeze(0)
-        num_positions = position_embedding.shape[1] - 1
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
-
-        class_pos_embed = position_embedding[:, :1]
-        patch_pos_embed = position_embedding[:, 1:]
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bicubic",
-            align_corners=False,
-        )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
-
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
-        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
-            )
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
 
 
 class MetaCLIP2VisionTransformer(nn.Module):
@@ -611,196 +784,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
     sum_tensor = torch.sum(square_tensor, dim=-1, keepdim=True)
     normed_tensor = torch.pow(sum_tensor, 0.5)
     return normed_tensor
-
-
-@auto_docstring(
-    custom_intro="""
-    The text model from METACLIP_2 without any head or projection on top.
-    """
-)
-class MetaCLIP2TextModel(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2TextConfig
-
-    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
-
-    def __init__(self, config: MetaCLIP2TextConfig):
-        super().__init__(config)
-        self.text_model = MetaCLIP2TextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MetaCLIP2TextModel
-
-        >>> model = MetaCLIP2TextModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-
-@auto_docstring
-class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2TextConfig
-
-    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
-
-    def __init__(self, config: MetaCLIP2TextConfig):
-        super().__init__(config)
-
-        text_model = MetaCLIP2TextModel._from_config(config)
-        self.text_model = text_model.text_model
-
-        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> MetaCLIP2TextModelOutput:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MetaCLIP2TextModelWithProjection
-
-        >>> model = MetaCLIP2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> text_embeds = outputs.text_embeds
-        ```"""
-
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        pooled_output = text_outputs.pooler_output
-        text_embeds = self.text_projection(pooled_output)
-
-        return MetaCLIP2TextModelOutput(
-            text_embeds=text_embeds,
-            last_hidden_state=text_outputs.last_hidden_state,
-            hidden_states=text_outputs.hidden_states,
-            attentions=text_outputs.attentions,
-        )
-
-
-@auto_docstring
-class MetaCLIP2PreTrainedModel(PreTrainedModel):
-    config: MetaCLIP2Config
-    base_model_prefix = "metaclip_2"
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor
-        if isinstance(module, MetaCLIP2TextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, MetaCLIP2VisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MetaCLIP2Attention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MetaCLIP2MLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MetaCLIP2Model):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaCLIP2VisionModelWithProjection):
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaCLIP2TextModelWithProjection):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, MetaCLIP2ForImageClassification):
-            nn.init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-
-        if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 @auto_docstring
@@ -1080,6 +1063,24 @@ class MetaCLIP2VisionModel(MetaCLIP2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    """
+)
+class MetaCLIP2VisionModelOutput(ModelOutput):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
