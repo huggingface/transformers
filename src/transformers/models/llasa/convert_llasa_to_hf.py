@@ -38,7 +38,7 @@ def conversion(config):
 
     # -- model config and model itself
     model_config = LlasaConfig.from_pretrained_llm(config.llm_model, **config.original_model)
-    
+
     # -- generation configuration
     model_config.eos_token_id = speech_end_id
 
@@ -49,7 +49,7 @@ def conversion(config):
         print("Model dtype : ", model.dtype)
     assert model.lm_head.weight.size(0) == len(tokenizer)
     assert model.lm_head.weight.size(0) == model_orig.lm_head.weight.size(0)
-    
+
     # -- copy model weights
     model.load_state_dict(model_orig.state_dict())
 

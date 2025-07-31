@@ -63,6 +63,8 @@ import soundfile as sf
 from xcodec2.modeling_xcodec2 import XCodec2Model
 
 model_repo = "bezzam/Llasa-1B"
+# model_repo = "bezzam/Llasa-3B"
+# model_repo = "bezzam/Llasa-8B"
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load tokenizer
@@ -75,7 +77,7 @@ processor = LlasaProcessor(
 model = LlasaForCausalLM.from_pretrained(model_repo)
 model.eval().to(torch_device)
 
-# TTS
+# TTS, some text inputs don't work which shows limitations of this approach
 input_text = "How much wood would a woodchuck chuck if a woodchuck could chuck speech tokens?"
 with torch.no_grad():
 
@@ -86,15 +88,16 @@ with torch.no_grad():
     outputs = model.generate(
         encoded_text["input_ids"],
         do_sample=False,
-        max_length=600,    # up to ~10 seconds. Max allowed length is 2048, as Llasa was trained with max length 2048
+        max_length=600,    # generates up to ~10s. Max allowed length is 2048, as Llasa was trained with max length 2048
         top_p=1,           # Adjusts the diversity of generated content
         temperature=0.8,   # Controls randomness in output
     )
 
 # decode to audio
 gen_wav = processor.decode(outputs, input_offset=encoded_text["input_offset"])
-sf.write("llasa_out.wav", gen_wav.cpu().numpy(), 16000)
-print("Generated speech saved to llasa_out.wav")
+fn = f"gen_{model_repo.split('/')[-1]}.wav"
+sf.write(fn, gen_wav.cpu().numpy(), model.config.sampling_rate)
+print(f"Generated speech saved to {fn}")
 ```
 
 ### Training
@@ -119,6 +122,11 @@ An extendable training code, e.g., to train the codec or pick an LLM model other
     - __call__
     - batch_decode
     - decode
+
+## LlasaModel
+
+[[autodoc]] LlasaModel
+    - forward
 
 ## LlasaForCausalLM
 
