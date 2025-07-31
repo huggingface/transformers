@@ -105,6 +105,7 @@ class PLBartConfig(PretrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
         "initializer_range": "init_std",
+        "num_hidden_layers": "decoder_layers",
     }
 
     def __init__(

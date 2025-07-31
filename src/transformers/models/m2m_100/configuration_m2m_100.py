@@ -99,7 +99,11 @@ class M2M100Config(PretrainedConfig):
 
     model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "num_hidden_layers": "decoder_layers",
+    }
 
     def __init__(
         self,

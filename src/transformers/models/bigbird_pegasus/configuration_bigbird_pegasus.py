@@ -115,6 +115,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
         "attention_probs_dropout_prob": "attention_dropout",
+        "num_hidden_layers": "decoder_layers",
     }
 
     def __init__(

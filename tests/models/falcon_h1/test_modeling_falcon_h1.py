@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Cache, FalconH1ForCausalLM, FalconH1Model
+    from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
         FalconHybridMambaAttentionDynamicCache,
     )
