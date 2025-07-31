@@ -374,8 +374,7 @@ class ViTEncoder(nn.Module):
     ) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, layer_head_mask)
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_module(hidden_states, layer_head_mask)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -510,7 +509,7 @@ class ViTPooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
         self.activation = ACT2FN[config.pooler_act]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
