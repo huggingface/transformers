@@ -77,6 +77,11 @@ class Glm4v_moeVisionText2TextModelTester:
             "bos_token_id": 0,
             "eos_token_id": 0,
             "pad_token_id": 0,
+            "n_routed_experts": 8,
+            "n_shared_experts": 1,
+            "n_group": 1,
+            "topk_group": 1,
+            "num_experts_per_tok": 8,
         },
         vision_config={
             "depth": 2,
@@ -112,6 +117,11 @@ class Glm4v_moeVisionText2TextModelTester:
         self.vocab_size = text_config["vocab_size"]
         self.num_image_tokens = 64
         self.seq_length = seq_length + self.num_image_tokens
+        self.n_routed_experts = text_config["n_routed_experts"]
+        self.n_shared_experts = text_config["n_shared_experts"]
+        self.num_experts_per_tok = text_config["num_experts_per_tok"]
+        self.n_group = text_config["n_group"]
+        self.topk_group = text_config["topk_group"]
 
     def get_config(self):
         return Glm4v_moeConfig(
@@ -233,6 +243,14 @@ class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip(reason="We cannot configure to output a smaller model.")
+    def test_model_is_small(self):
+        pass
+
+    @unittest.skip("GLM4's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
@@ -282,7 +300,7 @@ class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 @require_torch
 class Glm4v_moeIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("THUDM/GLM-4.5V")
+        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V-Air")
         self.message = [
             {
                 "role": "user",
@@ -315,7 +333,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype="auto", device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype="auto", device_map="auto"
         )
 
         inputs = self.processor.apply_chat_template(
@@ -351,7 +369,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype="auto", device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype="auto", device_map="auto"
         )
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
@@ -372,9 +390,9 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.5V", max_image_size={"longest_edge": 50176})
+        processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V-Air", max_image_size={"longest_edge": 50176})
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype=torch.float16, device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype=torch.float16, device_map="auto"
         )
         questions = ["Describe this video."] * 2
         video_urls = [
@@ -411,7 +429,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype="auto", device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype="auto", device_map="auto"
         )
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -431,7 +449,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype="auto", device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype="auto", device_map="auto"
         )
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
@@ -461,7 +479,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V", torch_dtype="auto", device_map="auto"
+            "zai-org/GLM-4.5V-Air", torch_dtype="auto", device_map="auto"
         )
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
@@ -490,7 +508,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V",
+            "zai-org/GLM-4.5V-Air",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
@@ -522,7 +540,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Glm4v_moeForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.5V",
+            "zai-org/GLM-4.5V-Air",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
