@@ -125,7 +125,7 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
                     Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
                     computation. If unspecified, it defaults to value recommended by the implementation, using the
                     `factor` field to infer the suggested value.
-        attention_bias (`bool`, defaults to `True`):
+        attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
