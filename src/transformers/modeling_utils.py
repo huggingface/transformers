@@ -2694,7 +2694,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 repo_id, kernel_name = attn_implementation.split(":")
                 kernel_name = kernel_name.strip()
             else:
-                repo_id = attn_implementation
+                repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
             try:
