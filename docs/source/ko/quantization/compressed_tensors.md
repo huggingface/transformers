@@ -65,7 +65,7 @@ print(f"{mem_params/2**30:.4f} GB")
 
 ## 모델 체크포인트[[model-checkpoint]]
 
-compressed-tensor 모델은 설정 항목을 통해 정의됩니다. 다음 예시는 [nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json) `config.json` 파일에서 가져온 것입니다.
+compressed-tensor 모델은 설정 항목을 통해 정의됩니다. 다음은 [nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf/blob/main/config.json) `config.json` 파일에서 가져온 예시입니다.
 
 압축 전후의 유연한 표현을 위해 많은 항목이 존재하지만, 모델 불러오기와 추론에는 핵심 항목 몇 가지만 알아도 됩니다.
 
