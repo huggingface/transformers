@@ -148,11 +148,7 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use query-key normalization in the attention
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
+            Whether to use query-key normalization in the attention.
 
     ```python
     >>> from transformers import Glm4v_moeTextModel, Glm4v_moeConfig
@@ -214,8 +210,6 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
         first_k_dense_replace=1,
         norm_topk_prob=True,
         use_qk_norm=False,
-        image_token_id=None,
-        video_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -240,8 +234,6 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
