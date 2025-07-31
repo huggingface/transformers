@@ -27,10 +27,6 @@ if is_torch_available():
     import torch
 
 
-def extract_rope_type_from_config(*args, **kwargs):
-    pass
-
-
 def _get_rope_scaling_dict(config, layer_type: str) -> dict:
     """Get the RoPE scaling dictionary for the specified layer."""
     rope_scaling_dict = config.rope_scaling_dict
@@ -139,9 +135,6 @@ def _compute_default_rope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attribute - `local_rope_theta`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -174,9 +167,6 @@ def _compute_linear_scaling_rope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attributes - `local_rope_theta` and `local_rope_scaling`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -208,9 +198,6 @@ def _compute_dynamic_ntk_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length, used to update the dynamic RoPE at inference time.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attributes - `local_rope_theta` and `local_rope_scaling`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -258,9 +245,6 @@ def _compute_yarn_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attributes - `local_rope_theta` and `local_rope_scaling`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
@@ -353,9 +337,6 @@ def _compute_longrope_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attributes - `local_rope_theta` and `local_rope_scaling`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
@@ -414,9 +395,6 @@ def _compute_llama3_parameters(
             The device to use for initialization of the inverse frequencies.
         seq_len (`int`, *optional*):
             The current sequence length. Unused for this type of RoPE.
-        is_global (`bool`, *optional*, defaults to `True`):
-            Whether to use global or local rope theta from config. For local rope theta,
-            the config object should have attributes - `local_rope_theta` and `local_rope_scaling`.
     Returns:
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
@@ -462,32 +440,29 @@ def extract_rope_scaling_dict_from_config(config):
     "Helper to extract the rope type from config, while handling BC and local/global keys"
 
     # The RoPE scaling dict might be serialized differently in older versions, which we need to support.
-    # Case 1: `config.rope_scaling` is a simple dict with values to configure RoPE type. Deprecated.
+    # Case 1: `config.rope_scaling` is a simple dict with values to configure RoPE type. Used when the model
+    # has a single attention type, i.e. `config.layer_types = None`
     # Case 2: `config.rope_scaling` is a dict where keys define different RoPE configurations used by the model.
-    # For example `rope_scaling={"global": {}, "local": {}}` to alternate between global and local attention layers.
+    # For example `rope_scaling={"full_attention": {}, "sliding_attentionn": {}}` to alternate between global and local attention layers.
     rope_scaling_dict = getattr(config, "rope_scaling", None)
 
+    # Case 1, if `config.layer_types` is defined we need to check that all layer types got their own RoPE config
+    # We need to handle BC in case users still use simple dict RoPE params and duplicate it for all layer types
     if getattr(config, "layer_types", None) is not None:
-        if rope_scaling_dict is not None and ("type" in rope_scaling_dict or "rope_type" in rope_scaling_dict):
-            # if there is a 'type' field, copy it it to 'rope_type'.
-            if "type" in rope_scaling_dict:
-                rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
-            rope_scaling_dict["rope_theta"] = config.rope_theta
-            rope_scaling_dict = {"full_attention": rope_scaling_dict}
-        elif rope_scaling_dict is None:
-            rope_scaling_dict = {"full_attention": {"rope_type": "default", "rope_theta": config.rope_theta}}
-        else:
-            for rope_key in rope_scaling_dict:
-                if "type" in rope_scaling_dict[rope_key]:
-                    rope_scaling_dict[rope_key]["rope_type"] = rope_scaling_dict[rope_key].pop("type")
+        if rope_scaling_dict is None:
+            default_rope_params = {"rope_type": "default", "rope_theta": config.rope_theta}
+            rope_scaling_dict = dict.fromkeys(config.layer_types, default_rope_params)
+        elif set(config.layer_types) != set(rope_scaling_dict.keys()):
+            rope_scaling_dict = dict.fromkeys(config.layer_types, rope_scaling_dict)
+
+    # Case 2, single RoPE per model, just make sure `rope_scaling_dict` has all default attributes defined
     else:
         if rope_scaling_dict is None:
             rope_scaling_dict = {"rope_type": "default", "rope_theta": config.rope_theta}
         else:
-            if "type" in rope_scaling_dict:
-                rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
-            if "rope_theta" not in rope_scaling_dict:
-                rope_scaling_dict["rope_theta"] = config.rope_theta
+            rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type", "default"))
+            rope_theta = config.rope_theta if hasattr(config, "rope_theta") else rope_scaling_dict["rope_theta"]
+            rope_scaling_dict.update({"rope_type": rope_type, "rope_theta": rope_theta})
     config.rope_scaling_dict = rope_scaling_dict
     return rope_scaling_dict
 
