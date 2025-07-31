@@ -398,16 +398,10 @@ def dequantize_and_quantize(
 
                 right_pad = getattr(module, right_pad_attr)
                 bottom_pad = getattr(module, bottom_pad_attr)
+                
                 dequantized = torch.nn.functional.pad(
                     dequantized, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                 )
-                with torch.cuda.device(target_device):
-                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
-                setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
-                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
-                setattr(module, proj, triton_weight_tensor)
-                setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-
                 original_device = target_device
                 # for fsdp and deepspeed since the model is load on cpu, we need to move the weight to gpu for quantization
                 if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
