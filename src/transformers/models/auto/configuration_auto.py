@@ -649,7 +649,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mega", "MEGA"),
         ("megatron-bert", "Megatron-BERT"),
         ("megatron_gpt2", "Megatron-GPT2"),
-        ("metaclip-2", "MetaMetaCLIP2 2"),
+        ("metaclip-2", "MetaCLIP 2"),
         ("mgp-str", "MGP-STR"),
         ("mimi", "Mimi"),
         ("minimax", "MiniMax"),
