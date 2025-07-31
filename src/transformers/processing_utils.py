@@ -879,7 +879,6 @@ class ProcessorMixin(PushToHubMixin):
                         local_files_only=local_files_only,
                         revision=revision,
                         cache_dir=cache_dir,
-                        token=token,
                     ):
                         additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}"
                 except EntryNotFoundError:
