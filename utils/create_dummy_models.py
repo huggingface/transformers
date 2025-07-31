@@ -1494,6 +1494,8 @@ def create_tiny_models(
         with open(os.path.join(report_path, "failed_uploads.json"), "w") as fp:
             json.dump(upload_results, fp, indent=4)
 
+    return
+
     # Build the tiny model summary file. The `tokenizer_classes` and `processor_classes` could be both empty lists.
     # When using the items in this file to update the file `tests/utils/tiny_model_summary.json`, the model
     # architectures with `tokenizer_classes` and `processor_classes` being both empty should **NOT** be added to
