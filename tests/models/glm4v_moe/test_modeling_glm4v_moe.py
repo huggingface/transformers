@@ -169,7 +169,9 @@ class Glm4v_moeVisionText2TextModelTester:
 
 @require_torch
 class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Glm4v_moeModel, Glm4v_moeTextModel, Glm4v_moeForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (Glm4v_moeModel, Glm4v_moeTextModel, Glm4v_moeForConditionalGeneration) if is_torch_available() else ()
+    )
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
