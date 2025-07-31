@@ -715,6 +715,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
+        ("cohere2_vision", "Cohere2VisionModel"),
         ("dab-detr", "DabDetrModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
         ("deformable_detr", "DeformableDetrModel"),
