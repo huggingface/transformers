@@ -268,9 +268,9 @@ class StaticLayer(CacheLayerMixin):
         if self.keys is None:
             self.lazy_initializion(key_states)
 
-        cache_position = cache_kwargs.get("cache_position")
-        # Some old models given None for `cache_position` when used as cross-attention, in which case we should copy
-        # the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
