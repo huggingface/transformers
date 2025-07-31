@@ -45,7 +45,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class GotOcr2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class GotOcr2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -76,13 +76,13 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_kwargs = GotOcr2ImageProcessorKwargs
+    valid_kwargs = GotOcr2FastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2FastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
@@ -237,12 +237,10 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs["min_patches"] if "min_patches" in images_kwargs else self.min_patches
-        max_patches = images_kwargs["max_patches"] if "max_patches" in images_kwargs else self.max_patches
-        patch_size = images_kwargs["patch_size"] if "patch_size" in images_kwargs else self.size
-        crop_to_patches = (
-            images_kwargs["crop_to_patches"] if "crop_to_patches" in images_kwargs else self.crop_to_patches
-        )
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:

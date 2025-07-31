@@ -1107,7 +1107,7 @@ class ProcessorMixin(PushToHubMixin):
             for i, arg in enumerate(accepted_args_and_kwargs)
             if (arg in valid_kwargs and i < len(args))
         }
-        args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
+        args = [args_to_update.get(i, arg) for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
