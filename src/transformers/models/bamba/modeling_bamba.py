@@ -1181,9 +1181,10 @@ class BambaModel(BambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
             layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1196,7 +1197,7 @@ class BambaModel(BambaPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
 

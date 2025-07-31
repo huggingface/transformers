@@ -1416,8 +1416,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: torch.Tensor,
-        position_embeddings_local: torch.Tensor,
+        position_embeddings: torch.Tensor,
         per_layer_input: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1432,12 +1431,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 
         active_prediction_normed = self.input_layernorm(active_prediction)
         laurel_output = self.laurel(active_prediction_normed)
-
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
 
         attn, self_attn_weights = self.self_attn(
             hidden_states=active_prediction_normed,
@@ -1531,7 +1524,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         self.norm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma3nTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.rotary_emb_local = Gemma3nTextRotaryEmbedding(config=config, is_global=False)
 
         self.hidden_size = config.hidden_size
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
@@ -1641,8 +1633,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         hidden_states_0 = inputs_embeds
 
         # Initialize RoPE embeddings
-        position_embeddings_global = self.rotary_emb(hidden_states_0, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states_0, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states_0, position_ids)
 
         # Expand hidden_states to support per-layer inputs
         target_magnitude = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
@@ -1664,7 +1655,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -1673,8 +1665,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global,
-                position_embeddings_local,
+                position_embeddings[layer_type],
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,

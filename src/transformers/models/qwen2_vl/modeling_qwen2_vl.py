@@ -35,7 +35,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import compute_rope_parameters, ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -109,38 +109,40 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
 class Qwen2VLRotaryEmbedding(nn.Module):
     def __init__(self, config: Qwen2VLTextConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_types = rope_types
+        self.rope_keys = inv_freqs_dict.keys()
+        for key in inv_freqs_dict:
+            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
+            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
+            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, Qwen2_VL has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_embeddings = {}
+        for rope_key in self.rope_keys:
+            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, rope_key):
+        inv_freq = getattr(self, f"{rope_key}_inv_freq")
+        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
@@ -891,7 +893,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 **kwargs,
             )
 

@@ -434,7 +434,7 @@ class Cohere2Model(Gemma2Model):
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 past_key_value=past_key_values,
                 use_cache=use_cache,

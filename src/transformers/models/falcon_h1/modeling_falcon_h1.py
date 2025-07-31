@@ -1303,7 +1303,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for i, decoder_layer in enumerate(self).layers:
+        for i, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 

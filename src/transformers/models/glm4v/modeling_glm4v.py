@@ -36,7 +36,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
@@ -524,35 +524,38 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 class Glm4vTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_types = rope_types
+        self.rope_keys = inv_freqs_dict.keys()
+        for key in inv_freqs_dict:
+            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
+            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
+            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, Glm4vText has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_embeddings = {}
+        for rope_key in self.rope_keys:
+            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, rope_key):
+        inv_freq = getattr(self, f"{rope_key}_inv_freq")
+        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -889,13 +892,14 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            layer_type = self.config.layer_types[i] if hasattr(self.config, "layer_types") else "full_attention"
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[layer_type],
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,

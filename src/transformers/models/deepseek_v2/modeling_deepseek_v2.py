@@ -33,7 +33,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -196,6 +196,17 @@ class DeepseekV2RMSNorm(nn.Module):
 class DeepseekV2RotaryEmbedding(nn.Module):
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_types = rope_types
+        self.rope_keys = inv_freqs_dict.keys()
+        for key in inv_freqs_dict:
+            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
+            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
+            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
         # BC: "rope_type" was originally "type"
         self.rope_type = (
             config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -203,27 +214,25 @@ class DeepseekV2RotaryEmbedding(nn.Module):
             else "default"
         )
 
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_embeddings = {}
+        for rope_key in self.rope_keys:
+            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, rope_key):
+        inv_freq = getattr(self, f"{rope_key}_inv_freq")
+        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
-            freqs_cis = freqs_cis * self.attention_scaling
+            freqs_cis = freqs_cis * attention_scaling
 
         return freqs_cis
 
@@ -294,7 +303,6 @@ class DeepseekV2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank

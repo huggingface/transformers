@@ -54,20 +54,11 @@ class Ernie4_5RotaryEmbedding(nn.Module):
             setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        # keeping it in full precision
-        return cos, sin
+        position_embeddings = {}
+        for rope_key in self.rope_keys:
+            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        return position_embeddings
 
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def apply_rope(self, x, position_ids, rope_key):
@@ -83,7 +74,8 @@ class Ernie4_5RotaryEmbedding(nn.Module):
             cos = emb.cos() * attention_scaling
             sin = emb.sin() * attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        # keeping it in full precision
+        return cos, sin
 
 
 class Ernie4_5MLP(nn.Module):

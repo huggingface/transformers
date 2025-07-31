@@ -54,7 +54,13 @@ def dynamic_rope_update(rope_forward):
         if seq_len > original_max_position_embeddings:
             if not hasattr(self, f"{rope_key}_long_inv_freq"):
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
-                self.long_inv_freq, _ = rope_init_fn(self.config, device, seq_len=original_max_position_embeddings + 1)
+                rope_scaling_dict = self.config.rope_scaling_dict[rope_key]
+                self.long_inv_freq, _ = rope_init_fn(
+                    self.config,
+                    device,
+                    seq_len=original_max_position_embeddings + 1,
+                    rope_scaling_dict=rope_scaling_dict,
+                )
             self.register_buffer(f"{rope_key}_inv_freq", self.long_inv_freq, persistent=False)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -71,7 +77,10 @@ def dynamic_rope_update(rope_forward):
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, device, seq_len=seq_len)
+            rope_scaling_dict = self.config.rope_scaling_dict[rope_key]
+            inv_freq, self.attention_scaling = rope_init_fn(
+                self.config, device, seq_len=seq_len, rope_scaling_dict=rope_scaling_dict
+            )
             self.register_buffer(
                 f"{rope_key}_inv_freq", inv_freq, persistent=False
             )  # TODO joao: may break with compilation
@@ -85,7 +94,7 @@ def dynamic_rope_update(rope_forward):
             self.max_seq_len_cached = self.original_max_seq_len
 
     @wraps(rope_forward)
-    def wrapper(self, x, position_ids, rope_key):
+    def wrapper(self, x, position_ids, rope_key="full_attention"):
         if "dynamic" in self.rope_types[rope_key]:
             dynamic_frequency_update(self, position_ids, device=x.device, rope_key=rope_key)
         elif self.rope_types[rope_key] == "longrope":
@@ -100,7 +109,6 @@ def _compute_default_rope_parameters(
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     rope_scaling_dict: Optional[dict] = None,
-    rope_config_key: Optional[str] = "global",
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
@@ -118,6 +126,7 @@ def _compute_default_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+
     base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
     head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
@@ -134,7 +143,7 @@ def _compute_linear_scaling_rope_parameters(
     config: Optional[PretrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
@@ -152,10 +161,10 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    factor = config.rope_scaling["factor"] if is_global else config.local_rope_scaling["factor"]
+    factor = rope_scaling_dict["factor"]
 
     # Gets the default RoPE parameters
-    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, is_global)
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, rope_scaling_dict)
 
     # Then applies linear scaling to the frequencies.
     # NOTE: originally, scaling was applied to the position_ids. However, we get `embs = inv_freq @ position_ids`, so
@@ -168,7 +177,7 @@ def _compute_dynamic_ntk_parameters(
     config: Optional[PretrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
@@ -187,12 +196,12 @@ def _compute_dynamic_ntk_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
-    base = config.rope_theta if is_global else config.local_rope_theta
+    base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
     max_position_embeddings = config.max_position_embeddings
-    factor = config.rope_scaling["factor"] if is_global else config.local_rope_scaling["factor"]
+    factor = rope_scaling_dict["factor"]
 
     attention_factor = 1.0  # Unused in this type of RoPE
 
@@ -217,7 +226,7 @@ def _compute_yarn_parameters(
     config: PretrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
@@ -236,13 +245,11 @@ def _compute_yarn_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-
-    base = config.rope_theta if is_global else config.local_rope_theta
+    base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
-    rope_scaling_dict = config.rope_scaling if is_global else config.local_rope_scaling
     factor = rope_scaling_dict["factor"]
     attention_factor = rope_scaling_dict.get("attention_factor")
     mscale = rope_scaling_dict.get("mscale")
@@ -314,7 +321,7 @@ def _compute_longrope_parameters(
     config: PretrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
@@ -334,12 +341,11 @@ def _compute_longrope_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
-    base = config.rope_theta if is_global else config.local_rope_theta
+    base = rope_scaling_dict["rope_theta"]
     partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
     head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
     dim = int(head_dim * partial_rotary_factor)
 
-    rope_scaling_dict = config.rope_scaling if is_global else config.local_rope_scaling
     long_factor = rope_scaling_dict["long_factor"]
     short_factor = rope_scaling_dict["short_factor"]
     factor = rope_scaling_dict.get("factor")
@@ -376,7 +382,7 @@ def _compute_llama3_parameters(
     config: PretrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
-    is_global: Optional[bool] = True,
+    rope_scaling_dict: Optional[dict] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies for llama 3.1.
@@ -396,9 +402,8 @@ def _compute_llama3_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # Gets the default RoPE parameters
-    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, is_global)
+    inv_freq, attention_factor = _compute_default_rope_parameters(config, device, seq_len, rope_scaling_dict)
 
-    rope_scaling_dict = config.rope_scaling if is_global else config.local_rope_scaling
     factor = rope_scaling_dict["factor"]  # `8` in the original implementation
     low_freq_factor = rope_scaling_dict["low_freq_factor"]  # `1` in the original implementation
     high_freq_factor = rope_scaling_dict["high_freq_factor"]  # `4` in the original implementation
@@ -450,7 +455,12 @@ def extract_rope_scaling_dict_from_config(config):
         rope_scaling_dict = {"full_attention": rope_scaling_dict}
     elif rope_scaling_dict is None:
         rope_scaling_dict = {"full_attention": {"rope_type": "default", "rope_theta": config.rope_theta}}
+    else:
+        for rope_key in rope_scaling_dict:
+            if "type" in rope_scaling_dict[rope_key]:
+                rope_scaling_dict[rope_key]["rope_type"] = rope_scaling_dict[rope_key].pop("type")
 
+    config.rope_scaling_dict = rope_scaling_dict
     return rope_scaling_dict
 
 

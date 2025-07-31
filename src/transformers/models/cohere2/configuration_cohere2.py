@@ -22,7 +22,6 @@
 import warnings
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
 
 
 class Cohere2Config(PretrainedConfig):
@@ -198,17 +197,12 @@ class Cohere2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.layer_types = layer_types
         # Need to specify head_dim in the config so it can be used in the attention forward functions
         self.head_dim = hidden_size // num_attention_heads
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -229,6 +223,23 @@ class Cohere2Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
+        # per RoPE type and raise a warning
+        rope_theta = getattr(self, "rope_theta", 10000.0)
+        if rope_scaling is not None and ("type" in rope_scaling or "rope_type" in rope_scaling):
+            # if there is a 'type' field, copy it it to 'rope_type'.
+            if "type" in rope_scaling:
+                rope_scaling["rope_type"] = rope_scaling.pop("type")
+            rope_scaling["rope_theta"] = rope_theta
+            rope_scaling = dict.fromkeys(set(self.layer_types), rope_scaling)
+        elif rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+            rope_scaling = dict.fromkeys(set(self.layer_types), rope_scaling)
+
+        self.rope_scaling = rope_scaling
+        # rope_config_validation(self)
 
     @property
     def sliding_window_pattern(self):
