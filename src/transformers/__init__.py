@@ -34,6 +34,10 @@ from .utils import (
     is_mistral_common_available,
     is_pretty_midi_available,
 )
+
+# Note: the following symbols are deliberately exported with `as`
+# so that mypy, pylint or other static linters can recognize them,
+# given that they are not exported using `__all__` in this file.
 from .utils import is_bitsandbytes_available as is_bitsandbytes_available
 from .utils import is_flax_available as is_flax_available
 from .utils import is_keras_nlp_available as is_keras_nlp_available
