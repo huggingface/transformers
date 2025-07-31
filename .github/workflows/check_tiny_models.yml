@@ -11,7 +11,6 @@ on:
 env:
   TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
