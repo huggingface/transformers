@@ -41,7 +41,9 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = CLIPImageProcessor.from_pretrained("microsoft/Florence-2-base")
         image_processor.image_seq_length = 0
         tokenizer = BartTokenizerFast.from_pretrained("microsoft/Florence-2-base")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        tokenizer.image_token = "<image>"
+        tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
+        tokenizer.extra_special_tokens = {"image_token": "<image>"}
         processor_kwargs = cls.prepare_processor_dict()
         processor = Florence2Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
