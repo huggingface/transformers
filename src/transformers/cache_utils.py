@@ -1386,13 +1386,10 @@ class EncoderDecoderCache(Cache):
 
     """
 
-    # Override @property from Cache
-    is_compileable = None
-
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
-        super().__init__(layer_classes=DynamicLayer)
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
+        # Override @property from Cache
         self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
