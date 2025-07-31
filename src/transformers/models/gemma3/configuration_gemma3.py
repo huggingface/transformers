@@ -132,9 +132,6 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        local_rope_scaling (`Dict`, *optional*):
-            Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
-            in local attention.
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
 
@@ -193,7 +190,6 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         rope_scaling=None,
-        local_rope_scaling=None,
         rope_local_base_freq=10_000.0,
         **kwargs,
     ):
@@ -235,11 +231,9 @@ class Gemma3TextConfig(PretrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
-        # per RoPE type and raise a warning
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "rope_theta", 1_000_000)
-        local_rope_scaling = local_rope_scaling if local_rope_scaling is not None else {"rope_type": "default"}
-        sliding_attention_rope = {"rope_theta": rope_local_base_freq, **local_rope_scaling}
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
             full_attention_rope.update(**rope_scaling)
