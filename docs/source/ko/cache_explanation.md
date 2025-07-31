@@ -129,7 +129,7 @@ print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
 ```
 
-캐시 위치[[cache-position]]
+## 캐시 위치[[cache-position]]
 
 캐시 위치는 어텐션 캐시에서 새로운 토큰을 삽입할 위치를 추적합니다. 이는 패딩이나 배치 구조와 무관하게 컨텍스트 내에서 각 토큰의 절대적 위치를 나타냅니다. 이미 `N`개의 토큰을 캐시했고 현재 `K`개의 새로운 토큰을 처리하고 있다고 가정하겠습니다. 새로운 토큰에 대한 캐시 위치는 `N`부터 `N + K - 1`까지의 범위가 됩니다. 즉, `[N, N + 1, N + 2, ..., N + K - 1]` 위치의 토큰들을 처리하는 것입니다.
 
