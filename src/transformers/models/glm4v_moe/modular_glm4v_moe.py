@@ -51,7 +51,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionPatchMerger,
     Glm4vVisionRotaryEmbedding,
 )
-from ..glm4v.processing_glm4v import Glm4vProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -619,16 +618,11 @@ class Glm4v_moeForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
-class Glm4v_moeProcessor(Glm4vProcessor):
-    pass
-
-
 __all__ = [
     "Glm4v_moeConfig",
     "Glm4v_moeTextConfig",
     "Glm4v_moeForConditionalGeneration",
     "Glm4v_moeModel",
     "Glm4v_moePreTrainedModel",
-    "Glm4v_moeProcessor",
     "Glm4v_moeTextModel",
 ]

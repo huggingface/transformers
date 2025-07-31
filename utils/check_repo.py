@@ -92,6 +92,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
+    "Glm4v_moeVisionModel",
     "EvollaSaProtPreTrainedModel",
 ]
 

@@ -155,6 +155,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4v", "Glm4vModel"),
         ("glm4v_moe", "Glm4v_moeModel"),
         ("glm4v_text", "Glm4vTextModel"),
+        ("glm4v_moe_text", "Glm4v_moeTextModel"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
         ("gpt-sw3", "GPT2Model"),
