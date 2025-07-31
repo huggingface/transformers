@@ -420,7 +420,6 @@ def dequantize_and_quantize(
                 # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
                 setattr(module, proj, triton_weight_tensor)
                 setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-
             return
 
 
