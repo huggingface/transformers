@@ -150,7 +150,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if is_triton_kernels_availalble():
-            from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig, InFlexData
+            from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
         from ..integrations import Mxfp4OpenAIMoeExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
         from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts

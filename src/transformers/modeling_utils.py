@@ -5005,7 +5005,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             config._pre_quantization_dtype = original_dtype
             _assign_original_dtype(model)
-        
+
         if _torch_distributed_available and device_mesh is not None:
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 

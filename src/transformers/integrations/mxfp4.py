@@ -50,16 +50,14 @@ FP4_VALUES = [
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
-    from triton_kernels.tensor import convert_layout
-    from triton_kernels.tensor import wrap_torch_tensor, FP4
+    from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
     from triton_kernels.tensor_details import layout
     from triton_kernels.tensor_details.layout import StridedLayout
-    import triton_kernels.matmul_ogs_details.opt_flags as opt_flags
-    
+
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    
+
     # TODO : add that when we are actually sure that it works on B200
     # if torch.cuda.get_device_capability()[0] == 10:
     #     constraints = {
@@ -69,12 +67,12 @@ def quantize_to_mxfp4(w):
     #     opt_flags.update_opt_flags_constraints(constraints)
     # # transpose the tensor so that the quantization axis is on dim1
 
-    
+
     # TODO: there is still an issue with the scales on hopper
     # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
     # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
-    
+
     return w, w_scale
 
 # Copied from GPT_OSS repo
@@ -341,7 +339,7 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
 def dequantize_and_quantize(
     module, param_name, param_value, target_device, **kwargs
 ):
-    from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig, InFlexData
+    from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
     from ..integrations.tensor_parallel import shard_and_distribute_module
     from ..modeling_utils import _load_parameter_into_model
