@@ -254,6 +254,9 @@ class Lfm2HybridConvCache:
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
+    def __len__(self) -> int:
+        return len(self.conv_cache)
+
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 

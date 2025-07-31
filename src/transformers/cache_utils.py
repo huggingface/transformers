@@ -949,19 +949,9 @@ class Cache:
         Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
         to the number of layers in the model.
         """
-        # Best effort BC support for old-style caches like Mambas, Falcon, HybridChunked that rely on __len__
-        if getattr(self, "layers", None) is None:
-            if getattr(self, "key_cache", None) is not None:
-                return len(self.key_cache)
-            return 0
-        # Empty dynamic caches initialize an empty layer to be ready for first update
-        dynamic_empty = (
-            getattr(self, "layers", None) is not None
-            and len(self.layers) == 1
-            and isinstance(self.layers[0], DynamicLayer)
-            and self.layers[0].keys is None
-        )
-        return len(self.layers) if not dynamic_empty else 0
+        # Note: for DynamicCache, layers are initialized lazily, so this will not be accurate before the first
+        # forward through all the layers
+        return len(self.layers)
 
     @property
     def key_cache(self) -> KeyValuesWrapper:
