@@ -833,22 +833,211 @@ class WandbCallback(TrainerCallback):
         - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
             Whether to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
-        pass
+        if self._wandb is None:
+            return
+        self._initialized = True
+
+        # prepare to handle potential configuration issues during setup
+        from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
+
+        if state.is_world_process_zero:
+            logger.info(
+                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
+            )
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+            trial_name = state.trial_name
+            init_args = {}
+            if trial_name is not None:
+                init_args["name"] = trial_name
+                init_args["group"] = args.run_name
+            elif args.run_name is not None:
+                init_args["name"] = args.run_name
+                if args.run_name == args.output_dir:
+                    self._wandb.termwarn(
+                        "The `run_name` is currently set to the same value as `TrainingArguments.output_dir`. If this was "
+                        "not intended, please specify a different run name by setting the `TrainingArguments.run_name` parameter.",
+                        repeat=False,
+                    )
+
+            if self._wandb.run is None:
+                self._wandb.init(
+                    project=os.getenv("WANDB_PROJECT", "huggingface"),
+                    **init_args,
+                )
+            # add config parameters (run may have been created manually)
+            self._wandb.config.update(combined_dict or {}, allow_val_change=True)
+
+            # define default x-axis (for latest wandb versions)
+            if getattr(self._wandb, "define_metric", None):
+                self._wandb.define_metric("train/global_step")
+                self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
+
+            # keep track of model topology and gradients, unsupported on TPU
+            _watch_model = os.getenv("WANDB_WATCH", "false")
+            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
+                self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
+            self._wandb.run._label(code="transformers_trainer")
+
+            # add number of model parameters to wandb config
+            try:
+                self._wandb.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+            except WandbConfigError:
+                logger.warning(
+                    "A ConfigError was raised whilst setting the number of model parameters in Weights & Biases config."
+                )
+
+            # log the initial model architecture to an artifact
+            if self._log_model.is_enabled:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    model_name = (
+                        f"model-{self._wandb.run.id}"
+                        if (args.run_name is None or args.run_name == args.output_dir)
+                        else f"model-{self._wandb.run.name}"
+                    )
+                    model_artifact = self._wandb.Artifact(
+                        name=model_name,
+                        type="model",
+                        metadata={
+                            "model_config": model.config.to_dict() if hasattr(model, "config") else None,
+                            "num_parameters": self._wandb.config.get("model/num_parameters"),
+                            "initial_model": True,
+                        },
+                    )
+                    # add the architecture to a separate text file
+                    save_model_architecture_to_file(model, temp_dir)
+
+                    for f in Path(temp_dir).glob("*"):
+                        if f.is_file():
+                            with model_artifact.new_file(f.name, mode="wb") as fa:
+                                fa.write(f.read_bytes())
+                    self._wandb.run.log_artifact(model_artifact, aliases=["base_model"])
+
+                    badge_markdown = (
+                        f'[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge'
+                        f'-28.svg" alt="Visualize in Weights & Biases" width="20'
+                        f'0" height="32"/>]({self._wandb.run.url})'
+                    )
+
+                    modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
-        pass
+        if self._wandb is None:
+            return
+        hp_search = state.is_hyper_param_search
+        if hp_search:
+            self._wandb.finish()
+            self._initialized = False
+            args.run_name = None
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
-        pass
+        if self._wandb is None:
+            return
+        if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
+            from ..trainer import Trainer
+
+            args_for_fake = copy.deepcopy(args)
+            args_for_fake.deepspeed = None
+            args_for_fake.deepspeed_plugin = None
+            fake_trainer = Trainer(
+                args=args_for_fake, model=model, processing_class=processing_class, eval_dataset=["fake"]
+            )
+            with tempfile.TemporaryDirectory() as temp_dir:
+                fake_trainer.save_model(temp_dir)
+                metadata = (
+                    {
+                        k: v
+                        for k, v in dict(self._wandb.summary).items()
+                        if isinstance(v, numbers.Number) and not k.startswith("_")
+                    }
+                    if not args.load_best_model_at_end
+                    else {
+                        f"eval/{args.metric_for_best_model}": state.best_metric,
+                        "train/total_floss": state.total_flos,
+                        "model/num_parameters": self._wandb.config.get("model/num_parameters"),
+                    }
+                )
+                metadata["final_model"] = True
+                logger.info("Logging model artifacts. ...")
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                # add the model architecture to a separate text file
+                save_model_architecture_to_file(model, temp_dir)
+
+                artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
+                for f in Path(temp_dir).glob("*"):
+                    if f.is_file():
+                        with artifact.new_file(f.name, mode="wb") as fa:
+                            fa.write(f.read_bytes())
+                self._wandb.run.log_artifact(artifact, aliases=["final_model"])
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
-        pass
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if self._wandb is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._wandb.run.summary[k] = v
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._wandb.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
-        pass
+        if self._log_model == WandbLogModel.CHECKPOINT and self._initialized and state.is_world_process_zero:
+            checkpoint_metadata = {
+                k: v
+                for k, v in dict(self._wandb.summary).items()
+                if isinstance(v, numbers.Number) and not k.startswith("_")
+            }
+            checkpoint_metadata["model/num_parameters"] = self._wandb.config.get("model/num_parameters")
+
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. ...")
+            checkpoint_name = (
+                f"model-{self._wandb.run.id}"
+                if (args.run_name is None or args.run_name == args.output_dir)
+                else f"model-{self._wandb.run.name}"
+            )
+            artifact = self._wandb.Artifact(name=checkpoint_name, type="model", metadata=checkpoint_metadata)
+            artifact.add_dir(artifact_path)
+            self._wandb.log_artifact(
+                artifact, aliases=[f"epoch_{round(state.epoch, 2)}", f"checkpoint_global_step_{state.global_step}"]
+            )
 
     def on_predict(self, args, state, control, metrics, **kwargs):
-        pass
+        if self._wandb is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._wandb.log(metrics)
 
 
 class TrackioCallback(TrainerCallback):
