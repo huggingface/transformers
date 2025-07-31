@@ -692,11 +692,21 @@ class Cache:
 
     A `Cache` behaves like a list of `CacheLayerMixin` objects, one per model layer.
     Sub-classes such as `DynamicCache`, `StaticCache`, or `SlidingWindowCache`
-    simply pre-select which `CacheLayerMixin` class to use and may attach a
-    `CacheProcessor` (off-loading, quantization).
+    simply pre-select which `CacheLayerMixin` class to use.
 
-    Example
-    -------
+    Parameters:
+        layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
+            A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
+            provided, then it is used for all layers.
+        layer_class_to_replicate (`type[CacheLayerMixin]`):
+            FILL ME
+        offloading (`bool`, optional):
+            FILL ME
+        offload_only_non_sliding (`bool`, optional):
+            FILL ME
+
+    Examples:
+
     ```python
     from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
 
@@ -708,14 +718,6 @@ class Cache:
     outputs = model(**inputs, past_key_values=cache, use_cache=True)
     ```
 
-    Parameters:
-        layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
-            A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
-            provided, then it is used for all layers.
-
-        cache_processor (`CacheProcessor` or `str`, *optional*):
-            Cache processor to apply (e.g., "offloaded", "quanto_quantized", "hqq_quantized")
-            or a CacheProcessor class.
     """
 
     def __init__(

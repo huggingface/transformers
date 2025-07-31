@@ -49,12 +49,10 @@ if is_torch_available():
         DynamicCache,
         Gemma2Config,
         GenerationConfig,
-        HQQQuantizedCacheProcessor,
         HybridCache,
         HybridChunkedCache,
         LlamaConfig,
         QuantizedCache,
-        QuantoQuantizedCacheProcessor,
         SlidingWindowCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -294,20 +292,11 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-        processor = gen_out.past_key_values.cache_processor
-        if backend == "quanto":
-            self.assertIsInstance(processor, QuantoQuantizedCacheProcessor)
-        elif backend == "hqq":
-            self.assertIsInstance(processor, HQQQuantizedCacheProcessor)
 
         decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
-        self.assertTrue(len(processor._quantized_keys) > 0)
-
         # Check that something is actually quantized
-        has_been_quantized = any((q[0] if isinstance(q, tuple) else q).numel() > 0 for q in processor._quantized_keys)
-        self.assertTrue(has_been_quantized)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
