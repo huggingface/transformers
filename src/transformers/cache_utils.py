@@ -1052,7 +1052,7 @@ if is_torch_greater_or_equal("2.3"):
     )
 
 
-class OffloadedCache(DynamicCache):
+class OffloadedCache(Cache):
     """
     A drop-in replacement for DynamicCache that conserves accelerator(GPU, XPU) memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
@@ -1066,8 +1066,7 @@ class OffloadedCache(DynamicCache):
     """
 
     def __init__(self) -> None:
-        super().__init__()
-        self.offloading = True
+        super().__init__(layer_class_to_replicate=DynamicLayer, offloading=True)
 
 
 class StaticCache(Cache):
@@ -1101,7 +1100,7 @@ class StaticCache(Cache):
         super().__init__(layers=layers)
 
 
-class OffloadedStaticCache(StaticCache):
+class OffloadedStaticCache(Cache):
     """
     A drop-in replacement for StaticCache that conserves accelerator memory by offloading
     cache tensors to CPU when not actively being used.
@@ -1136,8 +1135,8 @@ class OffloadedStaticCache(StaticCache):
     """
 
     def __init__(self, max_cache_len: int, config: PretrainedConfig):
-        super().__init__(max_cache_len, config)
-        self.offloading = True
+        layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers, offloading=True)
 
 
 class SlidingWindowCache(Cache):
@@ -1233,6 +1232,7 @@ class OffloadedHybridCache(HybridChunkedCache):
     def __init__(self, max_cache_len: int, config: PretrainedConfig):
         super().__init__(max_cache_len, config)
         self.offloading = True
+        self.only_non_sliding = True
 
 
 class QuantizedCache(Cache):
@@ -1383,7 +1383,6 @@ class EncoderDecoderCache(Cache):
         >>> outputs.past_key_values # access cache filled with key/values from generation
         EncoderDecoderCache()
         ```
-
     """
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
