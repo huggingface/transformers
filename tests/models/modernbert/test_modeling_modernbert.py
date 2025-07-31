@@ -375,6 +375,16 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 config_dict = json.load(f)
             self.assertNotIn("reference_compile", config_dict)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_flash_attention_dispatches_by_defaul(self):
+        "ModernBert should dispatch to FA2 by default, not SDPA"
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            self.assertTrue(model.config._attn_implementation == "flash_attention_2")
+
 
 @require_torch
 class ModernBertModelIntegrationTest(unittest.TestCase):

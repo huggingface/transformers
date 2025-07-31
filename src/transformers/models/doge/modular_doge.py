@@ -564,7 +564,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
 
 class DogePreTrainedModel(LlamaPreTrainedModel):
     _supports_flash_attn = False
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(DogeCDMoE, index=1),
         "hidden_states": DogeDecoderLayer,
@@ -573,8 +573,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
-
+        LlamaPreTrainedModel._init_weights(module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()

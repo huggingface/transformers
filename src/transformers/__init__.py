@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.54.0.dev0"
+__version__ = "4.55.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -127,6 +127,7 @@ _import_structure = {
         "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
+        "is_trackio_available",
         "is_wandb_available",
     ],
     "loss": [],
@@ -274,6 +275,7 @@ _import_structure = {
         "HqqConfig",
         "QuantoConfig",
         "QuarkConfig",
+        "FPQuantConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -365,15 +367,28 @@ else:
     ]
     _import_structure["activations"] = []
     _import_structure["cache_utils"] = [
+        "CacheLayerMixin",
+        "DynamicLayer",
+        "StaticLayer",
+        "SlidingWindowLayer",
+        "ChunkedSlidingLayer",
+        "CacheProcessor",
+        "OffloadedCacheProcessor",
+        "QuantizedCacheProcessor",
+        "QuantoQuantizedCacheProcessor",
+        "HQQQuantizedCacheProcessor",
         "Cache",
         "CacheConfig",
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
+        "HQQQuantizedCacheProcessor",
         "HybridCache",
+        "HybridChunkedCache",
         "OffloadedCache",
         "OffloadedStaticCache",
         "QuantizedCache",
+        "QuantoQuantizedCacheProcessor",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
@@ -746,6 +761,7 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
+        is_trackio_available,
         is_wandb_available,
     )
     from .integrations.executorch import (
@@ -946,6 +962,7 @@ if TYPE_CHECKING:
         EetqConfig,
         FbgemmFp8Config,
         FineGrainedFP8Config,
+        FPQuantConfig,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,
