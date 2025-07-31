@@ -44,10 +44,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] EdgeTamConfig
 
-## EdgeTamHieraDetConfig
-
-[[autodoc]] EdgeTamHieraDetConfig
-
 ## EdgeTamVisionConfig
 
 [[autodoc]] EdgeTamVisionConfig
@@ -63,11 +59,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## EdgeTamVideoInferenceSession
 
 [[autodoc]] EdgeTamVideoInferenceSession
-
-## EdgeTamHieraDetModel
-
-[[autodoc]] EdgeTamHieraDetModel
-    - forward
 
 ## EdgeTamVisionModel
 

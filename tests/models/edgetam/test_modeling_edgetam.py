@@ -24,9 +24,9 @@ from transformers import (
     EdgeTamConfig,
     EdgeTamHieraDetConfig,
     EdgeTamMaskDecoderConfig,
-    Sam2Processor,
     EdgeTamPromptEncoderConfig,
     EdgeTamVisionConfig,
+    Sam2Processor,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -48,7 +48,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import EdgeTamModel, Sam2Processor, EdgeTamVideoModel, EdgeTamVisionModel
+    from transformers import EdgeTamModel, EdgeTamVideoModel, EdgeTamVisionModel, Sam2Processor
 
 
 if is_vision_available():
@@ -743,10 +743,12 @@ class EdgeTamModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
-        self.model = EdgeTamModel.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0).to(torch.float32)
-        self.video_model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0).to(
+        self.model = EdgeTamModel.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0).to(
             torch.float32
         )
+        self.video_model = EdgeTamVideoModel.from_pretrained(
+            "yonigozlan/edgetam.1_hiera_tiny_hf", fill_hole_area=0
+        ).to(torch.float32)
         self.processor = Sam2Processor.from_pretrained("yonigozlan/edgetam.1_hiera_tiny_hf")
         self.model.to(torch_device)
         self.model.eval()

@@ -36,7 +36,7 @@ class EdgeTamVisionConfig(PretrainedConfig):
         backbone_config (`Union[dict, "PretrainedConfig"]`, *optional*):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
-        backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
+        backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
             The list of channel dimensions for the backbone.
         backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
             The spatial sizes of the feature maps from the backbone.
@@ -308,7 +308,7 @@ class EdgeTamConfig(PretrainedConfig):
             Whether to preserve temporal direction in object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the memory attention hidden states.
-        memory_attention_num_layers (`int`, *optional*, defaults to 4):
+        memory_attention_num_layers (`int`, *optional*, defaults to 2):
             The number of layers in the memory attention module.
         memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
             Number of attention heads for each attention layer in the memory attention.
@@ -442,19 +442,19 @@ class EdgeTamConfig(PretrainedConfig):
         memory_attention_apply_pe_at_self_attn=False,
         memory_attention_apply_pe_at_cross_attn_keys=True,
         memory_attention_apply_pe_at_cross_attn_queries=False,
-        # spatial perceiver
-        num_latents=256,
-        num_latents_2d=256,
-        dim=64,
-        dim_head=64,
-        heads=1,
-        depth=2,
-        use_self_attn=True,
-        hidden_dropout_p=0.0,
-        attention_dropout_p=0.0,
-        concat_kv_latents=False,
-        pos_enc_at_key_value=True,
-        ff_mult=4,
+        # spatial perceiver resampler
+        perceiver_resampler_num_latents=256,
+        perceiver_resampler_num_latents_2d=256,
+        perceiver_resampler_hidden_size=64,
+        perceiver_resampler_num_attention_heads=1,
+        perceiver_resampler_attention_head_dim=64,
+        perceiver_resampler_num_layers=2,
+        perceiver_resampler_use_self_attention=True,
+        perceiver_resampler_hidden_dropout=0.0,
+        perceiver_resampler_attention_dropout=0.0,
+        perceiver_resampler_concat_kv_latents=False,
+        perceiver_resampler_pos_encoding_at_input=True,
+        perceiver_resampler_ff_intermediate_size_multiplier=4,
         # memory encoder
         memory_encoder_hidden_size=256,
         memory_encoder_output_channels=64,
@@ -526,19 +526,19 @@ class EdgeTamConfig(PretrainedConfig):
         self.memory_attention_apply_pe_at_cross_attn_keys = memory_attention_apply_pe_at_cross_attn_keys
         self.memory_attention_apply_pe_at_cross_attn_queries = memory_attention_apply_pe_at_cross_attn_queries
 
-        # spatial perceiver
-        self.num_latents = num_latents
-        self.num_latents_2d = num_latents_2d
-        self.dim = dim
-        self.dim_head = dim_head
-        self.heads = heads
-        self.depth = depth
-        self.use_self_attn = use_self_attn
-        self.hidden_dropout_p = hidden_dropout_p
-        self.attention_dropout_p = attention_dropout_p
-        self.concat_kv_latents = concat_kv_latents
-        self.pos_enc_at_key_value = pos_enc_at_key_value
-        self.ff_mult = ff_mult
+        # spatial perceiver resampler
+        self.perceiver_resampler_num_latents = perceiver_resampler_num_latents
+        self.perceiver_resampler_num_latents_2d = perceiver_resampler_num_latents_2d
+        self.perceiver_resampler_hidden_size = perceiver_resampler_hidden_size
+        self.perceiver_resampler_attention_head_dim = perceiver_resampler_attention_head_dim
+        self.perceiver_resampler_num_attention_heads = perceiver_resampler_num_attention_heads
+        self.perceiver_resampler_num_layers = perceiver_resampler_num_layers
+        self.perceiver_resampler_use_self_attention = perceiver_resampler_use_self_attention
+        self.perceiver_resampler_hidden_dropout = perceiver_resampler_hidden_dropout
+        self.perceiver_resampler_attention_dropout = perceiver_resampler_attention_dropout
+        self.perceiver_resampler_concat_kv_latents = perceiver_resampler_concat_kv_latents
+        self.perceiver_resampler_pos_encoding_at_input = perceiver_resampler_pos_encoding_at_input
+        self.perceiver_resampler_ff_intermediate_size_multiplier = perceiver_resampler_ff_intermediate_size_multiplier
 
         # memory encoder
         self.memory_encoder_hidden_size = memory_encoder_hidden_size

@@ -102,6 +102,9 @@ KEYS_TO_MODIFY_MAPPING = {
     ".norm": ".layer_norm",
     "trunk.": "",
     "body.": "timm_model.",
+    "ff.0": "feed_forward.layer_norm",
+    "ff.1": "feed_forward.linear1",
+    "ff.3": "feed_forward.linear2",
 }
 
 
@@ -114,11 +117,28 @@ def replace_keys(state_dict):
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
+    perceiver_resampler_patterns = {
+        r"spatial_perceiver.latents": r"spatial_perceiver.latents_1d",
+        r"spatial_perceiver.latents_1d_2d": r"spatial_perceiver.latents_2d",
+        r"spatial_perceiver.layers.(\d+).attn.layer_norm_x": r"spatial_perceiver.layers.\1.cross_attention.layer_norm_input",
+        r"spatial_perceiver.layers.(\d+).attn.to_q": r"spatial_perceiver.layers.\1.cross_attention.query_proj",
+        r"spatial_perceiver.layers.(\d+).attn.to_kv": r"spatial_perceiver.layers.\1.cross_attention.key_value_proj",
+        r"spatial_perceiver.layers.(\d+).attn.to_out": r"spatial_perceiver.layers.\1.cross_attention.output_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_q": r"spatial_perceiver.layers.\1.self_attention.query_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_kv": r"spatial_perceiver.layers.\1.self_attention.key_value_proj",
+        r"spatial_perceiver.layers.(\d+).self_attn.to_out": r"spatial_perceiver.layers.\1.self_attention.output_proj",
+        r"spatial_perceiver.layers.(\d+).attn": r"spatial_perceiver.layers.\1.cross_attention",
+        r"spatial_perceiver.layers.(\d+).self_attn": r"spatial_perceiver.layers.\1.self_attention",
+    }
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
+
+        for pattern, replacement in perceiver_resampler_patterns.items():
+            if re.match(pattern, key):
+                key = re.sub(pattern, replacement, key)
 
         # vision_encoder.blocks.0.mlp.layers.1.weight -> vision_encoder.blocks.0.mlp.proj_out.weight
         if re.match(output_vision_encoder_mlps_pattern, key):

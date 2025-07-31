@@ -3394,11 +3394,11 @@ class Sam2VideoModel(Sam2Model):
         r"""
         inference_session (`Sam2VideoInferenceSession`):
             The video inference session object.
-        frame (`torch.Tensor`, *optional*):
-            The frame to process. Provide when streaming.
         frame_idx (`int`, *optional*):
             The index of the frame on which to run inference. No need to provide when inferring
             on a new streamed frame.
+        frame (`torch.Tensor`, *optional*):
+            The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
         consolidate_at_video_res (`bool`, *optional*, defaults to `True`):

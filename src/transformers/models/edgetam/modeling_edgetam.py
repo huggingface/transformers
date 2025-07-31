@@ -581,6 +581,92 @@ class EdgeTamTwoWayAttentionBlock(nn.Module):
         return queries, keys, attn_out
 
 
+class EdgeTamPositionEmbeddingSine(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one
+    used by the Attention is all you need paper, generalized to work on images.
+    """
+
+    def __init__(
+        self,
+        num_pos_feats,
+        temperature: int = 10000,
+        normalize: bool = True,
+        scale: Optional[float] = None,
+    ):
+        super().__init__()
+        self.num_pos_feats = num_pos_feats // 2
+        self.temperature = temperature
+        self.normalize = normalize
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        if scale is None:
+            scale = 2 * math.pi
+        self.scale = scale
+
+        self.cache = {}
+
+    def _encode_xy(self, x, y):
+        # The positions are expected to be normalized
+        x_embed = x * self.scale
+        y_embed = y * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+
+        pos_x = x_embed[:, None] / dim_t
+        pos_y = y_embed[:, None] / dim_t
+        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
+        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
+        return pos_x, pos_y
+
+    @torch.no_grad()
+    def encode_boxes(self, x, y, w, h):
+        pos_x, pos_y = self._encode_xy(x, y)
+        pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
+        return pos
+
+    @torch.no_grad()
+    def encode_points(self, x, y, labels):
+        (bx, nx), (by, ny) = x.shape, y.shape
+        pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
+        pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
+        pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
+        return pos
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor):
+        cache_key = (x.shape[-2], x.shape[-1])
+        if cache_key in self.cache:
+            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
+        y_embed = (
+            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
+            .view(1, -1, 1)
+            .repeat(x.shape[0], 1, x.shape[-1])
+        )
+        x_embed = (
+            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
+            .view(1, 1, -1)
+            .repeat(x.shape[0], x.shape[-2], 1)
+        )
+
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        self.cache[cache_key] = pos[0]
+        return pos
+
+
 class EdgeTamMemoryFuser(nn.Module):
     def __init__(self, config: EdgeTamConfig):
         super().__init__()
@@ -2367,207 +2453,218 @@ class EdgeTamMemoryAttentionLayer(nn.Module):
         return queries
 
 
-class EdgeTamPerceiverAttention(nn.Module):
-    def __init__(self, config, dim, dim_head=64, heads=8, dropout_p=0.05, concat_kv_latents=True):
+class EdgeTamPerceiverFeedForward(nn.Module):
+    def __init__(self, config: EdgeTamConfig, hidden_size: int):
+        super().__init__()
+        intermediate_size = int(hidden_size * config.perceiver_resampler_ff_intermediate_size_multiplier)
+
+        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.linear1 = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.activation = nn.GELU()
+        self.linear2 = nn.Linear(intermediate_size, hidden_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        return hidden_states
+
+
+class EdgeTamPerceiverCrossAttention(nn.Module):
+    def __init__(self, config: EdgeTamConfig, hidden_size: int):
         super().__init__()
         self.config = config
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        inner_dim = dim_head * heads
+        self.hidden_size = hidden_size
+        self.num_attention_heads = config.perceiver_resampler_num_attention_heads
+        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
+        self.attention_dropout = config.perceiver_resampler_attention_dropout
+        self.concat_kv_latents = config.perceiver_resampler_concat_kv_latents
 
-        self.layer_norm_x = nn.LayerNorm(dim)
-        self.layer_norm_latents = nn.LayerNorm(dim)
+        self.inner_dim = self.attention_head_dim * self.num_attention_heads
+        self.scale = self.attention_head_dim**-0.5
 
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+        self.layer_norm_input = nn.LayerNorm(hidden_size)
+        self.layer_norm_latents = nn.LayerNorm(hidden_size)
 
-        self.dropout_p = dropout_p
-        self.concat_kv_latents = concat_kv_latents
+        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
+        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
+        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
+
         self.is_causal = False
 
-    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
-        b, n, c = x.shape
-        x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
+        return hidden_states.transpose(1, 2)
 
-    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
-        b, n_tokens, n_heads, c_per_head = x.shape
-        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
+        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
 
-    def forward(self, latents, x, pos=None, **kwargs):
-        latents = self.layer_norm_latents(latents)
-        x = self.layer_norm_x(x)
+    def forward(
+        self,
+        latents: torch.Tensor,
+        input_features: torch.Tensor,
+        positional_encoding: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        normalized_latents = self.layer_norm_latents(latents)
+        normalized_input = self.layer_norm_input(input_features)
 
-        q = self.to_q(latents)
+        query_states = self.query_proj(normalized_latents)
 
-        # the paper differs from Perceiver in which they also concat the key / values derived from the latents to be attended to
         if self.concat_kv_latents:
-            kv_input = torch.cat((x, latents), dim=-2)
+            key_value_input = torch.cat((normalized_input, normalized_latents), dim=-2)
         else:
-            kv_input = x
-        k, v = self.to_kv(kv_input).chunk(2, dim=-1)
+            key_value_input = normalized_input
 
-        q = self._separate_heads(q, self.heads)
-        k = self._separate_heads(k, self.heads)
-        v = self._separate_heads(v, self.heads)
+        key_value_states = self.key_value_proj(key_value_input)
+        key_states, value_states = key_value_states.chunk(2, dim=-1)
 
-        if pos is not None:
+        query_states = self._separate_heads(query_states)
+        key_states = self._separate_heads(key_states)
+        value_states = self._separate_heads(value_states)
+
+        if positional_encoding is not None:
             if self.concat_kv_latents:
                 raise ValueError("Position encoding is not supported when concat_kv_latents is True")
-            pos = self._separate_heads(pos, self.heads)
-            k, v = k + pos, v + pos
+            pos_encoding = self._separate_heads(positional_encoding)
+            key_states = key_states + pos_encoding
+            value_states = value_states + pos_encoding
 
-        scale = q.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attention_output, _ = attention_interface(
             self,
-            q,
-            k,
-            v,
+            query_states,
+            key_states,
+            value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
             is_causal=self.is_causal,
             **kwargs,
         )
-        attn_output = self._recombine_heads(attn_output)
-        return self.to_out(attn_output)
+
+        attention_output = self._recombine_heads(attention_output)
+        return self.output_proj(attention_output)
 
 
 class EdgeTamPerceiverSelfAttention(nn.Module):
-    def __init__(self, config, dim, dim_head=64, heads=8, dropout_p=0.05):
+    def __init__(self, config: EdgeTamConfig, hidden_size: int):
         super().__init__()
         self.config = config
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        inner_dim = dim_head * heads
+        self.hidden_size = hidden_size
+        self.num_attention_heads = config.perceiver_resampler_num_attention_heads
+        self.attention_head_dim = config.perceiver_resampler_attention_head_dim
+        self.attention_dropout = config.perceiver_resampler_attention_dropout
 
-        self.layer_norm = nn.LayerNorm(dim)
+        self.inner_dim = self.attention_head_dim * self.num_attention_heads
+        self.scale = self.attention_head_dim**-0.5
 
-        self.to_q = nn.Linear(dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
-        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+        self.layer_norm = nn.LayerNorm(hidden_size)
 
-        self.dropout_p = dropout_p
+        self.query_proj = nn.Linear(hidden_size, self.inner_dim, bias=False)
+        self.key_value_proj = nn.Linear(hidden_size, self.inner_dim * 2, bias=False)
+        self.output_proj = nn.Linear(self.inner_dim, hidden_size, bias=False)
+
         self.is_causal = False
 
-    def _separate_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
-        b, n, c = x.shape
-        x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+    def _separate_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, seq_len, self.num_attention_heads, self.attention_head_dim)
+        return hidden_states.transpose(1, 2)
 
-    def _recombine_heads(self, x: torch.Tensor) -> torch.Tensor:
-        b, n_tokens, n_heads, c_per_head = x.shape
-        return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
+    def _recombine_heads(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, num_attention_heads, attention_head_dim = hidden_states.shape
+        return hidden_states.view(batch_size, seq_len, num_attention_heads * attention_head_dim)
 
-    def forward(self, x, **kwargs):
-        x = self.layer_norm(x)
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        normalized_states = self.layer_norm(hidden_states)
 
-        q = self.to_q(x)
-        k, v = self.to_kv(x).chunk(2, dim=-1)
+        query_states = self.query_proj(normalized_states)
+        key_value_states = self.key_value_proj(normalized_states)
+        key_states, value_states = key_value_states.chunk(2, dim=-1)
 
-        q = self._separate_heads(q, self.heads)
-        k = self._separate_heads(k, self.heads)
-        v = self._separate_heads(v, self.heads)
+        query_states = self._separate_heads(query_states)
+        key_states = self._separate_heads(key_states)
+        value_states = self._separate_heads(value_states)
 
-        scale = q.shape[-1] ** -0.5
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attention_output, _ = attention_interface(
             self,
-            q,
-            k,
-            v,
+            query_states,
+            key_states,
+            value_states,
             attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
             is_causal=self.is_causal,
             **kwargs,
         )
-        attn_output = self._recombine_heads(attn_output)
-        return self.to_out(attn_output)
 
-
-def FeedForward(dim, mult=4):
-    inner_dim = int(dim * mult)
-    return nn.Sequential(
-        nn.LayerNorm(dim),
-        nn.Linear(dim, inner_dim, bias=False),
-        nn.GELU(),
-        nn.Linear(inner_dim, dim, bias=False),
-    )
+        attention_output = self._recombine_heads(attention_output)
+        return self.output_proj(attention_output)
 
 
 class EdgeTamPerceiverEncoderLayer(nn.Module):
-    def __init__(
-        self,
-        config,
-        dim,
-        dim_head=64,
-        heads=8,
-        ff_mult=4,
-        hidden_dropout_p=0.0,
-        attention_dropout_p=0.0,
-        concat_kv_latents=False,
-        use_self_attn=False,
-    ):
+    def __init__(self, config: EdgeTamConfig, hidden_size: int):
         super().__init__()
-        self.attn = EdgeTamPerceiverAttention(
-            config,
-            dim=dim,
-            dim_head=dim_head,
-            heads=heads,
-            dropout_p=attention_dropout_p,
-            concat_kv_latents=concat_kv_latents,
-        )
-        self.ff = FeedForward(dim=dim, mult=ff_mult)
-        self.dropout = nn.Dropout(hidden_dropout_p)
-        self.use_self_attn = use_self_attn
-        if use_self_attn:
-            self.self_attn = EdgeTamPerceiverSelfAttention(
-                config,
-                dim=dim,
-                dim_head=dim_head,
-                heads=heads,
-                dropout_p=attention_dropout_p,
-            )
-            self.self_ff = FeedForward(dim=dim, mult=ff_mult)
+        self.use_self_attention = config.perceiver_resampler_use_self_attention
 
-    def forward(self, latents, x, pos=None):
-        latents = self.attn(latents, x, pos) + latents
-        latents = self.dropout(latents)
-        latents = self.ff(latents) + latents
-        if self.use_self_attn:
-            latents = self.self_attn(latents) + latents
-            latents = self.self_ff(latents) + latents
+        self.cross_attention = EdgeTamPerceiverCrossAttention(config, hidden_size)
+        self.feed_forward = EdgeTamPerceiverFeedForward(config, hidden_size)
+        self.dropout = nn.Dropout(config.perceiver_resampler_hidden_dropout)
+
+        if self.use_self_attention:
+            self.self_attention = EdgeTamPerceiverSelfAttention(config, hidden_size)
+            self.self_feed_forward = EdgeTamPerceiverFeedForward(config, hidden_size)
+
+    def forward(
+        self,
+        latents: torch.Tensor,
+        input_features: torch.Tensor,
+        positional_encoding: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        cross_attention_output = self.cross_attention(latents, input_features, positional_encoding)
+        latents = latents + self.dropout(cross_attention_output)
+
+        feed_forward_output = self.feed_forward(latents)
+        latents = latents + feed_forward_output
+
+        if self.use_self_attention:
+            self_attention_output = self.self_attention(latents)
+            latents = latents + self_attention_output
+
+            self_feed_forward_output = self.self_feed_forward(latents)
+            latents = latents + self_feed_forward_output
+
         return latents
 
 
-class EdgeTamPositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention Is All You Need paper, generalized to work on images.
-    """
-
+class EdgeTamPerceiverPositionEmbeddingSine(nn.Module):
     def __init__(
         self,
-        num_pos_feats,
+        num_position_features: int,
         temperature: int = 10000,
         normalize: bool = True,
         scale: Optional[float] = None,
     ):
         super().__init__()
-        assert num_pos_feats % 2 == 0, "Expecting even model width"
-        self.num_pos_feats = num_pos_feats // 2
+        if num_position_features % 2 != 0:
+            raise ValueError(f"num_position_features must be even, got {num_position_features}")
+
+        self.num_position_features_per_dim = num_position_features // 2
         self.temperature = temperature
         self.normalize = normalize
-        if scale is not None and normalize is False:
+
+        if scale is not None and not normalize:
             raise ValueError("normalize should be True if scale is passed")
         if scale is None:
             scale = 2 * math.pi
@@ -2576,19 +2673,22 @@ class EdgeTamPositionEmbeddingSine(nn.Module):
         self.cache = {}
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor):
-        cache_key = (x.shape[-2], x.shape[-1])
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        cache_key = (hidden_states.shape[-2], hidden_states.shape[-1])
         if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
+            return self.cache[cache_key][None].repeat(hidden_states.shape[0], 1, 1, 1)
+
+        height, width = hidden_states.shape[-2:]
+
         y_embed = (
-            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
+            torch.arange(1, height + 1, dtype=torch.float32, device=hidden_states.device)
             .view(1, -1, 1)
-            .repeat(x.shape[0], 1, x.shape[-1])
+            .repeat(hidden_states.shape[0], 1, width)
         )
         x_embed = (
-            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
+            torch.arange(1, width + 1, dtype=torch.float32, device=hidden_states.device)
             .view(1, 1, -1)
-            .repeat(x.shape[0], x.shape[-2], 1)
+            .repeat(hidden_states.shape[0], height, 1)
         )
 
         if self.normalize:
@@ -2596,16 +2696,17 @@ class EdgeTamPositionEmbeddingSine(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features_per_dim, dtype=torch.float32, device=hidden_states.device)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features_per_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = pos[0]
-        return pos
+
+        positional_encoding = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        self.cache[cache_key] = positional_encoding[0]
+        return positional_encoding
 
 
 def window_partition(hidden_state, window_size):
@@ -2643,97 +2744,103 @@ def window_partition(hidden_state, window_size):
 class EdgeTamPerceiverResampler(nn.Module):
     def __init__(self, config: EdgeTamConfig):
         super().__init__()
-        self.num_latents = config.num_latents
-        self.num_latents_2d = config.num_latents_2d
+        self.config = config
+        self.hidden_size = config.perceiver_resampler_hidden_size
+        self.num_latents_1d = config.perceiver_resampler_num_latents
+        self.num_latents_2d = config.perceiver_resampler_num_latents_2d
+        self.num_layers = config.perceiver_resampler_num_layers
+        self.use_positional_encoding_at_input = config.perceiver_resampler_pos_encoding_at_input
 
-        if self.num_latents > 0:
-            self.latents = nn.Parameter(torch.randn(self.num_latents, config.dim))
+        if self.num_latents_1d > 0:
+            self.latents_1d = nn.Parameter(torch.randn(self.num_latents_1d, self.hidden_size))
         if self.num_latents_2d > 0:
-            self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, config.dim))
-        self.position_encoding = EdgeTamPositionEmbeddingSine(config.dim)
+            self.latents_2d = nn.Parameter(torch.randn(self.num_latents_2d, self.hidden_size))
 
-        self.layers = nn.ModuleList([])
-        for _ in range(config.depth):
-            self.layers.append(
-                EdgeTamPerceiverEncoderLayer(
-                    config,
-                    dim=config.dim,
-                    dim_head=config.dim_head,
-                    heads=config.heads,
-                    ff_mult=config.ff_mult,
-                    hidden_dropout_p=config.hidden_dropout_p,
-                    attention_dropout_p=config.attention_dropout_p,
-                    concat_kv_latents=config.concat_kv_latents,
-                    use_self_attn=config.use_self_attn,
-                )
-            )
+        self.positional_encoding = EdgeTamPerceiverPositionEmbeddingSine(self.hidden_size)
 
-        self.layer_norm = nn.LayerNorm(config.dim)
-        self.pos_enc_at_key_value = config.pos_enc_at_key_value
+        self.layers = nn.ModuleList(
+            [EdgeTamPerceiverEncoderLayer(config, self.hidden_size) for _ in range(self.num_layers)]
+        )
 
-    def forward(self, x, pos=None):
-        out_latents = []
-        out_pos = []
-        if self.num_latents > 0:
-            latents_1d, pos_1d = self.forward_1d(x, pos)
-            out_latents.append(latents_1d)
-            out_pos.append(pos_1d)
+        self.layer_norm = nn.LayerNorm(self.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        positional_encoding: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        output_latents = []
+        output_positional_encodings = []
+
+        if self.num_latents_1d > 0:
+            latents_1d, pos_1d = self._forward_1d(hidden_states, positional_encoding)
+            output_latents.append(latents_1d)
+            output_positional_encodings.append(pos_1d)
+
         if self.num_latents_2d > 0:
-            latents_2d, pos_2d = self.forward_2d(x)
-            out_latents.append(latents_2d)
-            out_pos.append(pos_2d)
+            latents_2d, pos_2d = self._forward_2d(hidden_states)
+            output_latents.append(latents_2d)
+            output_positional_encodings.append(pos_2d)
 
-        latents = torch.concat(out_latents, dim=1)
-        if pos is not None:
-            pos = torch.concat(out_pos, dim=1)
+        combined_latents = torch.cat(output_latents, dim=1)
 
-        return latents, pos
+        combined_positional_encoding = None
+        if positional_encoding is not None and output_positional_encodings:
+            combined_positional_encoding = torch.cat(output_positional_encodings, dim=1)
 
-    def forward_1d(self, x, pos):
-        latents = self.latents.unsqueeze(0).expand(x.shape[0], -1, -1)
-        x = x.permute(0, 2, 3, 1).flatten(1, 2)
+        return combined_latents, combined_positional_encoding
 
-        if not self.pos_enc_at_key_value:
-            _pos = None
-        if pos is not None:
-            _pos = pos.permute(0, 2, 3, 1).flatten(1, 2)
-        else:
-            _pos = None
+    def _forward_1d(
+        self,
+        hidden_states: torch.Tensor,
+        positional_encoding: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size = hidden_states.shape[0]
+
+        latents = self.latents_1d.unsqueeze(0).expand(batch_size, -1, -1)
+        flattened_features = hidden_states.permute(0, 2, 3, 1).flatten(1, 2)
+
+        positional_features = None
+        if self.use_positional_encoding_at_input and positional_encoding is not None:
+            positional_features = positional_encoding.permute(0, 2, 3, 1).flatten(1, 2)
 
         for layer in self.layers:
-            latents = layer(latents, x, _pos)
-
-        if pos is not None:
-            pos = torch.zeros_like(latents)
+            latents = layer(latents, flattened_features, positional_features)
 
         latents = self.layer_norm(latents)
-        return latents, pos
 
-    def forward_2d(self, x):
-        B, C, H, W = x.shape
+        output_positional_encoding = None
+        if positional_encoding is not None:
+            output_positional_encoding = torch.zeros_like(latents)
 
-        latents_2d = self.latents_2d.unsqueeze(0).expand(B, -1, -1).view(-1, 1, C)
+        return latents, output_positional_encoding
 
-        num_window = int(math.sqrt(self.num_latents_2d))
-        window_size = H // num_window
-        x = x.permute(0, 2, 3, 1)
+    def _forward_2d(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, channels, height, width = hidden_states.shape
 
-        x, _ = window_partition(x, window_size)
-        x = x.flatten(1, 2)
+        latents_2d = self.latents_2d.unsqueeze(0).expand(batch_size, -1, -1).view(-1, 1, channels)
+
+        num_windows_per_dim = int(math.sqrt(self.num_latents_2d))
+        window_size = height // num_windows_per_dim
+
+        windowed_input = hidden_states.permute(0, 2, 3, 1)
+        windowed_features, _ = window_partition(windowed_input, window_size)
+        windowed_features = windowed_features.flatten(1, 2)
 
         for layer in self.layers:
-            latents_2d = layer(latents_2d, x)
+            latents_2d = layer(latents_2d, windowed_features, positional_encoding=None)
 
-        latents_2d = latents_2d.view(B, num_window, num_window, C).permute(0, 3, 1, 2)
+        latents_2d = latents_2d.view(batch_size, num_windows_per_dim, num_windows_per_dim, channels).permute(
+            0, 3, 1, 2
+        )
 
-        pos_2d = self.position_encoding(latents_2d).to(dtype=x.dtype)
-        pos_2d = pos_2d.permute(0, 2, 3, 1).flatten(1, 2)
+        positional_encoding_2d = self.positional_encoding(latents_2d).to(dtype=hidden_states.dtype)
+        positional_encoding_2d = positional_encoding_2d.permute(0, 2, 3, 1).flatten(1, 2)
 
         latents_2d = latents_2d.permute(0, 2, 3, 1).flatten(1, 2)
-
         latents_2d = self.layer_norm(latents_2d)
 
-        return latents_2d, pos_2d
+        return latents_2d, positional_encoding_2d
 
 
 class EdgeTamMemoryAttention(nn.Module):
@@ -3432,11 +3539,11 @@ class EdgeTamVideoModel(EdgeTamModel):
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):
             The video inference session object.
-        frame (`torch.Tensor`, *optional*):
-            The frame to process. Provide when streaming.
         frame_idx (`int`, *optional*):
             The index of the frame on which to run inference. No need to provide when inferring
             on a new streamed frame.
+        frame (`torch.Tensor`, *optional*):
+            The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
         consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
