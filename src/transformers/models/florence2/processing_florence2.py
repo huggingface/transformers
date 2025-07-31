@@ -113,6 +113,7 @@ class Florence2Processor(ProcessorMixin):
         self.num_image_tokens = image_processor.image_seq_length
         self.num_additional_image_tokens = num_additional_image_tokens
         self.post_processor = Florence2PostProcessor(tokenizer=tokenizer)
+        self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
 
         super().__init__(image_processor, tokenizer, **kwargs)

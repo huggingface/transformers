@@ -29,7 +29,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_vision,
     slow,
     torch_device,
 )
@@ -57,7 +56,6 @@ class Florence2VisionText2TextModelTester:
         image_size=8,
         seq_length=13,
         encoder_seq_length=18,
-        image_seq_length=5,
         is_training=True,
         vocab_size=99,
         max_position_embeddings=64,
@@ -275,12 +273,11 @@ def prepare_img():
     return image
 
 
-@require_vision
-@require_torch
 @slow
+@require_torch
 class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_name = "microsoft/Florence-2-base"
+        self.model_name = "ducviet00/Florence-2-base-hf"
         self.processor = AutoProcessor.from_pretrained(self.model_name)
 
         self.image1 = Image.open(
@@ -299,56 +296,140 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_inference_base(self):
-        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch.float16).to(
+    def test_base_model_inference_eager(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, attn_implementation="eager").to(
             torch_device
         )
 
         prompt = "<DETAILED_CAPTION>"
         inputs = self.processor(images=self.image1, text=prompt, return_tensors="pt")
-        inputs.to(device=torch_device, dtype=torch.float16)
+        inputs.to(device=torch_device)
 
-        EXPECTED_INPUT_IDS = [[0, 47066, 21700, 11, 4617, 99, 16, 2343, 11, 5, 2274, 4, 2]]  # fmt: skip
-        self.assertTrue(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
+        EXPECTED_INPUT_IDS = [[self.processor.image_token_id] * self.processor.num_image_tokens + [0, 47066, 21700, 11, 4617, 99, 16, 2343, 11, 5, 2274, 4, 2]]  # fmt: skip
+        self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
 
         predictions = model.generate(**inputs, max_new_tokens=100)
 
         EXPECTED_PREDICTION_IDS = [[2, 0, 133, 2274, 924, 10, 912, 1203, 2828, 15, 5, 526, 9, 10, 2014, 11, 35910, 6, 188, 469, 412, 4, 20, 2014, 16, 9321, 19, 3413, 6, 3980, 6, 8, 19638, 6, 8, 89, 32, 82, 3051, 15, 5, 2767, 22609, 4, 20, 6360, 16, 7097, 11, 5, 3618, 4, 2]]  # fmt: skip
-        self.assertTrue(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+        self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_text = self.processor.batch_decode(predictions, skip_special_tokens=True)[0]
 
         EXPECTED_GENERATED_TEXT = "The image shows a stop sign sitting on the side of a street in Chinatown, New York City. The street is lined with buildings, trees, and statues, and there are people walking on the footpath. The sky is visible in the background."  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
-    def test_batch_inference_base(self):
-        model = Florence2ForConditionalGeneration.from_pretrained(
-            self.model_name, attn_implementation="eager", torch_dtype=torch.float16
-        ).to(torch_device)
+    def test_base_model_batching_inference_eager(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, attn_implementation="eager").to(
+            torch_device
+        )
 
         images = [self.image1, self.image2]
-        prompts = ["<CAPTION>", "<DETAILED_CAPTION>"]
+        prompts = ["<REGION_PROPOSAL>", "<OPEN_VOCABULARY_DETECTION>wheels"]
         inputs = self.processor(images=images, text=prompts, padding="longest", return_tensors="pt")
 
         EXPECTED_INPUT_IDS = [
-            [0,  2264,   473,  5, 2274, 6190, 116,    2,  1, 1,    1, 1, 1],
-            [0, 47066, 21700, 11, 4617,   99,  16, 2343, 11, 5, 2274, 4, 2],
-        ]  # fmt: skip
-        self.assertTrue(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
+            [self.processor.image_token_id] * self.processor.num_image_tokens
+            + [0, 574, 22486, 5, 976, 5327, 11, 5, 2274, 4, 2],
+            [self.processor.image_token_id] * self.processor.num_image_tokens
+            + [0, 574, 22486, 10562, 11, 5, 2274, 4, 2, 1, 1],
+        ]
+        self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
 
-        inputs.to(device=torch_device, dtype=torch.float16)
+        inputs.to(device=torch_device)
         predictions = model.generate(**inputs, max_new_tokens=100)
 
         EXPECTED_PREDICTION_IDS = [
-            [2, 0, 250,  912, 1203, 2828,   15,     5,   526,    9, 10, 2014, 4,  2,    1,   1,  1,  1,    1,    1, 1,    1,  1,    1, 1,  1,   1,    1,    1, 1, 1],
-            [2, 0, 133, 2274,  924,   10, 2272, 10685, 41537, 9181, 11,  760, 9, 10, 5718, 745, 19, 80, 6219, 4259, 6, 7501, 30, 3980, 8, 10, 699, 2440, 6360, 4, 2]
+            [2, 0, 50269, 50269, 51267, 50980, 50269, 50269, 50688, 50942, 50269, 50333, 50633, 50941, 51033, 50269, 51267, 50934, 50794, 50814, 51190, 51032, 50432, 50402, 50634, 50692, 50269, 50334, 50340, 50927, 51224, 50417, 51267, 50930, 51076, 50944, 51159, 51028, 50836, 50947, 50915, 51030, 2],
+            [2, 0, 28884,  2507, 50413, 50839, 51139, 51047, 28884,  2507, 50980, 50842, 51135, 51043, 28884, 2507, 50417, 50848, 50573, 51043,      2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ]  # fmt: skip
-        self.assertTrue(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+        self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
-        generated_texts = self.processor.batch_decode(predictions, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(predictions, skip_special_tokens=False)
 
         EXPECTED_GENERATED_TEXTS = [
-            "A stop sign sitting on the side of a street.",
-            "The image shows a green Volkswagen Beetle parked in front of a yellow building with two brown doors, surrounded by trees and a clear blue sky.",
+            "</s><s><loc_0><loc_0><loc_998><loc_711><loc_0><loc_0><loc_419><loc_673><loc_0><loc_64><loc_364><loc_672><loc_764><loc_0><loc_998><loc_665><loc_525><loc_545><loc_921><loc_763><loc_163><loc_133><loc_365><loc_423><loc_0><loc_65><loc_71><loc_658><loc_955><loc_148><loc_998><loc_661><loc_807><loc_675><loc_890><loc_759><loc_567><loc_678><loc_646><loc_761></s>",
+            "</s><s>wheels<loc_144><loc_570><loc_870><loc_778>wheels<loc_711><loc_573><loc_866><loc_774>wheels<loc_148><loc_579><loc_304><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+        ]
+        self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
+
+        parsed_answer_0 = self.processor.post_process_generation(
+            generated_texts[0], task="<REGION_PROPOSAL>", image_size=(images[0].width, images[0].height)
+        )
+        EXPECTED_PARSED_ANSWER_0 = {"<REGION_PROPOSAL>": {"bboxes": [[0, 0, 1298, 623], [0, 0, 545, 589], [0, 56, 473, 589], [993, 0, 1298, 582], [683, 477, 1197, 668], [212, 116, 475, 370], [0, 57, 92, 576], [1242, 130, 1298, 579], [1049, 591, 1157, 665], [737, 594, 840, 667]], "labels": ["", "", "", "", "", "", "", "", "", ""]}}  # fmt: skip
+
+        self.assertEqual(parsed_answer_0, EXPECTED_PARSED_ANSWER_0)
+
+        parsed_answer_1 = self.processor.post_process_generation(
+            generated_texts[1], task="<OPEN_VOCABULARY_DETECTION>", image_size=(images[1].width, images[1].height)
+        )
+        EXPECTED_PARSED_ANSWER_1 = {"<OPEN_VOCABULARY_DETECTION>": {"bboxes": [[92, 273, 557, 373], [455, 275, 554, 371], [95, 278, 194, 371]], "bboxes_labels": ["wheels", "wheels", "wheels"], "polygons": [], "polygons_labels": []}}  # fmt: skip
+
+        self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
+
+    def test_base_model_inference_sdpa(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, attn_implementation="sdpa").to(
+            torch_device
+        )
+
+        prompt = "<REFERRING_EXPRESSION_SEGMENTATION>a car"
+        inputs = self.processor(images=self.image2, text=prompt, return_tensors="pt")
+        inputs.to(device=torch_device)
+
+        EXPECTED_INPUT_IDS = [[self.processor.image_token_id] * self.processor.num_image_tokens + [0, 574, 22486, 10, 512, 11, 5, 2274, 19, 11445, 2]]  # fmt: skip
+        self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
+
+        predictions = model.generate(**inputs, max_new_tokens=100)
+
+        EXPECTED_PREDICTION_IDS = [[2, 0, 50548, 50648, 50551, 50648, 50559, 50641, 50562, 50641, 50567, 50637, 50570, 50637, 50575, 50633, 50579, 50631, 50584, 50629, 50589, 50627, 50593, 50624, 50600, 50622, 50606, 50620, 50612, 50618, 50618, 50616, 50625, 50614, 50634, 50612, 50645, 50610, 50659, 50608, 50678, 50606, 50758, 50606, 50783, 50608, 50797, 50610, 50808, 50612, 50816, 50614, 50822, 50616, 50828, 50618, 50835, 50620, 50841, 50622, 50847, 50624, 50853, 50629, 50858, 50635, 50861, 50641, 50864, 50648, 50867, 50654, 50870, 50660, 50872, 50666, 50875, 50670, 50877, 50677, 50880, 50683, 50883, 50689, 50886, 50695, 50889, 50702, 50895, 50710, 50900, 50714, 50905, 50716, 50908, 50720, 50908, 50725, 50911, 50729, 2]]  # fmt: skip
+        self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+
+        generated_text = self.processor.batch_decode(predictions, skip_special_tokens=False)[0]
+
+        EXPECTED_GENERATED_TEXT = "</s><s><loc_279><loc_379><loc_282><loc_379><loc_290><loc_372><loc_293><loc_372><loc_298><loc_368><loc_301><loc_368><loc_306><loc_364><loc_310><loc_362><loc_315><loc_360><loc_320><loc_358><loc_324><loc_355><loc_331><loc_353><loc_337><loc_351><loc_343><loc_349><loc_349><loc_347><loc_356><loc_345><loc_365><loc_343><loc_376><loc_341><loc_390><loc_339><loc_409><loc_337><loc_489><loc_337><loc_514><loc_339><loc_528><loc_341><loc_539><loc_343><loc_547><loc_345><loc_553><loc_347><loc_559><loc_349><loc_566><loc_351><loc_572><loc_353><loc_578><loc_355><loc_584><loc_360><loc_589><loc_366><loc_592><loc_372><loc_595><loc_379><loc_598><loc_385><loc_601><loc_391><loc_603><loc_397><loc_606><loc_401><loc_608><loc_408><loc_611><loc_414><loc_614><loc_420><loc_617><loc_426><loc_620><loc_433><loc_626><loc_441><loc_631><loc_445><loc_636><loc_447><loc_639><loc_451><loc_639><loc_456><loc_642><loc_460></s>"  # fmt: skip
+        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
+
+        parsed_answer = self.processor.post_process_generation(
+            generated_text,
+            task="<REFERRING_EXPRESSION_SEGMENTATION>",
+            image_size=(self.image2.width, self.image2.height),
+        )
+        EXPECTED_PARSED_ANSWER = {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 182, 180, 182, 185, 178, 187, 178, 191, 176, 192, 176, 196, 174, 198, 174, 201, 173, 205, 172, 207, 170, 212, 169, 216, 168, 219, 167, 223, 166, 228, 165, 233, 164, 240, 163, 249, 162, 262, 162, 313, 162, 329, 162, 338, 163, 345, 164, 350, 165, 354, 166, 358, 167, 362, 168, 366, 169, 370, 170, 374, 173, 377, 175, 379, 178, 381, 182, 383, 185, 384, 187, 386, 190, 388, 192, 389, 196, 391, 198, 393, 201, 395, 204, 397, 208, 400, 211, 404, 213, 407, 214, 409, 216, 409, 219, 411, 221]]], 'labels': ['']}}  # fmt: skip
+        self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
+
+    def test_base_model_batching_inference_sdpa(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, attn_implementation="sdpa").to(
+            torch_device
+        )
+
+        images = [self.image1, self.image2]
+        prompts = ["<OCR>", "<OD>"]
+        inputs = self.processor(images=images, text=prompts, padding="longest", return_tensors="pt")
+
+        EXPECTED_INPUT_IDS = [
+            [self.processor.image_token_id] * self.processor.num_image_tokens + [0, 2264, 16, 5, 2788, 11, 5, 2274, 116, 2, 1, 1, 1],
+            [self.processor.image_token_id] * self.processor.num_image_tokens + [0, 574, 22486, 5, 8720, 19, 4120, 766, 11, 5, 2274, 4, 2],
+        ]  # fmt: skip
+        self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
+
+        inputs.to(device=torch_device)
+        predictions = model.generate(**inputs, max_new_tokens=100)
+
+        EXPECTED_PREDICTION_IDS = [
+            [2, 0, 47643, 47240, 6382, 47643, 7405, 495, 211, 2571, 4014, 5733, 36714, 11582, 11582, 36714, 18164, 9357, 36714, 6248, 3602, 37127, 27969, 7471, 44636, 23171, 41907, 27, 16948, 45895, 11582, 45262, 18537, 530, 791, 384, 229, 791, 5733, 565, 3048, 673, 10932, 5733, 565, 11120, 673, 2],
+            [2, 0, 5901, 50322, 50602, 51202, 51043, 11219, 3679, 50694, 50772, 50743, 50784, 13630, 50978, 50845, 51134, 51041, 50419, 50853, 50578, 51042, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ]  # fmt: skip
+        self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+
+        generated_texts = self.processor.batch_decode(predictions, skip_special_tokens=False)
+
+        EXPECTED_GENERATED_TEXTS = [
+            "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSTO</s>",
+            "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
         ]  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
+
+        parsed_answer = self.processor.post_process_generation(
+            generated_texts[1], task="<OD>", image_size=(images[1].width, images[1].height)
+        )
+        EXPECTED_PARSED_ANSWER = {'<OD>': {'bboxes': [[34, 160, 597, 371], [272, 241, 303, 247], [454, 276, 553, 370], [96, 280, 198, 371]], 'labels': ['car', 'door handle', 'wheel', 'wheel']}}  # fmt: skip
+        self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)

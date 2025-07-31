@@ -322,26 +322,31 @@ def language_model(state_dict):
     return language_state_dict_keys
 
 
-def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
+def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_path):
     """
     Function to convert the microsoft florence2 checkpoint to huggingface checkpoint
     """
 
     hf_config = AutoConfig.from_pretrained(hf_model_id, trust_remote_code=True)
-    hf_model = AutoModelForCausalLM.from_pretrained(hf_model_id, trust_remote_code=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(hf_model_id, trust_remote_code=True, attn_implementation="eager")
     hf_processor = AutoProcessor.from_pretrained(hf_model_id, trust_remote_code=True)
     huggingface_weights = OrderedDict()
     list_of_state_dict = []
 
-    vision_config = convert_config(hf_config.vision_config.__dict__)
-    text_config = hf_config.text_config.__dict__
-    config = Florence2Config(text_config=text_config, vision_config=vision_config)
-
     tokenizer = hf_processor.tokenizer
+    tokenizer.image_token = "<image>"
+    tokenizer.add_tokens(AddedToken(tokenizer.image_token, special=True, normalized=False), special_tokens=True)
+    tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
     tokenizer.extra_special_tokens = {"image_token": "<image>"}
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+
     image_processor = hf_processor.image_processor
     processor = Florence2Processor(image_processor=image_processor, tokenizer=tokenizer)
+
+    vision_config = convert_config(hf_config.vision_config.__dict__)
+    text_config = hf_config.text_config.__dict__
+    config = Florence2Config(
+        text_config=text_config, vision_config=vision_config, image_token_id=tokenizer.image_token_id
+    )
 
     for stage_idx in range(len(config.vision_config.embed_dim)):
         list_of_state_dict = list_of_state_dict + vision_conv_embeddings(stage_idx)
@@ -363,8 +368,14 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder):
     # We add an image token so we resize the model and pad to 64 for performance reasons
     pad_shape = 64
     model.resize_token_embeddings(len(tokenizer), pad_shape)
-    model.save_pretrained(pytorch_dump_folder)
-    processor.save_pretrained(pytorch_dump_folder)
+
+    if pytorch_dump_folder:
+        model.save_pretrained(pytorch_dump_folder)
+        processor.save_pretrained(pytorch_dump_folder)
+
+    if output_hub_path:
+        model.push_to_hub(output_hub_path)
+        processor.push_to_hub(output_hub_path)
 
 
 if __name__ == "__main__":
@@ -378,6 +389,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--output_hub_path",
+        help="Location on the hub of the converted model",
+    )
 
     args = parser.parse_args()
-    convert_florence2_checkpoint(args.hf_model_id, args.pytorch_dump_folder_path)
+    convert_florence2_checkpoint(args.hf_model_id, args.pytorch_dump_folder_path, args.output_hub_path)
