@@ -260,26 +260,40 @@ class ServeCompletionsMixin:
 
 
 class ServeCompletionsGenerateMockTests(unittest.TestCase):
-
-    @parameterized.expand([
-        ("flat", [
-            {"role": "user", "content": "How are you doing?"},
-            {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
-            {"role": "user", "content": "Can you help me write tests?"},
-        ]),
-        ("nested", [
-            {"role": "user", "content": "How are you doing?"},
-            {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
-            {"role": "user", "content": [{"text": "Can you help me write tests?", "type": "text"}]}
-        ],
-         [
-             {"role": "user", "content": "How are you doing?"},
-             {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
-             {"role": "user", "content": "Can you help me write tests?"}
-         ],
-         ),
-
-    ])
+    @parameterized.expand(
+        [
+            (
+                "flat",
+                [
+                    {"role": "user", "content": "How are you doing?"},
+                    {
+                        "role": "assistant",
+                        "content": "I'm doing great, thank you for asking! How can I assist you today?",
+                    },
+                    {"role": "user", "content": "Can you help me write tests?"},
+                ],
+            ),
+            (
+                "nested",
+                [
+                    {"role": "user", "content": "How are you doing?"},
+                    {
+                        "role": "assistant",
+                        "content": "I'm doing great, thank you for asking! How can I assist you today?",
+                    },
+                    {"role": "user", "content": [{"text": "Can you help me write tests?", "type": "text"}]},
+                ],
+                [
+                    {"role": "user", "content": "How are you doing?"},
+                    {
+                        "role": "assistant",
+                        "content": "I'm doing great, thank you for asking! How can I assist you today?",
+                    },
+                    {"role": "user", "content": "Can you help me write tests?"},
+                ],
+            ),
+        ]
+    )
     def test_processor_inputs_from_inbound_messages_llm(self, name, messages, expected_outputs=None):
         expected_outputs = expected_outputs or messages
         outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, Modality.LLM)
