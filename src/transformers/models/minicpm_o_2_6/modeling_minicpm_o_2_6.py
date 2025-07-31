@@ -3252,6 +3252,7 @@ class Resampler(nn.Module):
         else:
             self.kv_proj = nn.Identity()
 
+        # norm_layer=partial(nn.LayerNorm, eps=1e-6)
         self.attn = MultiheadAttention(embed_dim, num_heads)
         self.ln_q = norm_layer(embed_dim)
         self.ln_kv = norm_layer(embed_dim)

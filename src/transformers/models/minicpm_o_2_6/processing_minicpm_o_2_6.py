@@ -23,28 +23,15 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 import librosa
 import numpy as np
-import PIL
-import PIL.Image
 import torch
 import torchaudio
-from PIL import Image
 
-from transformers import AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
-from transformers.image_processing_utils import BaseImageProcessor
-from transformers.image_transforms import to_channel_dimension_format
 from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs, AudioKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils import logging, TensorType
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import (
-    ChannelDimension,
-    infer_channel_dimension_format,
-    is_torch_tensor,
-    to_numpy_array,
-    valid_images,
-)
 from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType
 
 logger = logging.get_logger(__name__)
@@ -166,7 +153,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, config=None, image_processor=None, feature_extractor=None, tokenizer=None):
+    def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None):
         super().__init__(image_processor, feature_extractor, tokenizer)
         self.version = image_processor.version
 
@@ -232,11 +219,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             total_unk_len = 0
             for _ in range(num_audio_chunks):
                 unk_len = min(audio_embeds_in_chunk, output_lens - total_unk_len)
-                place_holders += self.tokenizer.audio_start + "<unk>" * unk_len + self.tokenizer.audio_end
+                place_holders += self.tokenizer.audio_start + self.tokenizer.unk_token * unk_len + self.tokenizer.audio_end
                 total_unk_len += unk_len
             audio_placeholder = place_holders
         else:
-            audio_placeholder = self.tokenizer.audio_start + "<unk>" * output_lens + self.tokenizer.audio_end
+            audio_placeholder = self.tokenizer.audio_start + self.tokenizer.unk_token * output_lens + self.tokenizer.audio_end
 
         return audio_placeholder
 
