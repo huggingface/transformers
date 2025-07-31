@@ -445,7 +445,7 @@
     title: 메인 클래스
   - sections:
     - sections:
-      - local: in_translation
+      - local: model_doc/albert
         title: ALBERT
       - local: in_translation
         title: Arcee
@@ -1169,7 +1169,7 @@
         title: TrOCR
       - local: in_translation
         title: TVLT
-      - local: in_translation
+      - local: model_doc/tvp
         title: TVP
       - local: in_translation
         title: UDOP
