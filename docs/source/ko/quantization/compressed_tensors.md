@@ -93,7 +93,7 @@ compressed-tensor 모델은 설정 항목을 통해 정의됩니다. 다음은 [
 },
 ```
 
-구성 파일은 구성 그룹(`group_0`)에 대해 정적 per-tensor 전략으로 가중치와 활성화 함수 기반 값을 fp8로 양자화하도록 지정합니다. `ignore` 키에 명시된 것처럼 `lm_head` 모듈은 양자화되지 않습니다.
+구성 파일은 구성 그룹(`group_0`)에 대해 텐서별 정적 전략으로 가중치와 활성화 함수 기반 값을 fp8로 양자화하도록 지정합니다. `ignore` 키에 명시된 것처럼 `lm_head` 모듈은 양자화되지 않습니다.
 
 모델 가중치를 더 자세히 보려면, 모델 카드의 [safetensors 뷰어](https://huggingface.co/nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf?show_file_info=model.safetensors.index.json)를 사용하여 모든 [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) 모듈의 양자화된 가중치, 입력 스케일, 가중치 스케일을 확인할 수 있습니다.
 
