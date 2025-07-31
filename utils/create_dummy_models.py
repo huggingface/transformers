@@ -16,6 +16,7 @@
 import argparse
 import collections.abc
 import copy
+import datetime
 import inspect
 import json
 import multiprocessing
@@ -1063,7 +1064,7 @@ def get_config_overrides(config_class, processors):
     return config_overrides
 
 
-def build(config_class, models_to_create, output_dir):
+def _build(config_class, models_to_create, output_dir):
     """Create all models for a certain model type.
 
     Args:
@@ -1076,7 +1077,7 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
-    print(f"Create models for {config_class.__name__} ...")
+    print(f"Create tiny models for {config_class.__name__} ...")
 
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
@@ -1089,13 +1090,6 @@ def build(config_class, models_to_create, output_dir):
         "speech-encoder-decoder",
         "vision-text-dual-encoder",
     ]:
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
-
         return build_composite_models(config_class, output_dir)
 
     result = {k: {} for k in models_to_create}
@@ -1111,14 +1105,6 @@ def build(config_class, models_to_create, output_dir):
         error = f"No processor class could be found in {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
-
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
-
         return result
 
     for processor_class in processor_classes:
@@ -1131,28 +1117,12 @@ def build(config_class, models_to_create, output_dir):
             trace = traceback.format_exc()
             fill_result_with_error(result, error, trace, models_to_create)
             logger.error(result["error"][0])
-
-            print(f"Finished building models for {config_class.__name__} ...")
-            print("=" * 40)
-
-            # save info to mark done
-            with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-                fp.write("done")
-
             return result
 
     if len(result["processor"]) == 0:
         error = f"No processor could be built for {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
-
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
-
         return result
 
     try:
@@ -1162,13 +1132,6 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
-
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
 
         return result
 
@@ -1187,13 +1150,6 @@ def build(config_class, models_to_create, output_dir):
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
 
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
-
         return result
 
     try:
@@ -1203,13 +1159,6 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
-
-        print(f"Finished building models for {config_class.__name__} ...")
-        print("=" * 40)
-
-        # save info to mark done
-        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-            fp.write("done")
 
         return result
 
@@ -1264,12 +1213,27 @@ def build(config_class, models_to_create, output_dir):
     if not result["warnings"]:
         del result["warnings"]
 
+    return result
+
+
+def build(*args, **kwargs):
+
+    s = datetime.datetime.now()
+
+    result = _build(*args, **kwargs)
+
+    e = datetime.datetime.now()
+    t = (e-s).total_seconds()
+
+    config_class = args[0]
+
     print(f"Finished building models for {config_class.__name__} ...")
+    print(f"timing: {t}")
     print("=" * 40)
 
     # save info to mark done
     with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
-        fp.write("done")
+        fp.write(f"{t}")
 
     return result
 
@@ -1617,32 +1581,3 @@ if __name__ == "__main__":
         args.token,
         args.num_workers,
     )
-
-
-# import os
-# fns = os.listdir("tiny_local_models")
-# fns = [x.replace(".txt", "") for x in fns if x.endswith(".txt")]
-# fns2 = '\n'.join(fns)
-# print(fns2)
-# print(len(fns))
-#
-# with open("tiny_local_models/models.txt") as fp:
-#     data = fp.read()
-#     data = data.split("\n")
-#     data = data[2:]
-# data2 = '\n'.join(data)
-# print(data2)
-# print(len(data))
-#
-# no_created = sorted(set(data).difference(fns))
-# print(len(no_created))
-# no_created2 = '\n'.join(no_created)
-# print(no_created2)
-
-"""
-kyutai_speech_to_text
-layoutlm
-led
-moshi
-mpt
-"""

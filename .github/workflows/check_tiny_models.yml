@@ -48,6 +48,10 @@ jobs:
         run: |
           python utils/create_dummy_models.py tiny_local_models --all --num_workers 7
 
+      - name: Create all tiny models (locally)
+        run: |
+          python utils/check_tiny.py
+
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
