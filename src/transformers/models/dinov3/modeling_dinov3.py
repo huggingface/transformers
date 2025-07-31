@@ -641,9 +641,25 @@ class Dinov3PreTrainedModel(PreTrainedModel):
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
         elif isinstance(module, Dinov3RopePositionEmbedding):
-            module.init_weights()
+            device = module.periods.device
+            dtype = module.dtype
+            if module.base is not None:
+                periods = module.base ** (
+                    2
+                    * torch.arange(module.D_head // 4, device=device, dtype=dtype)
+                    / (module.D_head // 2)
+                )  # [D//4]
+            else:
+                base = module.max_period / module.min_period
+                exponents = torch.linspace(
+                    0, 1, module.D_head // 4, device=device, dtype=dtype
+                )  # [D//4] range [0, 1]
+                periods = base**exponents  # range [1, max_period / min_period]
+                periods = periods / base  # range [min_period / max_period, 1]
+                periods = periods * module.max_period  # range [min_period, max_period]
+            module.periods.data = periods
         elif isinstance(module, Dinov3LayerScale):
-            module.init_weights()
+            module.lambda1.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
