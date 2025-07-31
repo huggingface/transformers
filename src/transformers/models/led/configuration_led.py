@@ -99,7 +99,6 @@ class LEDConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "attention_probs_dropout_prob": "attention_dropout",
         "initializer_range": "init_std",
-        "num_hidden_layers": "decoder_layers",
     }
 
     def __init__(
