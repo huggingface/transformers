@@ -29,19 +29,10 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MetaCLIP 2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+MetaCLIP 2 is a replication of the original CLIP model trained on 300+ languages. It achieves state-of-the-art results on multilingual benchmarks (e.g., XM3600, CVQA, Babel‑ImageNet), surpassing previous SOTA such as mSigLIP and SigLIP‑2.
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/facebookresearch/MetaCLIP).
 
 
 ## MetaCLIP2Config

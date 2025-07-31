@@ -634,7 +634,11 @@ class CLIPTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        if self.eos_token_id == 2:
+        print("Input ids:", input_ids)
+        print("Eos token id:", 49407)
+        print("All eos tokens:", torch.all(input_ids.argmax(dim=-1) == 49407).item())
+
+        if torch.all(input_ids.max(dim=-1).values == 49407).item():
             # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
             # A CLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
             # ------------------------------------------------------------

@@ -164,8 +164,11 @@ class MetaCLIP2TextTransformer(CLIPTextTransformer):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        index = (input_ids == self.eos_token_id).nonzero()
-        pooled_output = last_hidden_state[index[:, 0], index[:, 1]]
+        # Use robust pooling like CLIP - finds the first EOS token position per sequence
+        pooled_output = last_hidden_state[
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
+        ]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,

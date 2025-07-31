@@ -351,7 +351,7 @@ class MetaCLIP2TextModelTester:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         # ensure that the last token is the eos token
-        input_ids[:, -1] = 2
+        input_ids[:, -1] = self.eos_token_id
 
         input_mask = None
         if self.use_input_mask:
