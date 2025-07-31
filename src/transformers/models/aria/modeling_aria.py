@@ -191,7 +191,7 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict.keys():
+        if num_patches not in self.patch_to_query_dict:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )

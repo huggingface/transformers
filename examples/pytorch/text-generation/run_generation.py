@@ -370,7 +370,7 @@ def main():
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
     # Different models need different input formatting and/or extra arguments
-    requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS.keys()
+    requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS
     if requires_preprocessing:
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
         preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)

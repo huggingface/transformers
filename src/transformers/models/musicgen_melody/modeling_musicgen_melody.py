@@ -270,8 +270,8 @@ class MusicgenMelodyAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
             value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
@@ -1472,11 +1472,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         }
 
         # remove text encoder, audio encoder and decoder kwargs from kwargs
-        for key in kwargs_text_encoder.keys():
+        for key in kwargs_text_encoder:
             del kwargs["text_encoder_" + key]
-        for key in kwargs_audio_encoder.keys():
+        for key in kwargs_audio_encoder:
             del kwargs["audio_encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder

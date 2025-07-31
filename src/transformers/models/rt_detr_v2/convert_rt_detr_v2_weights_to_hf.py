@@ -239,13 +239,13 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     ]["module"]
     # rename keys
     state_dict = convert_old_keys_to_new_keys(state_dict)
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage

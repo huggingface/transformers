@@ -74,31 +74,29 @@ NUM_MODELS_TO_TRIGGER_FULL_CI = 30
 # List here the models to always test.
 IMPORTANT_MODELS = [
     "auto",
-    # Most downloaded models
     "bert",
-    "clip",
-    "t5",
-    "xlm-roberta",
     "gpt2",
-    "bart",
-    "mpnet",
-    "gpt-j",
-    "wav2vec2",
-    "deberta-v2",
-    "layoutlm",
-    "llama",
-    "opt",
-    "longformer",
-    "vit",
-    "whisper",
-    # Pipeline-specific model (to be sure each pipeline has one model in this list)
-    "tapas",
-    "vilt",
-    "clap",
+    "t5",
+    "modernbert",
+    "vit,clip",
     "detr",
-    "owlvit",
-    "dpt",
-    "videomae",
+    "table_transformer",
+    "got_ocr2",
+    "whisper",
+    "wav2vec2",
+    "qwen2_audio",
+    "speech_t5",
+    "csm",
+    "llama",
+    "gemma3",
+    "qwen2",
+    "mistral3",
+    "qwen2_5_vl",
+    "llava",
+    "smolvlm",
+    "internvl",
+    "gemma3n",
+    "qwen2_5_omni",
 ]
 
 
@@ -1059,9 +1057,9 @@ def infer_tests_to_run(
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
         # Remove repo utils tests
-        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "repo_utils"]
+        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "repo_utils"]
         # Remove SageMaker tests
-        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
+        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 

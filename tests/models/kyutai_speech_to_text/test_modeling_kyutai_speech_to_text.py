@@ -38,7 +38,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -390,7 +390,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
-            for attr_name in config.to_dict().keys()
+            for attr_name in config.to_dict()
             if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
@@ -527,7 +527,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self._check_similar_generate_outputs(outputs, outputs_cached)
+            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
                     self.assertTrue(
@@ -613,7 +613,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 del model_attn
                 gc.collect()
 
-                self._check_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
+                self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
 
 
 @require_torch
