@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Vision Encoder Decoder Models
+# 비전 인코더-디코더 모델[[vision-encoder-decoder-models]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -33,13 +33,13 @@ rendered properly in your Markdown viewer.
 사전훈련된 체크포인트로 이미지-텍스트 시퀀스 모델을 초기화하는 효과는 (예를 들어) Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://huggingface.co/papers/2109.10282)에서 입증되었습니다.
 
-이러한 [`VisionEncoderDecoderModel`]이 훈련/미세 조정된 후에는 다른 모델들과 마찬가지로 저장/가져올 수 있습니다 (자세한 내용은 아래 예제를 참조하세요).
+이러한 [`VisionEncoderDecoderModel`]이 훈련/미세 조정된 후에는 다른 모델들과 마찬가지로 저장하거나 가져올 수 있습니다 (자세한 내용은 아래 예제를 참조하세요).
 
-응용 예시로는 이미지 캡셔닝이 있습니다. 여기서는 인코더가 이미지를 인코딩하고, 이후 자기회귀 언어 모델이 캡션을 생성합니다. 다른 예시로는 광학 문자 인식이 있습니다. [`VisionEncoderDecoderModel`]의 인스턴스인 [TrOCR](trocr)을 참조하세요.
+응용 예시로는 이미지 캡셔닝이 있습니다. 여기서는 인코더가 이미지를 인코딩하고, 이후 자기회귀 언어 모델이 캡션을 생성합니다. 다른 예시로는 광학 문자 인식(OCR)이 있습니다. [`VisionEncoderDecoderModel`]의 인스턴스인 [TrOCR](trocr)을 참조하세요.
 
-## 모델 설정에서 `VisionEncoderDecoderModel` 랜덤 초기화[[randomly-initializing-visionencoderdecodermodel-from-model-configurations]]
+## 모델 설정으로 `VisionEncoderDecoderModel` 랜덤 초기화하기[[randomly-initializing-visionencoderdecodermodel-from-model-configurations]]
 
-[`VisionEncoderDecoderModel`]은 인코더와 디코더 설정에서 랜덤하게 초기화할 수 있습니다. 다음 예제에서는 인코더에 기본 [`ViTModel`] 설정을,
+[`VisionEncoderDecoderModel`]은 인코더와 디코더 설정을 이용해 랜덤하게 가중치를 초기화할 수 있습니다. 다음 예제에서는 인코더에 기본 [`ViTModel`] 설정을,
 디코더에 기본 [`BertForCausalLM`] 설정을 사용하여 이를 수행하는 방법을 보여줍니다.
 
 ```python
@@ -52,11 +52,11 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 >>> model = VisionEncoderDecoderModel(config=config)
 ```
 
-## 사전훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
+## 사전훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화하기[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
 
 [`VisionEncoderDecoderModel`]은 사전훈련된 인코더 체크포인트와 사전훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전훈련된 오토인코딩 모델(*예:* BERT), 사전훈련된 인과적 언어 모델링(causal language modeling)(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
 디코더로 선택하는 아키텍처에 따라 교차 어텐션(cross-attention) 레이어가 랜덤하게 초기화될 수 있습니다.
-사전훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 미세 조정해야 합니다.
+사전 훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 미세 조정해야 합니다.
 이를 위해 `VisionEncoderDecoderModel` 클래스는 [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] 메소드를 제공합니다.
 
 ```python
@@ -67,7 +67,7 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 ... )
 ```
 
-## 기존 `VisionEncoderDecoderModel` 체크포인트 가져오기 및 추론 수행[[loading-an-existing-visionencoderdecodermodel-checkpoint-and-perform-inference]]
+## 기존 `VisionEncoderDecoderModel` 체크포인트 불러와 추론하기[[loading-an-existing-visionencoderdecodermodel-checkpoint-and-perform-inference]]
 
 `VisionEncoderDecoderModel` 클래스의 미세 조정된 체크포인트를 가져오기 위해, [`VisionEncoderDecoderModel`]은 Transformers의 다른 모델 아키텍처와 마찬가지로 `from_pretrained(...)` 메소드를 제공합니다.
 
@@ -117,7 +117,7 @@ a cat laying on a blanket next to a cat laying on a bed
 
 ## 훈련[[training]]
 
-모델이 생성된 후에는 (이미지, 텍스트) 쌍의 데이터셋에서 BART, T5 또는 다른 인코더-디코더 모델과 유사하게 미세 조정할 수 있습니다.
+모델이 생성되면, (이미지, 텍스트) 쌍으로 구성된 데이터셋을 사용하여 BART, T5 또는 다른 인코더-디코더 모델과 유사하게 미세 조정할 수 있습니다.
 보시다시피, 손실을 계산하기 위해 모델에 필요한 입력은 단 2개입니다: `pixel_values` (이미지)와 `labels` (인코딩된 대상 시퀀스의 `input_ids`)입니다.
 
 ```python
@@ -149,14 +149,14 @@ a cat laying on a blanket next to a cat laying on a bed
 이 모델은 [nielsr](https://github.com/nielsrogge)이 기여했습니다. 이 모델의 TensorFlow와 Flax 버전은
 [ydshieh](https://github.com/ydshieh)가 기여했습니다.
 
-## VisionEncoderDecoderConfig
+## VisionEncoderDecoderConfig[[transformers.VisionEncoderDecoderConfig]]
 
 [[autodoc]] VisionEncoderDecoderConfig
 
 <frameworkcontent>
 <pt>
 
-## VisionEncoderDecoderModel
+## VisionEncoderDecoderModel[[transformers.VisionEncoderDecoderModel]]
 
 [[autodoc]] VisionEncoderDecoderModel
     - forward
@@ -165,7 +165,7 @@ a cat laying on a blanket next to a cat laying on a bed
 </pt>
 <tf>
 
-## TFVisionEncoderDecoderModel
+## TFVisionEncoderDecoderModel[[transformers.TFVisionEncoderDecoderModel]]
 
 [[autodoc]] TFVisionEncoderDecoderModel
     - call
@@ -174,7 +174,7 @@ a cat laying on a blanket next to a cat laying on a bed
 </tf>
 <jax>
 
-## FlaxVisionEncoderDecoderModel
+## FlaxVisionEncoderDecoderModel[[transformers.FlaxVisionEncoderDecoderModel]]
 
 [[autodoc]] FlaxVisionEncoderDecoderModel
     - __call__
