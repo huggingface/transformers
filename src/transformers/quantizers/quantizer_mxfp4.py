@@ -307,4 +307,5 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
+        logger.warning_once("MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()")
         return False

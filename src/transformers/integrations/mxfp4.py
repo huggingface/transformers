@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..modeling_utils import is_deepspeed_zero3_enabled, is_fsdp_enabled
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -86,6 +87,11 @@ def convert_moe_packed_tensors(
 ) -> torch.Tensor:
     import math
 
+    # Check if blocks and scales are on CPU, and move to GPU if so
+    if not blocks.is_cuda and torch.cuda.is_available():
+        blocks = blocks.cuda()
+        scales = scales.cuda()
+
     scales = scales.to(torch.int32) - 127
 
     assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
@@ -119,6 +125,11 @@ def convert_moe_packed_tensors(
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
 
+    # TODO: Delete after making sure this is not necessary! since we go back to cpu in the end in create_quantized_param using .to(target_device)
+    # Move back to CPU if needed
+    # if need_to_move_back:
+    #     out = out.cpu()
+    del blocks, scales
     return out
 
 
@@ -330,6 +341,9 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 setattr(module, param_name.rsplit(".", 1)[1], param_value)
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
+                # TODO: this is perhaps necessary since if target_device is cpu, and the param was on gpu
+                if target_device == "cpu" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
@@ -393,6 +407,20 @@ def dequantize_and_quantize(
                 # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
                 setattr(module, proj, triton_weight_tensor)
                 setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
+
+                original_device = target_device
+                # for fsdp and deepspeed since the model is load on cpu, we need to move the weight to gpu for quantization
+                if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
+                    dequantized = dequantized.cuda()
+                    target_device = "cuda"
+                with torch.cuda.device(target_device):
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
+                triton_weight_tensor.storage.data = triton_weight_tensor.storage.data.to(original_device)
+                setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+                setattr(module, proj, triton_weight_tensor)
+                setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
+
             return
 
 
