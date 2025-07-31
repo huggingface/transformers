@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # compressed-tensors[[compressed-tensors]]
 
-[compressed-tensors](https://github.com/neuralmagic/compressed-tensors)는 [safetensors](https://github.com/huggingface/safetensors) 파일을 압축된 텐서 데이터 타입으로 확장해서, dense, int 양자화(int8), float 양자화(fp8), pack 양자화(int32로 패킹된 int4 또는 int8 가중치 양자화) 등 다양한 양자화·sparse 형식을 하나의 체크포인트 형식으로 저장하고 불러올 수 있게 합니다.
+[compressed-tensors](https://github.com/neuralmagic/compressed-tensors)는 [safetensors](https://github.com/huggingface/safetensors) 파일을 압축된 텐서 데이터 타입으로 확장해서, dense, int 양자화(int8), float 양자화(fp8), pack 양자화(int32로 패킹된 int4 또는 int8 가중치 양자화) 등 다양한 양자화 및 희소성 형식을 하나의 체크포인트 형식으로 저장하고 불러올 수 있게 합니다.
 
 compressed-tensors는 [PEFT](https://huggingface.co/docs/peft)를 사용한 미세 조정을 지원하며, 다음과 같은 기능들을 제공합니다.
 
