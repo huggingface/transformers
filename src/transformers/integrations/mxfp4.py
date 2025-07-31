@@ -48,35 +48,33 @@ FP4_VALUES = [
 ]
 
 
-# Copied from GPT_OSS repo
-# TODO: Add absolute link when the repo is public
-def quantize_to_mxfp4(w, swizzle_mx_value, swizzle_mx_scale):
-    from triton_kernels.matmul_ogs import InFlexData, MicroscalingCtx
+# Copied from GPT_OSS repo and vllm
+def quantize_to_mxfp4(w):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+    from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
+    from triton_kernels.tensor_details import layout
+    from triton_kernels.tensor_details.layout import StridedLayout
 
-    swizzle_axis = 2 if swizzle_mx_scale or swizzle_mx_value else None
-    w = w.to(torch.bfloat16)
+    w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
+    value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
+    w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
 
-    w, mx_scales, weight_scale_shape = downcast_to_mxfp(
-        w,
-        torch.uint8,
-        axis=1,
-        swizzle_axis=swizzle_axis,
-        swizzle_scale=swizzle_mx_scale,
-        swizzle_value=swizzle_mx_value,
-    )
+    # TODO : add that when we are actually sure that it works on B200
+    # if torch.cuda.get_device_capability()[0] == 10:
+    #     constraints = {
+    #         "is_persistent": True,
+    #         "epilogue_subtile": 1,
+    #     }
+    #     opt_flags.update_opt_flags_constraints(constraints)
+    # # transpose the tensor so that the quantization axis is on dim1
 
-    return (
-        w,
-        InFlexData(),
-        MicroscalingCtx(
-            weight_scale=mx_scales,
-            swizzle_scale=swizzle_mx_scale,
-            swizzle_value=swizzle_mx_value,
-            actual_weight_scale_shape=weight_scale_shape,
-        ),
-    )
 
+    # TODO: there is still an issue with the scales on hopper
+    # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
+    # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
+    w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
+
+    return w, w_scale
 
 # Copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -353,9 +351,9 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
 
 
 def dequantize_and_quantize(
-    module, param_name, param_value, target_device, swizzle_mx_value, swizzle_mx_scale, **kwargs
+    module, param_name, param_value, target_device, **kwargs
 ):
-    from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
+    from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
     from ..integrations.tensor_parallel import shard_and_distribute_module
     from ..modeling_utils import _load_parameter_into_model
@@ -396,25 +394,32 @@ def dequantize_and_quantize(
                     _load_parameter_into_model(model, param_name, param_value)
 
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).to(target_device)
+                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
 
                 right_pad = getattr(module, right_pad_attr)
                 bottom_pad = getattr(module, bottom_pad_attr)
-                loaded_weight = torch.nn.functional.pad(
+                dequantized = torch.nn.functional.pad(
                     dequantized, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                 )
-                del dequantized
+                with torch.cuda.device(target_device):
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
+                setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+                setattr(module, proj, triton_weight_tensor)
+                setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
 
                 original_device = target_device
                 # for fsdp and deepspeed since the model is load on cpu, we need to move the weight to gpu for quantization
                 if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
-                    loaded_weight = loaded_weight.cuda()
+                    dequantized = dequantized.cuda()
                     target_device = "cuda"
                 with torch.cuda.device(target_device):
-                    loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, swizzle_mx_value, swizzle_mx_scale)
-                setattr(module, precision_config_attr, PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex)))
-                setattr(module, proj, torch.nn.Parameter(loaded_weight.to(original_device), requires_grad=False))
-
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
+                triton_weight_tensor.storage.data = triton_weight_tensor.storage.data.to(original_device)
+                setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+                setattr(module, proj, triton_weight_tensor)
+                setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
             return
 
 
