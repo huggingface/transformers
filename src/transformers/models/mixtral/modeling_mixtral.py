@@ -247,6 +247,13 @@ class MixtralAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        # This check is necessary to support models that inherit via modular (e.g. Mixtral) and do not use layer_types
+        is_sliding = (
+            config.layer_types[layer_idx] == "sliding_attention"
+            if getattr(config, "layer_types", None) is not None
+            else getattr(config, "sliding_window", None) is not None
+        )
+        self.sliding_window = config.sliding_window if is_sliding else None
 
     def forward(
         self,
@@ -284,7 +291,7 @@ class MixtralAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 

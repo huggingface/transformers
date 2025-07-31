@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -239,6 +239,9 @@ class Phi3DecoderLayer(GradientCheckpointingLayer):
         self.mlp = Phi3MLP(config)
         self.input_layernorm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Phi3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = (
+            config.layer_types[layer_idx] if getattr(config, "layer_types", None) is not None else None
+        )
         self.config = config
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
@@ -379,20 +382,29 @@ class Phi3Model(Phi3PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
+        # It may already have been prepared by e.g. `generate`
+        mask_already_prepared = isinstance(attention_mask, dict) or (
+            isinstance(attention_mask, torch.Tensor) and len(attention_mask.shape) > 2
         )
+        if not mask_already_prepared:
+            attention_mask = create_masks_for_generate(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            causal_mask = (
+                attention_mask[decoder_layer.attention_type]
+                if decoder_layer.attention_type is not None
+                else attention_mask
+            )
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,

@@ -428,6 +428,7 @@ class Phi4MultimodalConfig(Phi3Config):
             sliding_window=sliding_window,
             **kwargs,
         )
+        del self.layer_types
 
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)

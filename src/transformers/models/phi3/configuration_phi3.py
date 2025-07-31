@@ -15,7 +15,7 @@
 
 """Phi-3 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -91,6 +91,8 @@ class Phi3Config(PretrainedConfig):
             The id of the padding token.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If `None`, no sliding window is applied.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     Example:
 
@@ -146,6 +148,7 @@ class Phi3Config(PretrainedConfig):
         eos_token_id=32000,
         pad_token_id=32000,
         sliding_window=None,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -173,6 +176,12 @@ class Phi3Config(PretrainedConfig):
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if self.sliding_window is not None else "full_attention"
+            ] * self.num_hidden_layers
+        layer_type_validation(self.layer_types)
 
         super().__init__(
             bos_token_id=bos_token_id,
