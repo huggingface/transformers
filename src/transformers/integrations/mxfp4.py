@@ -131,7 +131,7 @@ def convert_moe_packed_tensors(
     # Move back to CPU if needed
     # if need_to_move_back:
     #     out = out.cpu()
-
+    del blocks, scales
     return out
 
 
