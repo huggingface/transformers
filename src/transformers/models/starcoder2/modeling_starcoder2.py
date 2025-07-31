@@ -220,9 +220,6 @@ class Starcoder2DecoderLayer(GradientCheckpointingLayer):
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
-        self.attention_type = (
-            config.layer_types[layer_idx] if getattr(config, "layer_types", None) is not None else None
-        )
 
     def forward(
         self,

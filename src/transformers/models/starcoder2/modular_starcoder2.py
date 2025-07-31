@@ -134,6 +134,7 @@ class Starcoder2DecoderLayer(MistralDecoderLayer):
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
+        del self.attention_type
 
 
 class Starcoder2RotaryEmbedding(MistralRotaryEmbedding):

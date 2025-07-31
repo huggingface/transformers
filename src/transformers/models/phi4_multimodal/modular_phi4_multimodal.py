@@ -1455,7 +1455,9 @@ class Phi4MultimodalRMSNorm(Phi3RMSNorm):
 
 
 class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
-    pass
+    def __init__(self, config: Phi4MultimodalConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.attention_type
 
 
 class Phi4MultimodalFeatureEmbedding(nn.Module):

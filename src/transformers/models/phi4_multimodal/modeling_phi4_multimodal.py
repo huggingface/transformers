@@ -1442,9 +1442,6 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
         self.mlp = Phi4MultimodalMLP(config)
         self.input_layernorm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = (
-            config.layer_types[layer_idx] if getattr(config, "layer_types", None) is not None else None
-        )
         self.config = config
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
