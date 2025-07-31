@@ -974,11 +974,13 @@ class OutputRecorder:
         target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
     target_class: "type[torch.nn.Module]"
     index: Optional[int] = 0
     layer_name: Optional[str] = None
+    class_name: Optional[str] = None
 
 
 def check_model_inputs(func):
@@ -1049,16 +1051,16 @@ def check_model_inputs(func):
                 for specs in layer_specs:
                     if not isinstance(specs, OutputRecorder):
                         index = 0 if "hidden_states" in key else 1
-                        layer_name = None if not isinstance(specs, str) else specs
+                        class_name = None if not isinstance(specs, str) else specs
                         target_class = specs if not isinstance(specs, str) else None
-                        specs = OutputRecorder(target_class=target_class, index=index, layer_name=layer_name)
+                        specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
                     capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
                     # The second check is for multimodals where only backbone layer suffix is available
                     if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
-                        specs.target_class is None and specs.layer_name is not None and name.endswith(specs.layer_name)
+                        specs.class_name is not None and name.endswith(specs.class_name)
                     ):
                         if specs.layer_name is not None and specs.layer_name not in name:
                             continue
