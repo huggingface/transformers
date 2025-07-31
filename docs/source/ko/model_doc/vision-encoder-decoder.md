@@ -54,7 +54,7 @@ Zhoujun Li, Furu Wei의 [TrOCR: Transformer-based Optical Character Recognition 
 
 ## 사전훈련된 인코더와 디코더에서 `VisionEncoderDecoderModel` 초기화하기[[initialising-visionencoderdecodermodel-from-a-pretrained-encoder-and-a-pretrained-decoder]]
 
-[`VisionEncoderDecoderModel`]은 사전훈련된 인코더 체크포인트와 사전훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전훈련된 오토 인코딩 모델(*예:* BERT), 사전훈련된 인과적 언어 모델(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
+[`VisionEncoderDecoderModel`]은 사전훈련된 인코더 체크포인트와 사전 훈련된 디코더 체크포인트에서 초기화할 수 있습니다. 사전 훈련된 Transformer 기반 비전 모델(*예:* [Swin](swin))은 인코더 역할을 할 수 있으며, 사전 훈련된 오토 인코딩 모델(*예:* BERT), 사전 훈련된 인과적 언어 모델(*예:* GPT2), 그리고 시퀀스-투-시퀀스 모델의 사전 훈련된 디코더 부분(*예:* BART의 디코더)은 모두 디코더로 사용할 수 있습니다.
 디코더로 선택하는 아키텍처에 따라 교차 어텐션(cross-attention) 레이어가 랜덤하게 초기화될 수 있습니다.
 사전 훈련된 인코더와 디코더 체크포인트에서 [`VisionEncoderDecoderModel`]을 초기화하려면 [*Warm-starting-encoder-decoder blog post*](https://huggingface.co/blog/warm-starting-encoder-decoder)에서 보여준 바와 같이 다운스트림 작업에서 모델을 미세 조정해야 합니다.
 이를 위해 `VisionEncoderDecoderModel` 클래스는 [`VisionEncoderDecoderModel.from_encoder_decoder_pretrained`] 메소드를 제공합니다.
