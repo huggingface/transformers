@@ -828,10 +828,18 @@ class Cache:
         the given layer at `layer_idx`.
         The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns for each layer.
         """
+        # For DynamicCache, where the layers are created at runtime -> if it was not yet created, the size is
+        # simply the shape of `cache_position`
+        if layer_idx >= len(self.layers):
+            return cache_position.shape[0], 0
         return self.layers[layer_idx].get_mask_sizes(cache_position)
 
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
         """Returns maximum sequence length of the cache object. Dynamic caches do not have a maximum length."""
+        # For DynamicCache, where the layers are created at runtime -> if it was not yet created, return -1
+        # as DynamicLayer does
+        if layer_idx >= len(self.layers):
+            return -1
         return self.layers[layer_idx].get_max_cache_shape()
 
     def reset(self):
