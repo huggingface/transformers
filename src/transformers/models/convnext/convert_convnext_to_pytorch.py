@@ -128,11 +128,11 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnext." + key

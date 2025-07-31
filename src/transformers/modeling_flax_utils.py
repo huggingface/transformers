@@ -138,7 +138,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     for idx, shard in enumerate(sharded_state_dicts):
         shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
         shards[shard_file] = shard
-        for weight_name in shard.keys():
+        for weight_name in shard:
             weight_map[weight_name] = shard_file
 
     # Add the metadata
@@ -588,7 +588,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -963,7 +963,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # Mismatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
         mismatched_keys = []
-        for key in state.keys():
+        for key in state:
             if key in random_state and state[key].shape != random_state[key].shape:
                 if ignore_mismatched_sizes:
                     mismatched_keys.append((key, state[key].shape, random_state[key].shape))
@@ -1112,7 +1112,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
             safe_serialization (`bool`, *optional*, defaults to `False`):
@@ -1169,11 +1169,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
             weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
-            if (
-                filename.startswith(weights_no_suffix)
-                and os.path.isfile(full_filename)
-                and filename not in shards.keys()
-            ):
+            if filename.startswith(weights_no_suffix) and os.path.isfile(full_filename) and filename not in shards:
                 os.remove(full_filename)
 
         if index is None:

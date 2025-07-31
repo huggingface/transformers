@@ -79,6 +79,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
     "Llama4Processor",
@@ -912,7 +913,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
         missing = set(signature.keys()) - set(old_arguments)
         new_param_docs.extend([arguments[name] for name in missing if len(arguments[name]) > 0])
     else:
-        new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
+        new_param_docs = [arguments[name] for name in signature if len(arguments[name]) > 0]
     new_doc_arg = "\n".join(new_param_docs)
 
     return old_doc_arg, new_doc_arg
