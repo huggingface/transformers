@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ERNIE (Enhanced Representation through kNowledge IntEgration) is designed to learn language representation enhanced by knowledge masking strategies, which includes entity-level masking and phrase-level masking.
 
-Other ERNIE models released by baidu can be found at [Ernie 4.5](./ernie4_5.md), and [Ernie 4.5 MoE](./ernie4_5_moe.md).
+Other ERNIE models released by baidu can be found at [Ernie 4.5](./ernie4_5), and [Ernie 4.5 MoE](./ernie4_5_moe).
 
 > [!TIP]
 > This model was contributed by [nghuyong](https://huggingface.co/nghuyong), and the official code can be found in [PaddleNLP](https://github.com/PaddlePaddle/PaddleNLP) (in PaddlePaddle).

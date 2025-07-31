@@ -38,7 +38,7 @@ This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](
 
 ## Usage example
 
-The code snippet below shows how to randomly initialize a PatchTSMixer model. The model is compatible with the [Trainer API](../trainer.md).
+The code snippet below shows how to randomly initialize a PatchTSMixer model. The model is compatible with the [Trainer API](../trainer).
 
 ```python
 
