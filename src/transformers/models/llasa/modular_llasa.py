@@ -12,9 +12,9 @@ Process
 LLaSa models on Hugging Face, and corresponding Llama models
 1. 1B config: https://huggingface.co/HKUSTAudio/Llasa-1B/blob/main/config.json
 - same as https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct/blob/main/config.json
-2. 3. 3B config: https://huggingface.co/HKUSTAudio/Llasa-3B/blob/main/config.json
+2. 3B config: https://huggingface.co/HKUSTAudio/Llasa-3B/blob/main/config.json
 - same as https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/main/config.json
-8B config: https://huggingface.co/HKUSTAudio/Llasa-8B/blob/main/config.json
+3. 8B config: https://huggingface.co/HKUSTAudio/Llasa-8B/blob/main/config.json
 - same as https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/main/config.json
 """
 
