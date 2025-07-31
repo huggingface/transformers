@@ -20,7 +20,7 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 
 
 class Phi4MultimodalVisionConfig(PretrainedConfig):
@@ -411,11 +411,6 @@ class Phi4MultimodalConfig(PretrainedConfig):
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention" if self.sliding_window is not None else "full_attention"
-            ] * self.num_hidden_layers
-        layer_type_validation(self.layer_types)
 
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)

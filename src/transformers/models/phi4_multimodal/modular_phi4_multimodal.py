@@ -35,7 +35,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, check_model_inputs
-from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
     Phi3ForCausalLM,
@@ -278,7 +277,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(Phi3Config):
+class Phi4MultimodalConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -371,6 +370,20 @@ class Phi4MultimodalConfig(Phi3Config):
     >>> configuration = model.config
     ```"""
 
+    model_type = "phi4_multimodal"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.qkv_proj": "colwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
     sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
 
     def __init__(
@@ -403,32 +416,37 @@ class Phi4MultimodalConfig(Phi3Config):
         **kwargs,
     ):
         super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            resid_pdrop=resid_pdrop,
-            embd_pdrop=embd_pdrop,
-            attention_dropout=attention_dropout,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
-            partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
-            original_max_position_embeddings=original_max_position_embeddings,
-            sliding_window=sliding_window,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        del self.layer_types
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.resid_pdrop = resid_pdrop
+        self.embd_pdrop = embd_pdrop
+        self.attention_dropout = attention_dropout
+        self.hidden_act = hidden_act
+        self.max_position_embeddings = max_position_embeddings
+        self.original_max_position_embeddings = original_max_position_embeddings
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.partial_rotary_factor = partial_rotary_factor
+        self._rope_scaling_adjustment()
+        self._rope_scaling_validation()
+        self.sliding_window = sliding_window
 
         if isinstance(vision_config, dict):
             vision_config = Phi4MultimodalVisionConfig(**vision_config)
@@ -441,6 +459,60 @@ class Phi4MultimodalConfig(Phi3Config):
         elif vision_config is None:
             audio_config = Phi4MultimodalAudioConfig()
         self.audio_config = audio_config
+
+    def _rope_scaling_adjustment(self):
+        """
+        Adjust the `type` of the `rope_scaling` configuration for backward compatibility.
+        """
+        if self.rope_scaling is None:
+            return
+
+        rope_scaling_type = self.rope_scaling.get("type", None)
+
+        # For backward compatibility if previous version used "su" or "yarn"
+        if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
+            self.rope_scaling["type"] = "longrope"
+
+    def _rope_scaling_validation(self):
+        """
+        Validate the `rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 3:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with three fields, `type`, `short_factor` and `long_factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
+        rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
+            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
+        if not (
+            isinstance(rope_scaling_short_factor, list)
+            and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
+        ):
+            raise ValueError(
+                f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
+            )
+        rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
+        if not len(rope_scaling_short_factor) == rotary_ndims // 2:
+            raise ValueError(
+                f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"
+            )
+        if not (
+            isinstance(rope_scaling_long_factor, list)
+            and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
+        ):
+            raise ValueError(
+                f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
+            )
+        if not len(rope_scaling_long_factor) == rotary_ndims // 2:
+            raise ValueError(
+                f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
+            )
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
