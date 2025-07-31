@@ -563,6 +563,16 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
+    if isinstance(video, Union[np.ndarray, torch.Tensor]):
+        if not is_valid_video(video):
+            raise ValueError(
+                f"When passing video as decoded frames, video should be a 4D numpy array or torch tensor, but got {video.ndim} dimensions instead."
+            )
+        # Case 1: Video is provided as a 4D numpy array or torch tensor (frames, height, width, channels)
+        if is_torch_tensor(video):
+            video = video.numpy()  # Convert torch tensor to numpy array
+        return video, None
+
     if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
@@ -579,8 +589,6 @@ def load_video(
         file_obj = BytesIO(requests.get(video).content)
     elif os.path.isfile(video):
         file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
-        file_obj = None
     else:
         raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")
 
