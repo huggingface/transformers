@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Bamba
 
-[Bamba](https://huggingface.co/blog/bamba)는 [Mamba-2](./mamba2) 아키텍처를 기반으로 구축된 90억 개 매개변수를 가진 디코더 전용 언어 모델입니다. 이 모델은 두 단계로 사전 학습됩니다. 먼저 [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) 데이터셋에서 2T 토큰으로 학습한 후, [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)과 [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia)에서 추가로 200B 토큰으로 학습합니다.
+[Bamba](https://huggingface.co/blog/bamba)는 [Mamba-2](./mamba2) 아키텍처를 기반으로 구축된 90억 개 매개변수를 가진 디코더 전용 언어 모델입니다. 이 모델은 두 단계로 사전 학습됩니다. 먼저 [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) 데이터 세트에서 2T 토큰으로 학습한 후, [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)과 [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia)에서 추가로 200B 토큰으로 학습합니다.
 
 모든 원본 Bamba 체크포인트는 [Bamba](https://huggingface.co/collections/ibm-ai-platform/bamba-674f1388b9bbc98b413c7bab) 컬렉션에서 찾을 수 있습니다.
 
@@ -76,7 +76,7 @@ echo "Plants create energy through a process known as" | transformers-cli run --
 </hfoption>
 </hfoptions>
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 양자화 백엔드에 대한 자세한 내용은 [양자화](../quantization/overview) 개요를 참조하세요.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용할 수 있는 양자화 백엔드에 대한 자세한 내용은 [양자화](../quantization/overview) 개요를 참조하세요.
 
 아래 예제는 [torchao](../quantization/torchao)를 사용하여 가중치만 int4로 양자화하는 방법을 보여줍니다.
 
@@ -102,7 +102,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 - Bamba는 별개의 학습 예제들을 연결하면서도 입력을 별도의 배치로 처리하는 패딩 없는 학습을 지원합니다. 이는 패딩 토큰으로 인한 불필요한 계산과 메모리 오버헤드를 피함으로써 다양한 길이의 예제가 있을 때 추론을 [~2배](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) 가속화하고(모델과 데이터 분포에 따라 다름) 메모리 사용량을 줄일 수 있습니다.
 
-  패딩 없는 학습에는 `flash-attn`, `mamba-ssm`, `causal-conv1d` 패키지가 필요하며, `input_ids`와 `labels` 외에 다음 인수들을 모델에 전달해야 합니다.
+  패딩 없는 학습에는 `flash-attn`, `mamba-ssm`, `causal-conv1d` 패키지가 필요하며, `input_ids`와 `labels` 외에 다음 인수를 모델에 전달해야 합니다.
 
   - `position_ids: torch.LongTensor`: 각 시퀀스에서 각 토큰의 위치 인덱스입니다.
   - `seq_idx: torch.IntTensor`: 배치에서 각 시퀀스의 인덱스입니다.
@@ -112,7 +112,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     - `max_length_q: int`: 배치에서 가장 긴 쿼리 길이입니다.
     - `max_length_k: int`: 배치에서 가장 긴 키 길이입니다.
 
-  `attention_mask` 입력은 제공하지 말아야 합니다. [`DataCollatorWithFlattening`]은 `return_seq_idx=True`와 `return_flash_attn_kwargs=True`를 사용하여 위의 추가 인수들을 프로그래밍 방식으로 생성합니다. 자세한 정보는 [Flash Attention을 활용한 패킹으로 Hugging Face 학습 효율성 향상](https://huggingface.co/blog/packing-with-FA2) 블로그 포스트를 참조하세요.
+  `attention_mask` 입력은 제공하지 말아야 합니다. [`DataCollatorWithFlattening`]은 `return_seq_idx=True`와 `return_flash_attn_kwargs=True`를 사용하여 위의 추가 인수를 프로그래밍 방식으로 생성합니다. 자세한 정보는 [Flash Attention을 활용한 패킹으로 Hugging Face 학습 효율성 향상](https://huggingface.co/blog/packing-with-FA2) 블로그 포스트를 참조하세요.
 
   ```python
   from transformers import DataCollatorWithFlattening
