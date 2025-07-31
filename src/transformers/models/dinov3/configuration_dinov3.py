@@ -122,7 +122,7 @@ class Dinov3Config(PretrainedConfig):
         patch_size=14,
         num_channels=3,
         qkv_bias=True,
-        layerscale_value=1e-5,
+        layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
         swiglu_align_to=64,

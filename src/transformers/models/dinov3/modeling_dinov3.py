@@ -608,9 +608,7 @@ class Dinov3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov3Layer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -659,7 +657,7 @@ class Dinov3PreTrainedModel(PreTrainedModel):
                 periods = periods * module.max_period  # range [min_period, max_period]
             module.periods.data = periods
         elif isinstance(module, Dinov3LayerScale):
-            module.lambda1.data.fill_(self.config.layerscale_value)
+            module.gamma.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
