@@ -590,6 +590,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        # Initialize current_rope_deltas for all code paths
+        current_rope_deltas = rope_deltas if rope_deltas is not None else self.rope_deltas
+
         if position_ids is None:
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -603,9 +606,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-
-            # Use rope_deltas parameter if provided, otherwise use the current logic
-            current_rope_deltas = rope_deltas if rope_deltas is not None else self.rope_deltas
 
             if (prefill_compiled_stage or prefill_noncompiled_stage) or current_rope_deltas is None:
                 position_ids, calculated_rope_deltas = self.get_rope_index(
@@ -649,7 +649,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=current_rope_deltas if "current_rope_deltas" in locals() else self.rope_deltas,
+            rope_deltas=current_rope_deltas,
         )
         return output if return_dict else output.to_tuple()
 
