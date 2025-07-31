@@ -13,7 +13,13 @@ from packaging import version
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
+from .utils import (
+    is_hqq_available,
+    is_optimum_quanto_available,
+    is_torch_greater_or_equal,
+    is_torchdynamo_compiling,
+    logging,
+)
 
 
 if is_optimum_quanto_available():
@@ -233,10 +239,13 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
-        # preventing compiled graph breaks when updating the cache.
-        torch._dynamo.mark_static_address(self.keys)
-        torch._dynamo.mark_static_address(self.values)
+        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
+        # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
+        # As prefill should never be compiled, this is not an issue and will still be run (except when users compile
+        # prefill explicitly)
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
 
     def update(
         self,
@@ -815,6 +824,22 @@ class Cache:
             self.offload(layer_idx, self.only_non_sliding)
 
         return keys, values
+
+    def early_initialization(
+        self, batch_size: int, num_heads: int, head_dim: int, dtype: torch.dtype, device: torch.device
+    ):
+        """
+        Initialize all the layers in advance (it's otherwise lazy initialized on the first `update` call).
+        This is useful for our `export` recipes, as `export` needs everything in advance.
+
+        Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
+        this fake tensor. It has size 0 on the -2 dimension, so it does not allocate any data (it only creates
+        an empty tensor with correct shape, dtype and device), which is very practical.
+        """
+        fake_keys_tensor = torch.zeros((batch_size, num_heads, 0, head_dim), dtype=dtype, device=device)
+        # Init all layers
+        for layer in self.layers:
+            layer.lazy_initializion(fake_keys_tensor)
 
     def get_seq_length(self, layer_idx: int = 0, cache_position=None) -> int:
         """Returns the sequence length of the cache for the given layer."""
