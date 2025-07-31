@@ -326,6 +326,7 @@ class MetaCLIP2TextModelTester:
         attention_dropout=0.1,
         max_position_embeddings=512,
         initializer_range=0.02,
+        eos_token_id=2,
         scope=None,
     ):
         self.parent = parent
@@ -344,10 +345,13 @@ class MetaCLIP2TextModelTester:
         self.attention_dropout = attention_dropout
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
+        self.eos_token_id = eos_token_id
         self.scope = scope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # ensure that the last token is the eos token
+        input_ids[:, -1] = 2
 
         input_mask = None
         if self.use_input_mask:
@@ -376,6 +380,7 @@ class MetaCLIP2TextModelTester:
             attention_dropout=self.attention_dropout,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
+            eos_token_id=self.eos_token_id,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):

@@ -526,7 +526,7 @@ class MetaCLIP2TextTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        index = (input_ids == 2).nonzero()
+        index = (input_ids == self.eos_token_id).nonzero()
         pooled_output = last_hidden_state[index[:, 0], index[:, 1]]
 
         return BaseModelOutputWithPooling(
