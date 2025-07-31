@@ -1,18 +1,18 @@
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
+# coding=utf-8
+# Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/Tencent/Tencent-Hunyuan-Large/blob/main/License.docx
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-"""PyTorch HunYuan model."""
+"""PyTorch HunYuanMoEV1 model."""
 
 import math
 import warnings
@@ -602,7 +602,7 @@ class HunYuanAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         # layer_idx 从 0 开始
-        self.attention_type = "cross" if config.use_cla and layer_idx % config.cla_share_factor != 0 else "self"
+        self.attention_type = "self"
         if layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
@@ -1331,18 +1331,13 @@ class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.add_classification_head = config.add_classification_head
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [HunYuanDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        if not config.add_classification_head:
-            self.norm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.cla = config.use_cla
-        self.cla_share_factor = config.cla_share_factor
+        self.norm = HunYuanRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1474,12 +1469,7 @@ class HunYuanMoEV1Model(HunYuanMoEPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-            kv_states = layer_outputs[-1]
-
-            if self.cla and layer_idx % self.cla_share_factor == 0:
-                prev_kv_states = kv_states
-        if not self.add_classification_head:
-            hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1505,14 +1495,9 @@ class HunYuanMoEV1ForCausalLM(HunYuanMoEPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.config = config
         self.model = HunYuanMoEV1Model(config)
-        self.add_classification_head = config.add_classification_head
         self.pad_id = config.pad_id
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        if config.add_classification_head:
-            self.pool_head = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-            self.pool_head2 = nn.Linear(config.hidden_size, config.class_num, bias=False)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1596,33 +1581,13 @@ class HunYuanMoEV1ForCausalLM(HunYuanMoEPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
 
-        if not self.add_classification_head:
-            if self.config.pretraining_tp > 1:
-                lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-                logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-                logits = torch.cat(logits, dim=-1)
-            else:
-                logits = self.lm_head(hidden_states)
-            logits = logits.float()
+        if self.config.pretraining_tp > 1:
+            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+            logits = torch.cat(logits, dim=-1)
         else:
-            logits = hidden_states
-            logits = logits.float()
-            pooled_output = self.pool_head(logits)
-            pooled_output = torch.tanh(pooled_output)
-            pooled_output = self.pool_head2(pooled_output).contiguous()  # bs * class_num
-            if len(pooled_output.shape) < 2:
-                raise ValueError("pooled_output does not have enough dimensions for transpose")
-
-            if self.config.pool_type == "mean":
-                reward = pooled_output.mean(dim=1).squeeze(-1)
-            elif self.config.pool_type == "last":
-                # bs * hidden_size
-                seq_length = (input_ids != self.pad_id).long().sum(dim=1) - 1
-                batch_size = input_ids.size(0)
-                reward = pooled_output[torch.arange(batch_size, device=pooled_output.device), seq_length].squeeze(-1)
-            else:
-                reward = pooled_output[:, 0].squeeze(-1)
-
+            logits = self.lm_head(hidden_states)
+        logits = logits.float()
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
@@ -1647,8 +1612,6 @@ class HunYuanMoEV1ForCausalLM(HunYuanMoEPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        if self.add_classification_head:
-            output["reward"] = reward
 
         return output
 

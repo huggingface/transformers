@@ -1,6 +1,18 @@
 # coding=utf-8
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-"""HunYuan model configuration"""
+# Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""HunYuanDenseV1 model configuration"""
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -87,23 +99,9 @@ class HunYuanDenseV1Config(PretrainedConfig):
             Whether query and key in attention use norm
         use_rotary_pos_emb (`bool`, *optional*, defaults to `True`):
             Whether to use rotary_pos_emb.
-        use_cla (`bool`, *optional*, defaults to `False`):
-            Whether to use CLA in attention
-        cla_share_factor (`int`, *optional*, defaults to 1):
-            The share factor of CLA
         norm_type (str, *optional*, defaults to `"hf_rms"`):
             Normalization type to use. Supported values are `"hf_rms"` (HuggingFace RMSNorm),
             `"layer_norm"` (standard LayerNorm), or `"no_norm"` (disabled normalization).
-        add_classification_head (bool, *optional*, defaults to `False`):
-            Whether to add a task-specific classification head on top of the model.
-            If True, requires `class_num` to be set to a positive value.
-        class_num (int, *optional*, defaults to 0):
-            Number of classes for classification task. Ignored if `add_classification_head` is False.
-            Must be >=1 when classification is enabled.
-        pool_type (str, *optional*, defaults to `"last"`):
-            Pooling strategy for sequence outputs. Options:
-            - `"last"`: Use the last token's hidden state
-            - `"mean"`: Mean pooling of all tokens
         pad_id (int, *optional*, defaults to -1):
             Token id used for padding sequences. Values <= -1 typically indicate no padding.
             Should match the tokenizer's pad_token_id if padding is enabled.
@@ -140,12 +138,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
         attention_dropout=0.0,
         use_qk_norm=False,
         use_rotary_pos_emb=True,
-        use_cla=False,
-        cla_share_factor=1,
         norm_type="hf_rms",
-        add_classification_head=False,
-        class_num=0,
-        pool_type="last",
         pad_id=-1,
         head_dim=None,
         **kwargs,
@@ -179,17 +172,8 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_qk_norm = use_qk_norm
         self.use_rotary_pos_emb = use_rotary_pos_emb
-        self.use_cla = use_cla
-        self.cla_share_factor = cla_share_factor
         self.norm_type = norm_type
-
-        self.add_classification_head = add_classification_head
-        self.class_num = class_num
-        self.pool_type = pool_type
         self.pad_id = pad_id
-
-        if self.class_num is not None:
-            self.dense_list = [self.hidden_size, self.class_num]
 
         super().__init__(
             pad_token_id=pad_token_id,
