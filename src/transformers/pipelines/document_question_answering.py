@@ -341,7 +341,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not self.model_type == ModelType.VisionEncoderDecoder:
+        if self.model_type != ModelType.VisionEncoderDecoder:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]

@@ -368,8 +368,8 @@ class ImageGPTAttention(nn.Module):
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions, and compute only q
                 query = self.q_attn(hidden_states)
-                key = curr_past_key_value.key_cache[self.layer_idx]
-                value = curr_past_key_value.value_cache[self.layer_idx]
+                key = curr_past_key_value.layers[self.layer_idx].keys
+                value = curr_past_key_value.layers[self.layer_idx].values
             else:
                 query = self.q_attn(hidden_states)
                 key, value = self.c_attn(current_states).split(self.split_size, dim=2)

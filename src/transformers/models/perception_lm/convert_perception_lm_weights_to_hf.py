@@ -351,8 +351,8 @@ def write_model(
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = model_params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in model_params else 1
-        multiple_of = model_params["multiple_of"] if "multiple_of" in model_params else 256
+        ffn_dim_multiplier = model_params.get("ffn_dim_multiplier", 1)
+        multiple_of = model_params.get("multiple_of", 256)
 
         bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
         eos_token_id = [tokenizer.convert_tokens_to_ids(t) for t in ["<|end_of_text|>", "<|eot_id|>"]]

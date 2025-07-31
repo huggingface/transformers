@@ -1057,9 +1057,9 @@ def infer_tests_to_run(
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
         # Remove repo utils tests
-        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "repo_utils"]
+        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "repo_utils"]
         # Remove SageMaker tests
-        test_files_to_run = [f for f in test_files_to_run if not f.split(os.path.sep)[1] == "sagemaker"]
+        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
