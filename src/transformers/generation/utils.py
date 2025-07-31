@@ -1808,9 +1808,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_cache(
-        self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
-    ) -> Cache:
+    def _get_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
@@ -2379,7 +2377,9 @@ class GenerationMixin(ContinuousMixin):
             and not self.config.is_encoder_decoder
         ):
             max_cache_length += inputs_tensor.shape[1]
-        self._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, max_cache_length)
+        self._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
+        )
 
         # 8. determine generation mode
         generation_mode = generation_config.get_generation_mode(assistant_model)
