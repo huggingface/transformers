@@ -19,9 +19,12 @@ Command A Vision is built upon a robust architecture that leverages the latest a
 
 The model and image processor can be loaded as follows:
 
-```python
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
+```python
 import torch
+
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_id = "CohereLabs/command-a-vision-07-2025"
@@ -67,6 +70,34 @@ print(
     )
 )
 ```
+
+</hfoption>
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+pipe = pipeline(model="CohereLabs/command-a-vision-07-2025", task="image-text-to-text", device_map="auto")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://media.istockphoto.com/id/458012057/photo/istanbul-turkey.jpg?s=612x612&w=0&k=20&c=qogAOVvkpfUyqLUMr_XJQyq-HkACXyYUSZbKhBlPrxo=",
+            },
+            {"type": "text", "text": "Where was this taken ?"},
+        ],
+    },
+]
+
+outputs = pipe(text=messages, max_new_tokens=300, return_full_text=False)
+
+print(outputs)
+```
+</hfoption>
+</hfoptions>
 
 ## Cohere2VisionConfig
 
