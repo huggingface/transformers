@@ -24,7 +24,6 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -46,7 +45,7 @@ class Cohere2VisionMultiModalProjector(nn.Module):
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * (config.downsample_factor**2), self.intermediate_size, bias=True
         )
-        self.act = ACT2FN["silu"]
+        self.act = nn.SiLU()
         self.linear_2 = nn.Linear(self.intermediate_size // 2, config.text_config.hidden_size, bias=True)
 
     def pixel_shuffle(self, image_features):  # B, S, D
@@ -210,9 +209,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Cohere2VisionModelOutputWithPast]:
@@ -247,9 +243,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -329,9 +322,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: Optional[torch.Tensor] = None,
@@ -383,9 +373,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,

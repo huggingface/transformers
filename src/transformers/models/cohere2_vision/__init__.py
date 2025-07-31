@@ -1,4 +1,4 @@
-# Copyright 2024 Cohere and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,27 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_cohere2_vision import Cohere2VisionConfig
-    from .image_processing_cohere2_vision import Cohere2VisionImageProcessor
-    from .processing_cohere2_vision import Cohere2VisionProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_cohere2_vision import Cohere2VisionForConditionalGeneration, Cohere2VisionPreTrainedModel
-
+    from .configuration_cohere2_vision import *
+    from .modeling_cohere2_vision import *
+    from .modeling_flax_cohere2_vision import *
+    from .tokenization_cohere2_vision import *
+    from .tokenization_cohere2_vision_fast import *
 else:
     import sys
 

@@ -90,7 +90,3 @@ print(
 ## Cohere2VisionProcessor
 
 [[autodoc]] Cohere2VisionProcessor
-
-## Cohere2VisionProcessorKwargs
-
-[[autodoc]] Cohere2VisionProcessorKwargs
