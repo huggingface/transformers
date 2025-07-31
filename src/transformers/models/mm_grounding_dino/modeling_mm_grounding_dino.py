@@ -1831,35 +1831,25 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         self.backbone = MMGroundingDinoConvModel(backbone, position_embeddings)
 
         # Create input projection layers
-        if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.intermediate_channel_sizes)
-            input_proj_list = []
-            for i in range(num_backbone_outs):
-                in_channels = backbone.intermediate_channel_sizes[i]
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
+        num_backbone_outs = len(backbone.intermediate_channel_sizes)
+        input_proj_list = []
+        for i in range(num_backbone_outs):
+            in_channels = backbone.intermediate_channel_sizes[i]
+            input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=1),
+                    nn.GroupNorm(32, config.d_model),
                 )
-            for _ in range(config.num_feature_levels - num_backbone_outs):
-                input_proj_list.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                )
-                in_channels = config.d_model
-            self.input_proj_vision = nn.ModuleList(input_proj_list)
-        else:
-            self.input_proj_vision = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                ]
             )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            input_proj_list.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                    nn.GroupNorm(32, config.d_model),
+                )
+            )
+            in_channels = config.d_model
+        self.input_proj_vision = nn.ModuleList(input_proj_list)
 
         # Create text backbone
         self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
