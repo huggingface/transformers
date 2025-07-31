@@ -1421,6 +1421,9 @@ class EncoderDecoderCache(Cache):
         ```
     """
 
+    # Override @property from Cache -> this will be set in __init__ on the instances
+    is_compileable = False
+
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
