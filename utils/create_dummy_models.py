@@ -1444,6 +1444,7 @@ def create_tiny_models(
 
         ]
         skip = ["fuyu", "kyutai_speech_to_text", "moshi",]
+        skip = []
         all_build_args = [x for x in all_build_args if x[0].model_type not in skip]
 
         for x in all_build_args:
