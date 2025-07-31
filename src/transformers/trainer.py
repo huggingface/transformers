@@ -1241,16 +1241,45 @@ class Trainer:
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
-            # Handle Muon optimizers which expect a list of parameters instead of parameter groups
+            # Handle Muon optimizers which have different parameter format requirements
             if "Muon" in optimizer_cls.__name__:
-                # Extract parameters from parameter groups for Muon optimizers
-                if isinstance(optimizer_grouped_parameters, list) and all(isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters):
-                    all_params = []
-                    for group in optimizer_grouped_parameters:
-                        all_params.extend(group["params"])
-                    self.optimizer = optimizer_cls(all_params, **optimizer_kwargs)
+                optimizer_name = optimizer_cls.__name__
+
+                # MuonWithAuxAdam and SingleDeviceMuonWithAuxAdam expect parameter groups with specific keys
+                # and don't accept additional keyword arguments like lr, betas
+                if "WithAuxAdam" in optimizer_name:
+                    # These optimizers expect parameter groups with exact keys: params, lr, momentum, weight_decay, use_muon
+                    if isinstance(optimizer_grouped_parameters, list) and all(
+                        isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters
+                    ):
+                        for group in optimizer_grouped_parameters:
+                            # Ensure all required keys are present
+                            group["use_muon"] = group.get("use_muon", True)
+                            group["lr"] = group.get("lr", optimizer_kwargs.get("lr", 3e-4))
+                            group["momentum"] = group.get("momentum", 0.95)
+                            group["weight_decay"] = group.get("weight_decay", 0.0)
+
+                            # Remove any extra keys that MuonWithAuxAdam doesn't expect
+                            allowed_keys = {"params", "lr", "momentum", "weight_decay", "use_muon"}
+                            extra_keys = set(group.keys()) - allowed_keys
+                            for key in extra_keys:
+                                group.pop(key)
+
+                    # These optimizers only accept param_groups, no additional kwargs
+                    self.optimizer = optimizer_cls(optimizer_grouped_parameters)
+
+                # Regular Muon and SingleDeviceMuon expect direct parameter list
                 else:
-                    self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+                    if isinstance(optimizer_grouped_parameters, list) and all(
+                        isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters
+                    ):
+                        # Extract all parameters from parameter groups
+                        all_params = []
+                        for group in optimizer_grouped_parameters:
+                            all_params.extend(group["params"])
+                        self.optimizer = optimizer_cls(all_params, **optimizer_kwargs)
+                    else:
+                        self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
