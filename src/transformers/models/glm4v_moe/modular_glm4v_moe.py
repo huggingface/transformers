@@ -79,11 +79,12 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 10944):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
+        num_hidden_layers (`int`, *optional*, defaults to 46):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 96):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
+        num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -92,7 +93,7 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -105,10 +106,6 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -128,6 +125,31 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
                     Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
                     computation. If unspecified, it defaults to value recommended by the implementation, using the
                     `factor` field to infer the suggested value.
+        attention_bias (`bool`, defaults to `True`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        moe_intermediate_size (`int`, *optional*, defaults to 1408):
+            Intermediate size of the routed expert.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            number of experts per token.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
+        n_routed_experts (`int`, *optional*, defaults to 128):
+            Number of routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor or routed experts.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                                    \--k dense layers--/
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the topk probabilities.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use query-key normalization in the attention
         image_token_id (`int`, *optional*):
             Token index used as placeholder for image embeddings.
         video_token_id (`int`, *optional*):
