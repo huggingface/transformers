@@ -672,6 +672,7 @@ class ProcessorMixin(PushToHubMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
+        save_jinja_files = kwargs.pop("save_jinja_files", True)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -698,8 +699,6 @@ class ProcessorMixin(PushToHubMixin):
             configs = [(a.init_kwargs if isinstance(a, PreTrainedTokenizerBase) else a) for a in attrs]
             configs.append(self)
             custom_object_save(self, save_directory, config=configs)
-
-        save_jinja_files = kwargs.get("save_jinja_files", True)
 
         for attribute_name in self.attributes:
             attribute = getattr(self, attribute_name)
@@ -734,7 +733,6 @@ class ProcessorMixin(PushToHubMixin):
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-            save_jinja_files = kwargs.get("save_jinja_files", True)
             is_single_template = isinstance(self.chat_template, str)
             if save_jinja_files and is_single_template:
                 # New format for single templates is to save them as chat_template.jinja
@@ -879,6 +877,7 @@ class ProcessorMixin(PushToHubMixin):
                         local_files_only=local_files_only,
                         revision=revision,
                         cache_dir=cache_dir,
+                        token=token,
                     ):
                         additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
                 except EntryNotFoundError:

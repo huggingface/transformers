@@ -1958,6 +1958,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             local_files_only=local_files_only,
                             revision=revision,
                             cache_dir=cache_dir,
+                            token=token,
                         ):
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
@@ -2409,6 +2410,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             A tuple of `str`: The files saved.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
+        save_jinja_files = kwargs.pop("save_jinja_files", True)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -2457,7 +2459,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        save_jinja_files = kwargs.get("save_jinja_files", True)
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
