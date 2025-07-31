@@ -406,6 +406,7 @@ def dequantize_and_quantize(
                 del dequantized
 
                 original_device = target_device
+                # for fsdp and deepspeed since the model is load on cpu, we need to move the weight to gpu for quantization
                 if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
                     loaded_weight = loaded_weight.cuda()
                     target_device = "cuda"
