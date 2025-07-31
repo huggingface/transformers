@@ -695,14 +695,13 @@ class Cache:
     simply pre-select which `CacheLayerMixin` class to use.
 
     Parameters:
-        layer_classes (`type[CacheLayerMixin]` or `list[type[CacheLayerMixin]]`):
-            A list of `CacheLayerMixin` classes to instantiate for the cache. If only a `CacheLayerMixin` class is
-            provided, then it is used for all layers.
-        layer_class_to_replicate (`type[CacheLayerMixin]`):
+        layers (`Optional`, *optional*):
             FILL ME
-        offloading (`bool`, optional):
+        layer_class_to_replicate (`type[CacheLayerMixin]`, *optional*):
             FILL ME
-        offload_only_non_sliding (`bool`, optional):
+        offloading (`bool`, *optional*, defaults to `False`):
+            FILL ME
+        offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
             FILL ME
 
     Examples:
