@@ -77,6 +77,8 @@ class Starcoder2Attention(MistralAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+        del is_sliding  # noqa: F821
+        del self.sliding_window
 
     def forward(
         self,

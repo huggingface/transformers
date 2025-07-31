@@ -177,6 +177,7 @@ class Phi3DecoderLayer(MistralDecoderLayer):
         self.mlp = Phi3MLP(config)
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
+        del self.attention_type
 
     def forward(
         self,
