@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 # GPT-2[[gpt-2]]
 
-[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)는 GPT의 확장 버전으로, 인과적 트랜스포머 언어 모델이며, 10배 더 많은 매개변수와 학습 데이터를 가지고 있습니다. 이 모델은 이전의 모든 단어를 기반으로 다음 단어를 예측하도록 40GB 데이터셋에서 사전 학습되었습니다. 이러한 접근 방식을 통해 모델은 제로샷 설정에서 많은 다운스트림 작업을 수행할 수 있게 되었습니다.
+[GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)는 GPT의 확장 버전으로, 인과적 트랜스포머 언어 모델이며, 10배 더 많은 매개변수와 학습 데이터를 가지고 있습니다. 이 모델은 이전의 모든 단어를 기반으로 다음 단어를 예측하도록 40GB 데이터 세트에서 사전 학습되었습니다. 이러한 접근 방식을 통해 이 모델은 제로샷 설정에서 많은 다운스트림 작업을 수행할 수 있게 되었습니다.
 
 모델 아키텍처는 각 토큰이 이전 토큰에만 주의를 기울일 수 있는 단방향(인과적) 어텐션 메커니즘을 사용하므로, 텍스트 생성 작업에 특히 효과적입니다.
 
@@ -83,7 +83,7 @@ echo -e "Hello, I'm a language model" | transformers run --task text-generation 
 vllm serve openai-community/gpt2 --model-imp transformers
 ```
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 더 많은 양자화 백엔드에 대해서는 [Quantization](../quantization/overview) 개요를 참조하세요.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용할 수 있는 더 많은 양자화 백엔드에 대해서는 [Quantization](../quantization/overview) 개요를 참조하세요.
 
 아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 가중치만 4비트로 양자화합니다.
 
