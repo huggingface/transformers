@@ -1089,6 +1089,13 @@ def build(config_class, models_to_create, output_dir):
         "speech-encoder-decoder",
         "vision-text-dual-encoder",
     ]:
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return build_composite_models(config_class, output_dir)
 
     result = {k: {} for k in models_to_create}
@@ -1104,6 +1111,14 @@ def build(config_class, models_to_create, output_dir):
         error = f"No processor class could be found in {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
+
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return result
 
     for processor_class in processor_classes:
@@ -1116,12 +1131,28 @@ def build(config_class, models_to_create, output_dir):
             trace = traceback.format_exc()
             fill_result_with_error(result, error, trace, models_to_create)
             logger.error(result["error"][0])
+
+            print(f"Finished building models for {config_class.__name__} ...")
+            print("=" * 40)
+
+            # save info to mark done
+            with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+                fp.write("done")
+
             return result
 
     if len(result["processor"]) == 0:
         error = f"No processor could be built for {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
+
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return result
 
     try:
@@ -1131,6 +1162,14 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
+
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return result
 
     # Convert the processors (reduce vocabulary size, smaller image size, etc.)
@@ -1147,6 +1186,14 @@ def build(config_class, models_to_create, output_dir):
         error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
         logger.error(result["error"][0])
+
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return result
 
     try:
@@ -1156,6 +1203,14 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
         logger.error(result["error"][0])
+
+        print(f"Finished building models for {config_class.__name__} ...")
+        print("=" * 40)
+
+        # save info to mark done
+        with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+            fp.write("done")
+
         return result
 
     # Just for us to see this easily in the report
@@ -1211,6 +1266,10 @@ def build(config_class, models_to_create, output_dir):
 
     print(f"Finished building models for {config_class.__name__} ...")
     print("=" * 40)
+
+    # save info to mark done
+    with open(os.path.join("tiny_local_models", f"{config_class.model_type}.txt"), "w") as fp:
+        fp.write("done")
 
     return result
 
@@ -1400,7 +1459,45 @@ def create_tiny_models(
         for c, models_to_create in list(to_create.items()):
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
 
-        all_build_args = all_build_args[140:280]
+        skip = [
+            "fuyu",
+            "glpn",
+            "gpt_bigcode",
+            "gpt_neo",
+            "gptj",
+            "phimoe",
+            "pix2struct",
+            "pixtral",
+            "poolformer",
+            "pop2piano",
+            "prompt_depth_anything",
+
+            "kyutai_speech_to_text",
+            "layoutlm",
+            "led",
+            "moshi",
+            "mpt",
+
+        ]
+        all_build_args = [x for x in all_build_args if x[0].model_type not in skip]
+
+        index = 0
+        base_size = 100
+        size = base_size * num_workers
+
+        start = index * size
+        end = (index + 1) * size
+
+        all_build_args = all_build_args[start:end]
+
+        msg1 = f"len(all_build_args) :{len(all_build_args)}"
+        models = sorted([build_args[0].model_type for build_args in all_build_args])
+        models = '\n'.join(models)
+        msg2 = f"model_types:\n{models}"
+        msg = msg1 + "\n" + msg2
+        with open(os.path.join("tiny_local_models", "models.txt"), "w") as fp:
+            fp.write(msg)
+
         with multiprocessing.Pool() as pool:
             results = pool.starmap(build, all_build_args)
             results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
@@ -1520,3 +1617,32 @@ if __name__ == "__main__":
         args.token,
         args.num_workers,
     )
+
+
+# import os
+# fns = os.listdir("tiny_local_models")
+# fns = [x.replace(".txt", "") for x in fns if x.endswith(".txt")]
+# fns2 = '\n'.join(fns)
+# print(fns2)
+# print(len(fns))
+#
+# with open("tiny_local_models/models.txt") as fp:
+#     data = fp.read()
+#     data = data.split("\n")
+#     data = data[2:]
+# data2 = '\n'.join(data)
+# print(data2)
+# print(len(data))
+#
+# no_created = sorted(set(data).difference(fns))
+# print(len(no_created))
+# no_created2 = '\n'.join(no_created)
+# print(no_created2)
+
+"""
+kyutai_speech_to_text
+layoutlm
+led
+moshi
+mpt
+"""
