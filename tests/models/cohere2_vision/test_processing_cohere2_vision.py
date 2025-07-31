@@ -32,6 +32,7 @@ if is_torchvision_available():
 
 @require_read_token
 @require_vision
+@unittest.skip("Model not released yet!")
 class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cohere2VisionProcessor
 
