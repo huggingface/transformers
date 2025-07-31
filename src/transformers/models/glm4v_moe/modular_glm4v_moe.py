@@ -427,7 +427,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
 class Glm4v_moeTextAttention(Glm4MoEAttention):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.rope_scaling = config.rope_scaling
 
     def forward(
         self,
