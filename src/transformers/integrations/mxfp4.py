@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..modeling_utils import is_deepspeed_zero3_enabled, is_fsdp_enabled
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -403,11 +404,15 @@ def dequantize_and_quantize(
                     dequantized, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                 )
                 del dequantized
+
+                original_device = target_device
+                if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
+                    loaded_weight = loaded_weight.cuda()
+                    target_device = "cuda"
                 with torch.cuda.device(target_device):
                     loaded_weight, flex, mx = quantize_to_mxfp4(loaded_weight, swizzle_mx_value, swizzle_mx_scale)
-
                 setattr(module, precision_config_attr, PrecisionConfig(mx_ctx=mx, flex_ctx=FlexCtx(rhs_data=flex)))
-                setattr(module, proj, torch.nn.Parameter(loaded_weight, requires_grad=False))
+                setattr(module, proj, torch.nn.Parameter(loaded_weight.to(original_device), requires_grad=False))
 
             return
 

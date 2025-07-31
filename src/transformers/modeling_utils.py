@@ -897,7 +897,7 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         param_to = "meta"
                     val_kwargs = {}
-                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (value.dtype == torch.uint8 or value.dtype == torch.int8):
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)

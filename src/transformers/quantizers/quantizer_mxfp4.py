@@ -85,12 +85,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
 
         device_map = kwargs.get("device_map", None)
-        if device_map is None and not self.quantization_config.dequantize:
-            raise ValueError(
+        if device_map is None:
+            logger.warning_once(
                 "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
                 "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
-                "If you are attempting to train the model, please consider dequantizing the model first by passing "
-                "quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
             )
         elif device_map is not None:
             if (
