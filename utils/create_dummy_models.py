@@ -1449,8 +1449,6 @@ def create_tiny_models(
         for x in all_build_args:
             print(x)
 
-        return
-
         index = 0
         base_size = 100
         size = base_size * num_workers
