@@ -39,6 +39,7 @@ jobs:
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake
           pip install --upgrade pip
           python -m pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]
+          python -m pip install -U essentia librosa pretty_midi
 
       - name: Create all tiny models (locally)
         run: |
