@@ -53,6 +53,7 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
+        Gemma3ForSequenceClassification,
         Gemma3Model,
         Gemma3Processor,
         Gemma3TextModel,
@@ -141,6 +142,60 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    def test_generation_beyond_sliding_window_tiny_model(self):
+        """Test generation with a tiny randomly initialised model whose input length is larger than the `sliding_window`.
+        The model is configured with both `full_attention` and `sliding_attention` layers to make sure the hybrid cache
+        and mask slicing logic is covered.
+        """
+        config = Gemma3TextConfig.from_pretrained("hf-internal-testing/tiny-random-Gemma3ForCausalLM")
+        config.attn_implementation = "eager"
+        config.layer_types = ["full_attention", "sliding_attention"]
+        config.sliding_window = 8
+        config.max_position_embeddings = 128
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-Gemma3ForCausalLM", config=config
+        ).to(torch_device)
+
+        input_len = 10
+        input_ids = torch.tensor(
+            [
+                [42300, 241087, 255445, 81315, 193760, 184471, 67719, 98191, 210651, 124725],
+                [102294, 205314, 226646, 62020, 60245, 68025, 251839, 114053, 4695, 175511],
+            ],
+            device=torch_device,
+        )
+        attention_mask = torch.ones_like(input_ids).to(torch_device)
+        with torch.no_grad():
+            _ = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=1,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="hybrid",
+            )
+            # 2 generations are needed to trigger https://github.com/huggingface/transformers/issues/39711
+            # Since it requires model._cache to have been previously initialized
+            output = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=5,
+                do_sample=False,
+                use_cache=True,
+                cache_implementation="hybrid",
+            )
+        generated_sequences = output[:, input_len:].cpu()
+        EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
+        torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
 
 
 class Gemma3Vision2TextModelTester:
@@ -246,6 +301,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         (
             Gemma3Model,
             Gemma3ForConditionalGeneration,
+            Gemma3ForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -267,6 +323,45 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def setUp(self):
         self.model_tester = Gemma3Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+
+    def test_bidirectional_image_attention(self):
+        """
+        Tests that each image can attend to itself bidirectionally. However an image
+        cannot attend to future images, even within the same batch.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = Gemma3Model(config).to(torch_device)
+
+        # First let's pass inputs without change which is one image per text and manipulate
+        # `token_type_ids` to make sure bidirectional mask is applied where it has to be
+        inputs_dict["token_type_ids"] = torch.zeros_like(inputs_dict["token_type_ids"])
+        inputs_dict["token_type_ids"][:, :4] = 1  # unmask first 4 tokens
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            # We expect a non-causal mask on first 4 tokens, thus no zeros
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+
+        # Now when removing `token_type_ids`, we will get simple causal mask
+        inputs_dict["token_type_ids"][:, :4] = 0  # mask back first 4 tokens
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            # We expect a causal mask on first 4 tokens, thus no zeros
+            for attention in out.attentions:
+                self.assertFalse((attention[..., :4, :4] != 0).all().item())
+
+        # Let's add two "images" per text, first one spanning 4 tokens and last one 3 tokens
+        inputs_dict["token_type_ids"][:, :4] = 1
+        inputs_dict["token_type_ids"][:, 7:10] = 1
+        with torch.no_grad():
+            out = model(**inputs_dict, output_attentions=True)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 7:10, 7:10] != 0).all().item())
+
+                # We expect a non-causal mask only within same image and no looking ahead to the future
+                self.assertTrue((attention[..., :4, 7:10] == 0).all().item())
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing(self):
@@ -348,6 +443,14 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_initialization(self):
         pass
 
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
+    def test_load_with_mismatched_shapes(self):
+        pass
+
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
+        pass
+
     def test_automodelforcausallm(self):
         """
         Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
@@ -403,7 +506,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water in the background. It looks like a lovely,'],
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant coastline in the background. It looks'],
+                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like'],
                 ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant coastline in the background. It looks'],
             }
         )  # fmt: skip
@@ -453,8 +556,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
                     ],
                 ("cuda", 8):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks',
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. They depict very different scenes. \n\n*   **Image 1** shows a cow standing on a beach'
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like',
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
                     ],
                 ("rocm", (9, 5)):
                     [
@@ -498,7 +601,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.'],
                 ("cuda", 7): [],
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.'],
+                ("cuda", 8): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -555,8 +658,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [
-                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.',
-                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a',
+                    "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the",
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
                 ],
                 ("rocm", (9, 5)) : [
                     'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.',
@@ -600,7 +703,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
                 ("cuda", 7): [],
-                ("cuda", 8): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
+                ("cuda", 8): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
 def is_grayscale(
-    image: ImageInput,
+    image: np.ndarray,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:

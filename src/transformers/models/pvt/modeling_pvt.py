@@ -447,12 +447,13 @@ class PvtPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -462,13 +463,13 @@ class PvtPreTrainedModel(PreTrainedModel):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data,
                 mean=0.0,
-                std=self.config.initializer_range,
+                std=std,
             )
             if module.cls_token is not None:
                 module.cls_token.data = nn.init.trunc_normal_(
                     module.cls_token.data,
                     mean=0.0,
-                    std=self.config.initializer_range,
+                    std=std,
                 )
 
 

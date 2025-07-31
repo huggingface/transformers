@@ -388,7 +388,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, RwkvSelfAttention):
             layer_id = module.layer_id
@@ -420,13 +420,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 * 0.5
             )
 
-            with torch.no_grad():
-                module.time_decay.data = decay_speed
-                module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
+            module.time_decay.data = decay_speed
+            module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
 
-                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
-                module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
+            module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -441,9 +440,28 @@ class RwkvPreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
-            with torch.no_grad():
-                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+        elif isinstance(module, nn.Linear):
+            shape = module.weight.data.shape
+            gain = 1.0
+            scale = 1.0  # extra scale for gain
+            if module.bias is not None:
+                module.bias.data.zero_()
+            if shape[0] > shape[1]:
+                gain = math.sqrt(shape[0] / shape[1])
+            if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
+                scale = 0.5
+
+            gain *= scale
+            nn.init.orthogonal_(module.weight, gain=gain)
+        elif isinstance(module, nn.Embedding):
+            shape = module.weight.data.shape
+            gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
+            nn.init.orthogonal_(module.weight, gain=gain)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 @dataclass

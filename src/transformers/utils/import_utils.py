@@ -172,6 +172,8 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
+_fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
+_qutlass_available = _is_package_available("qutlass")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -586,6 +588,12 @@ def is_causal_conv1d_available():
     return False
 
 
+def is_xlstm_available():
+    if is_torch_available():
+        return _is_package_available("xlstm")
+    return False
+
+
 def is_mambapy_available():
     if is_torch_available():
         return _is_package_available("mambapy")
@@ -931,9 +939,9 @@ def is_torch_hpu_available():
     original_compile = torch.compile
 
     def hpu_backend_compile(*args, **kwargs):
-        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+        if kwargs.get("backend") not in ["hpu_backend", "eager"]:
             logger.warning(
-                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                f"Calling torch.compile with backend={kwargs.get('backend')} on a Gaudi device is not supported. "
                 "We will override the backend with 'hpu_backend' to avoid errors."
             )
             kwargs["backend"] = "hpu_backend"
@@ -1312,6 +1320,14 @@ def is_optimum_quanto_available():
 
 def is_quark_available():
     return _quark_available
+
+
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+
+
+def is_qutlass_available():
+    return _qutlass_available
 
 
 def is_compressed_tensors_available():
@@ -2133,7 +2149,7 @@ class _LazyModule(ModuleType):
         self._object_missing_backend = {}
         self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
 
-        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+        if any(isinstance(key, frozenset) for key in import_structure):
             self._modules = set()
             self._class_to_module = {}
             self.__all__ = []
@@ -2231,7 +2247,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend:
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -2255,7 +2271,7 @@ class _LazyModule(ModuleType):
             Placeholder.__module__ = module_name
 
             value = Placeholder
-        elif name in self._class_to_module.keys():
+        elif name in self._class_to_module:
             try:
                 module = self._get_module(self._class_to_module[name])
                 value = getattr(module, name)
@@ -2383,7 +2399,7 @@ def requires(*, backends=()):
     """
 
     if not isinstance(backends, tuple):
-        raise ValueError("Backends should be a tuple.")
+        raise TypeError("Backends should be a tuple.")
 
     applied_backends = []
     for backend in backends:
@@ -2710,7 +2726,7 @@ def spread_import_structure(nested_import_structure):
             if not isinstance(_value, dict):
                 frozenset_first_import_structure[_key] = _value
 
-            elif any(isinstance(v, frozenset) for v in _value.keys()):
+            elif any(isinstance(v, frozenset) for v in _value):
                 for k, v in _value.items():
                     if isinstance(k, frozenset):
                         # Here we want to switch around _key and k to propagate k upstream if it is a frozenset

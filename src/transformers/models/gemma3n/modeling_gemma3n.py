@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -47,7 +47,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -1328,22 +1327,20 @@ class Gemma3nTextAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
-            if isinstance(past_key_value, HybridCache) and self.is_sliding:
-                max_length = past_key_value.sliding_window
-                indices = (
-                    slice(0, max_length)
-                    if cache_position.shape[0] > max_length
-                    else cache_position.clamp(min=0, max=max_length - 1)
-                )
+            layer = past_key_value.layers[self.kv_shared_layer_index]
+            # Device of past layer may be different from current one
+            indices = cache_position.to(layer.keys.device)
+            # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
+            if isinstance(layer, SlidingWindowLayer):
+                if cache_position.shape[0] > layer.get_max_cache_shape():
+                    indices = slice(0, layer.get_max_cache_shape())
+                else:
+                    indices = indices.clamp(min=0, max=layer.get_max_cache_shape() - 1)
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
-                query_states.device
-            )
+            key_states = layer.keys[:, :, indices].to(query_states.device)
+            value_states = layer.values[:, :, indices].to(query_states.device)
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1408,7 +1405,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1490,7 +1486,7 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Gemma3nTextDecoderLayer,
@@ -1498,22 +1494,8 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        # important: this ported version of Gemma2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Gemma3nRMSNorm):
-            if module.with_scale:
-                module.weight.data.fill_(1.0)
-        elif isinstance(module, Gemma3nAudioCumulativeGroupNorm):
+        super()._init_weights(module)
+        if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
             module.per_dim_scale.data.zero_()
@@ -1581,12 +1563,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -1792,18 +1768,6 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -2211,12 +2175,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model.set_decoder(decoder)

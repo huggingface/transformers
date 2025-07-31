@@ -334,7 +334,7 @@ class FalconAttention(nn.Module):
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
                 # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
                 # create a causal mask in case query_length == 1.
-                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                is_causal = self.is_causal and attention_mask is None and query_length > 1
                 attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
@@ -364,7 +364,7 @@ class FalconAttention(nn.Module):
             if self._use_sdpa and not output_attentions and head_mask is None:
                 # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
                 # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
-                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                is_causal = self.is_causal and attention_mask is None and query_length > 1
                 attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
@@ -643,14 +643,14 @@ class FalconPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear) or isinstance(module, FalconLinear):
+        if isinstance(module, (nn.Linear, FalconLinear)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1001,9 +1001,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings

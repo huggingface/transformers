@@ -63,8 +63,8 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
+    distribute_model,
     initialize_tensor_parallelism,
     repack_weights,
     replace_state_dict_local_with_dtensor,
@@ -72,6 +72,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -1356,12 +1357,12 @@ def _get_torch_dtype(
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
                 config.torch_dtype = torch_dtype
-                for sub_config_key in config.sub_configs.keys():
+                for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
             config.torch_dtype = torch_dtype
-            for sub_config_key in config.sub_configs.keys():
+            for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, dict):
@@ -1387,7 +1388,7 @@ def _get_torch_dtype(
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
-        for key in config.sub_configs.keys():
+        for key in config.sub_configs:
             value = getattr(config, key)
             value.torch_dtype = default_dtype
 
@@ -1445,7 +1446,7 @@ def _get_device_map(
 
         # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
         # which we can use to allocate parameters.
-        for device_name in inferred_max_memory.keys():
+        for device_name in inferred_max_memory:
             if isinstance(device_name, int):  # it's a GPU device
                 if is_torch_xpu_available():
                     unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
@@ -1572,8 +1573,8 @@ def _find_mismatched_keys(
         # Fix the key names
         new_state_dict = {keys_to_rename_mapping[k]: v for k, v in state_dict.items() if k in keys_to_rename_mapping}
 
-        for key in new_state_dict.keys():
-            if key in model_state_dict and new_state_dict[key].shape != model_state_dict[key].shape:
+        for key, tensor in new_state_dict.items():
+            if key in model_state_dict and tensor.shape != model_state_dict[key].shape:
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
@@ -1582,7 +1583,7 @@ def _find_mismatched_keys(
                     and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
-                    mismatched_shapes.append((new_state_dict[key].shape, model_state_dict[key].shape))
+                    mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
 
     return mismatched_keys, mismatched_shapes
 
@@ -1902,7 +1903,97 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
+class EmbeddingAccessMixin:
+    """
+    Base utilities to regroup getters and setters for embeddings.
+    Introduces the `input_layer_embed` attribute, which indicates
+    where the input embeddings come from and where they
+    should be set.
+    """
+
+    _input_embed_layer = "embed_tokens"  # default layer that holds input embeddings.
+
+    def get_input_embeddings(self) -> nn.Module:
+        """
+        Returns the model's input embeddings.
+
+        Returns:
+            `nn.Module`: A torch module mapping vocabulary to hidden states.
+        """
+
+        # 1) Check if the model has an attribute named 'embed_tokens' (the standard input embedding layer
+        #  for most NLP models), and if so, return it.
+
+        name = getattr(self, "_input_embed_layer", "embed_tokens")
+
+        if (default_embedding := getattr(self, name, None)) is not None:
+            return default_embedding
+        # 2) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+
+        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
+            return self.model.embed_tokens
+
+        # 3) vanilla decoder‑only architectures
+        elif hasattr(self, "embed_tokens"):
+            return self.embed_tokens
+        else:
+            base_model = getattr(self, "base_model_prefix", None)
+            if base_model is not None:
+                base_model = getattr(self, base_model, None)
+                if base_model is not None and base_model is not self:
+                    return base_model.get_input_embeddings()
+            raise NotImplementedError(
+                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
+                "please override in the subclass."
+            )
+
+    def set_input_embeddings(self, value: nn.Module):
+        """Fallback setter that handles **~70 %** of models in the code‑base.
+
+        Order of attempts:
+        1. `self.model.embed_tokens`
+        2. `self.embed_tokens`
+        3. delegate to the *base model* if one exists
+        4. otherwise raise `NotImplementedError` so subclasses still can (and
+            should) override for exotic layouts.
+        """
+
+        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        name = getattr(self, "_input_embed_layer", "embed_tokens")
+        if hasattr(self, "model") and hasattr(self.model, name):
+            setattr(self.model, name, value)
+        # 2) as well as vanilla decoder‑only architectures
+        elif hasattr(self, name):
+            setattr(self, name, value)
+        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        elif getattr(self, self.base_model_prefix, self) is not self:
+            base_model = getattr(self, self.base_model_prefix, self)
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError(
+                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+            )
+
+    def get_output_embeddings(self):
+        if not hasattr(self, "lm_head"):
+            return None
+        try:
+            # Speech / vision backbones raise here, so we return None.
+            # Legit use of get_input_embs?
+            self.get_input_embeddings()
+        except NotImplementedError:
+            return None
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        """
+        Sets the model's output embedding, defaulting to setting new_embeddings to lm_head.
+        """
+        if getattr(self, "lm_head"):
+            self.lm_head = new_embeddings
+
+
+class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -1972,8 +2063,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support `torch.compile(fullgraph=True)`
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
     # top-level models, this attribute is currently defined in respective model
@@ -2088,7 +2178,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
-            raise ValueError(
+            raise TypeError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
@@ -2128,6 +2218,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
         modules properly initialized (such as weight initialization).
+
+        This is also used when the user is running distributed code. We add hooks to the modules here, according to
+        the model's tp_plan!
         """
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
@@ -2160,17 +2253,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
-        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
-        for name, module in self.named_children():
-            if plan := getattr(module, "_tp_plan", None):
-                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
-
-        if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-            for v in self._tp_plan.values():
-                if v not in ALL_PARALLEL_STYLES:
-                    raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
-                    )
 
     def dequantize(self):
         """
@@ -2598,30 +2680,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:[^/:]+$", applicable_attn_implementation):
+        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
 
             # Extract repo_id and kernel_name from the string
-            repo_id, kernel_name = applicable_attn_implementation.split(":")
-            kernel_name = kernel_name.strip()
+            if ":" in applicable_attn_implementation:
+                repo_id, kernel_name = attn_implementation.split(":")
+                kernel_name = kernel_name.strip()
+            else:
+                repo_id = attn_implementation
+                kernel_name = None
             repo_id = repo_id.strip()
-
             try:
                 kernel = get_kernel(repo_id)
-                ALL_ATTENTION_FUNCTIONS.register(f"kernel_{repo_id.replace('/', '_')}", getattr(kernel, kernel_name))
-                applicable_attn_implementation = f"kernel_{repo_id.replace('/', '_')}"
-            except FileNotFoundError as e:
+                if hasattr(kernel, "flash_attn_varlen_func"):
+                    kernel_function = partial(flash_attention_forward, implementation=kernel)
+                elif kernel_name is not None:
+                    kernel_function = getattr(kernel, kernel_name)
+                # Register it
+                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
+                applicable_attn_implementation = repo_id
+            except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            except AttributeError:
-                raise ValueError(
-                    "the kernel function name or class specified in the attn_implementation argument is not valid. Please check "
-                    "the documentation for the correct format, and check that the kernel exports the class and the function correctly."
-                )
         if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
@@ -2769,49 +2855,41 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         self._require_grads_hook.remove()
 
-    def get_input_embeddings(self) -> nn.Module:
-        """
-        Returns the model's input embeddings.
-
-        Returns:
-            `nn.Module`: A torch module mapping vocabulary to hidden states.
-        """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            return base_model.get_input_embeddings()
-        else:
-            raise NotImplementedError
-
-    def set_input_embeddings(self, value: nn.Module):
-        """
-        Set model's input embeddings.
-
-        Args:
-            value (`nn.Module`): A module mapping vocabulary to hidden states.
-        """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            base_model.set_input_embeddings(value)
-        else:
-            raise NotImplementedError
-
-    def get_output_embeddings(self) -> nn.Module:
-        """
-        Returns the model's output embeddings.
-
-        Returns:
-            `nn.Module`: A torch module mapping hidden states to vocabulary.
-        """
-        return None  # Overwrite for models with output embeddings
-
     def _init_weights(self, module):
         """
-        Initialize the weights. This method should be overridden by derived class and is
-        the only initialization method that will be called when loading a checkpoint
-        using `from_pretrained`. Any attempt to initialize outside of this function
-        will be useless as the torch.nn.init function are all replaced with skip.
+        Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
+        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
         """
-        pass
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value accross the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
 
     def _initialize_weights(self, module):
         """
@@ -2922,9 +3000,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
                 )
 
-                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
+                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules}
                 encoder_layer_pos = 0
-                for name in decoder_modules.keys():
+                for name in decoder_modules:
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
@@ -2976,6 +3054,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
         else:
             output_embeddings.weight = input_embeddings.weight
+
+        # Passing hooks over to the embeddings if needed
+        # (currently limited to tensor parallel hooks and flags only)
+        if hasattr(input_embeddings, "_is_hooked") and getattr(input_embeddings, "_hf_tp_plan", None):
+            output_embeddings._is_hooked = input_embeddings._is_hooked
+            output_embeddings._hf_tp_plan = input_embeddings._hf_tp_plan
+            output_embeddings._forward_hooks = input_embeddings._forward_hooks
+            output_embeddings._forward_pre_hooks = input_embeddings._forward_pre_hooks
+            output_embeddings.__repr__ = (
+                lambda: f"{output_embeddings.__repr__()}\nTP Plan: {output_embeddings._hf_tp_plan}"
+            )
 
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = nn.functional.pad(
@@ -3672,7 +3761,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 If specified, weights are saved in the format pytorch_model.<variant>.bin.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             save_peft_format (`bool`, *optional*, defaults to `True`):
                 For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
                 keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
@@ -3851,7 +3940,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
             for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
+                if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
@@ -3966,7 +4055,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in state_dict_split.filename_to_tensors.keys()
+                and filename not in state_dict_split.filename_to_tensors
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
@@ -4320,7 +4409,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -4381,6 +4470,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
+                If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -4468,6 +4558,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
+        distributed_config = kwargs.pop("distributed_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4487,6 +4578,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
         ):
             key_mapping = cls._checkpoint_conversion_mapping
+
+        if distributed_config is not None:
+            tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
@@ -4518,13 +4612,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         if tp_plan is not None:
-            if device_mesh is None and tp_plan is not None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+            if device_mesh is None:
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
-                # TODO: make device_mesh support multiple dimensions
-                if device_mesh.ndim == 1:
-                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                if device_mesh.ndim > 1:
+                    if "tp" not in device_mesh.mesh_dim_names:
+                        raise ValueError(
+                            "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                            "Please provide a valid `device_mesh`."
+                        )
+                    device_mesh = device_mesh["tp"]
+                tp_size = device_mesh.size()
+                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
@@ -4824,22 +4923,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             )
 
         config.name_or_path = pretrained_model_name_or_path
-
-        # Instantiate model.
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
-
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        if _torch_distributed_available and device_mesh is not None:
+            model = distribute_model(model, distributed_config, device_mesh, tp_size)
+
         # Make sure to tie the weights correctly
         model.tie_weights()
-
-        # Last check for tp
-        if device_mesh is not None and not model.supports_tp_plan:
-            if config.base_model_tp_plan is None and config.get_text_config().base_model_tp_plan is None:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -4921,11 +5015,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 key_mapping=key_mapping,
                 weights_only=weights_only,
             )
-
-        # record tp degree the model sharded to
-        model._tp_size = tp_size
-        model._device_mesh = device_mesh
-
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -5243,7 +5332,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
             # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
                 key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
@@ -5905,8 +5994,9 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
+    tp_plan = getattr(model, "_tp_plan", []) or []
     tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in model._tp_plan]))
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
         if _torch_distributed_available and torch.distributed.is_initialized()
         else None
     )
@@ -5929,19 +6019,22 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
-        if device.type == "cuda":
-            index = device.index if device.index is not None else torch.cuda.current_device()
-            device_memory = torch.cuda.mem_get_info(index)[0]
+        if device.type in ["cuda", "xpu"]:
+            torch_accelerator_module = getattr(torch, device.type)
+            index = device.index if device.index is not None else torch_accelerator_module.current_device()
+            device_memory = torch_accelerator_module.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda/xpu OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is *unused* reserved cuda memory, we can skip/reduce the allocation.
-            unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
+            # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
+            unused_memory = torch_accelerator_module.memory_reserved(
+                index
+            ) - torch_accelerator_module.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)

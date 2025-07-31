@@ -60,10 +60,14 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
+        ("cohere2_vision", "Cohere2VisionProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
+        ("deepseek_vl", "DeepseekVLProcessor"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
         ("emu3", "Emu3Processor"),
+        ("evolla", "EvollaProcessor"),
         ("flava", "FlavaProcessor"),
         ("fuyu", "FuyuProcessor"),
         ("gemma3", "Gemma3Processor"),
@@ -216,7 +220,7 @@ class AutoProcessor:
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -258,7 +262,7 @@ class AutoProcessor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -273,9 +277,7 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {
-            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
-        }
+        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {

@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowLayer
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -283,7 +283,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         if layer_types is None:
             self.layer_types = [
-                "full_attention" if i % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
         else:
             self.layer_types = layer_types
@@ -1769,22 +1769,20 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = query_states.transpose(1, 2)
 
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.key_cache[self.kv_shared_layer_index].device)
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
-            if isinstance(past_key_value, HybridCache) and self.is_sliding:
-                max_length = past_key_value.sliding_window
-                indices = (
-                    slice(0, max_length)
-                    if cache_position.shape[0] > max_length
-                    else cache_position.clamp(min=0, max=max_length - 1)
-                )
+            layer = past_key_value.layers[self.kv_shared_layer_index]
+            # Device of past layer may be different from current one
+            indices = cache_position.to(layer.keys.device)
+            # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
+            if isinstance(layer, SlidingWindowLayer):
+                if cache_position.shape[0] > layer.get_max_cache_shape():
+                    indices = slice(0, layer.get_max_cache_shape())
+                else:
+                    indices = indices.clamp(min=0, max=layer.get_max_cache_shape() - 1)
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.key_cache[self.kv_shared_layer_index][:, :, indices].to(query_states.device)
-            value_states = past_key_value.value_cache[self.kv_shared_layer_index][:, :, indices].to(
-                query_states.device
-            )
+            key_states = layer.keys[:, :, indices].to(query_states.device)
+            value_states = layer.values[:, :, indices].to(query_states.device)
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1917,22 +1915,8 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
 
     def _init_weights(self, module):
-        # important: this ported version of Gemma2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Gemma3nRMSNorm):
-            if module.with_scale:
-                module.weight.data.fill_(1.0)
-        elif isinstance(module, Gemma3nAudioCumulativeGroupNorm):
+        Gemma2PreTrainedModel._init_weights(module)
+        if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
             module.weight.data.fill_(1.0)
         elif isinstance(module, Gemma3nAudioAttention):
             module.per_dim_scale.data.zero_()

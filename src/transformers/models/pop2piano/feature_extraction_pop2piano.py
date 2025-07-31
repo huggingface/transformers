@@ -377,7 +377,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         """
 
         requires_backends(self, ["librosa"])
-        is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
+        is_batched = isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list))
         if is_batched:
             # This enables the user to process files of different sampling_rate at same time
             if not isinstance(sampling_rate, list):

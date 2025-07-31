@@ -888,6 +888,12 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_output_embeddings(self):
+        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
+        # Vision models like BEiT use a Conv2d patch embed layer (no `.weight`) so calling tie_weights() would fail.
+        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
+        return None
+
     @auto_docstring
     def forward(
         self,

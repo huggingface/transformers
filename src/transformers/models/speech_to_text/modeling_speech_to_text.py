@@ -286,8 +286,8 @@ class Speech2TextAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
             value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
@@ -761,12 +761,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(
         self,
         input_ids=None,
@@ -1219,12 +1213,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     @auto_docstring
     def forward(
