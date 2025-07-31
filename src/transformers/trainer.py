@@ -1241,7 +1241,18 @@ class Trainer:
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
-            self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            # Handle Muon optimizers which expect a list of parameters instead of parameter groups
+            if "Muon" in optimizer_cls.__name__:
+                # Extract parameters from parameter groups for Muon optimizers
+                if isinstance(optimizer_grouped_parameters, list) and all(isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters):
+                    all_params = []
+                    for group in optimizer_grouped_parameters:
+                        all_params.extend(group["params"])
+                    self.optimizer = optimizer_cls(all_params, **optimizer_kwargs)
+                else:
+                    self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            else:
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
             if "bitsandbytes" in str(optimizer_cls) and optimizer_kwargs.get("optim_bits", None) == 8:
                 import bitsandbytes
