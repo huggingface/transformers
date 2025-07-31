@@ -24,6 +24,8 @@ if is_optimum_quanto_available():
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
+_is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
+
 
 logger = logging.get_logger(__name__)
 
@@ -736,7 +738,9 @@ class Cache:
         self.layers = layers if layers is not None else []
         self.layer_class_to_replicate = layer_class_to_replicate
         self.offloading = offloading
-        self.only_non_sliding = offload_only_non_sliding
+        if self.offloading:
+            self.only_non_sliding = offload_only_non_sliding
+            self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
 
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
@@ -758,7 +762,7 @@ class Cache:
             layer_idx = layer_idx if layer_idx < len(self.layers) else 0
 
         # Prefetch
-        with torch.cuda.stream(self.prefetch_stream):
+        with self.prefetch_stream if _is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream):
             self.layers[layer_idx].prefetch()
 
     def offload(self, layer_idx: int, only_non_sliding: bool = True):
