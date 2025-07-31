@@ -2684,10 +2684,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
-            # FIXME: @ArthurZucker this is dirsty, did not want to a lof of extra work
+            # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
             if "|" in applicable_attn_implementation:
                 attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
-                # we usually wrap to prepare inputs etcs
+                # we usually wrap to prepare inputs etc
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
             if ":" in applicable_attn_implementation:
