@@ -1220,7 +1220,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         cache_methods = [
             "_prepare_cache_for_generation",
             "_get_cache",
-            "_get_layer_device_map_for_cache_init",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
@@ -1235,7 +1234,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             assistant_model=None,
             batch_size=batch_size,
             max_cache_length=self.config.codec_config.sliding_window,
-            device=device,
         )
 
         if "past_key_values" in temporary_model_kwargs:
