@@ -224,6 +224,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTModel"),
         ("mega", "MegaModel"),
         ("megatron-bert", "MegatronBertModel"),
+        ("metaclip-2", "MetaCLIP2Model"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
         ("minimax", "MiniMaxModel"),
@@ -820,6 +821,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
             "levit",
             ("LevitForImageClassification", "LevitForImageClassificationWithTeacher"),
         ),
+        ("metaclip-2", "MetaCLIP2ForImageClassification"),
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
@@ -1578,6 +1580,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+        ("metaclip-2", "MetaCLIP2Model"),
         ("siglip", "SiglipModel"),
         ("siglip2", "Siglip2Model"),
     ]

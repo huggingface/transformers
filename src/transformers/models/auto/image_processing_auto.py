@@ -125,6 +125,7 @@ else:
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
+            ("metaclip-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),

@@ -1043,6 +1043,8 @@
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
+      - local: model_doc/metaclip-2
+        title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
       - local: model_doc/mistral3
