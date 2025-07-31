@@ -855,32 +855,6 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    # TODO: raushan FA2 generates gibberish for no reason, check later
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @unittest.skip("Timm models do not support Flash Attention 2 yet")
-    def test_model_4b_flash_attn(self):
-        model_id = "Google/gemma-3n-E4B-it"
-
-        model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map=torch_device
-        )
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
     @parameterized.expand([("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as

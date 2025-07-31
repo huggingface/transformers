@@ -240,7 +240,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,),
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
         PretrainedConfig.__init__(
@@ -305,7 +305,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             activation_sparsity_pattern = [0.0] * num_hidden_layers
 
         # Default value for activation sparsity pattern
-        if activation_sparsity_pattern == (0.95,):
+        if activation_sparsity_pattern is None:
             num_sparse_layers = 10 if num_hidden_layers > 10 else num_hidden_layers
             activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
                 num_hidden_layers - num_sparse_layers
