@@ -1721,7 +1721,9 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         )
 
         # Preserve rope_deltas for CFG and multi-pass generation
-        if hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
+        if hasattr(outputs, "rope_deltas") and outputs.rope_deltas is not None:
+            model_kwargs["rope_deltas"] = outputs.rope_deltas
+        elif hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
             model_kwargs["rope_deltas"] = self.model.rope_deltas
 
         return model_kwargs

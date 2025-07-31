@@ -603,21 +603,28 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
-                position_ids, rope_deltas = self.get_rope_index(
+
+            # Use rope_deltas parameter if provided, otherwise use the current logic
+            current_rope_deltas = rope_deltas if rope_deltas is not None else self.rope_deltas
+
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or current_rope_deltas is None:
+                position_ids, calculated_rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
                     second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask,
                 )
-                self.rope_deltas = rope_deltas
+                # Only update model state if rope_deltas parameter was not provided
+                if rope_deltas is None:
+                    self.rope_deltas = calculated_rope_deltas
+                current_rope_deltas = calculated_rope_deltas
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
                 if cache_position is not None:
-                    delta = (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
+                    delta = (cache_position[0] + current_rope_deltas).to(inputs_embeds.device)
                 else:
                     delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
@@ -642,7 +649,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=current_rope_deltas if "current_rope_deltas" in locals() else self.rope_deltas,
         )
         return output if return_dict else output.to_tuple()
 
@@ -773,7 +780,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
         # Preserve rope_deltas for CFG and multi-pass generation
-        if hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
+        if hasattr(outputs, "rope_deltas") and outputs.rope_deltas is not None:
+            model_kwargs["rope_deltas"] = outputs.rope_deltas
+        elif hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
             model_kwargs["rope_deltas"] = self.model.rope_deltas
 
         return model_kwargs
@@ -796,9 +805,8 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # Restore rope_deltas from kwargs if available (needed for CFG generation)
-        if "rope_deltas" in kwargs and kwargs["rope_deltas"] is not None:
-            self.model.rope_deltas = kwargs["rope_deltas"]
+        # Extract rope_deltas from kwargs to pass as parameter (needed for CFG generation)
+        rope_deltas_param = kwargs.pop("rope_deltas", None)
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -849,6 +857,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
+
+        # Add rope_deltas parameter for clean CFG generation
+        if rope_deltas_param is not None:
+            model_inputs["rope_deltas"] = rope_deltas_param
 
         return model_inputs
 
