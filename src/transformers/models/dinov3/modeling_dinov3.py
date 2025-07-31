@@ -427,7 +427,7 @@ class Dinov3SelfAttention(nn.Module):
             key_layer,
             value_layer,
             head_mask,
-            is_causal=self.is_causal,
+            is_causal=False,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
         )
@@ -442,53 +442,11 @@ class Dinov3SelfAttention(nn.Module):
         return outputs
 
 
-class Dinov3Attention(nn.Module):
-    def __init__(self, config: Dinov3Config) -> None:
-        super().__init__()
-        self.attention = Dinov3SelfAttention(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads,
-            self.attention.num_attention_heads,
-            self.attention.attention_head_size,
-            self.pruned_heads,
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
-            heads
-        )
-        self.attention.all_head_size = (
-            self.attention.attention_head_size * self.attention.num_attention_heads
-        )
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        rope: Tensor = None,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        return self.attention(hidden_states, head_mask, output_attentions, rope)
-
-
 class Dinov3LayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.gamma = nn.Parameter(
-            config.layerscale_value * torch.ones(config.hidden_size)
-        )
+        self.gamma = nn.Parameter(torch.empty(config.hidden_size))
+        self.init_values = config.layerscale_value
 
     def init_weights(self):
         nn.init.constant_(self.gamma, self.init_values)
@@ -593,7 +551,7 @@ class Dinov3Layer(GradientCheckpointingLayer):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov3Attention(config)
+        self.attention = Dinov3SelfAttention(config)
         self.layer_scale1 = Dinov3LayerScale(config)
         self.drop_path = (
             Dinov3DropPath(config.drop_path_rate)
@@ -686,7 +644,7 @@ class Dinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Dinov3RopePositionEmbedding):
             module.init_weights()
         elif isinstance(module, Dinov3LayerScale):
-            module.gamma.data.fill_(self.config.layerscale_value)
+            module.init_weights()
 
 
 @auto_docstring
@@ -711,21 +669,13 @@ class Dinov3Model(Dinov3PreTrainedModel):
         self.layer = nn.ModuleList(
             [Dinov3Layer(config) for _ in range(config.num_hidden_layers)]
         )
-        self.norm = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> Dinov3PatchEmbeddings:
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
