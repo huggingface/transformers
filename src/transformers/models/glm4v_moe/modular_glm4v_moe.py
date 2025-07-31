@@ -454,6 +454,7 @@ class Glm4v_moeTextMLP(Glm4MoeMLP):
 class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
