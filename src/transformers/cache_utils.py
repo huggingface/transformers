@@ -946,8 +946,7 @@ class Cache:
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
-        to the number of layers in the model.
+        This value corresponds to the number of layers in the model.
         """
         # Note: for DynamicCache, layers are initialized lazily, so this will not be accurate before the first
         # forward through all the layers
