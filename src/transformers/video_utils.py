@@ -563,7 +563,7 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
-    if isinstance(video, Union[np.ndarray, torch.Tensor]):
+    if is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
         if not is_valid_video(video):
             raise ValueError(
                 f"When passing video as decoded frames, video should be a 4D numpy array or torch tensor, but got {video.ndim} dimensions instead."
@@ -571,6 +571,10 @@ def load_video(
         # Case 1: Video is provided as a 4D numpy array or torch tensor (frames, height, width, channels)
         if is_torch_tensor(video):
             video = video.numpy()  # Convert torch tensor to numpy array
+        logger.warning(
+            "When loading the video from list of decoded frames, we cannot infer metadata such as `fps` or `duration`. "
+            "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
+        )
         return video, None
 
     if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:

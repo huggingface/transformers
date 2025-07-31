@@ -38,14 +38,12 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, is_vision_available, load_image
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoMetadata, convert_pil_frames_to_video, load_video
+from .video_utils import VideoMetadata, load_video
 
 
 if is_vision_available():
     from .image_utils import PILImageResampling
 
-if is_torch_available():
-    import torch
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -68,7 +66,6 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     list_repo_templates,
     logging,
 )
@@ -1578,11 +1575,6 @@ class ProcessorMixin(PushToHubMixin):
                                 fname,
                                 backend=mm_load_kwargs["video_load_backend"],
                             )
-                            if metadata is None:
-                                logger.warning(
-                                    "When loading the video from list of decoded frames, we cannot infer metadata such as `fps` or `duration`. "
-                                    "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
-                                )
                         videos.append(video)
                         video_metadata.append(metadata)
 

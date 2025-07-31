@@ -63,9 +63,7 @@ if is_av_available():
     from transformers.video_utils import load_video
 
     # load a video file in memory for testing
-    video, _ = load_video(
-        "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"
-    )
+    video, _ = load_video("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4")
     MODALITY_INPUT_DATA["videos"].append(video)
 
 

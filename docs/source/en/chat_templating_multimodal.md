@@ -111,6 +111,7 @@ Some vision models also support video inputs. The message format is very similar
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
+- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
 
 > [!WARNING]
 > Loading a video from `"url"` is only supported by the PyAV or Decord backends.
@@ -137,27 +138,11 @@ messages = [
 ]
 ```
 
-### Passing decoded video objects
-In addition to loading videos from a URL or file path, you can also pass decoded video data directly. 
-
-This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
-
-- Use the `"video"` type with a dictionary that includes:
-    - `"frames"` (`np.ndarray` or `torch.Tensor`):
-        A 4D array of shape (num_frames, channels, height, width) containing decoded video frames.
-    - `"metadata"` (`"VideoMetadata"` or `"dict"`):
-        Describes metadata for the video. If you provide a dictionary, it must include at least one of:
-        - `"fps"` (frames per second)
-        - `"duration"` (video duration in seconds)
-        if both `"fps"` and `"duration"` is provided, `"fps"` gets priority and `"duration"` is calculated based on `"fps"`
-
+### Example: Passing decoded video objects
 ```python
 import numpy as np
 
-video_object1 = {
-    "frames": np.random.randint(0, 255, size=(16, 3, 224, 224), dtype=np.uint8),
-    "metadata": {"fps": 16, "duration": 2.0}
-}
+video_object1 = np.random.randint(0, 255, size=(16, 224, 224, 3), dtype=np.uint8),
 
 messages = [
     {
@@ -180,14 +165,9 @@ You can also use existing (`"load_video()"`) function to load a video, edit the 
 from transformers.video_utils import load_video
 
 # load a video file in memory for testing
-frames, metadata = load_video(
+video_object2, _ = load_video(
     "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"
 )
-
-video_object2 = {
-    "frames": frames,
-    "metadata": metadata,
-}
 
 messages = [
     {
