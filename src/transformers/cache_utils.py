@@ -1,12 +1,11 @@
 import copy
-import functools
 import importlib.metadata
 import json
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from packaging import version
@@ -94,8 +93,8 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initializion(self, key_states: torch.Tensor):
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=dtype, device=device)
-        self.values = torch.tensor([], dtype=dtype, device=device)
+        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
 
     def update(
         self,
@@ -652,6 +651,7 @@ LAYER_CLASS_MAP: dict[str, type[CacheLayerMixin]] = {
     "chunked_attention": ChunkedSlidingLayer,
 }
 
+
 class KeyValuesWrapper:
     """Helper class for Cache that simulates layer-indexed key/value lists from a layered cache.
     This allows for BC access and writing, e.g., cache.key_cache[idx] = ...
@@ -740,7 +740,7 @@ class Cache:
 
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
-    
+
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
         Prefetch a given layer on its device. If `only_non_sliding` is True, it will try to prefetch only the layers
@@ -750,7 +750,7 @@ class Cache:
         if only_non_sliding:
             # Try to find next non-sliding, starting at `layer_idx`
             try:
-                layer_idx = layer_idx + self.is_sliding[layer_idx :].index(False)
+                layer_idx = layer_idx + self.is_sliding[layer_idx:].index(False)
             # In this case, we need to circle back to the begining
             except ValueError:
                 layer_idx = self.is_sliding.index(False)
@@ -877,7 +877,7 @@ class Cache:
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
-    
+
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
@@ -1062,7 +1062,7 @@ class OffloadedCache(DynamicCache):
 
     def __init__(self) -> None:
         super().__init__()
-        self.cache_processor = OffloadedCacheProcessor
+        self.offloading = True
 
 
 class StaticCache(Cache):
@@ -1132,7 +1132,7 @@ class OffloadedStaticCache(StaticCache):
 
     def __init__(self, max_cache_len: int, config: PretrainedConfig):
         super().__init__(max_cache_len, config)
-        self.cache_processor = OffloadedCacheProcessor
+        self.offloading = True
 
 
 class SlidingWindowCache(Cache):
@@ -1227,7 +1227,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     def __init__(self, max_cache_len: int, config: PretrainedConfig):
         super().__init__(max_cache_len, config)
-        self.cache_processor = OffloadedCacheProcessor
+        self.offloading = True
 
 
 class QuantoQuantizedCache(Cache):
