@@ -163,25 +163,25 @@ class Gemma3RotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        inv_freqs_dict, rope_types = compute_rope_parameters(self.config, device)
-        self.rope_types = rope_types
-        self.rope_keys = inv_freqs_dict.keys()
-        for key in inv_freqs_dict:
-            self.register_buffer(f"{key}_inv_freq", inv_freqs_dict[key][0], persistent=False)
-            setattr(self, f"{key}_original_inv_freq", inv_freqs_dict[key][0])
-            setattr(self, f"{key}_attention_scaling", inv_freqs_dict[key][1])
+        rope_inv_freqs, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_type = rope_types
+        for layer_type in rope_inv_freqs:
+            self._update_inv_freq(rope_inv_freqs[layer_type][0], update_original=True, layer_type=layer_type)
+            setattr(self, f"{layer_type}_attention_scaling", rope_inv_freqs[layer_type][1])
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        position_embeddings = {}
-        for rope_key in self.rope_keys:
-            position_embeddings[rope_key] = self.apply_rope(x, position_ids, rope_key=rope_key)
+        if getattr(self.config, "layer_types", None) is not None:
+            position_embeddings = {}
+            for layer_type in self.config.layer_types:
+                position_embeddings[layer_type] = self.apply_rope(x, position_ids, layer_type=layer_type)
+        else:
+            position_embeddings = self.apply_rope(x, position_ids)
         return position_embeddings
 
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def apply_rope(self, x, position_ids, rope_key):
-        inv_freq = getattr(self, f"{rope_key}_inv_freq")
-        attention_scaling = getattr(self, f"{rope_key}_attention_scaling")
+    def apply_rope(self, x, position_ids, layer_type=None):
+        inv_freq, attention_scaling = self._get_inv_freq(layer_type=layer_type)
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
@@ -193,6 +193,28 @@ class Gemma3RotaryEmbedding(nn.Module):
             sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def _update_inv_freq(self, new_inv_freq, update_original=False, layer_type=None):
+        if layer_type:
+            inv_freq_name = f"{layer_type}_inv_freq"
+            original_freq_name = f"{layer_type}_original_inv_freq"
+        else:
+            inv_freq_name = "inv_freq"
+            original_freq_name = "original_inv_freq"
+
+        self.register_buffer(inv_freq_name, new_inv_freq, persistent=False)
+        if update_original:
+            setattr(self, original_freq_name, new_inv_freq)
+
+    def _get_inv_freq(self, layer_type=None):
+        if layer_type is not None:
+            inv_freq = getattr(self, f"{layer_type}_inv_freq")
+            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        else:
+            inv_freq = self.inv_freq
+            attention_scaling = self.attention_scaling
+
+        return inv_freq, attention_scaling
 
 
 def rotate_half(x):

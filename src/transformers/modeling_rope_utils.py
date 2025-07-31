@@ -31,6 +31,14 @@ def extract_rope_type_from_config(*args, **kwargs):
     pass
 
 
+def _get_rope_scaling_dict(config, layer_type: str) -> dict:
+    """Get the RoPE scaling dictionary for the specified layer."""
+    rope_scaling_dict = config.rope_scaling_dict
+    if layer_type is not None:
+        rope_scaling_dict = rope_scaling_dict[layer_type]
+    return rope_scaling_dict
+
+
 def dynamic_rope_update(rope_forward):
     """
     Decorator function to update the RoPE parameters in the forward pass, if the model is using a dynamic RoPE
@@ -44,7 +52,7 @@ def dynamic_rope_update(rope_forward):
         The decorated forward pass.
     """
 
-    def longrope_frequency_update(self, position_ids, device, rope_key):
+    def longrope_frequency_update(self, position_ids, device, layer_type=None):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
         if hasattr(self.config, "original_max_position_embeddings"):
@@ -52,23 +60,28 @@ def dynamic_rope_update(rope_forward):
         else:
             original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
-            if not hasattr(self, f"{rope_key}_long_inv_freq"):
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
-                rope_scaling_dict = self.config.rope_scaling_dict[rope_key]
-                self.long_inv_freq, _ = rope_init_fn(
+            if not hasattr(self, f"{layer_type}_long_inv_freq"):
+                rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+                rope_scaling_dict = _get_rope_scaling_dict(self.config, layer_type=layer_type)
+                long_inv_freq, _ = rope_init_fn(
                     self.config,
                     device,
                     seq_len=original_max_position_embeddings + 1,
                     rope_scaling_dict=rope_scaling_dict,
                 )
-            self.register_buffer(f"{rope_key}_inv_freq", self.long_inv_freq, persistent=False)
+            self._update_inv_freq(long_inv_freq, layer_type=None)
+            setattr(self, f"{layer_type}_long_inv_freq", long_inv_freq)
         else:
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer(f"{rope_key}_inv_freq", self.original_inv_freq, persistent=False)
+            if layer_type is not None:
+                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
+            else:
+                original_inv_freq = self.original_inv_freq.to(device)
+            self._update_inv_freq(original_inv_freq, update_original=True, layer_type=layer_type)
 
-    def dynamic_frequency_update(self, position_ids, device, rope_key):
+    def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
         dynamic RoPE layers should recompute `inv_freq` in the following situations:
         1 - growing beyond the cached sequence length (allow scaling)
@@ -76,30 +89,37 @@ def dynamic_rope_update(rope_forward):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_types[rope_key]]
-            rope_scaling_dict = self.config.rope_scaling_dict[rope_key]
+            rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            rope_scaling_dict = _get_rope_scaling_dict(self.config, layer_type=layer_type)
             inv_freq, self.attention_scaling = rope_init_fn(
-                self.config, device, seq_len=seq_len, rope_scaling_dict=rope_scaling_dict
+                self.config,
+                device,
+                seq_len=seq_len,
+                rope_scaling_dict=rope_scaling_dict,
             )
-            self.register_buffer(
-                f"{rope_key}_inv_freq", inv_freq, persistent=False
-            )  # TODO joao: may break with compilation
+            # TODO joao: may break with compilation
+            self._update_inv_freq(inv_freq, layer_type=None)
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer(f"{rope_key}_inv_freq", self.original_inv_freq, persistent=False)
+            if layer_type is not None:
+                original_inv_freq = getattr(f"{layer_type}_original_inv_freq").to(device)
+            else:
+                original_inv_freq = self.original_inv_freq.to(device)
+            self._update_inv_freq(original_inv_freq, update_original=True, layer_type=layer_type)
             self.max_seq_len_cached = self.original_max_seq_len
 
     @wraps(rope_forward)
-    def wrapper(self, x, position_ids, rope_key="full_attention"):
-        if "dynamic" in self.rope_types[rope_key]:
-            dynamic_frequency_update(self, position_ids, device=x.device, rope_key=rope_key)
-        elif self.rope_types[rope_key] == "longrope":
-            longrope_frequency_update(self, position_ids, device=x.device, rope_key=rope_key)
-        return rope_forward(self, x, position_ids, rope_key=rope_key)
+    def wrapper(self, x, position_ids, layer_type=None):
+        rope_type = self.rope_type if hasattr(self, "rope_type") else self.rope_types[layer_type]
+        if "dynamic" in rope_type:
+            dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
+        elif rope_type == "longrope":
+            longrope_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
+        return rope_forward(self, x, position_ids, layer_type=layer_type)
 
     return wrapper
 
@@ -447,19 +467,27 @@ def extract_rope_scaling_dict_from_config(config):
     # For example `rope_scaling={"global": {}, "local": {}}` to alternate between global and local attention layers.
     rope_scaling_dict = getattr(config, "rope_scaling", None)
 
-    if rope_scaling_dict is not None and ("type" in rope_scaling_dict or "rope_type" in rope_scaling_dict):
-        # if there is a 'type' field, copy it it to 'rope_type'.
-        if "type" in rope_scaling_dict:
-            rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
-        rope_scaling_dict["rope_theta"] = config.rope_theta
-        rope_scaling_dict = {"full_attention": rope_scaling_dict}
-    elif rope_scaling_dict is None:
-        rope_scaling_dict = {"full_attention": {"rope_type": "default", "rope_theta": config.rope_theta}}
+    if getattr(config, "layer_types", None) is not None:
+        if rope_scaling_dict is not None and ("type" in rope_scaling_dict or "rope_type" in rope_scaling_dict):
+            # if there is a 'type' field, copy it it to 'rope_type'.
+            if "type" in rope_scaling_dict:
+                rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
+            rope_scaling_dict["rope_theta"] = config.rope_theta
+            rope_scaling_dict = {"full_attention": rope_scaling_dict}
+        elif rope_scaling_dict is None:
+            rope_scaling_dict = {"full_attention": {"rope_type": "default", "rope_theta": config.rope_theta}}
+        else:
+            for rope_key in rope_scaling_dict:
+                if "type" in rope_scaling_dict[rope_key]:
+                    rope_scaling_dict[rope_key]["rope_type"] = rope_scaling_dict[rope_key].pop("type")
     else:
-        for rope_key in rope_scaling_dict:
-            if "type" in rope_scaling_dict[rope_key]:
-                rope_scaling_dict[rope_key]["rope_type"] = rope_scaling_dict[rope_key].pop("type")
-
+        if rope_scaling_dict is None:
+            rope_scaling_dict = {"rope_type": "default", "rope_theta": config.rope_theta}
+        else:
+            if "type" in rope_scaling_dict:
+                rope_scaling_dict["rope_type"] = rope_scaling_dict.pop("type")
+            if "rope_theta" not in rope_scaling_dict:
+                rope_scaling_dict["rope_theta"] = config.rope_theta
     config.rope_scaling_dict = rope_scaling_dict
     return rope_scaling_dict
 
@@ -484,15 +512,21 @@ def compute_rope_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     rope_scaling_dicts = extract_rope_scaling_dict_from_config(config)
-    rope_inv_freqs = {}
-    rope_types = {}
-    for rope_key in rope_scaling_dicts:
-        rope_scaling_dict = rope_scaling_dicts[rope_key]
-        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dict["rope_type"]]
-        inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dict, device=device)
-        rope_inv_freqs[rope_key] = (inv_freq, attention_scaling)
-        rope_types[rope_key] = rope_scaling_dict["rope_type"]
-    return rope_inv_freqs, rope_types
+
+    if hasattr(config, "layer_types"):
+        rope_inv_freqs = {}
+        rope_types = {}
+        for rope_key in rope_scaling_dicts:
+            rope_scaling_dict = rope_scaling_dicts[rope_key]
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dict["rope_type"]]
+            inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dict, device=device)
+            rope_inv_freqs[rope_key] = (inv_freq, attention_scaling)
+            rope_types[rope_key] = rope_scaling_dict["rope_type"]
+        return rope_inv_freqs, rope_types
+    else:
+        rope_init_fn = ROPE_INIT_FUNCTIONS[rope_scaling_dicts["rope_type"]]
+        inv_freq, attention_scaling = rope_init_fn(config, rope_scaling_dict=rope_scaling_dicts, device=device)
+        return inv_freq, attention_scaling
 
 
 def _check_received_keys(
@@ -525,15 +559,24 @@ def _check_received_keys(
 
 
 def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
-    for key in ["rope_scaling", "local_rope_scaling"]:
-        rope_scaling = getattr(config, key, None)
-        if rope_scaling is not None:
-            rope_type = rope_scaling.get(
-                "rope_type", rope_scaling.get("type", None)
-            )  # BC: "rope_type" was originally "type"
-            required_keys = {"rope_type"}
-            received_keys = set(rope_scaling.keys())
-            _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+    rope_scaling_dict = config.rope_scaling
+
+    if getattr(config, "layer_types") is not None:
+        missing_rope_keys = set(config.layer_types) - set(rope_scaling_dict.keys())
+        if missing_rope_keys:
+            raise KeyError(
+                f"Missing required keys in `rope_scaling`: {missing_rope_keys}. The `rope_scaling` dict should "
+                "contain keys for all types in `config.layer_types`"
+            )
+    else:
+        rope_scaling_dict = {"full_attention": rope_scaling_dict}
+
+    for dictionary in rope_scaling_dict.values():
+        # BC: "rope_type" was originally "type"
+        rope_type = dictionary.get("rope_type", dictionary.get("type", None))
+        required_keys = {"rope_type", "rope_theta"}
+        received_keys = set(dictionary.keys())
+        _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
 
 def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
@@ -543,7 +586,7 @@ def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_ke
             rope_type = rope_scaling.get(
                 "rope_type", rope_scaling.get("type", None)
             )  # BC: "rope_type" was originally "type"
-            required_keys = {"rope_type", "factor"}
+            required_keys = {"rope_type", "factor", "rope_theta"}
             received_keys = set(rope_scaling.keys())
             _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
@@ -559,7 +602,7 @@ def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_k
             rope_type = rope_scaling.get(
                 "rope_type", rope_scaling.get("type", None)
             )  # BC: "rope_type" was originally "type"
-            required_keys = {"rope_type", "factor"}
+            required_keys = {"rope_type", "factor", "rope_theta"}
             # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
             optional_keys = {"original_max_position_embeddings"}
             received_keys = set(rope_scaling.keys())
@@ -577,7 +620,7 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
             rope_type = rope_scaling.get(
                 "rope_type", rope_scaling.get("type", None)
             )  # BC: "rope_type" was originally "type"
-            required_keys = {"rope_type", "factor"}
+            required_keys = {"rope_type", "factor", "rope_theta"}
             optional_keys = {
                 "attention_factor",
                 "beta_fast",
@@ -619,7 +662,7 @@ def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optiona
             rope_type = rope_scaling.get(
                 "rope_type", rope_scaling.get("type", None)
             )  # BC: "rope_type" was originally "type"
-            required_keys = {"rope_type", "short_factor", "long_factor"}
+            required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta"}
             # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
             optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
             received_keys = set(rope_scaling.keys())
@@ -683,6 +726,7 @@ def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[
                 "original_max_position_embeddings",
                 "low_freq_factor",
                 "high_freq_factor",
+                "rope_theta",
             }
             received_keys = set(rope_scaling.keys())
             _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)

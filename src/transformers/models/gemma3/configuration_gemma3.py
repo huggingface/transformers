@@ -23,6 +23,7 @@ import warnings
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -223,30 +224,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
 
-        # Validate the correctness of rotary position embeddings parameters
-        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
-        # per RoPE type and raise a warning
-        local_rope_scaling = local_rope_scaling if local_rope_scaling is not None else {"rope_type": "default"}
-        if rope_scaling is not None and ("type" in rope_scaling or "rope_type" in rope_scaling):
-            # if there is a 'type' field, copy it it to 'rope_type'.
-            if "type" in rope_scaling:
-                rope_scaling["rope_type"] = rope_scaling.pop("type")
-            rope_scaling = {
-                "full_attention": {"rope_theta": kwargs.pop("rope_theta", 1_000_000.0), **rope_scaling},
-                "sliding_attention": {"rope_theta": rope_local_base_freq, **local_rope_scaling},
-            }
-        elif rope_scaling is None:
-            rope_scaling = {
-                "full_attention": {
-                    "rope_type": "default",
-                    "rope_theta": kwargs.pop("rope_theta", 1_000_000.0),
-                },
-                "sliding_attention": {"rope_theta": rope_local_base_freq, **local_rope_scaling},
-            }
-
-        self.rope_scaling = rope_scaling
-        # rope_config_validation(self)
-
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
 
@@ -256,6 +233,20 @@ class Gemma3TextConfig(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
+        # per RoPE type and raise a warning
+        rope_theta = getattr(self, "rope_theta", 1_000_000)
+        local_rope_scaling = local_rope_scaling if local_rope_scaling is not None else {"rope_type": "default"}
+        sliding_attention_rope = {"rope_theta": rope_local_base_freq, **local_rope_scaling}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            (full_attention_rope.update(**rope_scaling),)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
     @property
     def sliding_window_pattern(self):
