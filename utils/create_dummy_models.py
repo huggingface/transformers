@@ -1252,7 +1252,12 @@ def build_tiny_model_summary(results, organization=None, token=None):
     """
     tiny_model_summary = {}
     for config_name in results:
-        processors = [key for key, value in results[config_name]["processor"].items()]
+        try:
+            processors = [key for key, value in results[config_name]["processor"].items()]
+        except:
+            print("strange result")
+            print(config_name)
+            print(results[config_name])
         tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
         for framework in FRAMEWORKS:
