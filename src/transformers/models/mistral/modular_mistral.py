@@ -171,7 +171,7 @@ class MistralModel(LlamaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             causal_mask = (
                 attention_mask[decoder_layer.attention_type]
-                if decoder_layer.attention_type is not None
+                if decoder_layer.attention_type is not None and isinstance(attention_mask, dict)
                 else attention_mask
             )
             hidden_states = decoder_layer(
