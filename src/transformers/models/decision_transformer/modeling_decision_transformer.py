@@ -34,7 +34,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -256,7 +255,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -380,7 +378,6 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
         self.mlp = DecisionTransformerGPT2MLP(inner_dim, config)
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.53.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],

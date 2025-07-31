@@ -35,7 +35,6 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from ..utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -576,7 +575,6 @@ class GenerationConfig(PushToHubMixin):
                 )
         return generation_mode
 
-    @deprecate_kwarg("is_init", version="4.54.0")
     def validate(self, strict=False):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence

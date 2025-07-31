@@ -55,7 +55,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -525,7 +524,6 @@ class Wav2Vec2Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

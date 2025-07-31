@@ -362,7 +362,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)

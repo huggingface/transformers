@@ -493,9 +493,9 @@ class XCLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return XCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(),
-            self.vision_model_tester.get_config(),
+        return XCLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=self.projection_dim,
         )
 

@@ -44,7 +44,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_megatron_bert import MegatronBertConfig
 
 
@@ -207,14 +206,12 @@ class MegatronBertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("encoder_attention_mask", version="4.55.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -225,13 +222,7 @@ class MegatronBertSelfAttention(nn.Module):
             1, 2
         )
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-        if is_cross_attention and encoder_attention_mask is not None:
-            attention_mask = encoder_attention_mask
-
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
