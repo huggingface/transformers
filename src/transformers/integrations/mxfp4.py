@@ -390,6 +390,7 @@ def dequantize_and_quantize(
                 with torch.cuda.device(target_device):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
                 setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
                 setattr(module, proj, triton_weight_tensor)
                 setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
             return
