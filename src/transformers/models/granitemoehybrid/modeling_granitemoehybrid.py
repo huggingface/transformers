@@ -1370,7 +1370,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
-                position_embeddings=position_embeddings[layer_type],
+                position_embeddings=position_embeddings[layer_type] if position_embeddings is not None else None,
             )
 
             hidden_states = layer_outputs[0]
