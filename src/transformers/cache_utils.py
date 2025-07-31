@@ -884,6 +884,9 @@ class Cache:
     @property
     def is_compileable(self) -> bool:
         """Return whether the cache is compileable"""
+        # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
+        if len(self.layers) == 0:
+            return False
         return all(layer.is_compileable for layer in self.layers)
 
     @property
