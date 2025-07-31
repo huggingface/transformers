@@ -31,31 +31,35 @@ def conversion(config):
     # -- tokenizer
     tokenizer = LlasaTokenizer.from_pretrained_llm(
         config.llm_model,
-        model_max_length=config.original_model.model_max_length,
+        model_max_length=config.original_model.max_length,
         codebook_size=config.original_model.codebook_size,
     )
     speech_end_id = tokenizer.convert_tokens_to_ids(tokenizer.llasa_token["speech_generation_end"])
+
     # -- model config and model itself
-    model_config = LlasaConfig.from_pretrained_llm(config.llm_model)
+    model_config = LlasaConfig.from_pretrained_llm(config.llm_model, **config.original_model)
+    
     # -- generation configuration
     model_config.eos_token_id = speech_end_id
-    model_config.max_length = config.original_model.model_max_length
+
+    # -- create model
     model = LlasaForCausalLM(model_config)
     if config.remote_repo.dtype == "bfloat16":
         model.to(torch.bfloat16)
         print("Model dtype : ", model.dtype)
     assert model.lm_head.weight.size(0) == len(tokenizer)
     assert model.lm_head.weight.size(0) == model_orig.lm_head.weight.size(0)
+    
     # -- copy model weights
     model.load_state_dict(model_orig.state_dict())
 
-    # save converted model
+    # -- save converted model
     if config.remote_repo.id:
         print(f"Pushing a {model.__class__.__name__} to Hugging Face Hub: {config.remote_repo.id}")
         model.push_to_hub(config.remote_repo.id, private=config.remote_repo.private, use_temp_dir=True)
         print(f"Pushing a {tokenizer.__class__.__name__} to Hugging Face Hub: {config.remote_repo.id}")
         tokenizer.push_to_hub(config.remote_repo.id, private=True, use_temp_dir=True)
-    elif config.local_model_path:
+    if config.local_model_path:
         model.save_pretrained(config.local_model_path)
         print(f"Model saved locally at: {config.local_model_path}")
 

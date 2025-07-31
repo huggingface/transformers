@@ -108,6 +108,7 @@ class LlasaConfig(LlamaConfig):
         head_dim=None,
         codebook_size=65536,
         llasa_start_end_tokens=None,
+        sampling_rate=16000,
         **kwargs,
     ):
         super().__init__(
@@ -138,6 +139,7 @@ class LlasaConfig(LlamaConfig):
 
         # Adjust vocab size to accommodate the new tokenizer
         # https://github.com/zhenye234/LLaSA_training/blob/main/train_tts.py#L249-L251
+        self.sampling_rate = sampling_rate
         self.codebook_size = codebook_size
         if llasa_start_end_tokens is None:
             llasa_start_end_tokens = TTS_TOKENS_DICT

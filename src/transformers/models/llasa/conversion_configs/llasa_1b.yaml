@@ -1,11 +1,13 @@
+# python src/transformers/models/llasa/convert_llasa_to_hf.py -cn llasa_1b
 original_model:
   repo: HKUSTAudio/Llasa-1B
-  model_max_length: 2048
+  max_length: 2048
   codebook_size: 65536
+  sampling_rate: 16000
 
 llm_model: meta-llama/Llama-3.2-1B-Instruct
 
-local_model_path: /home/eric_bezzam/transformers/src/transformers/models/llasa/1B
+local_model_path: /raid/eric/llasa/1B
 
 remote_repo:
   dtype: bfloat16   # as in original Hub model: https://huggingface.co/HKUSTAudio/Llasa-1B
