@@ -567,7 +567,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4", "GLM4"),
         ("glm4_moe", "Glm4MoE"),
         ("glm4v", "GLM4V"),
-        ("glm4v_moe", "glm4VMOE"),
+        ("glm4v_moe", "GLM4VMOE"),
         ("glm4v_moe_text", "GLM4VMOE"),
         ("glm4v_text", "GLM4V"),
         ("glpn", "GLPN"),
