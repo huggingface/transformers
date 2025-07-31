@@ -34,7 +34,10 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     BertTokenizer,
+    LlamaTokenizer,
+    LlavaProcessor,
     ProcessorMixin,
+    SiglipImageProcessor,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -58,6 +61,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
+SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
 
@@ -436,6 +440,25 @@ class ProcessorPushToHubTester(unittest.TestCase):
             for k, v in processor.feature_extractor.__dict__.items():
                 self.assertEqual(v, getattr(new_processor.feature_extractor, k))
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
+
+    def test_push_to_hub_with_chat_templates(self):
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            image_processor = SiglipImageProcessor()
+            chat_template = {
+                "default": "default dummy template for testing purposes only",
+                "secondary": "secondary dummy chat template for testing purposes only",
+            }
+            processor = LlavaProcessor(
+                tokenizer=tokenizer, image_processor=image_processor, chat_template=chat_template
+            )
+            self.assertListEqual(list(processor.chat_template.keys()), ["default", "secondary"])
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
+
+            new_processor = LlavaProcessor.from_pretrained(tmp_repo.repo_id)
+            self.assertListEqual(list(new_processor.chat_template.keys()), ["secondary", "default"])
 
     def test_push_to_hub_in_organization_via_save_pretrained(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
