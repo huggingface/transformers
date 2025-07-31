@@ -2718,7 +2718,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
         return applicable_attn_implementation
 
-    def set_correct_implementation(self, requested_attention, is_init_check):
+    def get_correct_attn_implementation(self, requested_attention, is_init_check):
         if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
