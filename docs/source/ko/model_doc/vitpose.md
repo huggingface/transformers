@@ -158,7 +158,7 @@ image_pose_result = pose_results[0]
 
 - [`AutoProcessor`]를 사용하여 바운딩 박스와 이미지 입력을 자동으로 준비하세요.
 - ViTPose는 탑다운 방식의 포즈 추정기입니다. 키포인트 예측 전에 먼저 객체 감지기를 사용하여 개인을 감지합니다.
-- ViTPose++는 6개의 다른 MoE 전문가 헤드(COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`)를 가지고 있어 6개의 다른 데이터셋을 지원합니다. 사용할 전문가를 나타내기 위해 데이터셋에 해당하는 특정 값을 `dataset_index`에 전달하세요.
+- ViTPose++는 6개의 다른 MoE 전문가 헤드(COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`)를 가지고 있어 6개의 다른 데이터셋을 지원합니다. 사용할 전문가 네트워크를 나타내기 위해 데이터셋에 해당하는 특정 값을 `dataset_index`에 전달하세요.
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
@@ -269,10 +269,10 @@ image_pose_result = pose_results[0]
         scores = np.array(pose_result["scores"])
         keypoints = np.array(pose_result["keypoints"])
 
-        # 이미지에 각 포인트를 그립니다
+        # 이미지에 각 키포인트를 그립니다
         draw_points(numpy_image, keypoints, scores, keypoint_colors, keypoint_score_threshold=0.3, radius=4, show_keypoint_weight=False)
 
-        # 링크를 그립니다
+        # 연결선을 그립니다
         draw_links(numpy_image, keypoints, scores, keypoint_edges, link_colors, keypoint_score_threshold=0.3, thickness=1, show_keypoint_weight=False)
 
     pose_image = Image.fromarray(numpy_image)
