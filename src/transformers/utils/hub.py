@@ -166,7 +166,7 @@ def list_repo_templates(
     if not local_files_only:
         try:
             return [
-                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/").removesuffix(".jinja")
+                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
                 for entry in list_repo_tree(
                     repo_id=repo_id,
                     revision=revision,
