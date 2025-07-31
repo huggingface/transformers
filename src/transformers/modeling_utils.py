@@ -2683,7 +2683,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-
+            attention_wrapper = None
+            if "|" in applicable_attn_implementation:
+                attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
+                attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
             if ":" in applicable_attn_implementation:
                 repo_id, kernel_name = attn_implementation.split(":")
@@ -2695,22 +2698,28 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 kernel = get_kernel(repo_id)
                 if hasattr(kernel, "flash_attn_varlen_func"):
-                    kernel_function = partial(flash_attention_forward, implementation=kernel)
+                    if attention_wrapper is None:
+                        attention_wrapper = flash_attention_forward
+                    kernel_function = partial(attention_wrapper, implementation=kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                # Register it
-                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
-                applicable_attn_implementation = repo_id
+                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(
+                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                )
             except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
+
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-        if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+        return applicable_attn_implementation
+
+    def set_correct_implementation(self, requested_attention, is_init_check):
+        if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
-                f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
+                f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
                 '`attn_implementation="eager"` (manual attention implementation)'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
@@ -2726,23 +2735,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if applicable_attn_implementation == "flash_attention_2":
+        if requested_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "flash_attention_3":
+        elif re == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "flex_attention":
+        elif requested_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "sdpa":
+        elif requested_attention == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
                 # In this case, sdpa was requested explicitly, but we can't use it, so let's raise
-                if attn_implementation == "sdpa":
+                if requested_attention == "sdpa":
                     raise e
-                applicable_attn_implementation = "eager"
-
-        return applicable_attn_implementation
+                requested_attention = "eager"
+        return requested_attention
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2814,7 +2822,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 subconfig_key, submodule.config._attn_implementation
                             )
                             break
-                submodule.set_attn_implementation(sub_implementation)
+                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                submodule.config._attn_implementation = sub_implementation
                 subconfigs_changed.add(submodule.config.__class__)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
