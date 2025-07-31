@@ -38,9 +38,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -243,35 +244,62 @@ class ModernBertMLP(nn.Module):
 class ModernBertRotaryEmbedding(nn.Module):
     def __init__(self, config: ModernBertConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        rope_inv_freqs, rope_types = compute_rope_parameters(self.config, device)
+        self.rope_type = rope_types
+        for layer_type in rope_inv_freqs:
+            self._update_inv_freq(rope_inv_freqs[layer_type][0], update_original=True, layer_type=layer_type)
+            setattr(self, f"{layer_type}_attention_scaling", rope_inv_freqs[layer_type][1])
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        if getattr(self.config, "layer_types", None) is not None:
+            position_embeddings = {}
+            for layer_type in self.config.layer_types:
+                position_embeddings[layer_type] = self.apply_rope(x, position_ids, layer_type=layer_type)
+        else:
+            position_embeddings = self.apply_rope(x, position_ids)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, layer_type=None):
+        inv_freq, attention_scaling = self._get_inv_freq(layer_type=layer_type)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def _update_inv_freq(self, new_inv_freq, update_original=False, layer_type=None):
+        if layer_type:
+            inv_freq_name = f"{layer_type}_inv_freq"
+            original_freq_name = f"{layer_type}_original_inv_freq"
+        else:
+            inv_freq_name = "inv_freq"
+            original_freq_name = "original_inv_freq"
+
+        self.register_buffer(inv_freq_name, new_inv_freq, persistent=False)
+        if update_original:
+            setattr(self, original_freq_name, new_inv_freq)
+
+    def _get_inv_freq(self, layer_type=None):
+        if layer_type is not None:
+            inv_freq = getattr(self, f"{layer_type}_inv_freq")
+            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        else:
+            inv_freq = self.inv_freq
+            attention_scaling = self.attention_scaling
+
+        return inv_freq, attention_scaling
 
 
 def rotate_half(x):
@@ -317,11 +345,12 @@ def eager_attention_forward(
     local_attention: tuple[int, int],
     bs: int,
     dim: int,
+    position_embeddings: Optional[torch.Tensor],
     output_attentions: Optional[bool] = False,
     **_kwargs,
 ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
@@ -358,7 +387,7 @@ def flash_attention_forward(
     **_kwargs,
 ) -> tuple[torch.Tensor]:
     # (total_seqlen, 3, nheads, headdim)
-    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
+    qkv = module.rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
 
     convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
     if convert_dtype:
@@ -397,10 +426,11 @@ def sdpa_attention_forward(
     local_attention: tuple[int, int],
     bs: int,
     dim: int,
+    position_embeddings: Optional[torch.Tensor],
     **_kwargs,
 ) -> tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
@@ -462,17 +492,8 @@ class ModernBertAttention(nn.Module):
         else:
             self.local_attention = (-1, -1)
 
-        max_position_embeddings = config.max_position_embeddings
-        if self.local_attention != (-1, -1):
-            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
-            max_position_embeddings = config.local_attention
-
         if config._attn_implementation == "flash_attention_2":
-            self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
-                dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
-            )
-        else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config)
+            self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(config)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -482,6 +503,7 @@ class ModernBertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         qkv = self.Wqkv(hidden_states)
@@ -495,11 +517,11 @@ class ModernBertAttention(nn.Module):
         attn_outputs = MODERNBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
             self,
             qkv=qkv,
-            rotary_emb=self.rotary_emb,
             local_attention=self.local_attention,
             bs=bs,
             dim=self.all_head_size,
             output_attentions=output_attentions,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -519,6 +541,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         self.attn = ModernBertAttention(config=config, layer_id=layer_id)
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
+        self.attention_type = config.layer_types[layer_id]
 
     @torch.compile(dynamic=True)
     def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -533,6 +556,8 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
+        position_embeddings: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
         attn_outputs = self.attn(
             self.attn_norm(hidden_states),
@@ -542,6 +567,8 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             output_attentions=output_attentions,
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = hidden_states + attn_outputs[0]
         mlp_output = (
@@ -757,6 +784,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             [ModernBertEncoderLayer(config, layer_id) for layer_id in range(config.num_hidden_layers)]
         )
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.rotary_emb = ModernBertRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -782,6 +810,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutput]:
         r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -848,6 +877,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             )
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -861,6 +891,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 output_attentions=output_attentions,
+                position_embeddings=position_embeddings[encoder_layer.attention_type],
+                **kwargs,
             )
             hidden_states = layer_outputs[0]
             if output_attentions and len(layer_outputs) > 1:
@@ -981,7 +1013,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1038,6 +1070,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -1113,7 +1146,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1152,6 +1185,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -1236,6 +1270,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1272,6 +1307,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -1326,7 +1362,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1360,6 +1396,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 

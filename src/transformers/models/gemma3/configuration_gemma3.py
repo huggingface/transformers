@@ -81,8 +81,6 @@ class Gemma3TextConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -134,6 +132,9 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        local_rope_scaling (`Dict`, *optional*):
+            Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
+            in local attention.
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
 
@@ -164,6 +165,7 @@ class Gemma3TextConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"local_rope_theta": "rope_local_base_freq"}
 
     def __init__(
         self,
@@ -183,7 +185,6 @@ class Gemma3TextConfig(PretrainedConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=1_000_000.0,
         attention_bias=False,
         attention_dropout=0.0,
         query_pre_attn_scalar=256,
@@ -192,6 +193,7 @@ class Gemma3TextConfig(PretrainedConfig):
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         rope_scaling=None,
+        local_rope_scaling=None,
         rope_local_base_freq=10_000.0,
         **kwargs,
     ):
@@ -213,7 +215,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -222,10 +223,6 @@ class Gemma3TextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-
-        self.rope_local_base_freq = rope_local_base_freq
-        self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -236,6 +233,20 @@ class Gemma3TextConfig(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # If the config was saved with a simple rope scaling dict, we need to convert to nested structure
+        # per RoPE type and raise a warning
+        rope_theta = getattr(self, "rope_theta", 1_000_000)
+        local_rope_scaling = local_rope_scaling if local_rope_scaling is not None else {"rope_type": "default"}
+        sliding_attention_rope = {"rope_theta": rope_local_base_freq, **local_rope_scaling}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
     @property
     def sliding_window_pattern(self):

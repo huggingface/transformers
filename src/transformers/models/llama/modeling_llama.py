@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import compute_rope_parameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -72,35 +72,62 @@ class LlamaRMSNorm(nn.Module):
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(self, config: LlamaConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, attention_scaling = compute_rope_parameters(self.config, device)
+        self.rope_type = config.rope_scaling_dict["rope_type"]
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+        self.attention_scaling = attention_scaling
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        if getattr(self.config, "layer_types", None) is not None:
+            position_embeddings = {}
+            for layer_type in self.config.layer_types:
+                position_embeddings[layer_type] = self.apply_rope(x, position_ids, layer_type=layer_type)
+        else:
+            position_embeddings = self.apply_rope(x, position_ids)
+        return position_embeddings
+
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def apply_rope(self, x, position_ids, layer_type=None):
+        inv_freq, attention_scaling = self._get_inv_freq(layer_type=layer_type)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def _update_inv_freq(self, new_inv_freq, update_original=False, layer_type=None):
+        if layer_type:
+            inv_freq_name = f"{layer_type}_inv_freq"
+            original_freq_name = f"{layer_type}_original_inv_freq"
+        else:
+            inv_freq_name = "inv_freq"
+            original_freq_name = "original_inv_freq"
+
+        self.register_buffer(inv_freq_name, new_inv_freq, persistent=False)
+        if update_original:
+            setattr(self, original_freq_name, new_inv_freq)
+
+    def _get_inv_freq(self, layer_type=None):
+        if layer_type is not None:
+            inv_freq = getattr(self, f"{layer_type}_inv_freq")
+            attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+        else:
+            inv_freq = self.inv_freq
+            attention_scaling = self.attention_scaling
+
+        return inv_freq, attention_scaling
 
 
 def rotate_half(x):

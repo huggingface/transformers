@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import warnings
 from collections.abc import Callable
 from typing import Any, Optional, Union
@@ -159,6 +158,9 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        local_rope_scaling (`Dict`, *optional*):
+            Dictionary equivalent to `config.rope_scaling` containing the scaling configuration for the RoPE embeddings used
+            in local attention.
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
 
@@ -174,6 +176,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
     """
 
     model_type = "gemma3_text"
+    attribute_map = {"local_rope_theta": "rope_local_base_freq"}
 
     def __init__(
         self,
@@ -202,6 +205,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
         rope_scaling=None,
+        local_rope_scaling=None,
         rope_local_base_freq=10_000.0,
         **kwargs,
     ):
@@ -235,6 +239,7 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
+        self.local_rope_scaling = local_rope_scaling
         rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
@@ -386,7 +391,7 @@ class Gemma3RMSNorm(Gemma2RMSNorm):
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config: Gemma3TextConfig, device=None):
+    def __init__(self, config: Gemma3TextConfig, device=None, is_global=True):
         super().__init__(config)
 
 
@@ -543,12 +548,7 @@ class Gemma3TextModel(Gemma2Model):
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
 
-        # TODO: raushan fix this after RoPE refactor. For now we hack it by reassigning thetas
-        # when we want to create a local RoPE layer. Config defaults should hold values for global RoPE
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config)
+        self.rotary_emb_local = Gemma3RotaryEmbedding(config=config, is_global=False)
 
     def forward(
         self,
