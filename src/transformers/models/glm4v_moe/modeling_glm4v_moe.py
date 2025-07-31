@@ -847,6 +847,7 @@ class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
@@ -854,8 +855,8 @@ class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
         else:
             self.mlp = Glm4v_moeTextMLP(config)
 
-        self.input_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Glm4v_moeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4v_moeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
