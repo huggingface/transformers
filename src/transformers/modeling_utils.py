@@ -2684,8 +2684,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
+            # FIXME @ArthurZucker this is dirsty, did not want to a lof of extra work
             if "|" in applicable_attn_implementation:
                 attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
+                # we usually wrap to prepare inputs etcs
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
             if ":" in applicable_attn_implementation:
@@ -2737,7 +2739,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Perform relevant checks
         if requested_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif re == "flash_attention_3":
+        elif requested_attention == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
         elif requested_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
