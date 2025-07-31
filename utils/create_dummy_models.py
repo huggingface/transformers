@@ -1443,6 +1443,7 @@ def create_tiny_models(
             "mpt",
 
         ]
+        skip = []
         all_build_args = [x for x in all_build_args if x[0].model_type not in skip]
 
         index = 0
