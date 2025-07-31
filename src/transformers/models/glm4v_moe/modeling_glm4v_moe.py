@@ -556,6 +556,27 @@ class Glm4v_moeTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Glm4v_moeTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Glm4v_moeTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 def rotate_half_llm(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -630,7 +651,6 @@ class Glm4v_moeTextAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.rope_scaling = config.rope_scaling
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -646,8 +666,9 @@ class Glm4v_moeTextAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
-            self.q_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_norm = Glm4v_moeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Glm4v_moeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rope_scaling = config.rope_scaling
 
     def forward(
         self,

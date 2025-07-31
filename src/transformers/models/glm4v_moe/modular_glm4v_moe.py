@@ -26,6 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
+    Glm4MoEAttention,
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
     Glm4MoeMoE,
@@ -423,34 +424,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-class Glm4v_moeTextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+class Glm4v_moeTextAttention(Glm4MoEAttention):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
+        super().__init__(config, layer_idx)
         self.rope_scaling = config.rope_scaling
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.use_qk_norm = config.use_qk_norm
-        if self.use_qk_norm:
-            self.q_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Glm4v_moeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
