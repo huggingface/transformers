@@ -99,14 +99,14 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if (
             device_map is not None
             and isinstance(device_map, dict)
             and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
         ):
             device_map_without_lm_head = {
-                key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
+                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
             if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
@@ -177,7 +177,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Int8Params):
             if self.pre_quantized:
-                if param_name.replace("weight", "SCB") not in state_dict.keys():
+                if param_name.replace("weight", "SCB") not in state_dict:
                     raise ValueError("Missing quantization component `SCB`")
                 if param_value.dtype != torch.int8:
                     raise ValueError(
@@ -204,8 +204,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         fp16_statistics_key = param_name.replace("weight", "SCB")
         fp16_weights_format_key = param_name.replace("weight", "weight_format")
 
-        fp16_statistics = state_dict.get(fp16_statistics_key, None)
-        fp16_weights_format = state_dict.get(fp16_weights_format_key, None)
+        fp16_statistics = state_dict.get(fp16_statistics_key)
+        fp16_weights_format = state_dict.get(fp16_weights_format_key)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:

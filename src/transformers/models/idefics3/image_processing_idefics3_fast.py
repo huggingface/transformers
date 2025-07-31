@@ -514,9 +514,9 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of patches per image.
         """
-        do_image_splitting = images_kwargs.get("do_image_splitting", None) or self.do_image_splitting
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
-        size = images_kwargs.get("size", None) or self.size
+        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        size = images_kwargs.get("size", self.size)
 
         num_patches = num_rows = num_cols = 1
         if do_image_splitting:

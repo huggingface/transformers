@@ -934,7 +934,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         return self.model.get_input_embeddings()
 
     def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
-        attention_mask = kwargs.get("attention_mask", None)
+        attention_mask = kwargs.get("attention_mask")
 
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:

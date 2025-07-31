@@ -505,10 +505,10 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs.get("min_patches", None) or self.min_patches
-        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        patch_size = images_kwargs.get("size", None) or self.size
-        crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs.get("patch_size", self.size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:

@@ -373,18 +373,6 @@ class ChineseCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
-        Chinese-CLIP vision model configuration. Returns:
-            [`ChineseCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 class ChineseCLIPOnnxConfig(OnnxConfig):
     @property
