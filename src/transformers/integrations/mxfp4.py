@@ -88,6 +88,11 @@ def convert_moe_packed_tensors(
 ) -> torch.Tensor:
     import math
 
+    # Check if blocks and scales are on CPU, and move to GPU if so
+    if not blocks.is_cuda and torch.cuda.is_available():
+        blocks = blocks.cuda()
+        scales = scales.cuda()
+
     scales = scales.to(torch.int32) - 127
 
     assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
@@ -120,6 +125,11 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
+
+    # TODO: Delete after making sure this is not necessary! since we go back to cpu in the end in create_quantized_param using .to(target_device)
+    # Move back to CPU if needed
+    # if need_to_move_back:
+    #     out = out.cpu()
 
     return out
 
@@ -332,6 +342,9 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 setattr(module, param_name.rsplit(".", 1)[1], param_value)
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
+                # TODO: this is perhaps necessary since if target_device is cpu, and the param was on gpu
+                if target_device == "cpu" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
