@@ -41,7 +41,7 @@ jobs:
       - name: Create all tiny models (locally)
         working-directory: /transformers
         run: |
-          python3 utils/create_dummy_models.py tiny_local_models --all --num_workers 7
+          CUDA_VISIBLE_DEVICES="" python3 utils/create_dummy_models.py tiny_local_models --all --num_workers 7
 
       - name: Create all tiny models (locally)
         working-directory: /transformers
