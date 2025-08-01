@@ -150,7 +150,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             # bias could be loaded by regular set_module_tensor_to_device() from accelerate,
             # but it would wrongly use uninitialized weight there.
             return True
-        elif self.quantization_config.bnb_4bit_target_parameters is not None:            # Check if the parameter name is in the list of target parameters for quantization
+        elif (
+            self.quantization_config.bnb_4bit_target_parameters is not None
+        ):  # Check if the parameter name is in the list of target parameters for quantization
             return any(
                 target_param
                 for target_param in self.quantization_config.bnb_4bit_target_parameters
@@ -343,10 +345,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             matched_params = [
                 param_name
                 for param_name, _ in model.named_parameters()
-                if any(filter(
-                    lambda target_param: param_name.endswith("." + target_param) or param_name == target_param,
-                    self.quantization_config.bnb_4bit_target_parameters,
-                ))
+                if any(
+                    filter(
+                        lambda target_param: param_name.endswith("." + target_param) or param_name == target_param,
+                        self.quantization_config.bnb_4bit_target_parameters,
+                    )
+                )
             ]
 
             if any(matched_params):
