@@ -295,12 +295,13 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         Compute all visual embeddings, and set into llm embeddings.
         Args:
             data: Dict
-                tgt_sizes: image size after patch embedding
-                pixel_values: image features
-                image_bound: position of each picture corresponding to input_ids
-                input_ids: full input_ids, include placeholder
+                - tgt_sizes: image size after patch embedding
+                - pixel_values: image features
+                - image_bound: position of each picture corresponding to input_ids
+                - input_ids: full input_ids, include placeholder
+
         Returns:
-                embedding with vision, vision_hidden_states
+            embedding with vision, vision_hidden_states
         """
         if "vision_hidden_states" not in data:
             dtype = self.llm.model.embed_tokens.weight.dtype
@@ -360,9 +361,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     else:
                         vision_hidden_states.append([])
             else:  # no image
-                dummy_feature = []
-                for _ in range(len(pixel_values_list)):
-                    vision_hidden_states.append(dummy_feature)
+                vision_hidden_states.extend([[]] * len(pixel_values_list))
 
         else:
             vision_hidden_states = data["vision_hidden_states"]
@@ -548,36 +547,35 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         bs = len(input_embeddings)
         if len(data.get("audio_features", [])) > 0:
             assert len(audio_embeddings) == len(input_embeddings)
-            if len(audio_embeddings) > 0:
-                audio_bounds = data["audio_bounds"]
+            audio_bounds = data["audio_bounds"]
 
-                if self.config.chunk_input:
-                    for i in range(bs):
-                        audio_embs = torch.cat(audio_embeddings[i], dim=0).to(
-                            device=input_embeddings.device, dtype=input_embeddings.dtype
+            if self.config.chunk_input:
+                for i in range(bs):
+                    audio_embs = torch.cat(audio_embeddings[i], dim=0).to(
+                        device=input_embeddings.device, dtype=input_embeddings.dtype
+                    )
+                    audio_start_pos = 0
+                    for bound in audio_bounds[i]:
+                        audio_len = bound[1] - bound[0]
+                        input_embeddings[i, bound[0] : bound[1]] = audio_embs[
+                            audio_start_pos : audio_start_pos + audio_len, :
+                        ]
+                        audio_start_pos += audio_len
+            else:
+                for i in range(bs):
+                    audio_embs = audio_embeddings[i]
+                    bounds = audio_bounds[i]
+                    for embs, bound in zip(audio_embs, bounds):
+                        audio_indices = torch.arange(bound[0], bound[1], dtype=torch.long).to(
+                            input_embeddings.device
                         )
-                        audio_start_pos = 0
-                        for bound in audio_bounds[i]:
-                            audio_len = bound[1] - bound[0]
-                            input_embeddings[i, bound[0] : bound[1]] = audio_embs[
-                                audio_start_pos : audio_start_pos + audio_len, :
-                            ]
-                            audio_start_pos += audio_len
-                else:
-                    for i in range(bs):
-                        audio_embs = audio_embeddings[i]
-                        bounds = audio_bounds[i]
-                        for embs, bound in zip(audio_embs, bounds):
-                            audio_indices = torch.arange(bound[0], bound[1], dtype=torch.long).to(
-                                input_embeddings.device
-                            )
 
-                            if embs.shape[0] != len(audio_indices):
-                                raise ValueError(
-                                    f"Shape mismatch: Trying to assign embeddings of shape {embs.shape} "
-                                    f"to input indices of length {len(audio_indices)}"
-                                )
-                            input_embeddings[i, audio_indices] = embs.to(input_embeddings.dtype)
+                        if embs.shape[0] != len(audio_indices):
+                            raise ValueError(
+                                f"Shape mismatch: Trying to assign embeddings of shape {embs.shape} "
+                                f"to input indices of length {len(audio_indices)}"
+                            )
+                        input_embeddings[i, audio_indices] = embs.to(input_embeddings.dtype)
         elif self.training:
             for i in range(bs):
                 # dummy audio_embeddings
@@ -850,13 +848,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     chat_template=self.default_tts_chat_template if use_tts_template else None,
                 )
             )
-            input_images_list.append(images)
+            if images:
+                input_images_list.append(images)
             input_audios_list.append(audios)
             audio_parts_list.append(audio_parts)
 
         inputs = processor(
             prompts_lists,
-            input_images_list,
+            input_images_list if input_images_list else None,
             input_audios_list,
             audio_parts=audio_parts_list,
             max_slice_nums=max_slice_nums,
@@ -1012,7 +1011,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         model_inputs = self.processor(
             [prompt],
-            [images],
+            [images] if images else None,
             [audios],
             max_slice_nums=1 if max_slice_nums is None else max_slice_nums,
             use_image_id=False,

@@ -26,8 +26,8 @@ import torch
 from PIL import Image
 from transformers import AutoImageProcessor
 from transformers.image_processing_utils import BaseImageProcessor
-from transformers.image_transforms import to_channel_dimension_format
-from transformers.image_utils import ChannelDimension, infer_channel_dimension_format, is_torch_tensor, to_numpy_array, valid_images, make_nested_list_of_images
+from transformers.image_transforms import to_channel_dimension_format, to_pil_image
+from transformers.image_utils import ChannelDimension, infer_channel_dimension_format, to_numpy_array, valid_images, make_nested_list_of_images
 from transformers.utils import (
     TensorType,
     IMAGENET_DEFAULT_MEAN,
@@ -235,36 +235,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                 self.get_grid_placeholder(grid=grid)
         return final_placeholder
 
-    def to_pil_image(self, image, rescale=None) -> PIL.Image.Image:
-        """
-        Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
-        needed.
-
-        Args:
-            image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
-                The image to convert to the PIL Image format.
-            rescale (`bool`, *optional*):
-                Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
-                default to `True` if the image type is a floating type, `False` otherwise.
-        """
-        if isinstance(image, PIL.Image.Image):
-            return image
-        if is_torch_tensor(image):
-            image = image.numpy()
-
-        if isinstance(image, np.ndarray):
-            if rescale is None:
-                # rescale default to the array being of floating type.
-                rescale = isinstance(image.flat[0], np.floating)
-            # If the channel as been moved to first dim, we put it back at the end.
-            if image.ndim == 3 and image.shape[0] in [1, 3]:
-                image = image.transpose(1, 2, 0)
-            if rescale:
-                image = image * 255
-            image = image.astype(np.uint8)
-            return PIL.Image.fromarray(image)
-        return image
-
     def reshape_by_patch(self, image):
         """
         :param image: shape [3, H, W]
@@ -292,30 +262,20 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> MiniCPMOBatchFeature:
-        if isinstance(images, Image.Image):
-            images_list = [[images]]
-        elif isinstance(images[0], Image.Image):
-            images_list = [images]
-        else:
-            images_list = images
+        images_list = make_nested_list_of_images(images)
 
         new_images_list = []
         image_sizes_list = []
         tgt_sizes_list = []
 
         for _images in images_list:
-            if _images is None or len(_images) == 0:
-                new_images_list.append([])
-                image_sizes_list.append([])
-                tgt_sizes_list.append([])
-                continue
             if not valid_images(_images):
                 raise ValueError(
                     "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                     "torch.Tensor, tf.Tensor or jax.ndarray."
                 )
 
-            _images = [self.to_pil_image(image).convert("RGB")
+            _images = [to_pil_image(image).convert("RGB")
                        for image in _images]
             input_data_format = infer_channel_dimension_format(
                 np.array(_images[0]))
