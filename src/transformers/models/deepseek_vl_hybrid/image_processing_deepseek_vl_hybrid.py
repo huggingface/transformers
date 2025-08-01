@@ -321,6 +321,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         high_res_size = high_res_size if high_res_size is not None else self.high_res_size
         high_res_size_dict = get_size_dict(high_res_size)
 
+        images = self.fetch_images(images)
         images = make_list_of_images(images)
 
         if not valid_images(images):
