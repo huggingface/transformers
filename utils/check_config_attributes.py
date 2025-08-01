@@ -308,7 +308,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "DeformableDetrConfig": True,
         "DinatConfig": True,
         "DonutSwinConfig": True,
-        "FastConformerConfig": True,
         "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
         "LayoutLMv2Config": True,
