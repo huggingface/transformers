@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..modeling_utils import is_deepspeed_zero3_enabled, is_fsdp_enabled
 from ..utils import is_accelerate_available, is_torch_available, logging
 
 
@@ -51,11 +50,15 @@ FP4_VALUES = [
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+    w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
+    w, w_scale = swizzle_mxfp4(w, w_scale)
+    return w, w_scale
+
+def swizzle_mxfp4(w, w_scale):
     from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
     from triton_kernels.tensor_details import layout
     from triton_kernels.tensor_details.layout import StridedLayout
 
-    w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
 
@@ -68,12 +71,10 @@ def quantize_to_mxfp4(w):
     #     opt_flags.update_opt_flags_constraints(constraints)
     # # transpose the tensor so that the quantization axis is on dim1
 
-
     # TODO: there is still an issue with the scales on hopper
     # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
     # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
-
     return w, w_scale
 
 # Copied from GPT_OSS repo
@@ -121,7 +122,7 @@ def convert_moe_packed_tensors(
         sub[:, 1::2] = lut[idx_hi]
 
         torch.ldexp(sub, exp, out=sub)
-        del idx_lo, idx_hi, blk, exp
+        del idx_lo, idx_hi, blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
 
@@ -129,7 +130,7 @@ def convert_moe_packed_tensors(
     # Move back to CPU if needed
     # if need_to_move_back:
     #     out = out.cpu()
-    del blocks, scales
+    del blocks, scales, lut
     return out
 
 
@@ -140,46 +141,34 @@ class Mxfp4GptOssExperts(nn.Module):
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
-        self.expert_dim = self.intermediate_size
 
         self.gate_up_proj_blocks = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size // 32, 16, dtype=torch.uint8),
+            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, 16, dtype=torch.uint8),
             requires_grad=False,
         )
         self.gate_up_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size // 32, dtype=torch.uint8),
+            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, dtype=torch.uint8),
             requires_grad=False,
         )
         self.gate_up_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.expert_dim, dtype=torch.float32), requires_grad=False
+            torch.zeros(self.num_experts, 2 * self.intermediate_size, dtype=torch.float32), requires_grad=False
         )
 
         self.down_proj_blocks = nn.Parameter(
-            torch.zeros((self.num_experts, self.expert_dim, self.hidden_size // 32, 16), dtype=torch.uint8),
+            torch.zeros((self.num_experts, self.hidden_size, self.intermediate_size // 32, 16), dtype=torch.uint8),
             requires_grad=False,
         )
         self.down_proj_scales = nn.Parameter(
-            torch.zeros(self.num_experts, self.expert_dim, self.hidden_size // 32, dtype=torch.uint8),
+            torch.zeros(self.num_experts, self.hidden_size, self.intermediate_size // 32, dtype=torch.uint8),
             requires_grad=False,
         )
         self.down_proj_bias = nn.Parameter(
-            torch.zeros(self.num_experts, self.expert_dim, dtype=torch.float32), requires_grad=False
+            torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
         self.alpha = 1.702
 
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
-
-        # TODO: To remove once we make sure that we don't need this
-        # smallest_even_divide_number = lambda x, n: (x // n + 1) * n if x % n != 0 else x
-
-        self.gate_up_proj_right_pad = (
-            0  # smallest_even_divide_number(self.intermediate_size * 2, 256) - self.intermediate_size * 2
-        )
-        self.gate_up_proj_bottom_pad = 0
-        self.down_proj_right_pad = 0  # smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
-        self.down_proj_bottom_pad = 0  # self.gate_up_proj_right_pad // 2
-        self.hidden_size_pad = 0  # smallest_even_divide_number(self.hidden_size, 256) - self.hidden_size
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
@@ -187,11 +176,6 @@ class Mxfp4GptOssExperts(nn.Module):
 
         with torch.cuda.device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
-
-            if self.hidden_size_pad is not None:
-                hidden_states = torch.nn.functional.pad(
-                    hidden_states, (0, self.hidden_size_pad, 0, 0), mode="constant", value=0
-                )
 
             intermediate_cache1 = matmul_ogs(
                 hidden_states,
@@ -241,13 +225,13 @@ def routing_torch_dist(
 
         n_gates_pad = n_tokens * n_expts_act
 
-        def topk(vals, k, expt_indx):
+        def topk(vals, k):
             tk_indx = torch.argsort(-vals, dim=1, stable=True)[:, :k]
             tk_indx = tk_indx.long()
             tk_val = torch.take_along_dim(vals, tk_indx, dim=1)
             return tk_val, tk_indx.int()
 
-        expt_scal, expt_indx = topk(logits, n_expts_act, None)
+        expt_scal, expt_indx = topk(logits, n_expts_act)
         expt_scal = torch.softmax(expt_scal, dim=-1)
         expt_indx, sort_indices = torch.sort(expt_indx, dim=1)
         expt_scal = torch.gather(expt_scal, 1, sort_indices)
@@ -336,7 +320,6 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             scales_attr = f"{proj}_scales"
             if not hasattr(module, blocks_attr) and not hasattr(module, scales_attr):
                 setattr(module, param_name.rsplit(".", 1)[1], param_value)
-                return
             else:
                 setattr(module, param_name.rsplit(".", 1)[1], param_value)
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
@@ -347,10 +330,8 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 setattr(module, proj, torch.nn.Parameter(dequantized))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
-                return
 
-
-def dequantize_and_quantize(
+def load_and_swizzle_mxfp4(
     module, param_name, param_value, target_device, **kwargs
 ):
     from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
@@ -364,58 +345,44 @@ def dequantize_and_quantize(
     to_contiguous = kwargs.get("to_contiguous", None)
     rank = kwargs.get("rank", None)
     device_mesh = kwargs.get("device_mesh", None)
-    # Combine logic for gate_up_proj and down_proj
+
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
+            if device_mesh is not None:
+                shard_and_distribute_module(
+                    model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
+                )
+            else:
+                _load_parameter_into_model(model, param_name, param_value)
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
-            right_pad_attr = f"{proj}_right_pad"
-            bottom_pad_attr = f"{proj}_bottom_pad"
-            precision_config_attr = f"{proj}_precision_config"
-
-            # Check if both blocks and scales are still on meta device
             blocks = getattr(module, blocks_attr)
             scales = getattr(module, scales_attr)
-            if blocks.device.type == "meta" and scales.device.type == "meta":
-                if device_mesh is not None:
-                    shard_and_distribute_module(
-                        model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
-                    )
+            # Check if both blocks and scales both not on on meta device
+            if blocks.device.type != "meta" and scales.device.type != "meta":
+                # need it for ep
+                local_experts = getattr(module, blocks_attr).size(0)
+                if proj == "gate_up_proj":
+                    blocks = module.gate_up_proj_blocks.view(local_experts, module.intermediate_size * 2, -1)
                 else:
-                    _load_parameter_into_model(model, param_name, param_value)
-                return
-            else:
-                # One of the params is already loaded, so load the other
-                if device_mesh is not None:
-                    shard_and_distribute_module(
-                        model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
-                    )
-                else:
-                    _load_parameter_into_model(model, param_name, param_value)
-
-                dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
-
-                right_pad = getattr(module, right_pad_attr)
-                bottom_pad = getattr(module, bottom_pad_attr)
-                
-                dequantized = torch.nn.functional.pad(
-                    dequantized, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                )
-                original_device = target_device
-                # for fsdp and deepspeed since the model is load on cpu, we need to move the weight to gpu for quantization
-                if (is_fsdp_enabled() or is_deepspeed_zero3_enabled()) and target_device == "cpu":
-                    dequantized = dequantized.cuda()
-                    target_device = "cuda"
+                    blocks = module.down_proj_blocks.view(local_experts, -1, module.intermediate_size // 2)
                 with torch.cuda.device(target_device):
-                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(dequantized)
-                triton_weight_tensor.storage.data = triton_weight_tensor.storage.data.to(original_device)
-                setattr(module, precision_config_attr, PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(blocks.transpose(-2, -1), getattr(module, scales_attr).transpose(-2, -1))
+
+                # need to overwrite the shapes for the kernels
+                if proj == "gate_up_proj":
+                    triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+                else:
+                    triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
+
                 # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
                 setattr(module, proj, triton_weight_tensor)
-                setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-            return
+                setattr(module, f"{proj}_precision_config", PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
 
+                # delete blocks and scales
+                delattr(module, scales_attr)
+                delattr(module, blocks_attr)
+                # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
 
 def _replace_with_mxfp4_linear(
     model,

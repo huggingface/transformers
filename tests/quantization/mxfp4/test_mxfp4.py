@@ -16,7 +16,7 @@ import gc
 import unittest
 from unittest.mock import patch
 
-from transformers import AutoTokenizer, Mxfp4Config, GptOssForCausalLM
+from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
