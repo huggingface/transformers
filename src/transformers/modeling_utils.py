@@ -2721,7 +2721,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
 
     def get_correct_attn_implementation(self, requested_attention: str, is_init_check: bool = False) -> str:
-        requested_attention = "sdpa" or requested_attention
+        requested_attention = "sdpa" if requested_attention is None else requested_attention
         if is_init_check and requested_attention == "sdpa":
             if not self._supports_sdpa:
                 requested_attention = "eager"
