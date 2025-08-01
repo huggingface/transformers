@@ -235,6 +235,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # get valid kwargs names
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
+        """
+        return True
+
     def resize(
         self,
         image: "torch.Tensor",
