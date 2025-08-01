@@ -406,6 +406,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
 
         return results
 
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.visualize_keypoint_matching
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
@@ -462,6 +463,14 @@ class LightGlueImageProcessor(BaseImageProcessor):
             results.append(plot_image_pil)
         return results
 
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr._get_color
+    def _get_color(self, score):
+        """Maps a score to a color."""
+        r = int(255 * (1 - score))
+        g = int(255 * score)
+        b = 0
+        return (r, g, b)
+
     def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
@@ -517,12 +526,6 @@ class LightGlueImageProcessor(BaseImageProcessor):
                 plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
             plt.show()
 
-    def _get_color(self, score):
-        """Maps a score to a color."""
-        r = int(255 * (1 - score))
-        g = int(255 * score)
-        b = 0
-        return (r, g, b)
 
 
 __all__ = ["LightGlueImageProcessor"]
