@@ -686,6 +686,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "Qwen/Qwen2.5-14B-Instruct",
             "meta-llama/Llama-3.1-8B-Instruct",
             "meta-llama/Llama-3.2-1B-Instruct",
+            "meta-llama/Meta-Llama-3-8B-Instruct",
             "meta-llama/Llama-3.3-70B-Instruct",
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
@@ -1032,7 +1033,8 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True).to(model.device)
+        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True, return_tensors="pt")
+        inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
