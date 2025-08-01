@@ -4072,8 +4072,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if isinstance(state_dict[tensor], DTensor):
                         full_tensor = state_dict[tensor].full_tensor()
                     else:
+                        full_tensor = state_dict[tensor]
                         shard_dim = -1 if "rowise" in plan else 0
-                        gather_list = [torch.empty_like(full_tensor) for _ in range(self._device_mesh.size]
+                        gather_list = [torch.empty_like(full_tensor) for _ in range(self._device_mesh.size)]
                         torch.distributed.all_gather(gather_list, full_tensor)
                         full_tensor = torch.cat(gather_list, dim=shard_dim)
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
