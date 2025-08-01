@@ -1270,7 +1270,7 @@ class TrainingArguments:
             )
         },
     )
-    deepspeed: Optional[Union[dict, str]] = field(
+    deepspeed: Optional[Union[dict[str, Any], str]] = field(
         default=None,
         metadata={
             "help": (
