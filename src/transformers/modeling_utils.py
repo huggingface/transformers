@@ -2716,11 +2716,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
 
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+            return applicable_attn_implementation
         else:
             return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
-        return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: str, is_init_check: bool = False) -> str:
+        requested_attention = "sdpa" or requested_attention
+        if is_init_check and requested_attention == "sdpa":
+            if not self._supports_sdpa:
+                requested_attention = "eager"
         if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
@@ -2824,7 +2828,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             )
                             break
                 # check the module can use correctly, otherwise we silently set the config without the model using it
-                if submodule._can_set_attn_implementation() and sub_implementation is not None:
+                if sub_implementation is not None:
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation = sub_implementation
                     subconfigs_changed.add(submodule.config.__class__)
