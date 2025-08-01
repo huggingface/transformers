@@ -1357,12 +1357,12 @@ def _get_torch_dtype(
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
                 config.torch_dtype = torch_dtype
-                for sub_config_key in config.sub_configs.keys():
+                for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
             config.torch_dtype = torch_dtype
-            for sub_config_key in config.sub_configs.keys():
+            for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, dict):
@@ -1388,7 +1388,7 @@ def _get_torch_dtype(
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
-        for key in config.sub_configs.keys():
+        for key in config.sub_configs:
             value = getattr(config, key)
             value.torch_dtype = default_dtype
 
@@ -1446,7 +1446,7 @@ def _get_device_map(
 
         # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
         # which we can use to allocate parameters.
-        for device_name in inferred_max_memory.keys():
+        for device_name in inferred_max_memory:
             if isinstance(device_name, int):  # it's a GPU device
                 if is_torch_xpu_available():
                     unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
@@ -2599,7 +2599,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        if not self._supports_sdpa:
+        if not self._supports_sdpa and not is_init_check:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
@@ -2683,34 +2683,51 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
-
+            attention_wrapper = None
+            # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
+            if "|" in applicable_attn_implementation:
+                attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
+                # `transformers` has wrapper for sdpa, paged, flash, flex etc.
+                attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
             if ":" in applicable_attn_implementation:
                 repo_id, kernel_name = attn_implementation.split(":")
                 kernel_name = kernel_name.strip()
             else:
-                repo_id = attn_implementation
+                repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
             try:
                 kernel = get_kernel(repo_id)
                 if hasattr(kernel, "flash_attn_varlen_func"):
-                    kernel_function = partial(flash_attention_forward, implementation=kernel)
+                    if attention_wrapper is None:
+                        attention_wrapper = flash_attention_forward
+                    kernel_function = partial(attention_wrapper, implementation=kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                # Register it
-                ALL_ATTENTION_FUNCTIONS.register(repo_id, kernel_function)
-                ALL_MASK_ATTENTION_FUNCTIONS.register(repo_id, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
-                applicable_attn_implementation = repo_id
+                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
+                ALL_MASK_ATTENTION_FUNCTIONS.register(
+                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                )
             except Exception as e:
                 logger.warning_once(
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
-                applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-        if applicable_attn_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+
+                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+            return attn_implementation
+        else:
+            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+
+    def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
+        requested_attention = "sdpa" if _requested_attention is None else _requested_attention
+        if is_init_check and requested_attention == "sdpa":
+            if not self._supports_sdpa:
+                requested_attention = "eager"
+        if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
-                f'Specified `attn_implementation="{attn_implementation}"` is not supported. The only possible arguments are '
+                f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
                 '`attn_implementation="eager"` (manual attention implementation)'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
@@ -2726,23 +2743,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if applicable_attn_implementation == "flash_attention_2":
+        if requested_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "flash_attention_3":
+        elif requested_attention == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "flex_attention":
+        elif requested_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
-        elif applicable_attn_implementation == "sdpa":
+        elif requested_attention == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                # In this case, sdpa was requested explicitly, but we can't use it, so let's raise
-                if attn_implementation == "sdpa":
+                if _requested_attention == "sdpa":
                     raise e
-                applicable_attn_implementation = "eager"
-
-        return applicable_attn_implementation
+                requested_attention = "eager"
+        return requested_attention
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2790,7 +2805,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     )
                     # Apply the change (on the internal attr, to avoid setting it recursively)
                     self.config._attn_implementation_internal = applicable_attn_implementation
-                except (ValueError, ImportError) as e:
+                except Exception as e:
                     logger.warning(
                         f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
                     )
@@ -2814,8 +2829,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 subconfig_key, submodule.config._attn_implementation
                             )
                             break
-                submodule.set_attn_implementation(sub_implementation)
-                subconfigs_changed.add(submodule.config.__class__)
+                # check the module can use correctly, otherwise we silently set the config without the model using it
+                try:
+                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                    submodule.config._attn_implementation = sub_implementation
+                    subconfigs_changed.add(submodule.config.__class__)
+                except Exception:
+                    pass
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
@@ -2881,9 +2901,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
         # between modelings (because they are prefixed with the model name)
         elif (
-            isinstance(
-                module, (nn.LayerNorm, nn.RMSNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
-            )
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
             or "LayerNorm" in module.__class__.__name__
             or "RMSNorm" in module.__class__.__name__
         ):
@@ -3002,9 +3020,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
                 )
 
-                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
+                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules}
                 encoder_layer_pos = 0
-                for name in decoder_modules.keys():
+                for name in decoder_modules:
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
@@ -3942,7 +3960,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
             for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
+                if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
@@ -4057,7 +4075,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in state_dict_split.filename_to_tensors.keys()
+                and filename not in state_dict_split.filename_to_tensors
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
@@ -4472,7 +4490,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
-                If provided, it has to contain dimension named `"tp"` which will be used for tensor parallelism
+                If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -4617,10 +4635,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_mesh is None:
                 tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
-                # TODO: make device_mesh support multiple dimensions
                 if device_mesh.ndim > 1:
-                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
-                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
+                    if "tp" not in device_mesh.mesh_dim_names:
+                        raise ValueError(
+                            "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                            "Please provide a valid `device_mesh`."
+                        )
+                    device_mesh = device_mesh["tp"]
+                tp_size = device_mesh.size()
+                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
@@ -5329,7 +5352,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
             # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
                 key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
@@ -5743,6 +5766,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check if base model has a TP plan
         if getattr(self.base_model, "_tp_plan", None) is not None:
             return True
+        if self.config.base_model_tp_plan is not None:
+            return True
         return False
 
     @property
@@ -6016,19 +6041,22 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
-        if device.type == "cuda":
-            index = device.index if device.index is not None else torch.cuda.current_device()
-            device_memory = torch.cuda.mem_get_info(index)[0]
+        if device.type in ["cuda", "xpu"]:
+            torch_accelerator_module = getattr(torch, device.type)
+            index = device.index if device.index is not None else torch_accelerator_module.current_device()
+            device_memory = torch_accelerator_module.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda/xpu OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is *unused* reserved cuda memory, we can skip/reduce the allocation.
-            unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
+            # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
+            unused_memory = torch_accelerator_module.memory_reserved(
+                index
+            ) - torch_accelerator_module.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)

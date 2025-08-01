@@ -50,7 +50,7 @@ deps = {
     "optax": "optax>=0.0.8,<=0.1.4",
     "pandas": "pandas<2.3.0",
     "packaging": "packaging>=20.0",
-    "parameterized": "parameterized",
+    "parameterized": "parameterized>=0.9",
     "phonemizer": "phonemizer",
     "protobuf": "protobuf",
     "psutil": "psutil",

@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
+from .utils import is_torch_xpu_available
 from .utils.generic import GeneralInterface
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
 
@@ -33,6 +34,7 @@ else:
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+_is_torch_xpu_available = is_torch_xpu_available()
 
 if _is_torch_greater_or_equal_than_2_6:
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
@@ -225,11 +227,18 @@ def _ignore_causal_mask_sdpa(
     if (
         not is_tracing
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or kv_length == query_length)
+        and (query_length == 1 or (kv_length == query_length or _is_torch_xpu_available))
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
+        and (
+            padding_mask is None
+            or (
+                padding_mask.all()
+                if not _is_torch_xpu_available or query_length == 1
+                else padding_mask[:, :query_length].all()
+            )
+        )
     ):
         return True
 
@@ -770,7 +779,10 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    if _is_torch_xpu_available:
+        allow_is_causal_skip = True
+    else:
+        allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
 
     # If we detected packing format
     if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:

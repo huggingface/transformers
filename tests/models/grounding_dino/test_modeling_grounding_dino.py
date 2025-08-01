@@ -763,7 +763,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
-        for key in cpu_outputs.keys():
+        for key in cpu_outputs:
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
@@ -818,7 +818,9 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         prompt = ". ".join(id2label.values()) + "."
 
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
-        image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
+        image_inputs = image_processor(
+            images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt"
+        )
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = GroundingDinoForObjectDetection.from_pretrained(
