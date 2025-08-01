@@ -2705,9 +2705,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     kernel_function = partial(attention_wrapper, implementation=kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
+                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
                 )
             except Exception as e:
                 logger.warning_once(
