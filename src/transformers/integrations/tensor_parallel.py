@@ -1019,7 +1019,7 @@ def shard_and_distribute_module(
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
     tp_plan = model._tp_plan or {}
-    tp_plan.update(getattr(type(model), "_tp_plan", {}))
+    tp_plan.update(getattr(type(model), "_tp_plan", None) or {})
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
@@ -1085,7 +1085,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     _plan = "_tp_plan"
-    tp_plan = getattr(model, "_tp_plan", {}).copy()
+    tp_plan = (getattr(model, "_tp_plan", None) or {}).copy()
     model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
     model._tp_plan.update(tp_plan)
     model._tp_size = tp_size
