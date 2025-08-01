@@ -291,8 +291,6 @@ def save_sharded_model(state_dict, model_path):
     safetensors_index["weight_map"] = {}
     for key in state_dict.keys():
         size = state_dict[key].numel() * state_dict[key].element_size()
-        safetensors_index["metadata"]["total_size"] += size
-        safetensors_index["weight_map"][key] = shard_id
         if shard_size_counter + size > max_shard_size:
             total_sharded_dict[shard_id] = shard_state_dict
             shard_id += 1
@@ -300,6 +298,8 @@ def save_sharded_model(state_dict, model_path):
             shard_state_dict = {}
         shard_state_dict[key] = state_dict[key]
         shard_size_counter += size
+        safetensors_index["metadata"]["total_size"] += size
+        safetensors_index["weight_map"][key] = shard_id
     total_sharded_dict[shard_id] = shard_state_dict
     num_shards = len(total_sharded_dict) - 1
     for shard_id, shard_state_dict in total_sharded_dict.items():
