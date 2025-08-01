@@ -22,7 +22,7 @@ jobs:
       group: aws-general-8-plus
     container:
       image: huggingface/transformers-quantization-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
         working-directory: /transformers
