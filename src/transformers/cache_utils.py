@@ -1125,7 +1125,8 @@ class StaticCache(Cache):
         ```
     """
 
-    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
         layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
@@ -1164,7 +1165,8 @@ class OffloadedStaticCache(Cache):
         ```
     """
 
-    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
         layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers, offloading=True)
 
@@ -1187,14 +1189,15 @@ class SlidingWindowCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = SlidingWindowCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = SlidingWindowCache(config=model.config, max_cache_len=max_generated_length)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         SlidingWindowCache()
         ```
     """
 
-    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
         layers = [SlidingWindowLayer(max_cache_len, config.sliding_window) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
@@ -1221,14 +1224,15 @@ class HybridCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         HybridCache()
         ```
     """
 
-    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
         if hasattr(config, "layer_types"):
             layers = []
             for layer_type in config.layer_types:
@@ -1259,7 +1263,8 @@ class OffloadedHybridCache(HybridChunkedCache):
     See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
-    def __init__(self, max_cache_len: int, config: PretrainedConfig):
+    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
         super().__init__(max_cache_len, config)
         self.offloading = True
         self.only_non_sliding = True
