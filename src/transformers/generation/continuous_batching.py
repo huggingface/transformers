@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import queue
 import threading
 import time
@@ -35,6 +34,8 @@ from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 
+from ..utils.logging import logging
+
 
 class RequestStatus(Enum):
     """Status of a generation request through its lifecycle."""
@@ -48,9 +49,7 @@ class RequestStatus(Enum):
     FAILED = "failed"
 
 
-# Setup your logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
 
 
 @dataclass
