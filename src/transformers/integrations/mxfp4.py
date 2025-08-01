@@ -363,6 +363,11 @@ def load_and_swizzle_mxfp4(
                     blocks = module.gate_up_proj_blocks.view(local_experts, module.intermediate_size * 2, -1)
                 else:
                     blocks = module.down_proj_blocks.view(local_experts, -1, module.intermediate_size // 2)
+                
+                # TODO: we need to have the weights on cuda, refactor later
+                if target_device == "cpu":
+                    target_device = "cuda"
+
                 with torch.cuda.device(target_device):
                     triton_weight_tensor, weight_scale = swizzle_mxfp4(blocks.transpose(-2, -1), getattr(module, scales_attr).transpose(-2, -1))
 
