@@ -135,7 +135,7 @@ class DiaProcessorTest(unittest.TestCase):
         input_tokenizer = tokenizer(random_text, padding=True, return_tensors="pt")
         input_processor = self.processor(random_text)
 
-        for key in input_tokenizer.keys():
+        for key in input_tokenizer:
             self.assertTrue((input_tokenizer[key] == input_processor[key]).all())
 
     def test_no_audio(self):

@@ -492,7 +492,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     "Hello I am doing an experiment and need to get the mass of a block. The only tool I have is a scale",
-                    "Hi today we have the review for a brand new set, this is the <strong>Lego</strong> set number ",
+                    "Hi today we have the review for a <strong>2016/2017</strong> season of",
                 ],
             }
         )

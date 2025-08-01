@@ -3304,7 +3304,7 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
     missing_keys = []
     unexpected_keys = []
     all_field_names = {field.name for field in fields(hub_spec)}
-    matching_keys = sorted([key for key in output.keys() if key in all_field_names])
+    matching_keys = sorted([key for key in output if key in all_field_names])
 
     # Fields with a MISSING default are required and must be in the output
     for field in fields(hub_spec):

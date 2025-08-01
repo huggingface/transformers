@@ -71,7 +71,7 @@ def compare_files(modular_file_path, show_diff=True):
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
-    for file_type in generated_modeling_content.keys():
+    for file_type in generated_modeling_content:
         diff += process_file(modular_file_path, generated_modeling_content, file_type, show_diff)
     return diff
 
