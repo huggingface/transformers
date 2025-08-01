@@ -146,18 +146,18 @@ model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
 
 모델 가중치의 복사본 두 가지(무작위 가중치와 사전훈련된 가중치)를 보관할 수 있는 충분한 메모리가 필요하며, 이는 보유한 하드웨어에 따라 불가능할 수 있습니다. 분산 학습 환경에서는 각 프로세스가 사전훈련된 모델을 로드하기 때문에 이는 더욱 어려운 과제입니다.
 
-트랜스포머는 빠른 초기화, 샤드된 체크포인트, Accelerate의 [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) 기능, 그리고 더 낮은 비트 데이터 타입 지원을 통해 이러한 메모리 관련 문제들을 일부 줄여줍니다.
+transformers는 빠른 초기화, 분할된 체크포인트, Accelerate의 [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) 기능, 그리고 더 낮은 비트 데이터 타입 지원을 통해 이러한 메모리 관련 문제들을 일부 줄여줍니다.
 
 
-### 샤드된 체크포인트[[sharded-checkpoints]]
+### 분할된 체크포인트[[sharded-checkpoints]]
 
 [`~PreTrainedModel.save_pretrained`] 메소드는 10GB보다 큰 체크포인트를 자동으로 샤드합니다.
 
-각 샤드는 이전 샤드가 로드된 후 순차적으로 로드되어, 메모리 사용량을 모델 크기와 가장 큰 샤드 크기로만 제한합니다.
+각 샤드(shard)는 이전 샤드가 로드된 후 순차적으로 로드되어, 메모리 사용량을 모델 크기와 가장 큰 샤드 크기로만 제한합니다.
 
 `max_shard_size` 매개변수는 각 샤드에 대해 기본적으로 5GB로 설정되어 있는데, 이는 메모리 부족 없이 무료 등급 GPU 인스턴스에서 더 쉽게 실행할 수 있기 때문입니다.
 
-예를 들어, [`~PreTrainedModel.save_pretrained`]에서 [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B)에 대한 샤드 체크포인트를 생성해보겠습니다.
+예를 들어, [`~PreTrainedModel.save_pretrained`]에서 [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B)에 대한 분할된 체크포인트를 생성해보겠습니다.
 
 ```py
 from transformers import AutoModel
@@ -170,7 +170,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     print(sorted(os.listdir(tmp_dir)))
 ```
 
-[`~PreTrainedModel.from_pretrained`]로 샤드된 체크포인트를 다시 로드합니다.
+[`~PreTrainedModel.from_pretrained`]로 분할된 체크포인트를 다시 로드합니다.
 
 ```py
 with tempfile.TemporaryDirectory() as tmp_dir:
