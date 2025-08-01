@@ -94,11 +94,11 @@ model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 <Youtube id="AhChOFRegn4"/>
 
-[AutoModel](./model_doc/auto) 클래스는 사용 가능한 모델이 많기 때문에 정확한 모델 클래스 이름을 알 필요 없이 아키텍처를 로드하는 편리한 방법입니다. 구성 파일을 기반으로 올바른 모델 클래스를 자동으로 선택합니다. 작업과 사용하려는 체크포인트만 알면 됩니다.
+[AutoModel](./model_doc/auto) 클래스는 정확한 모델 클래스 이름을 몰라도 아키텍처를 불러올 수 있는 편리한 방법입니다. 많은 모델이 제공되기 때문에, 이 클래스는 구성 파일을 기반으로 올바른 모델 클래스를 자동으로 선택해 줍니다. 원하는 작업과 사용하려는 체크포인트만 알고 있으면 됩니다.
 
-주어진 작업에 대해 아키텍처가 지원되는 한, 모델이나 작업 간에 쉽게 전환할 수 있습니다.
+주어진 작업을 아키텍처가 지원하는 한, 모델이나 작업을 쉽게 전환할 수 있습니다.
 
-예를 들어, 동일한 모델을 별도의 작업에 사용할 수 있습니다.
+예를 들어, 동일한 모델을 서로 다른 작업에 사용할 수 있습니다.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoModelForQuestionAnswering
