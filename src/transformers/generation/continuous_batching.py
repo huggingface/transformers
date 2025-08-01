@@ -27,14 +27,12 @@ import torch
 import torch.nn as nn
 from tokenizers import Tokenizer
 from tokenizers.decoders import DecodeStream
-from torch.profiler import profile, schedule, tensorboard_trace_handler
 from tqdm import tqdm
 
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
-from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-
 from ..utils.logging import logging
+from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 
 
 class RequestStatus(Enum):
@@ -205,7 +203,9 @@ class PagedAttentionCache:
             dtype=dtype,
             num_blocks=num_blocks,
         )
-        logger.warning(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+        logger.warning(
+            f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max concurrent requests {max_batch_tokens}"
+        )
         self.max_batch_tokens = max_batch_tokens
         self.block_size = block_size
         self.num_blocks = num_blocks
