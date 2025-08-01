@@ -382,9 +382,9 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
         super().__init__(config.max_position_embeddings, config.hidden_size, config.pad_token_id)
 
     def forward(self, inputs_shape, device, attention_mask=None, past_key_values=None, position_ids=None):
-        assert (position_ids is None) or (self.padding_idx is None), (
-            "If position_ids is pre-computed then padding_idx should not be set."
-        )
+        assert (position_ids is None) or (
+            self.padding_idx is None
+        ), "If position_ids is pre-computed then padding_idx should not be set."
 
         if position_ids is None:
             if past_key_values is not None and past_key_values.get_seq_length() != 0:
@@ -583,9 +583,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self.ngram = config.ngram
         self.layer_idx = layer_idx
 
-        assert self.head_dim * self.num_attn_heads == config.hidden_size, (
-            "config.hidden_size must be divisible by num_attn_heads"
-        )
+        assert (
+            self.head_dim * self.num_attn_heads == config.hidden_size
+        ), "config.hidden_size must be divisible by num_attn_heads"
         # key, value, query projection
         self.key_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.value_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -842,9 +842,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         if predict_relative_position_buckets is None:
             key_sequence_length = attn_weights.shape[-1]
-            assert position_ids[0][0] == key_sequence_length - 1, (
-                "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
-            )
+            assert (
+                position_ids[0][0] == key_sequence_length - 1
+            ), "`position_ids` are incorrect. They should be of the format 1 2 3 4 5 ... (key_sequence_length - 1)"
             relative_positions = (
                 torch.arange(0, key_sequence_length)
                 .unsqueeze(0)
@@ -1102,9 +1102,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
@@ -1268,9 +1268,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # prepare attention mask
         if past_key_values_length != 0:
-            assert hidden_states.size(1) == 1, (
-                "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
-            )
+            assert (
+                hidden_states.size(1) == 1
+            ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
 
             ngram_hidden_states = [
                 (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).repeat(batch_size, 1, 1)

@@ -399,11 +399,13 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
 
 
 @functools.cache
-def load_stereo_chemical_props() -> tuple[
-    Mapping[str, list[Bond]],
-    Mapping[str, list[Bond]],
-    Mapping[str, list[BondAngle]],
-]:
+def load_stereo_chemical_props() -> (
+    tuple[
+        Mapping[str, list[Bond]],
+        Mapping[str, list[Bond]],
+        Mapping[str, list[BondAngle]],
+    ]
+):
     """Load stereo_chemical_props.txt into a nice structure.
 
     Load literature values for bond lengths and bond angles and translate bond angles into the length of the opposite

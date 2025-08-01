@@ -96,9 +96,9 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
 
-        assert world_size == tp_size * dp_size * cp_size, (
-            f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size}) * CP size ({cp_size})"
-        )
+        assert (
+            world_size == tp_size * dp_size * cp_size
+        ), f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size}) * CP size ({cp_size})"
 
         mesh = torch.arange(world_size).reshape(dp_size, tp_size, cp_size)
         world_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp", "cp"))
@@ -170,9 +170,9 @@ def main():
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
 
     if dist.is_initialized():
-        assert model.config.num_key_value_heads % tp_mesh.size() == 0, (
-            f"num_key_value_heads={model.config.num_key_value_heads} must be divisible by tp_size={tp_mesh.size()}"
-        )
+        assert (
+            model.config.num_key_value_heads % tp_mesh.size() == 0
+        ), f"num_key_value_heads={model.config.num_key_value_heads} must be divisible by tp_size={tp_mesh.size()}"
         device = torch.device(f"cuda:{local_rank}")
     else:
         model = model.to(device)
@@ -193,9 +193,9 @@ def main():
 
     model.train()
     assert len(list(model.parameters())) > 0, "No parameters found in model. Probably DDP bug.."
-    assert len([p for p in model.parameters() if p.requires_grad]) > 0, (
-        "No gradients found in model. Probably DDP bug.."
-    )
+    assert (
+        len([p for p in model.parameters() if p.requires_grad]) > 0
+    ), "No gradients found in model. Probably DDP bug.."
 
     if dist.is_initialized() and not ignore_sanity_checks:
         # assert model is replicated across all dp
@@ -271,9 +271,9 @@ def main():
 
     # Calculate local batch size
     if dist.is_initialized():
-        assert global_batch_size % dp_mesh.size() == 0, (
-            f"Global batch size ({global_batch_size}) must be divisible by DP size ({dp_mesh.size()})"
-        )
+        assert (
+            global_batch_size % dp_mesh.size() == 0
+        ), f"Global batch size ({global_batch_size}) must be divisible by DP size ({dp_mesh.size()})"
         local_batch_size = global_batch_size // dp_mesh.size()
     else:
         local_batch_size = global_batch_size
@@ -397,12 +397,12 @@ def main():
                     gradnorm = model.clip_grad_norm_(max_norm=1.0, norm_type=2.0)
                 else:
                     assert len(list(model.parameters())) > 2, "No parameters found in model. Probably DDP bug.."
-                    assert len([p for p in model.parameters() if p.requires_grad]) > 2, (
-                        "No gradients found in model. Probably DDP bug.."
-                    )
-                    assert len([p for p in model.parameters() if p.grad is not None]) > 2, (
-                        "No gradients found in model. Probably DDP bug.."
-                    )
+                    assert (
+                        len([p for p in model.parameters() if p.requires_grad]) > 2
+                    ), "No gradients found in model. Probably DDP bug.."
+                    assert (
+                        len([p for p in model.parameters() if p.grad is not None]) > 2
+                    ), "No gradients found in model. Probably DDP bug.."
                     # only works with FSDP's NO_SHARD otherwise we should use FSDP's clip_grad_norm_
                     gradnorm = clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2.0, foreach=True)
 
@@ -594,9 +594,9 @@ class ContextParallelCollator:
         if self.cp_mesh is not None and self.cp_mesh.size() > 1:
             # Get sequence length from the input batch
             seq_len = batch["input_ids"].shape[1]
-            assert seq_len % self.cp_mesh.size() == 0, (
-                f"Sequence length {seq_len} must be divisible by CP size {self.cp_mesh.size()}"
-            )
+            assert (
+                seq_len % self.cp_mesh.size() == 0
+            ), f"Sequence length {seq_len} must be divisible by CP size {self.cp_mesh.size()}"
             chunk_size = seq_len // self.cp_mesh.size()
             cp_rank = self.cp_mesh.get_local_rank()
             start_idx = cp_rank * chunk_size
