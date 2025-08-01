@@ -26,7 +26,7 @@ generation_config = GenerationConfig(
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-
+train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 print("--- Running CB Generation Example ---")
 
 
