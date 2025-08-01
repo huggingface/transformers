@@ -367,23 +367,44 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 break
 
         response_tokens = []
-        for input_pos in range(min(max_generation_length, prompt_token_len)):
-            result = exported_program.module().forward(
-                input_ids=prompt_token_ids[:, input_pos : input_pos + 1],
-                cache_position=torch.tensor([input_pos], dtype=torch.long, device=device),
-            )
-            response_tokens.append(prompt_token_ids[0][input_pos].item())
 
-        current_token = torch.argmax(result[:, -1, :], dim=-1).item()
-        response_tokens.append(current_token)
-
-        while len(response_tokens) < max_generation_length:
+        # Process the first token (which the model was exported with)
+        if prompt_token_len > 0:
             result = exported_program.module().forward(
-                input_ids=torch.tensor([[current_token]], dtype=torch.long, device=device),
-                cache_position=torch.tensor([len(response_tokens)], dtype=torch.long, device=device),
+                input_ids=prompt_token_ids[:, 0:1],
+                cache_position=torch.tensor([0], dtype=torch.long, device=device),
             )
-            current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+            response_tokens.append(prompt_token_ids[0][0].item())
+
+            # For remaining prompt tokens, we need to process them one by one
+            # but start from position 1 since position 0 was used during export
+            for input_pos in range(1, min(max_generation_length, prompt_token_len)):
+                result = exported_program.module().forward(
+                    input_ids=prompt_token_ids[:, input_pos : input_pos + 1],
+                    cache_position=torch.tensor([input_pos], dtype=torch.long, device=device),
+                )
+                response_tokens.append(prompt_token_ids[0][input_pos].item())
+
+        # Generate new tokens starting from the correct position
+        current_position = len(response_tokens)
+        for _ in range(max_new_tokens):
+            if current_position >= max_generation_length:
+                break
+
+            # For the first generation step, use the last processed token's output
+            if current_position == prompt_token_len:
+                # Use the result from the last prompt token processing
+                current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+            else:
+                # Generate subsequent tokens
+                result = exported_program.module().forward(
+                    input_ids=torch.tensor([[current_token]], dtype=torch.long, device=device),
+                    cache_position=torch.tensor([current_position], dtype=torch.long, device=device),
+                )
+                current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+
             response_tokens.append(current_token)
+            current_position += 1
 
         return torch.tensor([response_tokens], dtype=torch.long, device=device)
 

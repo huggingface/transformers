@@ -807,6 +807,7 @@ class MoshiPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_static_cache = True
 
     main_input_name = "input_ids"
 
