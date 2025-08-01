@@ -283,6 +283,7 @@ if TYPE_CHECKING:
     from .rwkv import *
     from .sam import *
     from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *

@@ -43,7 +43,7 @@ if is_vision_available():
 
 
 @requires(backends=("torchvision",))
-class Sam2VideoProcessor(BaseVideoProcessor):
+class Sam2VideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -120,4 +120,4 @@ class Sam2VideoProcessor(BaseVideoProcessor):
         return output_masks
 
 
-__all__ = ["Sam2VideoProcessor"]
+__all__ = ["Sam2VideoVideoProcessor"]

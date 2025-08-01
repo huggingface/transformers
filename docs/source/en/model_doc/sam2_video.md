@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# SAM2
+# SAM2 Video
 
 ## Overview
 
@@ -524,51 +524,35 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model.
 
-## Sam2Config
+## Sam2VideoConfig
 
-[[autodoc]] Sam2Config
+[[autodoc]] Sam2VideoConfig
 
-## Sam2HieraDetConfig
+## Sam2VideoMaskDecoderConfig
 
-[[autodoc]] Sam2HieraDetConfig
+[[autodoc]] Sam2VideoMaskDecoderConfig
 
-## Sam2VisionConfig
-
-[[autodoc]] Sam2VisionConfig
-
-## Sam2MaskDecoderConfig
-
-[[autodoc]] Sam2MaskDecoderConfig
-
-## Sam2PromptEncoderConfig
+## Sam2VideoPromptEncoderConfig
 
 [[autodoc]] Sam2PromptEncoderConfig
 
-## Sam2Processor
+## Sam2VideoProcessor
 
-[[autodoc]] Sam2Processor
-    - __call__
+[[autodoc]] Sam2VideoProcessor
     - post_process_masks
+    - init_video_session
+    - add_inputs_to_inference_session
 
-## Sam2ImageProcessorFast
+## Sam2VideoVideoProcessor
 
-[[autodoc]] Sam2ImageProcessorFast
+[[autodoc]] Sam2VideoVideoProcessor
 
 ## Sam2VideoInferenceSession
 
 [[autodoc]] Sam2VideoInferenceSession
 
-## Sam2HieraDetModel
+## Sam2VideoModel
 
-[[autodoc]] Sam2HieraDetModel
+[[autodoc]] Sam2VideoModel
     - forward
-
-## Sam2VisionModel
-
-[[autodoc]] Sam2VisionModel
-    - forward
-
-## Sam2Model
-
-[[autodoc]] Sam2Model
-    - forward
+    - propagate_in_video_iterator
