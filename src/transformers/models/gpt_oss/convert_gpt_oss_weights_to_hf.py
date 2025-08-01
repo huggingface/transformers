@@ -676,12 +676,16 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         {%- if "tool_calls" in message %}
             {#- We assume max 1 tool call per message, and so we infer the tool call name #}
             {#- in "tool" messages from the most recent assistant tool call name #}
-            {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content }}
+            {%- set tool_call = message.tool_calls[0] %}
+            {%- if tool_call.function %}
+                {%- set tool_call = tool_call.function %}
+            {%- endif %}
+            {{- "<|start|>assistant<|channel|>analysis<|message|>" }}
             {{- "<|end|><|start|>assistant to=" }}
-            {{- "functions." + message.tool_calls[0].name + "<|channel|>commentary json<|message|>" }}
-            {{- message.tool_calls[0].arguments|tojson }}
+            {{- "functions." + tool_call.name + "<|channel|>commentary json<|message|>" }}
+            {{- tool_call.arguments|tojson }}
             {{- "<|end|>" }}
-            {%- set last_tool_call.name = message.tool_calls[0].name %}
+            {%- set last_tool_call.name = tool_call.name %}
         {%- elif "thinking" in message and loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
             {#- This is a situation that should only occur in training, never in inference. #}
