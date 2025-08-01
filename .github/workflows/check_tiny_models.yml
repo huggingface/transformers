@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 -m pip uninstall -y transformers && python3 -m pip install -e .
           python3 -m pip install -U essentia librosa pretty_midi
+          python3 -m pip uninstall -y natten
 
       - name: Create all tiny models (locally)
         run: |
