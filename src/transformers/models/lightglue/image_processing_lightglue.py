@@ -527,5 +527,4 @@ class LightGlueImageProcessor(BaseImageProcessor):
             plt.show()
 
 
-
 __all__ = ["LightGlueImageProcessor"]

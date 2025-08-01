@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
@@ -36,7 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_matplotlib_available, logging, requires_backends
+from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
 
 
