@@ -1116,7 +1116,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.get_decoder
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
