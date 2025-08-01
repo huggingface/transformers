@@ -227,6 +227,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
     ) -> list[dict[str, torch.Tensor]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->LightGlue
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
@@ -239,15 +240,13 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
             images (`ImageInput`):
                 Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, torch.Tensor]])):
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
 
         Returns:
             `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
             keypoints as well as the matching between them.
         """
-        requires_backends(self, "vision")
-
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
@@ -282,6 +281,14 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
 
             results.append(plot_image_pil)
         return results
+
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
+    def _get_color(self, score):
+        """Maps a score to a color."""
+        r = int(255 * (1 - score))
+        g = int(255 * score)
+        b = 0
+        return (r, g, b)
 
     def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
         """
@@ -337,13 +344,6 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
                 plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
                 plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
             plt.show()
-
-    def _get_color(self, score):
-        """Maps a score to a color."""
-        r = int(255 * (1 - score))
-        g = int(255 * score)
-        b = 0
-        return (r, g, b)
 
 
 class LightGluePositionalEncoder(nn.Module):

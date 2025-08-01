@@ -407,7 +407,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
         return results
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.visualize_keypoint_matching
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->SuperGlue
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
@@ -420,7 +420,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image pairs to plot. Same as `SuperGlueImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, torch.Tensor]])):
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
 
         Returns:
@@ -462,7 +462,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             results.append(plot_image_pil)
         return results
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr._get_color
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
     def _get_color(self, score):
         """Maps a score to a color."""
         r = int(255 * (1 - score))
