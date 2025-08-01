@@ -17,16 +17,19 @@ import PIL
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 
+from ..mllama.image_processing_mllama import to_channel_dimension_format
+from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
-  BaseImageProcessorFast,
-  DefaultFastImageProcessorKwargs,
-  BatchFeature
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+    BatchFeature, logger
 )
 from ...processing_utils import Unpack
 from ...image_utils import (
     PILImageResampling,
     ImageInput,
-    ChannelDimension, SizeDict
+    ChannelDimension, SizeDict, make_list_of_images, valid_images, validate_preprocess_arguments, is_scaled_image,
+    infer_channel_dimension_format
 )
 from ...utils import (
     auto_docstring,
@@ -107,15 +110,48 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        resample: PILImageResampling,
         do_normalize: bool,
+        do_color_quantize: Optional[bool],
+        clusters: Optional[Union[list[list[int]], np.ndarray]],
         return_tensors: Optional[Union[str, TensorType]],
+        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
+
         # TODO: Override
         # Resize to specific size
         # Normalize pixel values
         # Optionally color quantize into clusters
         # Return processed images in a specified tensor format
-        pass
+
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        resample = resample if resample is not None else self.resample
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
+        clusters = clusters if clusters is not None else self.clusters
+        clusters = np.array(clusters)
+
+        images = make_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        # Here, normalize() is using a constant factor to divide pixel values.
+        # hence, the method does not need iamge_mean and image_std.
+        validate_preprocess_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+        if do_color_quantize and clusters is None:
+            raise ValueError("Clusters must be specified if do_color_quantize is True.")
+
 
 __all__ = ["ImageGPTImageProcessorFast"]
