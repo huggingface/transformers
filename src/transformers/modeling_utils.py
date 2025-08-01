@@ -4073,10 +4073,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     layer = ALL_PARALLEL_STYLES.get(plan, None)
                     if isinstance(state_dict[tensor], DTensor):
                         full_tensor = state_dict[tensor].full_tensor()
-                    else:
+                    elif layer is not None:
                         full_tensor = DTensor.from_local(
                             state_dict[tensor], layer.device_mesh, layer.output_layouts
                         ).full_tensor()
+                    else:
+                        full_tensor = state_dict[tensor]
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
