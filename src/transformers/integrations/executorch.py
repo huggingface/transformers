@@ -135,8 +135,8 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
             )
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("Can't specify both input_ids and inputs_embeds.")
+        if not input_ids ^ inputs_embeds:
+            raise ValueError("Need to specify either input_ids or inputs_embeds.")
 
         example_cache_position = (
             cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
@@ -150,7 +150,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
-        elif inputs_embeds:
+        else:  # inputs_embeds
             exported_program = torch.export.export(
                 self.model,
                 args=(),
@@ -158,16 +158,6 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
-        else:
-            # No inputs specified, assume we are exporting with input_ids for legacy reasons.
-            example_input_ids = torch.tensor([[1]], dtype=torch.long, device=model_device)
-            exported_program = torch.export.export(
-                self.model,
-                args=(),
-                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
-                dynamic_shapes=dynamic_shapes,
-                strict=strict if strict is not None else True,
-            )            
 
         return exported_program
 
