@@ -17,8 +17,8 @@ import PIL
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 
-from ..mllama.image_processing_mllama import to_channel_dimension_format
-from ...image_processing_utils import get_size_dict
+from transformers.image_transforms import to_channel_dimension_format
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -28,8 +28,8 @@ from ...processing_utils import Unpack
 from ...image_utils import (
     PILImageResampling,
     ImageInput,
-    ChannelDimension, SizeDict, make_list_of_images, valid_images, validate_preprocess_arguments, is_scaled_image,
-    infer_channel_dimension_format
+    ChannelDimension, SizeDict,
+    infer_channel_dimension_format, make_list_of_images, valid_images, validate_preprocess_arguments, is_scaled_image,
 )
 from ...utils import (
     auto_docstring,
@@ -54,6 +54,7 @@ def color_quantize_fast(x, clusters):
     return np.argmin(d, axis=1)
 
 class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    # TODO: Add documentation for each argument
     do_color_quantize: Optional[bool] = True
     clusters: Optional[np.ndarray] = None
     resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
@@ -120,12 +121,6 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
 
-        # TODO: Override
-        # Resize to specific size
-        # Normalize pixel values
-        # Optionally color quantize into clusters
-        # Return processed images in a specified tensor format
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
@@ -153,5 +148,55 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
+
+        # TODO:
+
+        # Resize to specific size
+
+        # Normalize pixel values
+
+        # Optionally color quantize into clusters
+
+        # Return processed images in a specified tensor format
+
+        if do_normalize and is_scaled_image(images[0]):
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
+                "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        if do_resize:
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        if do_normalize:
+            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
+
+        if do_color_quantize:
+            images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
+            # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
+            images = np.array(images)
+            images = color_quantize_fast(images, clusters).reshape(images.shape[:-1])
+
+            # flatten to (batch_size, height*width)
+            batch_size = images.shape[0]
+            images = images.reshape(batch_size, -1)
+
+            # We need to convert back to a list of images to keep consistent behaviour across processors.
+            images = list(images)
+        else:
+            images = [
+                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                for image in images
+            ]
+
+        data = {"input_ids": images}
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 __all__ = ["ImageGPTImageProcessorFast"]
