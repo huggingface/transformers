@@ -44,11 +44,10 @@ jobs:
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
-        working-directory: /transformers
         uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
-          path: tiny_local_models/reports
+          path: /transformers/tiny_local_models/reports
 #
 #      # GitHub-hosted runners have 2-core CPUs
 #      - name: Run pipeline tests against all new (local) tiny models
