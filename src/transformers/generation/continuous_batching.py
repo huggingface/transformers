@@ -196,19 +196,20 @@ class PagedAttentionCache:
         num_blocks = getattr(generation_config, "num_blocks", None)
         block_size = getattr(generation_config, "block_size", 32)
         max_memory_percent = getattr(generation_config, "max_memory", 0.9)
-        if num_blocks is None:
-            logger.info("Calculating optimal block size and number...")
-            num_blocks, max_batch_tokens = compute_optimal_blocks(
-                max_memory_percent,
-                generation_config.max_new_tokens,
-                num_requests,
-                block_size,
-                self.head_dim,
-                self.num_hidden_layers,
-                self.num_key_value_heads,
-                dtype,
-            )
-            logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+        num_blocks, max_batch_tokens = compute_optimal_blocks(
+            generation_config.max_new_tokens,
+            block_size=block_size,
+            head_dim=self.head_dim,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_key_value_heads,
+            max_memory_percent=max_memory_percent,
+            dtype=dtype,
+            num_blocks=num_blocks,
+        )
+        logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+        print(
+            f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
+        )
 
         self.max_batch_tokens = max_batch_tokens
         self.block_size = block_size
@@ -629,14 +630,13 @@ def get_device_and_memory():
 
 @traced(standalone=True)
 def compute_optimal_blocks(
-    max_memory_percent: float = 0.9,
-    max_num_tokens: int = 512,
-    total_requests: int = 100,
-    block_size: int = 32,
-    head_dim: int = 32,
-    hidden_dim: int = 1024,
-    num_heads: int = 16,
-    num_layers: int = 27,
+    max_num_tokens,
+    block_size,
+    head_dim,
+    num_heads,
+    num_layers,
+    max_memory_percent=0.9,
+    num_blocks=None,
     dtype=torch.float16,
 ):
     """
@@ -659,31 +659,21 @@ def compute_optimal_blocks(
             "max_concurrent_tokens": int
         }
     """
-    # 1. Get GPU memory information
     device, total, reserved, allocated = get_device_and_memory()
-    # Available memory is total minus current allocations, times the allowed percentage
-    available_memory = (total - max(allocated, reserved)) * max_memory_percent
+    available_memory = int((total - max(allocated, reserved)) * max_memory_percent)
 
-    # 2. Compute per-token cache memory requirement
-    # Typical KV cache size: 2 (K and V) * num_heads * head_dim * sizeof(float16)
-    # Assume FP16 = 2 bytes
     dtype_size = torch.tensor([], dtype=dtype).element_size()
-    kv_cache_bytes_per_token = 2 * num_heads * head_dim * dtype_size * num_layers
+    bytes_per_token = 2 * num_heads * head_dim * dtype_size * num_layers
+    if num_blocks is not None:
+        # TODO
+        max_possible_concurrent_requests = num_blocks * bytes_per_token
 
-    # Also include hidden states (optional)
-    hidden_bytes_per_token = hidden_dim * 2  # bytes per token
-
-    bytes_per_token = kv_cache_bytes_per_token + hidden_bytes_per_token
-
-    # 3. Compute concurrent tokens
-    # At least we need enough tokens to hold total_requests * max_num_tokens
-    max_possible_concurrent_tokens = int(available_memory // (bytes_per_token * max_num_tokens))
-    max_concurrent_tokens = min(total_requests, max_possible_concurrent_tokens)
-
-    # 4. Compute optimal number of blocks
-    # Blocks are allocated per token in multiples of block_size
-    optimal_num_blocks = (max_concurrent_tokens * max_num_tokens + block_size - 1) // block_size
-
+    max_possible_concurrent_requests = int(available_memory // (bytes_per_token * max_num_tokens))
+    if max_possible_concurrent_requests <= 0:
+        logger.warning("you are trying to generate a bit too many tokens")
+        max_possible_concurrent_requests = 32
+    max_concurrent_tokens = min(64, max_possible_concurrent_requests)
+    optimal_num_blocks = ((max_concurrent_tokens * max_num_tokens) // block_size) + 1
     return optimal_num_blocks, max_concurrent_tokens
 
 
