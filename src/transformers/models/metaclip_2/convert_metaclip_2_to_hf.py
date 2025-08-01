@@ -1,5 +1,5 @@
 """
-This script allows to convert MetaCLIP 2 (worldwide) checkpoints from the
+This script allows you to convert MetaCLIP 2 (worldwide) checkpoints from the
 original repository to the Hugging Face format.
 
 URL: https://github.com/facebookresearch/MetaCLIP
@@ -15,6 +15,7 @@ python convert_metaclip_2_to_hf.py --checkpoint_path /path/to/checkpoint --model
 
 import argparse
 import os
+from typing import Optional
 
 import torch
 from PIL import Image
@@ -166,7 +167,6 @@ def convert_state_dict(metaclip_state_dict: dict[str, torch.Tensor]) -> dict[str
                 # Handle attention and MLP mappings within transformer blocks
                 if "attn.in_proj" in new_key:
                     # Split the in_proj into q, k, v projections
-                    layer_num = new_key.split(".")[3]
                     if "weight" in new_key:
                         # We'll handle this later in a special case
                         continue
@@ -245,7 +245,7 @@ def convert_state_dict(metaclip_state_dict: dict[str, torch.Tensor]) -> dict[str
 
 
 def verify_conversion(
-    original_model, hf_model, preprocess, image_processor, tokenizer, test_image_path: str = None
+    original_model, hf_model, preprocess, image_processor, tokenizer, test_image_path: Optional[str] = None
 ) -> bool:
     """Verify that the conversion produces the same outputs."""
     print("Verifying conversion...")
@@ -336,17 +336,18 @@ def main():
     # Load original model
     original_model, preprocess = load_metaclip2_checkpoint(args.checkpoint_path, args.model_name)
 
+    # Create HF config
+    # Requires the tokenizer for the eos token id
+    tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-v-base")
+    config, image_size = create_hf_config(
+        metaclip_model=original_model, tokenizer=tokenizer, model_name=args.model_name
+    )
+
     # Create processor
     image_processor = CLIPImageProcessor(
         size={"height": image_size, "width": image_size}, crop_size={"height": image_size, "width": image_size}
     )
-    tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-v-base")
     processor = CLIPProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
-    # Create HF config
-    config, image_size = create_hf_config(
-        metaclip_model=original_model, tokenizer=tokenizer, model_name=args.model_name
-    )
 
     # Create HF model
     hf_model = MetaCLIP2Model(config)
