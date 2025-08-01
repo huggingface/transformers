@@ -1309,7 +1309,6 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
-                    "florence2",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
