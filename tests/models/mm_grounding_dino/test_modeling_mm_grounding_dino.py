@@ -673,14 +673,14 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
         return (
-            AutoProcessor.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det")
+            AutoProcessor.from_pretrained("openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
             if is_vision_available()
             else None
         )
 
     def test_inference_object_detection_head(self):
         model = MMGroundingDinoForObjectDetection.from_pretrained(
-            "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det"
+            "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
         ).to(torch_device)
 
         processor = self.default_processor
@@ -741,7 +741,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = MMGroundingDinoForObjectDetection.from_pretrained("rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det")
+        model = MMGroundingDinoForObjectDetection.from_pretrained("openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering (idxs 195<->196 and 267<->268 on my machine)
         # which causes different query position embedding assingments
@@ -782,7 +782,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
     @is_flaky()
     def test_cross_attention_mask(self):
         model = MMGroundingDinoForObjectDetection.from_pretrained(
-            "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det"
+            "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
         ).to(torch_device)
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering
@@ -826,7 +826,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = MMGroundingDinoForObjectDetection.from_pretrained(
-            "rziga/mm_grounding_dino_tiny_o365v1_goldg_v3det",
+            "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det",
             auxiliary_loss=True,
         )
         # Interested in the loss only
