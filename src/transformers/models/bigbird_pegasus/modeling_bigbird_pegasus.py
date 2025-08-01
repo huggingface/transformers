@@ -150,8 +150,8 @@ class BigBirdPegasusSelfAttention(nn.Module):
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
         if is_cross_attention and past_key_value is not None and past_key_value.get_seq_length(self.layer_idx) > 0:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.key_cache[self.layer_idx]
-            value_layer = past_key_value.value_cache[self.layer_idx]
+            key_layer = past_key_value.layers[self.layer_idx].keys
+            value_layer = past_key_value.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)

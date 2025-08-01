@@ -302,6 +302,7 @@ class GgufModelTests(unittest.TestCase):
     gemma3_text_model_id = "unsloth/gemma-3-1b-it-GGUF"
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
+    qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -335,6 +336,7 @@ class GgufModelTests(unittest.TestCase):
     bf16_gemma3_text_model_id = "gemma-3-1b-it-BF16.gguf"
     bf16_gemma3_vision_model_id = "gemma-3-4b-it-BF16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
+    q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -972,4 +974,18 @@ class GgufModelTests(unittest.TestCase):
         out = model.generate(text, max_new_tokens=10)
 
         EXPECTED_TEXT = "HelloED\nI need to find the value of the"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_qwen3moe_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen3moe_model_id, gguf_file=self.q4_k_m_qwen3moe_model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.qwen3moe_model_id,
+            gguf_file=self.q4_k_m_qwen3moe_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt")
+        out = model.generate(**text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)

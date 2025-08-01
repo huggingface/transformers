@@ -30,10 +30,10 @@ rendered properly in your Markdown viewer.
 The Ernie 4.5 Moe model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
 This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
 model with mixture of experts (moe) - one with 21B total, 3B active parameters and another one with 300B total, 47B active parameters.
-It uses the standard [Llama](./llama.md) at its core combined with a specialized MoE based on [Mixtral](./mixtral.md) with additional shared
+It uses the standard [Llama](./llama) at its core combined with a specialized MoE based on [Mixtral](./mixtral) with additional shared
 experts.
 
-Other models from the family can be found at [Ernie 4.5](./ernie4_5.md).
+Other models from the family can be found at [Ernie 4.5](./ernie4_5).
 
 <div class="flex justify-center">
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>

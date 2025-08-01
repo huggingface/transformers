@@ -14,25 +14,50 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# CLAP
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
-## Overview
+# CLAP
 
-The CLAP model was proposed in [Large Scale Contrastive Language-Audio pretraining with
-feature fusion and keyword-to-caption augmentation](https://huggingface.co/papers/2211.06687) by Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov.
+[CLAP (Contrastive Language-Audio Pretraining)](https://huggingface.co/papers/2211.06687) is a multimodal model that combines audio data with natural language descriptions through contrastive learning.
 
-CLAP (Contrastive Language-Audio Pretraining) is a neural network trained on a variety of (audio, text) pairs. It can be instructed in to predict the most relevant text snippet, given an audio, without directly optimizing for the task. The CLAP model uses a SWINTransformer to get audio features from a log-Mel spectrogram input, and a RoBERTa model to get text features. Both the text and audio features are then projected to a latent space with identical dimension. The dot product between the projected audio and text features is then used as a similar score.
+It incorporates feature fusion and keyword-to-caption augmentation to process variable-length audio inputs and to improve performance. CLAP doesn't require task-specific training data and can learn meaningful audio representations through natural language.
 
-The abstract from the paper is the following:
+You can find all the original CLAP checkpoints under the [CLAP](https://huggingface.co/collections/laion/clap-contrastive-language-audio-pretraining-65415c0b18373b607262a490) collection.
 
-*Contrastive learning has shown remarkable success in the field of multimodal representation learning. In this paper, we propose a pipeline of contrastive language-audio pretraining to develop an audio representation by combining audio data with natural language descriptions. To accomplish this target, we first release LAION-Audio-630K, a large collection of 633,526 audio-text pairs from different data sources. Second, we construct a contrastive language-audio pretraining model by considering different audio encoders and text encoders. We incorporate the feature fusion mechanism and keyword-to-caption augmentation into the model design to further enable the model to process audio inputs of variable lengths and enhance the performance. Third, we perform comprehensive experiments to evaluate our model across three tasks: text-to-audio retrieval, zero-shot audio classification, and supervised audio classification. The results demonstrate that our model achieves superior performance in text-to-audio retrieval task. In audio classification tasks, the model achieves state-of-the-art performance in the zeroshot setting and is able to obtain performance comparable to models' results in the non-zero-shot setting. LAION-Audio-6*
+> [!TIP]
+> This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
+>
+> Click on the CLAP models in the right sidebar for more examples of how to apply CLAP to different audio retrieval and classification tasks.
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ) .
-The original code can be found [here](https://github.com/LAION-AI/Clap).
+The example below demonstrates how to extract text embeddings with the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoTokenizer, AutoModel
+
+model = AutoModel.from_pretrained("laion/clap-htsat-unfused", torch_dtype=torch.float16, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
+
+texts = ["the sound of a cat", "the sound of a dog", "music playing"]
+
+inputs = tokenizer(texts, padding=True, return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    text_features = model.get_text_features(**inputs)
+
+print(f"Text embeddings shape: {text_features.shape}")
+print(f"Text embeddings: {text_features}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## ClapConfig
 
