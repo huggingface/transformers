@@ -279,26 +279,26 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 오디오 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
-### AudioClassificationPipeline 
+### AudioClassificationPipeline [[transformers.AudioClassificationPipeline]]
 
 [[autodoc]] AudioClassificationPipeline
     - __call__
     - all
 
-### AutomaticSpeechRecognitionPipeline
+### AutomaticSpeechRecognitionPipeline [[transformers.AutomaticSpeechRecognitionPipeline]]
 
 [[autodoc]] AutomaticSpeechRecognitionPipeline
     - __call__
     - all
 
-### TextToAudioPipeline
+### TextToAudioPipeline [[transformers.TextToAudioPipeline]]
 
 [[autodoc]] TextToAudioPipeline
     - __call__
     - all
 
 
-### ZeroShotAudioClassificationPipeline
+### ZeroShotAudioClassificationPipeline [[transformers.ZeroShotAudioClassificationPipeline]]
 
 [[autodoc]] ZeroShotAudioClassificationPipeline
     - __call__
@@ -308,48 +308,48 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 컴퓨터 비전 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
-### DepthEstimationPipeline
+### DepthEstimationPipeline [[transformers.DepthEstimationPipeline]]
 [[autodoc]] DepthEstimationPipeline
     - __call__
     - all
 
-### ImageClassificationPipeline
+### ImageClassificationPipeline [[transformers.ImageClassificationPipeline]]
 
 [[autodoc]] ImageClassificationPipeline
     - __call__
     - all
 
-### ImageSegmentationPipeline
+### ImageSegmentationPipeline [[transformers.ImageSegmentationPipeline]]
 
 [[autodoc]] ImageSegmentationPipeline
     - __call__
     - all
 
-### ImageToImagePipeline
+### ImageToImagePipeline [[transformers.ImageToImagePipeline]]
 
 [[autodoc]] ImageToImagePipeline
     - __call__
     - all
 
-### ObjectDetectionPipeline
+### ObjectDetectionPipeline [[transformers.ObjectDetectionPipeline]]
 
 [[autodoc]] ObjectDetectionPipeline
     - __call__
     - all
 
-### VideoClassificationPipeline
+### VideoClassificationPipeline [[transformers.VideoClassificationPipeline]]
 
 [[autodoc]] VideoClassificationPipeline
     - __call__
     - all
 
-### ZeroShotImageClassificationPipeline
+### ZeroShotImageClassificationPipeline [[transformers.ZeroShotImageClassificationPipeline]]
 
 [[autodoc]] ZeroShotImageClassificationPipeline
     - __call__
     - all
 
-### ZeroShotObjectDetectionPipeline
+### ZeroShotObjectDetectionPipeline [[transformers.ZeroShotObjectDetectionPipeline]]
 
 [[autodoc]] ZeroShotObjectDetectionPipeline
     - __call__
@@ -359,60 +359,60 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 자연어 처리 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
-### FillMaskPipeline
+### FillMaskPipeline [[transformers.FillMaskPipeline]]
 
 [[autodoc]] FillMaskPipeline
     - __call__
     - all
 
-### QuestionAnsweringPipeline
+### QuestionAnsweringPipeline [[transformers.QuestionAnsweringPipeline]]
 
 [[autodoc]] QuestionAnsweringPipeline
     - __call__
     - all
 
-### SummarizationPipeline
+### SummarizationPipeline [[transformers.SummarizationPipeline]]
 
 [[autodoc]] SummarizationPipeline
     - __call__
     - all
 
-### TableQuestionAnsweringPipeline
+### TableQuestionAnsweringPipeline [[transformers.TableQuestionAnsweringPipeline]]
 
 [[autodoc]] TableQuestionAnsweringPipeline
     - __call__
 
-### TextClassificationPipeline
+### TextClassificationPipeline [[transformers.TextClassificationPipeline]]
 
 [[autodoc]] TextClassificationPipeline
     - __call__
     - all
 
-### TextGenerationPipeline
+### TextGenerationPipeline [[transformers.TextGenerationPipeline]]
 
 [[autodoc]] TextGenerationPipeline
     - __call__
     - all
 
-### Text2TextGenerationPipeline
+### Text2TextGenerationPipeline [[transformers.Text2TextGenerationPipeline]]
 
 [[autodoc]] Text2TextGenerationPipeline
     - __call__
     - all
 
-### TokenClassificationPipeline
+### TokenClassificationPipeline [[transformers.TokenClassificationPipeline]]
 
 [[autodoc]] TokenClassificationPipeline
     - __call__
     - all
 
-### TranslationPipeline
+### TranslationPipeline [[transformers.TranslationPipeline]]
 
 [[autodoc]] TranslationPipeline
     - __call__
     - all
 
-### ZeroShotClassificationPipeline
+### ZeroShotClassificationPipeline [[transformers.ZeroShotClassificationPipeline]]
 
 [[autodoc]] ZeroShotClassificationPipeline
     - __call__
@@ -422,48 +422,48 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 멀티모달 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
-### DocumentQuestionAnsweringPipeline
+### DocumentQuestionAnsweringPipeline [[transformers.DocumentQuestionAnsweringPipeline]]
 
 [[autodoc]] DocumentQuestionAnsweringPipeline
     - __call__
     - all
 
-### FeatureExtractionPipeline
+### FeatureExtractionPipeline [[transformers.FeatureExtractionPipeline]]
 
 [[autodoc]] FeatureExtractionPipeline
     - __call__
     - all
 
-### ImageFeatureExtractionPipeline
+### ImageFeatureExtractionPipeline [[transformers.ImageFeatureExtractionPipeline]]
 
 [[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 
-### ImageToTextPipeline
+### ImageToTextPipeline [[transformers.ImageToTextPipeline]]
 
 [[autodoc]] ImageToTextPipeline
     - __call__
     - all
 
-### ImageTextToTextPipeline
+### ImageTextToTextPipeline [[transformers.ImageTextToTextPipeline]]
 
 [[autodoc]] ImageTextToTextPipeline
     - __call__
     - all
 
-### MaskGenerationPipeline
+### MaskGenerationPipeline [[transformers.MaskGenerationPipeline]]
 
 [[autodoc]] MaskGenerationPipeline
     - __call__
     - all
 
-### VisualQuestionAnsweringPipeline
+### VisualQuestionAnsweringPipeline [[transformers.VisualQuestionAnsweringPipeline]]
 
 [[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 
-## Parent class: `Pipeline`
+## Parent class: `Pipeline` [[transformers.Pipeline]]
 
 [[autodoc]] Pipeline
