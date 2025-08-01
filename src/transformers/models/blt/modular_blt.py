@@ -26,7 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_blt import (
     BltConfig,
@@ -295,7 +295,7 @@ class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):
 
 
 def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
+    # From Cohere2. Split and rotate. Note that this function is different from e.g. Llama.
     x1 = x[..., ::2]
     x2 = x[..., 1::2]
     rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
@@ -355,7 +355,7 @@ class BltLocalEncoder(nn.Module):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        input_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         patch_embeds: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -367,16 +367,20 @@ class BltLocalEncoder(nn.Module):
         patch_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        if input_embeds is None:
-            input_embeds = self.embed_tokens(input_ids)
-        batch_size = input_embeds.shape[0]
-        hidden_states = F.dropout(input_embeds, p=self.config.dropout, training=self.training)
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        batch_size = inputs_embeds.shape[0]
+        hidden_states = F.dropout(inputs_embeds, p=self.config.dropout, training=self.training)
+
         if position_ids is None:
             position_ids = (
-                torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0).expand(batch_size, -1)
             )
+
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
+
         for idx, layer in enumerate(self.layers):
             hidden_states = layer(
                 hidden_states,
@@ -425,6 +429,7 @@ class BltLocalEncoder(nn.Module):
         reduced_embeddings = torch.zeros(
             (batch_size, max_num_patches, embedding_dim), dtype=hidden_states.dtype, device=hidden_states.device
         )
+
         reduced_embeddings = reduced_embeddings.scatter_reduce(
             src=hidden_states,
             dim=1,
@@ -464,7 +469,7 @@ class BltLocalDecoder(nn.Module):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         patch_embeds: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -475,18 +480,24 @@ class BltLocalDecoder(nn.Module):
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size = embeds.shape[0]
-        hidden_states = embeds
+        batch_size = inputs_embeds.shape[0]
+        hidden_states = inputs_embeds
         patch_embeds = self.patch_embedding_projection(patch_embeds)
         patch_embeds = patch_embeds.reshape(
             batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size
         )
+
         if patch_embeds is not None and not self.cross_attn_decoder:
             hidden_states = hidden_states + patch_embeds
+
         if position_ids is None:
-            position_ids = torch.arange(embeds.shape[1], device=embeds.device).unsqueeze(0).expand(batch_size, -1)
+            position_ids = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0).expand(batch_size, -1)
+            )
+
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
+
         for i, layer in enumerate(self.layers):
             if i == 0 or self.config.cross_attn_all_layers:
                 # Remove cross_attention_states from kwargs if present to avoid multiple values error
@@ -534,6 +545,7 @@ class BltCrossAttention(MllamaTextCrossAttention):
         query_states = self.q_norm(hidden_states)
         query_states = self.q_proj(query_states)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
         if cross_attention_states is not None:
             cross_attention_states = self.k_norm(cross_attention_states)
             key_states = self.k_proj(cross_attention_states)
@@ -544,18 +556,20 @@ class BltCrossAttention(MllamaTextCrossAttention):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
-        elif cache_position is not None and cache_position[0] != 0:
+        elif cache_position[0] != 0:
             key_states, value_states = (
-                past_key_value.key_cache[self.layer_idx],
-                past_key_value.value_cache[self.layer_idx],
+                past_key_value.layers[self.layer_idx].keys,
+                past_key_value.layers[self.layer_idx].values,
             )
         else:
             raise ValueError(
                 "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
             )
         attention_interface: Callable = eager_attention_forward
+
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -612,8 +626,6 @@ class BltGlobalTransformer(nn.Module):
 
 @auto_docstring
 class BltPreTrainedModel(MllamaPreTrainedModel):
-    """Blt PreTrainedModel inheriting from Mllama but with Blt-specific init."""
-
     config: BltConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -676,10 +688,8 @@ class BltModel(BltPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is None and inputs_embeds is None:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if input_ids is not None:
             batch_size, sequence_length = input_ids.shape
         else:
@@ -730,7 +740,7 @@ class BltModel(BltPreTrainedModel):
         kwargs.pop("full_text_row_masked_out_mask", None)
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
-            input_embeds=encoder_embeds,
+            inputs_embeds=encoder_embeds,
             patch_embeds=None,
             attention_mask=causal_mask,
             position_ids=position_ids,
@@ -765,7 +775,7 @@ class BltModel(BltPreTrainedModel):
         )
         output = self.local_decoder(
             input_ids=input_ids,
-            embeds=encoder_hidden_states,
+            inputs_embeds=encoder_hidden_states,
             patch_embeds=global_hidden_states,
             attention_mask=causal_mask,
             position_ids=position_ids,
@@ -778,7 +788,7 @@ class BltModel(BltPreTrainedModel):
         )
         return BaseModelOutputWithPast(
             last_hidden_state=output,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
     def get_input_embeddings(self):
@@ -956,11 +966,6 @@ class BltForCausalLM(MllamaForCausalLM):
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
 
 __all__ = [
