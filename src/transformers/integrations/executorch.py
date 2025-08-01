@@ -581,9 +581,13 @@ def convert_and_export_with_cache(
 
         if is_torch_greater_or_equal("2.6.0"):
             exported_program = torch.export.export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(example_input_ids, example_cache_position),
-                kwargs={},
+                TorchExportableModuleWithStaticCache(
+                    model=model,
+                    config=config,
+                    generation_config=generation_config
+                ),
+                args=(),
+                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
@@ -599,9 +603,13 @@ def convert_and_export_with_cache(
             # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
             # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
             exported_program = torch.export._trace._export(
-                TorchExportableModuleWithStaticCache(model),
-                args=(example_input_ids,),
-                kwargs={"cache_position": example_cache_position},
+                TorchExportableModuleWithStaticCache(
+                    model=model,
+                    config=config,
+                    generation_config=generation_config,
+                ),
+                args=(),
+                kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
                 pre_dispatch=False,
                 strict=True,
             )
