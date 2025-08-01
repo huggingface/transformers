@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-샤드된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 로드할 수 있습니다.
+분할된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 로드할 수 있습니다.
 
 ```py
 from transformers.modeling_utils import load_sharded_checkpoint
