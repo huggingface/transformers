@@ -557,7 +557,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -577,7 +577,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_video(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 

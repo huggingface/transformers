@@ -46,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="meta-llama/Llama-2-7b-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-7b-hf",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -78,7 +78,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-transformers chat meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2
+transformers chat meta-llama/Llama-2-7b-chat-hf --dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -96,7 +96,7 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-13b-hf",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -137,7 +137,7 @@ visualizer("Plants create energy through a process known as")
     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.config.padding_idx)
     ```
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
-- Don't use the `torch_dtype` parameter in [`~AutoModel.from_pretrained`] if you're using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to `True` if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
+- Don't use the `dtype` parameter in [`~AutoModel.from_pretrained`] if you're using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to `True` if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
 ## LlamaConfig
 

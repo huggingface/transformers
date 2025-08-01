@@ -1510,7 +1510,7 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1663,7 +1663,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> model = Blip2TextModelWithProjection.from_pretrained(
-        ...     "Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16
+        ...     "Salesforce/blip2-itm-vit-g", dtype=torch.float16
         ... )
 
         >>> model.to(device)  # doctest: +IGNORE_RESULT
@@ -1755,7 +1755,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-itm-vit-g")
         >>> model = Blip2VisionModelWithProjection.from_pretrained(
-        ...     "Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16
+        ...     "Salesforce/blip2-itm-vit-g", dtype=torch.float16
         ... )
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
@@ -2005,7 +2005,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, dtype=torch.float16
         ... )  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2040,7 +2040,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
+        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, dtype=torch.bfloat16
         ... )  # doctest: +IGNORE_RESULT
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
@@ -2282,7 +2282,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> model = Blip2ForImageTextRetrieval.from_pretrained("Salesforce/blip2-itm-vit-g", torch_dtype=torch.float16)
+        >>> model = Blip2ForImageTextRetrieval.from_pretrained("Salesforce/blip2-itm-vit-g", dtype=torch.float16)
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-itm-vit-g")
 
         >>> model.to(device)  # doctest: +IGNORE_RESULT

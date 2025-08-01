@@ -46,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="FacebookAI/roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

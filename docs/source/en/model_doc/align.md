@@ -43,7 +43,7 @@ pipeline = pipeline(
     task="zero-shot-image-classification",
     model="kakaobrain/align-base",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 candidate_labels = [

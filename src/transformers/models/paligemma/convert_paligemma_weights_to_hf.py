@@ -64,7 +64,7 @@ def get_paligemma_config(variant: str, precision: str):
             "num_hidden_layers": 18,
             "num_key_value_heads": 1,
             "head_dim": 256,
-            "torch_dtype": precision,
+            "dtype": precision,
             "hidden_size": 2048,
             "hidden_activation": "gelu_pytorch_tanh",
             "num_attention_heads": 8,
@@ -72,7 +72,7 @@ def get_paligemma_config(variant: str, precision: str):
             "is_encoder_decoder": False,
         }
         vision_config = {
-            "torch_dtype": precision,
+            "dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
             "num_image_tokens": num_image_tokens,

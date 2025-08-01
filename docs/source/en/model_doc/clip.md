@@ -46,7 +46,7 @@ from transformers import pipeline
 clip = pipeline(
    task="zero-shot-image-classification",
    model="openai/clip-vit-base-patch32",
-   torch_dtype=torch.bfloat16,
+   dtype=torch.bfloat16,
    device=0
 )
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
@@ -62,7 +62,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
+model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.bfloat16, attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"

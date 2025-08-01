@@ -28,7 +28,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
     quantization_config=FPQuantConfig(),
     device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 ```
 
@@ -53,7 +53,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "qwen/Qwen3-8B",
     quantization_config=FPQuantConfig(),
     device_map="cuda",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 model.forward = torch.compile(model.forward, mode="max-autotune", fullgraph=True)

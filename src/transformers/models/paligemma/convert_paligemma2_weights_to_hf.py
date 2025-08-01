@@ -102,7 +102,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "num_hidden_layers": variant_config["num_hidden_layers"],
             "num_key_value_heads": variant_config["num_key_value_heads"],
             "head_dim": variant_config["head_dim"],
-            "torch_dtype": precision,
+            "dtype": precision,
             "hidden_size": variant_config["hidden_size"],
             "hidden_activation": "gelu_pytorch_tanh",
             "num_attention_heads": variant_config["num_attention_heads"],
@@ -114,7 +114,7 @@ def get_paligemma2_config(variant: str, precision: str):
 
         vision_config = {
             "num_positions": variant_config["num_positions"],  # not useful, to remove
-            "torch_dtype": precision,
+            "dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
             "num_image_tokens": num_image_tokens,

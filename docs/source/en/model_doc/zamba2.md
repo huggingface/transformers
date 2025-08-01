@@ -49,7 +49,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba2-7B")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="cuda", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="cuda", dtype=torch.bfloat16)
 
 input_text = "What factors contributed to the fall of the Roman Empire?"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")

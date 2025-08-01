@@ -261,7 +261,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
 
         model = MiniMaxForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
 
         with torch.no_grad():
@@ -286,7 +286,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
 
         model = MiniMaxForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
         expected_slice = (
             torch.tensor([[0, 1, 0, 933, 307, 3102, 2457, 1208], [0, 1, 0, 933, 307, 3102, 2457, 1208]])

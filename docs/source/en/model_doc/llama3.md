@@ -29,7 +29,7 @@ import torch
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 
-pipeline = transformers.pipeline("text-generation", model=model_id, model_kwargs={"torch_dtype": torch.bfloat16}, device_map="auto")
+pipeline = transformers.pipeline("text-generation", model=model_id, model_kwargs={"dtype": torch.bfloat16}, device_map="auto")
 pipeline("Hey how are you doing today?")
 ```
 
@@ -48,10 +48,10 @@ The original code of the authors can be found [here](https://github.com/meta-lla
 
 <Tip warning={true}>
 
-The `Llama3` models were trained using `bfloat16`, but the original inference uses `float16`. The checkpoints uploaded on the Hub use `torch_dtype = 'float16'`, which will be
+The `Llama3` models were trained using `bfloat16`, but the original inference uses `float16`. The checkpoints uploaded on the Hub use `dtype = 'float16'`, which will be
 used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
 
-The `dtype` of the online weights is mostly irrelevant unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+The `dtype` of the online weights is mostly irrelevant unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online), then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`), and finally, if there is a `dtype` provided in the config, it will be used. 
 
 Training the model in `float16` is not recommended and is known to produce `nan`; as such, the model should be trained in `bfloat16`.
 
@@ -82,7 +82,7 @@ Tips:
     Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
     come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
 
-- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `torch_dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
+- When using Flash Attention 2 via `attn_implementation="flash_attention_2"`, don't pass `dtype` to the `from_pretrained` class method and use Automatic Mixed-Precision training. When using `Trainer`, it is simply specifying either `fp16` or `bf16` to `True`. Otherwise, make sure you are using `torch.autocast`. This is required because the Flash Attention only support `fp16` and `bf16` data type.
 
 ## Resources
 

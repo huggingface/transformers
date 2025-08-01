@@ -80,7 +80,7 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 >>> set_seed(0)
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
+>>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
 >>> model.to(device)  # doctest: +SKIP
 
 >>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)

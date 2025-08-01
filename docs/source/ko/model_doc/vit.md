@@ -63,7 +63,7 @@ SDPA는 `torch>=2.1.1`에서 구현이 가능한 경우 기본적으로 사용�
 
 ```
 from transformers import ViTForImageClassification
-model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 

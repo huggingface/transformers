@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="FacebookAI/xlm-roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 # Example in French
@@ -62,7 +62,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "FacebookAI/xlm-roberta-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -107,7 +107,7 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-large")
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-large",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="flash_attention_2",
     quantization_config=quantization_config

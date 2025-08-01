@@ -202,7 +202,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
 
         with self.device_placement():
             if self.framework == "pt":

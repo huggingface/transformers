@@ -199,7 +199,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         model = SmolLM3ForCausalLM.from_pretrained(
             self.model_id,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
