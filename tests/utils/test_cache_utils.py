@@ -845,6 +845,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         max_cache_len = 23
         # Create generation config for the hybrid cache model
         from transformers.generation.configuration_utils import GenerationConfig
+
         generation_config = GenerationConfig(
             use_cache=True,
             cache_implementation="hybrid",
@@ -860,7 +861,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device)
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
         )
         n_g_key_caches = n_g_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():

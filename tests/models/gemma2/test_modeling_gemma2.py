@@ -368,7 +368,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
             model, config=model.config, generation_config=model.generation_config
         )
         exported_program = exportable_module.export(
-            input_ids=prompt_token_ids, cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device)
+            input_ids=prompt_token_ids,
+            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
         )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
@@ -396,8 +397,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
             model, config=model.config, generation_config=model.generation_config
         )
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device), 
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device)
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
         )
 
         # Test generation with the exported model

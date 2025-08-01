@@ -63,9 +63,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
         if hasattr(config, "layer_types") and getattr(config, "sliding_window", None) is not None:
             self.model = TorchExportableModuleWithHybridCache(
-                model,
-                config=config,
-                generation_config=generation_config
+                model, config=config, generation_config=generation_config
             )
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
@@ -134,21 +132,21 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             # Prepare inputs
             input_ids = torch.tensor([[1, 2, 3]], dtype=torch.long, device=model.device)
             cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long, device=model.device)
-            
+
             # Export
             exported = exportable_module.export(
-                input_ids=input_ids, 
+                input_ids=input_ids,
                 cache_position=cache_position
             )
             ```
-            
+
             Export with inputs_embeds:
             ```python
             # Prepare embeddings
             inputs_embeds = torch.randn(1, 3, 768, device=model.device)  # batch_size=1, seq_len=3, hidden_size=768
             cache_position = torch.arange(inputs_embeds.shape[1], dtype=torch.long, device=model.device)
-            
-            # Export  
+
+            # Export
             exported = exportable_module.export(
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position
@@ -367,7 +365,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for i in range(len(self.static_cache)):
             self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
-
 
     def forward(
         self,
@@ -603,11 +600,7 @@ def convert_and_export_with_cache(
 
         if is_torch_greater_or_equal("2.6.0"):
             exported_program = torch.export.export(
-                TorchExportableModuleWithStaticCache(
-                    model=model,
-                    config=config,
-                    generation_config=generation_config
-                ),
+                TorchExportableModuleWithStaticCache(model=model, config=config, generation_config=generation_config),
                 args=(),
                 kwargs={"input_ids": example_input_ids, "cache_position": example_cache_position},
                 dynamic_shapes=dynamic_shapes,
