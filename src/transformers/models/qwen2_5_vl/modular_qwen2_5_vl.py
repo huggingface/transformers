@@ -615,9 +615,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask,
                 )
-                # Only update model state if rope_deltas parameter was not provided
-                if rope_deltas is None:
-                    self.rope_deltas = calculated_rope_deltas
+                # Always update model state during prefill stage
+                self.rope_deltas = calculated_rope_deltas
                 current_rope_deltas = calculated_rope_deltas
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -782,8 +781,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         # Preserve rope_deltas for CFG and multi-pass generation
         if hasattr(outputs, "rope_deltas") and outputs.rope_deltas is not None:
             model_kwargs["rope_deltas"] = outputs.rope_deltas
-        elif hasattr(self.model, "rope_deltas") and self.model.rope_deltas is not None:
-            model_kwargs["rope_deltas"] = self.model.rope_deltas
 
         return model_kwargs
 
@@ -805,8 +802,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # Extract rope_deltas from kwargs to pass as parameter (needed for CFG generation)
-        rope_deltas_param = kwargs.pop("rope_deltas", None)
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -858,9 +853,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
-        # Add rope_deltas parameter for clean CFG generation
-        if rope_deltas_param is not None:
-            model_inputs["rope_deltas"] = rope_deltas_param
 
         return model_inputs
 
