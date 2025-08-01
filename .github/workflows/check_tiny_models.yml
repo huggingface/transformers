@@ -19,11 +19,15 @@ jobs:
   check_tiny_models:
     name: Check tiny models
     runs-on:
-      group: aws-g4dn-4xlarge-cache
+      group: aws-general-8-plus
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Check cache
+        working-directory: /transformers
+        run: ls -la /mnt/cache/
+
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
