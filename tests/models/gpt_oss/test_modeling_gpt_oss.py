@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch OpenAIMoe model."""
+"""Testing suite for the PyTorch GptOss model."""
 
 import unittest
 
@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from tests.tensor_parallel.test_tensor_parallel import TensorParallelTestBase
-from transformers import AutoModelForCausalLM, AutoTokenizer, OpenAIMoeConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GptOssConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -38,21 +38,21 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        OpenAIMoeForCausalLM,
-        OpenAIMoeModel,
+        GptOssForCausalLM,
+        GptOssModel,
     )
 
 
-class OpenAIMoeModelTester(CausalLMModelTester):
+class GptOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = OpenAIMoeConfig
-        base_model_class = OpenAIMoeModel
-        causal_lm_class = OpenAIMoeForCausalLM
+        config_class = GptOssConfig
+        base_model_class = GptOssModel
+        causal_lm_class = GptOssForCausalLM
 
     pipeline_model_mapping = (
         {
-            "feature-extraction": OpenAIMoeModel,
-            "text-generation": OpenAIMoeForCausalLM,
+            "feature-extraction": GptOssModel,
+            "text-generation": GptOssForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -60,12 +60,12 @@ class OpenAIMoeModelTester(CausalLMModelTester):
 
 
 @require_torch
-class OpenAIMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (OpenAIMoeModel, OpenAIMoeForCausalLM) if is_torch_available() else ()
+class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
+    all_model_classes = (GptOssModel, GptOssForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": OpenAIMoeModel,
-            "text-generation": OpenAIMoeForCausalLM,
+            "feature-extraction": GptOssModel,
+            "text-generation": GptOssForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -75,68 +75,68 @@ class OpenAIMoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-    model_tester_class = OpenAIMoeModelTester
+    model_tester_class = GptOssModelTester
 
     def setUp(self):
-        self.model_tester = OpenAIMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OpenAIMoeConfig, hidden_size=37)
+        self.model_tester = GptOssModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    @unittest.skip("OpenAIMoe's forcefully disables sdpa due to Sink")
+    @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
-    @unittest.skip("OpenAIMoe's eager attn/sdpa attn outputs are expected to be different")
+    @unittest.skip("GptOss's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache which is not compatible with dola decoding")
+    @unittest.skip("GptOss has HybridCache which is not compatible with dola decoding")
     def test_dola_decoding_sample(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support continue from past kv")
+    @unittest.skip("GptOss has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support contrastive generation")
+    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -147,18 +147,18 @@ class OpenAIMoeModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("OpenAIMoe has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    @unittest.skip("GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
         pass
 
-    @unittest.skip("OpenAIMoe eager/FA2 attention outputs are expected to be different")
+    @unittest.skip("GptOss eager/FA2 attention outputs are expected to be different")
     def test_flash_attn_2_equivalence(self):
         pass
 
 
 @slow
 @require_torch_accelerator
-class OpenAIMoeIntegrationTest(unittest.TestCase):
+class GptOssIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def setUp(self):
@@ -239,7 +239,7 @@ class OpenAIMoeIntegrationTest(unittest.TestCase):
 
 @slow
 @require_torch_multi_accelerator
-class OpenAIMoeTPTest(TensorParallelTestBase):
+class GptOssTPTest(TensorParallelTestBase):
     def test_model_training(self):
         self.run_tensor_parallel_test(
             model_id="/fsx/vb/new-oai/20b-converted-quantized", mode="training", expected_output="you with something?"

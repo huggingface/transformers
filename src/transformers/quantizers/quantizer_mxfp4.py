@@ -122,8 +122,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         state_dict: dict[str, Any],
         **kwargs,
     ):
-        from ..integrations import Mxfp4OpenAIMoeExperts
-        from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
+        from ..integrations import Mxfp4GptOssExperts
+        from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
@@ -131,8 +131,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         else:
             module, tensor_name = get_module_from_name(model, param_name)
 
-        if isinstance(module, Mxfp4OpenAIMoeExperts) or (
-            isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize
+        if isinstance(module, Mxfp4GptOssExperts) or (
+            isinstance(module, GptOssExperts) and self.quantization_config.dequantize
         ):
             if tensor_name in ["down_proj_bias", "gate_up_proj_bias"]:
                 return False
@@ -152,13 +152,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if is_triton_kernels_availalble():
             from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
-        from ..integrations import Mxfp4OpenAIMoeExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
-        from ..models.openai_moe.modeling_openai_moe import OpenAIMoeExperts
+        from ..integrations import Mxfp4GptOssExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
+        from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
             module, _ = get_module_from_name(model, param_name)
             with torch.cuda.device(target_device):
-                if isinstance(module, Mxfp4OpenAIMoeExperts):
+                if isinstance(module, Mxfp4GptOssExperts):
                     if "gate_up_proj" in param_name:
                         right_pad = module.gate_up_proj_right_pad
                         bottom_pad = module.gate_up_proj_bottom_pad
@@ -205,8 +205,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "model": model,
             }
 
-            if isinstance(module, Mxfp4OpenAIMoeExperts) or (
-                isinstance(module, OpenAIMoeExperts) and self.quantization_config.dequantize
+            if isinstance(module, Mxfp4GptOssExperts) or (
+                isinstance(module, GptOssExperts) and self.quantization_config.dequantize
             ):
                 if self.quantization_config.dequantize:
                     # dq_param_name is the name of the parameter without the blocks or scales suffix, it's used in this case since we don't switch linears
@@ -266,11 +266,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        from ..integrations import Mxfp4OpenAIMoeExperts
+        from ..integrations import Mxfp4GptOssExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, Mxfp4OpenAIMoeExperts):
+            if isinstance(module, Mxfp4GptOssExperts):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
@@ -281,7 +281,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
-        if "OpenAIMoeConfig" in config.__class__.__name__:
+        if "GptOssConfig" in config.__class__.__name__:
             if getattr(config, "base_model_tp_plan", None) is not None:
                 config.base_model_tp_plan.update(
                     {

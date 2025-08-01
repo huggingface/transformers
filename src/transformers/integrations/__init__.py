@@ -121,7 +121,7 @@ _import_structure = {
     ],
     "mxfp4": [
         "replace_with_mxfp4_linear",
-        "Mxfp4OpenAIMoeExperts",
+        "Mxfp4GptOssExperts",
         "quantize_to_mxfp4",
         "convert_moe_packed_tensors",
         "dequantize",
@@ -264,7 +264,7 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .mxfp4 import (
-        Mxfp4OpenAIMoeExperts,
+        Mxfp4GptOssExperts,
         dequantize,
         dequantize_and_quantize,
         quantize_to_mxfp4,

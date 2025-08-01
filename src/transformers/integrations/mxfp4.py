@@ -133,7 +133,7 @@ def convert_moe_packed_tensors(
     return out
 
 
-class Mxfp4OpenAIMoeExperts(nn.Module):
+class Mxfp4GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -433,11 +433,11 @@ def _replace_with_mxfp4_linear(
         if not should_convert_module(current_key_name, modules_to_not_convert):
             current_key_name.pop(-1)
             continue
-        if module.__class__.__name__ == "OpenAIMoeExperts" and not quantization_config.dequantize:
+        if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
             with init_empty_weights():
-                model._modules[name] = Mxfp4OpenAIMoeExperts(config)
+                model._modules[name] = Mxfp4GptOssExperts(config)
                 has_been_replaced = True
-        if module.__class__.__name__ == "OpenAIMoeMLP" and not quantization_config.dequantize:
+        if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
             from types import MethodType
 
             module.forward = MethodType(mlp_forward, module)
