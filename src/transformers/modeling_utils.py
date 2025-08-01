@@ -4068,7 +4068,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and self._device_mesh is not None:
+                if _is_dtensor_available and getattr(self, "_device_mesh", None) is not None:
                     plan = _get_parameter_tp_plan(tensor, self._tp_plan)
                     layer = ALL_PARALLEL_STYLES.get(plan, None)
                     if isinstance(state_dict[tensor], DTensor):
