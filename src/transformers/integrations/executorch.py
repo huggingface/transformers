@@ -95,9 +95,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             torch.Tensor: Logits output from the model.
         """
         return self.model.forward(
-            cache_position=cache_position,
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
         )
 
     def export(
@@ -153,8 +153,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             )
             ```
         """
-        # Validate inputs early for fail-fast behavior
-        if not input_ids ^ inputs_embeds:
+        if not (input_ids is None) ^ (inputs_embeds is None):
             raise ValueError("Need to specify either input_ids or inputs_embeds.")
 
         if hasattr(self.model, "base_model_prefix"):
@@ -172,15 +171,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
         )
 
-        if input_ids:
+        if input_ids is not None:
+            if cache_position is None:
+                cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long)
             exported_program = torch.export.export(
                 self.model,
                 args=(),
-                kwargs={"input_ids": input_ids, "cache_position": example_cache_position},
+                kwargs={"input_ids": input_ids, "cache_position": cache_position},
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
         else:  # inputs_embeds
+            if cache_position is None:
+                cache_position = torch.arange(inputs_embeds.shape[1], dtype=torch.long)
             exported_program = torch.export.export(
                 self.model,
                 args=(),
@@ -398,8 +401,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         outs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            attention_mask=None,
             cache_position=cache_position,
+            attention_mask=None,
             past_key_values=past_key_values,
             use_cache=True,
         )
@@ -525,25 +528,14 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        batch_size = None
-        if input_ids:
-            batch_size = input_ids.shape[0]
-        elif inputs_embeds:
-            batch_size = inputs_embeds.shape[0]
-
-        # Generate position_ids from cache_position
-        position_ids = None
-        if batch_size:
-            position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
-
         # Forward pass with the model
         outputs = self.model(
             input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
             attention_mask=None,
-            position_ids=position_ids,
             past_key_values=self.cache,
             use_cache=True,
-            cache_position=cache_position,
         )
 
         # Return only the logits to simplify the export
