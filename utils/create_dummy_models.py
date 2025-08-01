@@ -865,9 +865,6 @@ def build_composite_models(config_class, output_dir):
         GPT2Tokenizer,
         GPT2TokenizerFast,
         SpeechEncoderDecoderModel,
-        TFEncoderDecoderModel,
-        TFVisionEncoderDecoderModel,
-        TFVisionTextDualEncoderModel,
         VisionEncoderDecoderModel,
         VisionTextDualEncoderModel,
         ViTConfig,
@@ -968,6 +965,7 @@ def build_composite_models(config_class, output_dir):
                 f"Failed to build models for {config_class.__name__}.",
                 traceback.format_exc(),
             )
+            result["processor"] = {}
 
     if not result["error"]:
         del result["error"]
