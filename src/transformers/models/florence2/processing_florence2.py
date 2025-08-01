@@ -276,6 +276,24 @@ class Florence2Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=False, **kwargs):
+        """
+        Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                containing the token ids of the generated sequences.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text output.
+        """
+        return self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):

@@ -14,20 +14,149 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Florence2
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
-## Overview
+# Florence-2
 
-The Florence2 model was proposed in [Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks](https://arxiv.org/abs/2311.06242) by Microsoft.
+[Florence-2](https://arxiv.org/abs/2311.06242) is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation. It leverages the FLD-5B dataset, containing 5.4 billion annotations across 126 million images, to master multi-task learning. The model's sequence-to-sequence architecture enables it to excel in both zero-shot and fine-tuned settings, proving to be a competitive vision foundation model.
 
-Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation. It leverages our FLD-5B dataset, containing 5.4 billion annotations across 126 million images, to master multi-task learning. The model's sequence-to-sequence architecture enables it to excel in both zero-shot and fine-tuned settings, proving to be a competitive vision foundation model.
+You can find all the original Florence-2 checkpoints under the [Florence-2](https://huggingface.co/models?other=florence-2) collection.
 
-The abstract from the paper is the following:
+> [!TIP]
+> This model was contributed by [ducviet00](https://huggingface.co/ducviet00).
+>
+> Click on the Florence-2 models in the right sidebar for more examples of how to apply Florence-2 to different vision and language tasks.
 
-*We introduce Florence-2, a novel vision foundation model with a unified, prompt-based representation for a variety of computer vision and vision-language tasks. While existing large vision models excel in transfer learning, they struggle to perform a diversity of tasks with simple instructions, a capability that implies handling the complexity of various spatial hierarchy and semantic granularity. Florence-2 was designed to take text-prompt as task instructions and generate desirable results in text forms, whether it be captioning, object detection, grounding or segmentation. This multi-task learning setup demands large-scale, high-quality annotated data. To this end, we co-developed FLD-5B that consists of 5.4 billion comprehensive visual annotations on 126 million images, using an iterative strategy of automated image annotation and model refinement. We adopted a sequence-to-sequence structure to train Florence-2 to perform versatile and comprehensive vision tasks. Extensive evaluations on numerous tasks demonstrated Florence-2 to be a strong vision foundation model contender with unprecedented zero-shot and fine-tuning capabilities.*
+The example below demonstrates how to perform object detection with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [ducviet00](https://huggingface.co/ducviet00).
-The original code can be found [here](https://huggingface.co/microsoft/Florence-2-base/tree/main).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import pipeline
+
+pipeline = pipeline(
+    "image-text-to-text",
+    model="ducviet00/Florence-2-base-hf",
+    device=0,
+    torch_dtype=torch.bfloat16
+)
+
+pipeline(
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true",
+    text="<OD>"
+)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, Florence2ForConditionalGeneration
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", torch_dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+
+task_prompt = "<OD>"
+inputs = processor(text=task_prompt, images=image, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=1024,
+    num_beams=3,
+)
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+
+image_size = image.size
+parsed_answer = processor.post_process_generation(generated_text, task=task_prompt, image_size=image_size)
+print(parsed_answer)
+```
+
+</hfoption>
+<hfoption id="transformers-cli"></hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bit.
+
+```py
+# pip install bitsandbytes
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, Florence2ForConditionalGeneration, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+model = Florence2ForConditionalGeneration.from_pretrained(
+    "microsoft/Florence-2-large",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+task_prompt = "<OD>"
+inputs = processor(text=task_prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
+
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=1024,
+    num_beams=3,
+)
+generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+
+image_size = image.size
+parsed_answer = processor.post_process_generation(generated_text, task=task_prompt, image_size=image_size)
+
+print(parsed_answer)
+```
+
+<div class="flex justify-center">
+    <img src=""/>
+</div>
+
+## Notes
+
+- Florence-2 is a prompt-based model. You need to provide a task prompt to tell the model what to do. Supported tasks are:
+    - `<OCR>`
+    - `<OCR_WITH_REGION>`
+    - `<CAPTION>`
+    - `<DETAILED_CAPTION>`
+    - `<MORE_DETAILED_CAPTION>`
+    - `<OD>`
+    - `<DENSE_REGION_CAPTION>`
+    - `<CAPTION_TO_PHRASE_GROUNDING>`
+    - `<REFERRING_EXPRESSION_SEGMENTATION>`
+    - `<REGION_TO_SEGMENTATION>`
+    - `<OPEN_VOCABULARY_DETECTION>`
+    - `<REGION_TO_CATEGORY>`
+    - `<REGION_TO_DESCRIPTION>`
+    - `<REGION_TO_OCR>`
+    - `<REGION_PROPOSAL>`
+- The raw output of the model is a string that needs to be parsed. The [`Florence2Processor`] has a [`~Florence2Processor.post_process_generation`] method that can parse the string into a more usable format, like bounding boxes and labels for object detection.
+
+## Resources
+
+- [Florence-2 technical report](https://arxiv.org/abs/2311.06242)
+- [Jupyter Notebook for inference and visualization of Florence-2-large model](https://huggingface.co/microsoft/Florence-2-large/blob/main/sample_inference.ipynb)
 
 ## Florence2VisionConfig
 
