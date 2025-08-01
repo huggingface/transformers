@@ -49,8 +49,8 @@ import yaml
 from transformers.models.fastconformer.configuration_fastconformer import FastConformerConfig
 from transformers.models.fastconformer.feature_extraction_fastconformer import FastConformerFeatureExtractor
 from transformers.models.fastconformer.modeling_fastconformer import FastConformerModel
-from transformers.models.parakeet.configuration_parakeet import ParakeetCTCConfig
-from transformers.models.parakeet.modeling_parakeet import ParakeetCTC
+from transformers.models.parakeet_ctc.configuration_parakeet_ctc import ParakeetCTCConfig
+from transformers.models.parakeet_ctc.modeling_parakeet_ctc import ParakeetCTC
 
 
 # Set up logging
@@ -524,9 +524,36 @@ def create_feature_extractor_config(preprocessor_cfg: Optional[dict[str, Any]]) 
     return feature_extractor_config
 
 
+def extract_preprocessing_weights(nemo_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Extract preprocessing weights from NeMo state dict."""
+    preprocessing_weights = {}
+
+    # Extract window function
+    window_keys = [k for k in nemo_state_dict.keys() if k.endswith("featurizer.window")]
+    if window_keys:
+        preprocessing_weights["feature_extractor.window"] = nemo_state_dict[window_keys[0]]
+        logger.info(f"Extracted window function: {window_keys[0]}")
+
+    # Extract filterbanks
+    fb_keys = [k for k in nemo_state_dict.keys() if k.endswith("featurizer.fb")]
+    if fb_keys:
+        # NeMo stores filterbanks with shape (1, n_mels, n_fft//2+1)
+        # HuggingFace expects (n_mels, n_fft//2+1)
+        fb_tensor = nemo_state_dict[fb_keys[0]]
+        if fb_tensor.dim() == 3 and fb_tensor.size(0) == 1:
+            fb_tensor = fb_tensor.squeeze(0)
+        preprocessing_weights["feature_extractor.filterbanks"] = fb_tensor
+        logger.info(f"Extracted mel filterbanks: {fb_keys[0]}")
+
+    return preprocessing_weights
+
+
 def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[str, Any]) -> dict[str, torch.Tensor]:
     """Convert NeMo weights to HuggingFace format using regex mapping."""
     logger.info("Converting weights using regex mapping...")
+
+    # Extract preprocessing weights first
+    preprocessing_weights = extract_preprocessing_weights(nemo_state_dict)
 
     # Get key mapping
     all_keys = list(nemo_state_dict.keys())
@@ -545,16 +572,14 @@ def convert_weights(nemo_state_dict: dict[str, torch.Tensor], model_info: dict[s
             # Skip this key (mapped to None or empty)
             continue
 
-        # Special handling for CTC decoder weights (Conv1d -> Linear)
-        if hf_key == "decoder.ctc_head.weight" and tensor.dim() == 3 and tensor.size(2) == 1:
-            # NeMo uses Conv1d (shape: [out_channels, in_channels, kernel_size])
-            # HF uses Linear (shape: [out_features, in_features])
-            tensor = tensor.squeeze(2)
-            logger.info("Converted CTC head weight from Conv1d to Linear format")
-
         hf_state_dict[hf_key] = tensor
 
-    logger.info(f"Converted {len(hf_state_dict)} weights from {len(nemo_state_dict)} NeMo weights")
+    # Add preprocessing weights to the model state dict
+    hf_state_dict.update(preprocessing_weights)
+
+    logger.info(
+        f"Converted {len(hf_state_dict)} weights from {len(nemo_state_dict)} NeMo weights (including {len(preprocessing_weights)} preprocessing weights)"
+    )
     return hf_state_dict
 
 
@@ -721,7 +746,7 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
             json.dump(vocab_dict, f, ensure_ascii=False, indent=2)
 
         # Import and create tokenizer
-        from transformers.models.parakeet.tokenization_parakeet_ctc import ParakeetTokenizer
+        from transformers.models.parakeet_ctc.tokenization_parakeet_ctc import ParakeetCTCTokenizer
 
         # Get blank token ID from model config
         blank_token_id = len(vocab_dict)  # Default: vocab_size (blank token after all real tokens)
@@ -730,7 +755,7 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
             blank_token_id = hf_config.blank_token_id
             logger.info(f"Using blank_token_id from model config: {blank_token_id}")
 
-        tokenizer = ParakeetTokenizer(
+        tokenizer = ParakeetCTCTokenizer(
             vocab_file=str(vocab_file_path),
             unk_token="<unk>",
             blank_token_id=blank_token_id,
@@ -773,13 +798,12 @@ def convert_nemo_to_hf(input_path: str, output_dir: str) -> dict[str, Any]:
         **conversion_info_extra,  # Add tokenizer info
     }
 
-    # Can be used for debugging
-    print(conversion_info)
-    # with open(output_dir / "conversion_info.json", "w", encoding="utf-8") as f:
-    #     json.dump(conversion_info, f, indent=2)
+    # Save conversion metadata
+    with open(output_dir / "conversion_info.json", "w", encoding="utf-8") as f:
+        json.dump(conversion_info, f, indent=2)
 
-    # logger.info("Conversion completed successfully!")
-    # return conversion_info
+    logger.info("Conversion completed successfully!")
+    return conversion_info
 
 
 def verify_conversion(output_dir: str) -> bool:
