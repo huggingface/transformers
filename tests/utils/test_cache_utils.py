@@ -886,6 +886,7 @@ class SyntheticCacheTest(unittest.TestCase):
             head_dim=1,
             hidden_size=1,
             sliding_window=self.window_size,
+            attention_chunk_size=self.window_size,
             layer_types=["full_attention"] * 1,  # Static cache by default
         )
 
@@ -955,19 +956,19 @@ class SyntheticCacheTest(unittest.TestCase):
         # Scenario 1: Update within window, no slide yet
         config = copy.deepcopy(self.config)
         config.layer_types = ["sliding_attention"] * config.num_hidden_layers
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         sliding_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -976,19 +977,19 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 2: Update causing slide
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(4)},
         )
         sliding_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -997,13 +998,13 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 3: Long prompt handling
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         sliding_cache.update(
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1026,12 +1027,12 @@ class SyntheticCacheTest(unittest.TestCase):
 
         # Scenario 1
         hybrid_cache_static_mode = HybridCache(config=config, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         hybrid_cache_static_mode.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4)},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         hybrid_cache_static_mode.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
@@ -1080,18 +1081,18 @@ class SyntheticCacheTest(unittest.TestCase):
         config.layer_types = ["sliding_attention"] * config.num_hidden_layers
         # Scenario 1: Update within window, no slide yet
         hybrid_cache = HybridCache(config=config, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         hybrid_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1106,13 +1107,13 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(4)},
         )
         hybrid_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1125,7 +1126,7 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=torch.tensor(6.0)[None, None, None, None],
             value_states=torch.tensor(6.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([5]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([5])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1140,7 +1141,7 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1392,7 +1393,7 @@ class SyntheticCacheTest(unittest.TestCase):
         config.num_hidden_layers = 1
         config.layer_types = ["chunked_attention"]
         config.sliding_window = 3
-        cache = HybridChunkedCache(config, max_cache_len=3)
+        cache = HybridChunkedCache(config=config, max_cache_len=3)
 
         # Step 0 : multi-token prefill
         first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2

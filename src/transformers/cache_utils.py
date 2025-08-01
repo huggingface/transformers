@@ -820,7 +820,7 @@ class Cache:
 
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
-            torch.cuda.default_stream(key_states.device).wait_stream(self._prefetch_stream)
+            torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
@@ -1252,7 +1252,7 @@ class HybridCache(Cache):
 class HybridChunkedCache(HybridCache): ...
 
 
-class OffloadedHybridCache(HybridChunkedCache):
+class OffloadedHybridCache(Cache):
     """
     A drop-in replacement for HybridChunkedCache that conserves accelerator memory by offloading
     cache tensors to CPU when not actively being used.
@@ -1265,9 +1265,19 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
     def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
-        super().__init__(max_cache_len, config)
-        self.offloading = True
-        self.only_non_sliding = True
+        if hasattr(config, "layer_types"):
+            layers = []
+            for layer_type in config.layer_types:
+                init_kwargs = {"max_cache_len": max_cache_len}
+                if layer_type == "sliding_attention":
+                    init_kwargs["sliding_window"] = config.sliding_window
+                elif layer_type == "chunked_attention":
+                    init_kwargs["sliding_window"] = config.attention_chunk_size
+                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
+        else:
+            # In this case, fall back to StaticCache
+            layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers, offloading=True)
 
 
 class QuantizedCache(Cache):
