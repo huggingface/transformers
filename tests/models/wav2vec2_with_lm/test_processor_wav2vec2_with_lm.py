@@ -154,7 +154,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_another_feature_extractor(self):
@@ -169,7 +169,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
         self.assertListEqual(
@@ -199,7 +199,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def _get_dummy_logits(self, shape=(2, 10, 16), seed=77):
@@ -394,7 +394,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         input_wav2vec2 = processor_wav2vec2(raw_speech, return_tensors="np")
         input_auto = processor_auto(raw_speech, return_tensors="np")
 
-        for key in input_wav2vec2.keys():
+        for key in input_wav2vec2:
             self.assertAlmostEqual(input_wav2vec2[key].sum(), input_auto[key].sum(), delta=1e-2)
 
         logits = self._get_dummy_logits()

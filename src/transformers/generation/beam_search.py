@@ -228,7 +228,7 @@ class BeamSearchScorer(BeamScorer):
         cur_len = input_ids.shape[-1] + 1
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
-        if not (batch_size == (input_ids.shape[0] // self.group_size)):
+        if batch_size != (input_ids.shape[0] // self.group_size):
             if self.num_beam_groups > 1:
                 raise ValueError(
                     f"A group beam size of {input_ids.shape[0]} is used as the input, but a group beam "
@@ -564,7 +564,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         # add up to the length which the next_scores is calculated on (including decoder prompt)
         cur_len = input_ids.shape[-1] + 1
         batch_size = len(self._beam_hyps)
-        if not (batch_size == (input_ids.shape[0] // self.group_size)):
+        if batch_size != (input_ids.shape[0] // self.group_size):
             if self.num_beam_groups > 1:
                 raise ValueError(
                     f"A group beam size of {input_ids.shape[0]} is used as the input, but a group beam "

@@ -132,10 +132,10 @@ def expand_inputs_for_generation(
         torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
     )
     input_ids = input_ids.index_select(0, expanded_return_idx)
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
-    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
-    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
-    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values")
+    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings")
+    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings")
+    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask")
 
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]

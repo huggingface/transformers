@@ -452,7 +452,7 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "validation" in ds.keys() else args.train_val_split
+    args.train_val_split = None if "validation" in ds else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = ds["train"].train_test_split(args.train_val_split)
         ds["train"] = split["train"]

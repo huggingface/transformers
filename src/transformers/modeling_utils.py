@@ -1357,12 +1357,12 @@ def _get_torch_dtype(
             elif hasattr(torch, torch_dtype):
                 torch_dtype = getattr(torch, torch_dtype)
                 config.torch_dtype = torch_dtype
-                for sub_config_key in config.sub_configs.keys():
+                for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
                     sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, torch.dtype):
             config.torch_dtype = torch_dtype
-            for sub_config_key in config.sub_configs.keys():
+            for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
                 sub_config.torch_dtype = torch_dtype
         elif isinstance(torch_dtype, dict):
@@ -1388,7 +1388,7 @@ def _get_torch_dtype(
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
-        for key in config.sub_configs.keys():
+        for key in config.sub_configs:
             value = getattr(config, key)
             value.torch_dtype = default_dtype
 
@@ -1446,7 +1446,7 @@ def _get_device_map(
 
         # `inferred_max_memory` contains non-reserved memory. There may be *unused* reserved memory in the GPU,
         # which we can use to allocate parameters.
-        for device_name in inferred_max_memory.keys():
+        for device_name in inferred_max_memory:
             if isinstance(device_name, int):  # it's a GPU device
                 if is_torch_xpu_available():
                     unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
@@ -2881,9 +2881,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
         # between modelings (because they are prefixed with the model name)
         elif (
-            isinstance(
-                module, (nn.LayerNorm, nn.RMSNorm, nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
-            )
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
             or "LayerNorm" in module.__class__.__name__
             or "RMSNorm" in module.__class__.__name__
         ):
@@ -3002,9 +3000,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
                 )
 
-                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
+                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules}
                 encoder_layer_pos = 0
-                for name in decoder_modules.keys():
+                for name in decoder_modules:
                     if name.isdigit():
                         encoder_name = str(int(name) + encoder_layer_pos)
                         decoder_name = name
@@ -3942,7 +3940,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
             for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
+                if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
@@ -4057,7 +4055,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
-                and filename not in state_dict_split.filename_to_tensors.keys()
+                and filename not in state_dict_split.filename_to_tensors
                 and is_main_process
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
@@ -5334,7 +5332,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if device_map is not None:
                 device_map = {k[len(_prefix) :] if k.startswith(_prefix) else k: v for k, v in device_map.items()}
             # small sanity check: the base model should not contain task-specific head keys
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            task_specific_expected_keys = [s for s in model.state_dict() if not s.startswith(_prefix)]
             base_model_expected_keys = list(model_to_load.state_dict().keys())
             if any(
                 key in task_specific_expected_keys and key not in base_model_expected_keys for key in checkpoint_keys
@@ -6021,19 +6019,22 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
-        if device.type == "cuda":
-            index = device.index if device.index is not None else torch.cuda.current_device()
-            device_memory = torch.cuda.mem_get_info(index)[0]
+        if device.type in ["cuda", "xpu"]:
+            torch_accelerator_module = getattr(torch, device.type)
+            index = device.index if device.index is not None else torch_accelerator_module.current_device()
+            device_memory = torch_accelerator_module.mem_get_info(index)[0]
             # Allow up to (max device memory - 1.2 GiB) in resource-constrained hardware configurations. Trying to reserve more
-            # than that amount might sometimes lead to unnecessary cuda OOM, if the last parameter to be loaded on the device is large,
+            # than that amount might sometimes lead to unnecessary cuda/xpu OOM, if the last parameter to be loaded on the device is large,
             # and the remaining reserved memory portion is smaller than the param size -> torch will then try to fully re-allocate all
             # the param size, instead of using the remaining reserved part, and allocating only the difference, which can lead
             # to OOM. See https://github.com/huggingface/transformers/issues/37436#issuecomment-2808982161 for more details.
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
-            # If there is *unused* reserved cuda memory, we can skip/reduce the allocation.
-            unused_memory = torch.cuda.memory_reserved(index) - torch.cuda.memory_allocated(index)
+            # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
+            unused_memory = torch_accelerator_module.memory_reserved(
+                index
+            ) - torch_accelerator_module.memory_allocated(index)
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
