@@ -1303,12 +1303,15 @@ class AutoformerModel(AutoformerPreTrainedModel):
         # calculates the indices of the lags by subtracting the shift value from the given lags_sequence
         indices = [lag - shift for lag in self.config.lags_sequence]
 
-        # checks if the maximum lag plus the length of the subsequences exceeds the length of the input sequence
         sequence_length = sequence.shape[1]
-        if max(indices) + subsequences_length > sequence_length:
+        # We need to check if the sequence is long enough to create the lags
+        min_len_for_lags = max(self.config.lags_sequence) + subsequences_length
+        if sequence_length < min_len_for_lags:
             raise ValueError(
-                f"lags cannot go further than history length, found lag {max(indices)} "
-                f"while history length is only {sequence_length}"
+                "The length of the 'past_values' tensor is too short for the configured lags. "
+                f"To use lags up to {max(self.config.lags_sequence)}, the input sequence length needs to be at least "
+                f"{min_len_for_lags} (max_lag + context_length + prediction_length), but it is only "
+                f"{sequence_length}."
             )
 
         # extracts the lagged subsequences from the input sequence using the calculated indices
