@@ -453,6 +453,8 @@ class BlipPreTrainedModel(PreTrainedModel):
                 std = self.config.vision_config.initializer_range
             nn.init.trunc_normal_(module.position_embedding, std=std)
             nn.init.trunc_normal_(module.class_embedding, std=std)
+        elif isinstance(module, BlipModel):
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
