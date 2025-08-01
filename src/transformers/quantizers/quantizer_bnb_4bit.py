@@ -307,7 +307,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_before_weight_loading
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
