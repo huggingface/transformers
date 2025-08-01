@@ -2742,36 +2742,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation = "longest_first"
 
         # Get padding strategy
-        if padding is not False:
-            if padding is True:
-                if verbose:
-                    if max_length is not None and (
-                        truncation is None or truncation is False or truncation == "do_not_truncate"
-                    ):
-                        warnings.warn(
-                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
-                            "To pad to max length, use `padding='max_length'`."
-                        )
-                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            elif not isinstance(padding, PaddingStrategy):
-                padding_strategy = PaddingStrategy(padding)
-            elif isinstance(padding, PaddingStrategy):
-                padding_strategy = padding
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
+        padding_strategy = self.convert_to_padding_strategy(padding, max_length, truncation, verbose=verbose)
 
         # Get truncation strategy
-        if truncation is not False and truncation is not None:
-            if truncation is True:
-                truncation_strategy = (
-                    TruncationStrategy.LONGEST_FIRST
-                )  # Default to truncate the longest sequences in pairs of inputs
-            elif not isinstance(truncation, TruncationStrategy):
-                truncation_strategy = TruncationStrategy(truncation)
-            elif isinstance(truncation, TruncationStrategy):
-                truncation_strategy = truncation
-        else:
-            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+        truncation_strategy = self.convert_to_truncation_strategy(truncation)
 
         # Set max length if needed
         if max_length is None:
@@ -2823,6 +2797,77 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         return padding_strategy, truncation_strategy, max_length, kwargs
+
+    @staticmethod
+    def convert_to_padding_strategy(
+        padding: Union[bool, str, PaddingStrategy],
+        max_length: Optional[int] = None,
+        truncation: Union[bool, str, TruncationStrategy, None] = None,
+        verbose: bool = True,
+    ) -> PaddingStrategy:
+        """
+        Convert the padding argument to a PaddingStrategy.
+
+        Args:
+            padding : (`bool`, `str`, or [`~utils.PaddingStrategy`])
+                Padding strategy to convert to a PaddingStrategy enum.
+                If `True`, defaults to `PaddingStrategy.LONGEST`.
+            max_length : (`int`, *optional*, defaults to `None`)
+                Maximum length to pad to.
+            truncation : (`bool`, `str`, [`~utils.TruncationStrategy`], *optional*, defaults to `None`)
+                Truncation strategy to use, by default None
+            verbose : (`bool`, *optional*, defaults to `True`)
+                Whether to print warnings, by default True
+
+        Returns:
+            [`~utils.PaddingStrategy`]: The padding strategy to use.
+        """
+        if padding is not False:
+            if padding is True:
+                if verbose:
+                    if max_length is not None and (
+                        truncation is None or truncation is False or truncation == "do_not_truncate"
+                    ):
+                        warnings.warn(
+                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
+                            "To pad to max length, use `padding='max_length'`."
+                        )
+                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
+            elif not isinstance(padding, PaddingStrategy):
+                padding_strategy = PaddingStrategy(padding)
+            elif isinstance(padding, PaddingStrategy):
+                padding_strategy = padding
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
+
+        return padding_strategy
+
+    @staticmethod
+    def convert_to_truncation_strategy(truncation: Union[bool, str, TruncationStrategy, None]) -> TruncationStrategy:
+        """
+        Convert the truncation argument to a [`~utils.TruncationStrategy`].
+
+        Args:
+            truncation : (`bool`, `str`, [`~utils.TruncationStrategy`], *optional*, defaults to `None`)
+                Truncation strategy to convert to a [`~utils.TruncationStrategy`].
+                If `True`, defaults to `TruncationStrategy.LONGEST_FIRST`.
+
+        Returns:
+            [`~utils.TruncationStrategy`]: The truncation strategy to use.
+        """
+        if truncation is not False and truncation is not None:
+            if truncation is True:
+                truncation_strategy = (
+                    TruncationStrategy.LONGEST_FIRST
+                )  # Default to truncate the longest sequences in pairs of inputs
+            elif not isinstance(truncation, TruncationStrategy):
+                truncation_strategy = TruncationStrategy(truncation)
+            elif isinstance(truncation, TruncationStrategy):
+                truncation_strategy = truncation
+        else:
+            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+
+        return truncation_strategy
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
