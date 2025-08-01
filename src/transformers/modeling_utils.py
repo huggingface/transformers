@@ -2599,7 +2599,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        if not self._supports_sdpa:
+        if not self._supports_sdpa and not is_init_check:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
