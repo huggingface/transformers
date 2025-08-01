@@ -422,6 +422,10 @@ class PretrainedConfig(PushToHubMixin):
                 )
                 subconfig._attn_implementation = sub_implementation
 
+        # special case for `backbone_config`
+        if hasattr(self, "backbone_config") and isinstance(self.backbone_config, PretrainedConfig):
+            self.backbone_config._attn_implementation = attn_implementation
+
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
