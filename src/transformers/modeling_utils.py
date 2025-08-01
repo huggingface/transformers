@@ -2687,7 +2687,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
             if "|" in applicable_attn_implementation:
                 attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
-                # we usually wrap to prepare inputs etc
+                # `transformers` has wrapper for sdpa, paged, flash, flex etc.
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
             if ":" in applicable_attn_implementation:
@@ -2821,9 +2821,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 subconfig_key, submodule.config._attn_implementation
                             )
                             break
-                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                submodule.config._attn_implementation = sub_implementation
-                subconfigs_changed.add(submodule.config.__class__)
+                # check the module can use correctly, otherwise we silently set the config without the model using it
+                if submodule._can_set_attn_implementation():
+                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                    submodule.config._attn_implementation = sub_implementation
+                    subconfigs_changed.add(submodule.config.__class__)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
