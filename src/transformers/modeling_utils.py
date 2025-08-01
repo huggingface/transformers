@@ -4076,7 +4076,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         full_tensor = state_dict[tensor]
                     # to get the correctly ordered tensor we need to repack if packed
-                    shards = [local_tensor.clone() for local_tensor in self._device_mesh.all_gather(local_tensor)]
+                    shards = [
+                        local_tensor.clone()
+                        for local_tensor in torch.distributed.all_gather(local_tensor, self._device_mesh)
+                    ]
                     full_tensor = torch.cat(shards, dim=0)
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
