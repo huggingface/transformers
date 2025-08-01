@@ -11,3 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Testing suite for the ParakeetCTC tokenizer."""
+
+import unittest
+
+from transformers import ParakeetTokenizer
+
+from ...test_tokenization_common import TokenizerTesterMixin
+
+
+class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = ParakeetTokenizer
+    test_rust_tokenizer = False
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        tokenizer = ParakeetTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        tokenizer.save_pretrained(cls.tmpdirname)

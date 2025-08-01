@@ -871,8 +871,6 @@
         title: Dia
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/fastconformer
-        title: FastConformer
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
       - local: model_doc/granite_speech
@@ -895,8 +893,8 @@
         title: MusicGen
       - local: model_doc/musicgen_melody
         title: MusicGen Melody
-      - local: model_doc/parakeet_ctc
-        title: ParakeetCTC
+      - local: model_doc/parakeet
+        title: Parakeet
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
