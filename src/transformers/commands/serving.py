@@ -1038,7 +1038,6 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        print(req)
         if isinstance(req["input"], str):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append({"role": "user", "content": req["input"]})
