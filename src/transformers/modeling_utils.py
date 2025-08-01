@@ -2834,7 +2834,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation = sub_implementation
                     subconfigs_changed.add(submodule.config.__class__)
-                except Exception as e:
+                except Exception:
                     pass
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
