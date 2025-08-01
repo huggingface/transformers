@@ -18,7 +18,6 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional
 
 import torch
 import torch.distributed as dist
