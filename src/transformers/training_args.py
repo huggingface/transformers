@@ -187,6 +187,10 @@ class OptimizerNames(ExplicitEnum):
     APOLLO_ADAMW = "apollo_adamw"
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
     STABLE_ADAMW = "stable_adamw"
+    MUON = "muon"
+    MUON_ADAM = "muon_adam"
+    MUON_SINGLE = "muon_single"
+    MUON_SINGLE_ADAM = "muon_single_adam"
 
 
 def _convert_str_dict(passed_value: dict):
