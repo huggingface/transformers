@@ -1,4 +1,4 @@
-name: PR slow CI
+name: PR - build doc via comment
 on:
   issue_comment:
     types:
