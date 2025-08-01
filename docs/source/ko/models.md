@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 모델 로드하기[[loading-models]]
 
-트랜스포머는 한 줄의 코드로 사용할 수 있는 많은 사전훈련된 모델을 제공합니다. 모델 클래스와 [`~PreTrainedModel.from_pretrained`] 메소드가 필요합니다.
+Transformers는 한 줄의 코드로 사용할 수 있는 많은 사전훈련된 모델을 제공합니다. 모델 클래스와 [`~PreTrainedModel.from_pretrained`] 메소드가 필요합니다.
 
 [`~PreTrainedModel.from_pretrained`]를 호출하여 Hugging Face [Hub](https://hf.co/models)에 저장된 모델의 가중치와 구성을 다운로드하고 로드하세요.
 
@@ -29,18 +29,18 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype="auto", device_map="auto")
 ```
 
-이 가이드는 모델이 로드되는 방법, 모델을 로드할 수 있는 다양한 방법, 매우 큰 모델의 메모리 문제를 해결하는 방법, 그리고 사용자 정의 모델을 로드하는 방법을 설명합니다.
+이 가이드는 모델을 불러오는 방법, 다양한 로딩 방식, 매우 큰 모델에서 발생할 수 있는 메모리 문제를 해결하는 방법, 그리고 사용자 정의 모델을 불러오는 방법을 설명합니다.
 
 ## 모델과 구성[[models-and-configurations]]
 
-모든 모델에는 은닉 레이어 수, 어휘 크기, 활성화 함수 등과 같은 특정 속성이 포함된 `configuration.py` 파일이 있습니다. 또한 각 레이어의 정의와 각각의 레이어 안에서 일어나는 수학적 연산을 정의하는 `modeling.py` 파일도 있습니다. `modeling.py` 파일은 `configuration.py`의 모델 속성을 가져와서 그에 따라 모델을 구축합니다. 이 시점에서, 의미 있는 결과를 출력하기 위해 훈련이 필요한 무작위 가중치 모델을 얻습니다.
+모든 모델에는 은닉 레이어 수, 어휘 사전 크기, 활성화 함수 등과 같은 특정 속성이 포함된 `configuration.py` 파일이 있습니다. 또한 각 레이어의 정의와 각각의 레이어 안에서 일어나는 수학적 연산을 정의하는 `modeling.py` 파일도 있습니다. `modeling.py` 파일은 `configuration.py`에 정의된 모델 속성을 바탕으로 모델을 구축합니다. 이 단계에서는 아직 학습되지 않은 무작위 가중치를 가진 상태이기 때문에, 의미 있는 출력을 얻기 위해서는 학습이 필요합니다.
 
 <!-- insert diagram of model and configuration -->
 
 > [!TIP]
-> *아키텍처*는 모델의 골격을 의미하고 *체크포인트(checkpoint)*는 주어진 아키텍처에 대한 모델의 가중치를 의미합니다. 예를 들어, [BERT](./model_doc/bert)는 아키텍처이고 [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)는 해당 아키텍처의 체크포인트(checkpoint)입니다. *모델*이라는 용어는 아키텍처 및 체크포인트(checkpoint)와 혼용하여 사용되는 것을 볼 수 있습니다.
+> *아키텍처(Architecture)*는 모델의 골격을 의미하고 *체크포인트(checkpoint)*는 주어진 아키텍처에 대한 모델의 가중치를 의미합니다. 예를 들어, [BERT](./model_doc/bert)는 아키텍처이고 [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)는 해당 아키텍처의 체크포인트(checkpoint)입니다. *모델*이라는 용어는 아키텍처 및 체크포인트(checkpoint)와 혼용하여 사용되는 것을 볼 수 있습니다.
 
-로드할 수 있는 모델에는 두 가지 일반적인 타입이 있습니다:
+로드할 수 있는 모델은 일반적으로 두 가지 타입이 있습니다.
 
 1. 은닉 상태를 출력하는 [`AutoModel`] 또는 [`LlamaModel`]과 같은 기본 모델입니다.
 2. 특정 작업을 수행하기 위해 특정 *헤드*가 붙은 [`AutoModelForCausalLM`] 또는 [`LlamaForCausalLM`]과 같은 모델입니다.
