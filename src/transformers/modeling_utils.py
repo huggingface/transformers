@@ -2720,8 +2720,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
 
-    def get_correct_attn_implementation(self, requested_attention: str, is_init_check: bool = False) -> str:
-        requested_attention = "sdpa" if requested_attention is None else requested_attention
+    def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
+        requested_attention = "sdpa" if _requested_attention is None else _requested_attention
         if is_init_check and requested_attention == "sdpa":
             if not self._supports_sdpa:
                 requested_attention = "eager"
@@ -2754,7 +2754,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                raise e
+                if _requested_attention == "sdpa":
+                    raise e
+                requested_attention = "eager"
         return requested_attention
 
     @classmethod
@@ -2803,7 +2805,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     )
                     # Apply the change (on the internal attr, to avoid setting it recursively)
                     self.config._attn_implementation_internal = applicable_attn_implementation
-                except (ValueError, ImportError) as e:
+                except Exception as e:
                     logger.warning(
                         f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
                     )
@@ -2828,10 +2830,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             )
                             break
                 # check the module can use correctly, otherwise we silently set the config without the model using it
-                if sub_implementation is not None:
-                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                    submodule.config._attn_implementation = sub_implementation
-                    subconfigs_changed.add(submodule.config.__class__)
+                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                submodule.config._attn_implementation = sub_implementation
+                subconfigs_changed.add(submodule.config.__class__)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
