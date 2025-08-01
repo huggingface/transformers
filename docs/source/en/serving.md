@@ -254,6 +254,99 @@ The image depicts an astronaut in a space suit standing on what appears to be th
 </hfoption>
 </hfoptions>
 
+## Responses API
+
+The Responses API is the newest addition to the supported APIs of `transformers serve`.
+
+> [!TIP]
+> This API is still experimental: expect bug patches and additition of new features in the coming weeks.
+> If you run into any issues, please let us know and we'll work on fixing them ASAP.
+
+Instead of the previous `/v1/chat/completions` path, the Responses API lies begind the `/v1/responses` path.
+See below for examples interacting with our Responses endpoint with `curl`, as well as the Python OpenAI client.
+
+So far, this endpoint only supports text and therefore only LLMs. VLMs to come!
+
+<hfoptions id="responses">
+<hfoption id="curl">
+
+```shell
+curl http://localhost:8000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "stream": true,
+    "input": "Tell me a three sentence bedtime story about a unicorn."
+  }'
+```
+
+from which you'll receive multiple chunks in the Responses API format
+
+```shell
+data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"parallel_tool_calls":false,"tool_choice":"auto","tools":[],"status":"queued","text":{"format":{"type":"text"}}},"sequence_number":0,"type":"response.created"}
+
+data: {"response":{"id":"resp_req_0","created_at":1754059817.783648,"model":"Qwen/Qwen2.5-0.5B-Instruct@main","object":"response","output":[],"parallel_tool_calls":false,"tool_choice":"auto","tools":[],"status":"in_progress","text":{"format":{"type":"text"}}},"sequence_number":1,"type":"response.in_progress"}
+
+data: {"item":{"id":"msg_req_0","content":[],"role":"assistant","status":"in_progress","type":"message"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+data: {"content_index":0,"item_id":"msg_req_0","output_index":0,"part":{"annotations":[],"text":"","type":"output_text"},"sequence_number":3,"type":"response.content_part.added"}
+
+data: {"content_index":0,"delta":"","item_id":"msg_req_0","output_index":0,"sequence_number":4,"type":"response.output_text.delta"}
+
+data: {"content_index":0,"delta":"Once ","item_id":"msg_req_0","output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,"sequence_number":6,"type":"response.output_text.delta"}
+
+data: {"content_index":0,"delta":"a ","item_id":"msg_req_0","output_index":0,"sequence_number":7,"type":"response.output_text.delta"}
+```
+
+</hfoption>
+<hfoption id="python - openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    instructions="You are a helpful assistant.",
+    input="Hello!",
+    stream=True,
+    metadata={"foo": "bar"},
+)
+
+for event in response:
+    print(event)
+```
+
+From which you should get events printed out successively.
+
+```shell
+ResponseCreatedEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='queued', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=0, type='response.created')
+ResponseInProgressEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='in_progress', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=1, type='response.in_progress')
+ResponseOutputItemAddedEvent(item=ResponseOutputMessage(id='msg_req_0', content=[], role='assistant', status='in_progress', type='message'), output_index=0, sequence_number=2, type='response.output_item.added')
+ResponseContentPartAddedEvent(content_index=0, item_id='msg_req_0', output_index=0, part=ResponseOutputText(annotations=[], text='', type='output_text', logprobs=None), sequence_number=3, type='response.content_part.added')
+ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=4, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=5, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='Hello! ', item_id='msg_req_0', output_index=0, sequence_number=6, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='How ', item_id='msg_req_0', output_index=0, sequence_number=7, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='can ', item_id='msg_req_0', output_index=0, sequence_number=8, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='I ', item_id='msg_req_0', output_index=0, sequence_number=9, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='assist ', item_id='msg_req_0', output_index=0, sequence_number=10, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='you ', item_id='msg_req_0', output_index=0, sequence_number=11, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=12, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='', item_id='msg_req_0', output_index=0, sequence_number=13, type='response.output_text.delta')
+ResponseTextDeltaEvent(content_index=0, delta='today?', item_id='msg_req_0', output_index=0, sequence_number=14, type='response.output_text.delta')
+ResponseTextDoneEvent(content_index=0, item_id='msg_req_0', output_index=0, sequence_number=15, text='Hello! How can I assist you today?', type='response.output_text.done')
+ResponseContentPartDoneEvent(content_index=0, item_id='msg_req_0', output_index=0, part=ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None), sequence_number=16, type='response.content_part.done')
+ResponseOutputItemDoneEvent(item=ResponseOutputMessage(id='msg_req_0', content=[ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None)], role='assistant', status='completed', type='message', annotations=[]), output_index=0, sequence_number=17, type='response.output_item.done')
+ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.3718212, error=None, incomplete_details=None, instructions='You are a helpful assistant.', metadata={'foo': 'bar'}, model='Qwen/Qwen2.5-0.5B-Instruct@main', object='response', output=[ResponseOutputMessage(id='msg_req_0', content=[ResponseOutputText(annotations=[], text='Hello! How can I assist you today?', type='output_text', logprobs=None)], role='assistant', status='completed', type='message', annotations=[])], parallel_tool_calls=False, temperature=None, tool_choice='auto', tools=[], top_p=None, background=None, max_output_tokens=None, max_tool_calls=None, previous_response_id=None, prompt=None, reasoning=None, service_tier=None, status='completed', text=ResponseTextConfig(format=ResponseFormatText(type='text')), top_logprobs=None, truncation=None, usage=None, user=None), sequence_number=18, type='response.completed')
+```
+
+</hfoption>
+</hfoptions>
+
 
 The server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
 
