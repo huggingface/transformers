@@ -24,19 +24,19 @@ rendered properly in your Markdown viewer.
 
 # Mimi
 
-[Mimi](https://kyutai.org/Moshi.pdf) is a neural audio codec model with pretrained and quantized variants, designed for efficient speech representation and compression. The model operates at 1.1 kbps with a 12 Hz frame rate and uses a convolutional encoder-decoder architecture combined with a residual vector quantizer of 16 codebooks. Mimi outputs dual token streams i.e. semantic and acoustic to balance linguistic richness with high fidelity reconstruction. Key features include a causal streaming encoder for low-latency use, dual-path tokenization for flexible downstream generation, and integration readiness with large speech models like Moshi.
+[Mimi](huggingface.co/papers/2410.00037) is a neural audio codec model with pretrained and quantized variants, designed for efficient speech representation and compression. The model operates at 1.1 kbps with a 12 Hz frame rate and uses a convolutional encoder-decoder architecture combined with a residual vector quantizer of 16 codebooks. Mimi outputs dual token streams i.e. semantic and acoustic to balance linguistic richness with high fidelity reconstruction. Key features include a causal streaming encoder for low-latency use, dual-path tokenization for flexible downstream generation, and integration readiness with large speech models like Moshi.
 
-Its architecture is based on [Encodec](model_doc/encodec) with several major differences:
-* it uses a much lower frame-rate.
-* it uses additional transformers for encoding and decoding for better latent contextualization
-* it uses a different quantization scheme: one codebook is dedicated to semantic projection.
+You can find the original Mimi checkpoints under the [Kyutai](https://huggingface.co/kyutai/models?search=mimi) organization.
 
 >[!TIP]
->This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe).
->The original code can be found [here](https://github.com/kyutai-labs/moshi).
->Click on the Mimi models in the right sidebar for more examples of how to apply Mimi to encode and decode an audio using this model.
+> This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe).
+>
+> Click on the Mimi models in the right sidebar for more examples of how to apply Mimi to encode and decode an audio using this model.
 
-The example below demonstrates how to encode and decode an audio with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to encode and decode an audio with the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
 ```python 
 >>> from datasets import load_dataset, Audio
@@ -57,6 +57,9 @@ The example below demonstrates how to encode and decode an audio with [`Pipeline
 >>> # or the equivalent with a forward pass
 >>> audio_values = model(inputs["input_values"], inputs["padding_mask"]).audio_values
 ```
+
+</hfoption>
+</hfoptions>
 
 ## MimiConfig
 
