@@ -294,7 +294,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, MgpstrEmbeddings):
-            nn.init.trunc_normal_(module.pos_embe, std=std)
+            nn.init.trunc_normal_(module.pos_embed, std=std)
             nn.init.trunc_normal_(module.cls_token, std=std)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             nn.init.trunc_normal_(module.weight, std=std)
