@@ -36,7 +36,7 @@ You can find all the MetaCLIP 2 checkpoints under the [Meta](https://huggingface
 > [!TIP]
 > Click on the MetaCLIP 2 models in the right sidebar for more examples of how to apply MetaCLIP 2 to different image and language tasks.
 
-The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class. Usage of the MetaCLIP 2 models is identical to the CLIP models, you just need the `MetaCLIP2Model` class instead of `CLIPModel`.
+The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class. Usage of the MetaCLIP 2 models is identical to the CLIP models, you just need the `MetaClip2Model` class instead of `CLIPModel`.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -84,49 +84,49 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 </hfoption>
 </hfoptions>
 
-## MetaCLIP2Config
+## MetaClip2Config
 
-[[autodoc]] MetaCLIP2Config
+[[autodoc]] MetaClip2Config
     - from_text_vision_configs
 
-## MetaCLIP2TextConfig
+## MetaClip2TextConfig
 
-[[autodoc]] MetaCLIP2TextConfig
+[[autodoc]] MetaClip2TextConfig
 
-## MetaCLIP2VisionConfig
+## MetaClip2VisionConfig
 
-[[autodoc]] MetaCLIP2VisionConfig
+[[autodoc]] MetaClip2VisionConfig
 
-## MetaCLIP2Model
+## MetaClip2Model
 
-[[autodoc]] MetaCLIP2Model
+[[autodoc]] MetaClip2Model
     - forward
     - get_text_features
     - get_image_features
 
-## MetaCLIP2TextModel
+## MetaClip2TextModel
 
-[[autodoc]] MetaCLIP2TextModel
+[[autodoc]] MetaClip2TextModel
     - forward
 
-## MetaCLIP2TextModelWithProjection
+## MetaClip2TextModelWithProjection
 
-[[autodoc]] MetaCLIP2TextModelWithProjection
+[[autodoc]] MetaClip2TextModelWithProjection
     - forward
 
-## MetaCLIP2VisionModelWithProjection
+## MetaClip2VisionModelWithProjection
 
-[[autodoc]] MetaCLIP2VisionModelWithProjection
+[[autodoc]] MetaClip2VisionModelWithProjection
     - forward
 
-## MetaCLIP2VisionModel
+## MetaClip2VisionModel
 
-[[autodoc]] MetaCLIP2VisionModel
+[[autodoc]] MetaClip2VisionModel
     - forward
 
-## MetaCLIP2ForImageClassification
+## MetaClip2ForImageClassification
 
-[[autodoc]] MetaCLIP2ForImageClassification
+[[autodoc]] MetaClip2ForImageClassification
     - forward
 
 </pt>

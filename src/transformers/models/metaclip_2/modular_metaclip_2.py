@@ -28,37 +28,37 @@ from ..clip.modeling_clip import (
 logger = logging.get_logger(__name__)
 
 
-class MetaCLIP2TextConfig(CLIPTextConfig):
+class MetaClip2TextConfig(CLIPTextConfig):
     pass
 
 
-class MetaCLIP2VisionConfig(CLIPVisionConfig):
+class MetaClip2VisionConfig(CLIPVisionConfig):
     pass
 
 
-class MetaCLIP2Config(CLIPConfig):
+class MetaClip2Config(CLIPConfig):
     pass
 
 
-class MetaCLIP2TextEmbeddings(CLIPTextEmbeddings):
+class MetaClip2TextEmbeddings(CLIPTextEmbeddings):
     pass
 
 
-class MetaCLIP2VisionEmbeddings(CLIPVisionEmbeddings):
+class MetaClip2VisionEmbeddings(CLIPVisionEmbeddings):
     pass
 
 
-class MetaCLIP2Attention(CLIPAttention):
+class MetaClip2Attention(CLIPAttention):
     pass
 
 
-class MetaCLIP2MLP(CLIPMLP):
+class MetaClip2MLP(CLIPMLP):
     pass
 
 
 @auto_docstring
-class MetaCLIP2PreTrainedModel(PreTrainedModel):
-    config: MetaCLIP2Config
+class MetaClip2PreTrainedModel(PreTrainedModel):
+    config: MetaClip2Config
     base_model_prefix = "metaclip_2"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -69,15 +69,15 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, MetaCLIP2TextEmbeddings):
+        if isinstance(module, MetaClip2TextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, MetaCLIP2VisionEmbeddings):
+        elif isinstance(module, MetaClip2VisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MetaCLIP2Attention):
+        elif isinstance(module, MetaClip2Attention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -85,13 +85,13 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MetaCLIP2MLP):
+        elif isinstance(module, MetaClip2MLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MetaCLIP2Model):
+        elif isinstance(module, MetaClip2Model):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
@@ -100,17 +100,17 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2VisionModelWithProjection):
+        elif isinstance(module, MetaClip2VisionModelWithProjection):
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2TextModelWithProjection):
+        elif isinstance(module, MetaClip2TextModelWithProjection):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2ForImageClassification):
+        elif isinstance(module, MetaClip2ForImageClassification):
             nn.init.normal_(
                 module.classifier.weight,
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
@@ -123,7 +123,7 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class MetaCLIP2TextTransformer(CLIPTextTransformer):
+class MetaClip2TextTransformer(CLIPTextTransformer):
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -174,19 +174,19 @@ class MetaCLIP2TextTransformer(CLIPTextTransformer):
         )
 
 
-class MetaCLIP2TextModel(CLIPTextModel):
-    def __init__(self, config: MetaCLIP2TextConfig):
+class MetaClip2TextModel(CLIPTextModel):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
-        self.text_model = MetaCLIP2TextTransformer(config)
+        self.text_model = MetaClip2TextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
 
-class MetaCLIP2TextModelWithProjection(CLIPTextModelWithProjection):
-    def __init__(self, config: MetaCLIP2TextConfig):
+class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
 
-        text_model = MetaCLIP2TextModel._from_config(config)
+        text_model = MetaClip2TextModel._from_config(config)
         self.text_model = text_model.text_model
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -195,19 +195,19 @@ class MetaCLIP2TextModelWithProjection(CLIPTextModelWithProjection):
         self.post_init()
 
 
-class MetaCLIP2Model(CLIPModel):
-    def __init__(self, config: MetaCLIP2Config):
+class MetaClip2Model(CLIPModel):
+    def __init__(self, config: MetaClip2Config):
         super().__init__(config)
 
-        if not isinstance(config.text_config, MetaCLIP2TextConfig):
+        if not isinstance(config.text_config, MetaClip2TextConfig):
             raise TypeError(
-                "config.text_config is expected to be of type MetaCLIP2TextConfig but is of type"
+                "config.text_config is expected to be of type MetaClip2TextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, MetaCLIP2VisionConfig):
+        if not isinstance(config.vision_config, MetaClip2VisionConfig):
             raise TypeError(
-                "config.vision_config is expected to be of type MetaCLIP2VisionConfig but is of type"
+                "config.vision_config is expected to be of type MetaClip2VisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -218,10 +218,10 @@ class MetaCLIP2Model(CLIPModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = MetaCLIP2TextModel._from_config(text_config)
+        text_model = MetaClip2TextModel._from_config(text_config)
         self.text_model = text_model.text_model
 
-        vision_model = MetaCLIP2VisionModel._from_config(vision_config)
+        vision_model = MetaClip2VisionModel._from_config(vision_config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
@@ -232,27 +232,27 @@ class MetaCLIP2Model(CLIPModel):
         self.post_init()
 
 
-class MetaCLIP2VisionModel(CLIPVisionModel):
+class MetaClip2VisionModel(CLIPVisionModel):
     pass
 
 
-class MetaCLIP2VisionModelWithProjection(CLIPVisionModelWithProjection):
+class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     pass
 
 
-class MetaCLIP2ForImageClassification(CLIPForImageClassification):
+class MetaClip2ForImageClassification(CLIPForImageClassification):
     pass
 
 
 __all__ = [
-    "MetaCLIP2Config",
-    "MetaCLIP2TextConfig",
-    "MetaCLIP2VisionConfig",
-    "MetaCLIP2Model",
-    "MetaCLIP2PreTrainedModel",
-    "MetaCLIP2TextModel",
-    "MetaCLIP2TextModelWithProjection",
-    "MetaCLIP2VisionModel",
-    "MetaCLIP2VisionModelWithProjection",
-    "MetaCLIP2ForImageClassification",
+    "MetaClip2Config",
+    "MetaClip2TextConfig",
+    "MetaClip2VisionConfig",
+    "MetaClip2Model",
+    "MetaClip2PreTrainedModel",
+    "MetaClip2TextModel",
+    "MetaClip2TextModelWithProjection",
+    "MetaClip2VisionModel",
+    "MetaClip2VisionModelWithProjection",
+    "MetaClip2ForImageClassification",
 ]

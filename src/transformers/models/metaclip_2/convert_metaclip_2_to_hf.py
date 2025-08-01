@@ -26,8 +26,8 @@ from transformers import (
     AutoTokenizer,
     CLIPImageProcessor,
     CLIPProcessor,
-    MetaCLIP2Config,
-    MetaCLIP2Model,
+    MetaClip2Config,
+    MetaClip2Model,
 )
 
 
@@ -49,8 +49,8 @@ def load_metaclip2_checkpoint(checkpoint_path: str, model_name: str) -> torch.nn
 
 def create_hf_config(
     metaclip_model: torch.nn.Module, tokenizer: AutoTokenizer, model_name: str
-) -> tuple[MetaCLIP2Config, int]:
-    """Create Hugging Face MetaCLIP2Config from MetaCLIP model."""
+) -> tuple[MetaClip2Config, int]:
+    """Create Hugging Face MetaClip2Config from MetaCLIP model."""
     print("Creating Hugging Face config...")
 
     # Get model dimensions
@@ -110,7 +110,7 @@ def create_hf_config(
     }
 
     # Create config
-    config = MetaCLIP2Config(
+    config = MetaClip2Config(
         vision_config=vision_config,
         text_config=text_config,
         projection_dim=metaclip_model.text_projection.shape[1],
@@ -310,7 +310,7 @@ def verify_conversion(
         return False
 
 
-def push_to_hub(hf_model: MetaCLIP2Model, processor: CLIPProcessor, repo_name: str):
+def push_to_hub(hf_model: MetaClip2Model, processor: CLIPProcessor, repo_name: str):
     """Push the converted model to Hugging Face Hub."""
     print(f"Pushing to hub: {repo_name}")
 
@@ -350,7 +350,7 @@ def main():
     processor = CLIPProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # Create HF model
-    hf_model = MetaCLIP2Model(config)
+    hf_model = MetaClip2Model(config)
 
     # Convert state dict
     converted_state_dict = convert_state_dict(original_model.state_dict())

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MetaCLIP2 model."""
+"""Testing suite for the PyTorch MetaClip2 model."""
 
 import inspect
 import os
@@ -23,7 +23,7 @@ import requests
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import MetaCLIP2Config, MetaCLIP2TextConfig, MetaCLIP2VisionConfig
+from transformers import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -56,12 +56,12 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        MetaCLIP2ForImageClassification,
-        MetaCLIP2Model,
-        MetaCLIP2TextModel,
-        MetaCLIP2TextModelWithProjection,
-        MetaCLIP2VisionModel,
-        MetaCLIP2VisionModelWithProjection,
+        MetaClip2ForImageClassification,
+        MetaClip2Model,
+        MetaClip2TextModel,
+        MetaClip2TextModelWithProjection,
+        MetaClip2VisionModel,
+        MetaClip2VisionModelWithProjection,
     )
 
 if is_vision_available():
@@ -70,7 +70,7 @@ if is_vision_available():
     from transformers import CLIPProcessor
 
 
-class MetaCLIP2VisionModelTester:
+class MetaClip2VisionModelTester:
     def __init__(
         self,
         parent,
@@ -116,7 +116,7 @@ class MetaCLIP2VisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return MetaCLIP2VisionConfig(
+        return MetaClip2VisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -131,7 +131,7 @@ class MetaCLIP2VisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = MetaCLIP2VisionModel(config=config)
+        model = MetaClip2VisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -144,7 +144,7 @@ class MetaCLIP2VisionModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
-        model = MetaCLIP2VisionModelWithProjection(config=config)
+        model = MetaClip2VisionModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -168,10 +168,10 @@ class MetaCLIP2VisionModelTester:
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
 
-class MetaCLIP2ModelTesterMixin(ModelTesterMixin):
+class MetaClip2ModelTesterMixin(ModelTesterMixin):
     """
-    Subclass of ModelTesterMixin with methods specific to testing MetaCLIP2 models.
-    The SDPA equivalence test is overridden here because MetaCLIP2 models may have test/vision/text+vision inputs,
+    Subclass of ModelTesterMixin with methods specific to testing MetaClip2 models.
+    The SDPA equivalence test is overridden here because MetaClip2 models may have test/vision/text+vision inputs,
     different output logits, and are not supposed to be used or tested with padding_side="left".
     """
 
@@ -208,28 +208,28 @@ class MetaCLIP2ModelTesterMixin(ModelTesterMixin):
 
 
 @require_torch
-class MetaCLIP2VisionModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
+class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as MetaCLIP2 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as MetaClip2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (MetaCLIP2VisionModel, MetaCLIP2VisionModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (MetaClip2VisionModel, MetaClip2VisionModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = MetaCLIP2VisionModelTester(self)
+        self.model_tester = MetaClip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MetaCLIP2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=MetaClip2VisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="MetaCLIP2 does not use inputs_embeds")
+    @unittest.skip(reason="MetaClip2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -285,13 +285,13 @@ class MetaCLIP2VisionModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2VisionModel.from_pretrained(model_name)
+        model = MetaClip2VisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2VisionModelWithProjection.from_pretrained(model_name)
+        model = MetaClip2VisionModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "visual_projection"))
 
@@ -307,7 +307,7 @@ class MetaCLIP2VisionModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
         super().test_sdpa_can_dispatch_composite_models()
 
 
-class MetaCLIP2TextModelTester:
+class MetaClip2TextModelTester:
     def __init__(
         self,
         parent,
@@ -369,7 +369,7 @@ class MetaCLIP2TextModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return MetaCLIP2TextConfig(
+        return MetaClip2TextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
@@ -384,7 +384,7 @@ class MetaCLIP2TextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = MetaCLIP2TextModel(config=config)
+        model = MetaClip2TextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -394,7 +394,7 @@ class MetaCLIP2TextModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = MetaCLIP2TextModelWithProjection(config=config)
+        model = MetaClip2TextModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -411,16 +411,16 @@ class MetaCLIP2TextModelTester:
 
 
 @require_torch
-class MetaCLIP2TextModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MetaCLIP2TextModel, MetaCLIP2TextModelWithProjection) if is_torch_available() else ()
+class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MetaClip2TextModel, MetaClip2TextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
-        self.model_tester = MetaCLIP2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MetaCLIP2TextConfig, hidden_size=37)
+        self.model_tester = MetaClip2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MetaClip2TextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -453,20 +453,20 @@ class MetaCLIP2TextModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2 does not use inputs_embeds")
+    @unittest.skip(reason="MetaClip2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2TextModel.from_pretrained(model_name)
+        model = MetaClip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2TextModelWithProjection.from_pretrained(model_name)
+        model = MetaClip2TextModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "text_projection"))
 
@@ -485,11 +485,11 @@ class MetaCLIP2TextModelTest(MetaCLIP2ModelTesterMixin, unittest.TestCase):
     @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(
-            reason="MetaCLIP2TextModel has two attention masks: `causal_attention_mask` and `attention_mask`"
+            reason="MetaClip2TextModel has two attention masks: `causal_attention_mask` and `attention_mask`"
         )
 
 
-class MetaCLIP2ModelTester:
+class MetaClip2ModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -497,8 +497,8 @@ class MetaCLIP2ModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = MetaCLIP2TextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = MetaCLIP2VisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = MetaClip2TextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = MetaClip2VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
@@ -511,14 +511,14 @@ class MetaCLIP2ModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return MetaCLIP2Config(
+        return MetaClip2Config(
             text_config=self.text_model_tester.get_config().to_dict(),
             vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = MetaCLIP2Model(config).to(torch_device).eval()
+        model = MetaClip2Model(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
@@ -541,10 +541,10 @@ class MetaCLIP2ModelTester:
 
 
 @require_torch
-class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MetaCLIP2Model,) if is_torch_available() else ()
+class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (MetaClip2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MetaCLIP2Model, "image-feature-extraction": MetaCLIP2VisionModel}
+        {"feature-extraction": MetaClip2Model, "image-feature-extraction": MetaClip2VisionModel}
         if is_torch_available()
         else {}
     )
@@ -557,10 +557,10 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = MetaCLIP2ModelTester(self)
+        self.model_tester = MetaClip2ModelTester(self)
         common_properties = ["projection_dim", "logit_scale_init_value"]
         self.config_tester = ConfigTester(
-            self, config_class=MetaCLIP2Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=MetaClip2Config, has_text_modality=False, common_properties=common_properties
         )
 
     def test_model(self):
@@ -582,11 +582,11 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2Model does not have input/output embeddings")
+    @unittest.skip(reason="MetaClip2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initialization is different for MetaCLIP2
+    # override as the `logit_scale` parameter initialization is different for MetaClip2
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -624,7 +624,7 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # MetaCLIP2 needs pixel_values
+                pixel_values = inputs_dict["pixel_values"]  # MetaClip2 needs pixel_values
                 traced_model = torch.jit.trace(model, (input_ids, pixel_values))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -684,22 +684,22 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save MetaCLIP2Config and check if we can load MetaCLIP2VisionConfig from it
+        # Save MetaClip2Config and check if we can load MetaClip2VisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = MetaCLIP2VisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = MetaClip2VisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-        # Save MetaCLIP2Config and check if we can load MetaCLIP2TextConfig from it
+        # Save MetaClip2Config and check if we can load MetaClip2TextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = MetaCLIP2TextConfig.from_pretrained(tmp_dir_name)
+            text_config = MetaClip2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2Model.from_pretrained(model_name)
+        model = MetaClip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
@@ -717,12 +717,12 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
     @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(
-            reason="MetaCLIP2 text tower has two attention masks: `causal_attention_mask` and `attention_mask`"
+            reason="MetaClip2 text tower has two attention masks: `causal_attention_mask` and `attention_mask`"
         )
 
     @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
-        self.skipTest(reason="MetaCLIP2 model can't be compiled dynamic, error in metaclip_2_loss`")
+        self.skipTest(reason="MetaClip2 model can't be compiled dynamic, error in metaclip_2_loss`")
 
     @require_flash_attn
     @require_torch_gpu
@@ -815,7 +815,7 @@ class MetaCLIP2ModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittes
                 )
 
 
-class MetaCLIP2ForImageClassificationModelTester(MetaCLIP2ModelTester):
+class MetaClip2ForImageClassificationModelTester(MetaClip2ModelTester):
     def __init__(self, parent):
         super().__init__(parent)
         self.batch_size = self.vision_model_tester.batch_size
@@ -837,9 +837,9 @@ class MetaCLIP2ForImageClassificationModelTester(MetaCLIP2ModelTester):
 
 
 @require_torch
-class MetaCLIP2ForImageClassificationModelTest(MetaCLIP2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MetaCLIP2ForImageClassification,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-classification": MetaCLIP2ForImageClassification} if is_torch_available() else {}
+class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (MetaClip2ForImageClassification,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-classification": MetaClip2ForImageClassification} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -848,29 +848,29 @@ class MetaCLIP2ForImageClassificationModelTest(MetaCLIP2ModelTesterMixin, Pipeli
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = MetaCLIP2ForImageClassificationModelTester(self)
+        self.model_tester = MetaClip2ForImageClassificationModelTester(self)
 
-    @unittest.skip(reason="MetaCLIP2ForImageClassification does not support inputs_embeds")
+    @unittest.skip(reason="MetaClip2ForImageClassification does not support inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2ForImageClassification does not support inputs_embeds")
+    @unittest.skip(reason="MetaClip2ForImageClassification does not support inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(reason="MetaClip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(reason="MetaClip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2ForImageClassification does not support gradient checkpointing yet")
+    @unittest.skip(reason="MetaClip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="MetaCLIP2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="MetaClip2 uses the same initialization scheme as the Flax original implementation")
     def test_initialization(self):
         pass
 
@@ -896,11 +896,11 @@ def prepare_img():
 
 @require_vision
 @require_torch
-class MetaCLIP2ModelIntegrationTest(unittest.TestCase):
+class MetaClip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "facebook/metaclip2-worldwide"
-        model = MetaCLIP2Model.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
+        model = MetaClip2Model.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
@@ -928,11 +928,11 @@ class MetaCLIP2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        # MetaCLIP2 models have an `interpolate_pos_encoding` argument in their forward method,
+        # MetaClip2 models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = MetaCLIP2Model.from_pretrained("facebook/metaclip2-worldwide").to(torch_device)
+        model = MetaClip2Model.from_pretrained("facebook/metaclip2-worldwide").to(torch_device)
 
         processor = CLIPProcessor.from_pretrained(
             "facebook/metaclip2-worldwide", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}

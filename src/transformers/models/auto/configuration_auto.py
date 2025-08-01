@@ -236,7 +236,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mctct", "MCTCTConfig"),
         ("mega", "MegaConfig"),
         ("megatron-bert", "MegatronBertConfig"),
-        ("metaclip-2", "MetaCLIP2Config"),
+        ("metaclip-2", "MetaClip2Config"),
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),

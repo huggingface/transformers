@@ -19,14 +19,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
-from .configuration_metaclip_2 import MetaCLIP2Config, MetaCLIP2TextConfig, MetaCLIP2VisionConfig
+from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class MetaCLIP2TextEmbeddings(nn.Module):
-    def __init__(self, config: MetaCLIP2TextConfig):
+class MetaClip2TextEmbeddings(nn.Module):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -65,8 +65,8 @@ class MetaCLIP2TextEmbeddings(nn.Module):
         return embeddings
 
 
-class MetaCLIP2VisionEmbeddings(nn.Module):
-    def __init__(self, config: MetaCLIP2VisionConfig):
+class MetaClip2VisionEmbeddings(nn.Module):
+    def __init__(self, config: MetaClip2VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -172,10 +172,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class MetaCLIP2Attention(nn.Module):
+class MetaClip2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[MetaCLIP2VisionConfig, MetaCLIP2TextConfig]):
+    def __init__(self, config: Union[MetaClip2VisionConfig, MetaClip2TextConfig]):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -253,7 +253,7 @@ class MetaCLIP2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class MetaCLIP2MLP(nn.Module):
+class MetaClip2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -269,8 +269,8 @@ class MetaCLIP2MLP(nn.Module):
 
 
 @auto_docstring
-class MetaCLIP2PreTrainedModel(PreTrainedModel):
-    config: MetaCLIP2Config
+class MetaClip2PreTrainedModel(PreTrainedModel):
+    config: MetaClip2Config
     base_model_prefix = "metaclip_2"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -281,15 +281,15 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, MetaCLIP2TextEmbeddings):
+        if isinstance(module, MetaClip2TextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, MetaCLIP2VisionEmbeddings):
+        elif isinstance(module, MetaClip2VisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, MetaCLIP2Attention):
+        elif isinstance(module, MetaClip2Attention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -297,13 +297,13 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, MetaCLIP2MLP):
+        elif isinstance(module, MetaClip2MLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MetaCLIP2Model):
+        elif isinstance(module, MetaClip2Model):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
@@ -312,17 +312,17 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2VisionModelWithProjection):
+        elif isinstance(module, MetaClip2VisionModelWithProjection):
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2TextModelWithProjection):
+        elif isinstance(module, MetaClip2TextModelWithProjection):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
-        elif isinstance(module, MetaCLIP2ForImageClassification):
+        elif isinstance(module, MetaClip2ForImageClassification):
             nn.init.normal_(
                 module.classifier.weight,
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
@@ -335,13 +335,13 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class MetaCLIP2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[MetaCLIP2VisionConfig, MetaCLIP2TextConfig]):
+class MetaClip2EncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Union[MetaClip2VisionConfig, MetaClip2TextConfig]):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = MetaCLIP2Attention(config)
+        self.self_attn = MetaClip2Attention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MetaCLIP2MLP(config)
+        self.mlp = MetaClip2MLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -385,19 +385,19 @@ class MetaCLIP2EncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class MetaCLIP2Encoder(nn.Module):
+class MetaClip2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`MetaCLIP2EncoderLayer`].
+    [`MetaClip2EncoderLayer`].
 
     Args:
-        config: MetaCLIP2Config
+        config: MetaClip2Config
     """
 
-    def __init__(self, config: MetaCLIP2Config):
+    def __init__(self, config: MetaClip2Config):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([MetaCLIP2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MetaClip2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -471,13 +471,13 @@ class MetaCLIP2Encoder(nn.Module):
         )
 
 
-class MetaCLIP2TextTransformer(nn.Module):
-    def __init__(self, config: MetaCLIP2TextConfig):
+class MetaClip2TextTransformer(nn.Module):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = MetaCLIP2TextEmbeddings(config)
-        self.encoder = MetaCLIP2Encoder(config)
+        self.embeddings = MetaClip2TextEmbeddings(config)
+        self.encoder = MetaClip2Encoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         # For `pooled_output` computation
@@ -541,14 +541,14 @@ class MetaCLIP2TextTransformer(nn.Module):
     The text model from METACLIP_2 without any head or projection on top.
     """
 )
-class MetaCLIP2TextModel(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2TextConfig
+class MetaClip2TextModel(MetaClip2PreTrainedModel):
+    config: MetaClip2TextConfig
 
-    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
+    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
-    def __init__(self, config: MetaCLIP2TextConfig):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
-        self.text_model = MetaCLIP2TextTransformer(config)
+        self.text_model = MetaClip2TextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -572,9 +572,9 @@ class MetaCLIP2TextModel(MetaCLIP2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, MetaCLIP2TextModel
+        >>> from transformers import AutoTokenizer, MetaClip2TextModel
 
-        >>> model = MetaCLIP2TextModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2TextModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -599,7 +599,7 @@ class MetaCLIP2TextModel(MetaCLIP2PreTrainedModel):
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
-class MetaCLIP2TextModelOutput(ModelOutput):
+class MetaClip2TextModelOutput(ModelOutput):
     r"""
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The text embeddings obtained by applying the projection layer to the pooler_output.
@@ -612,15 +612,15 @@ class MetaCLIP2TextModelOutput(ModelOutput):
 
 
 @auto_docstring
-class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2TextConfig
+class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
+    config: MetaClip2TextConfig
 
-    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer"]
+    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
-    def __init__(self, config: MetaCLIP2TextConfig):
+    def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
 
-        text_model = MetaCLIP2TextModel._from_config(config)
+        text_model = MetaClip2TextModel._from_config(config)
         self.text_model = text_model.text_model
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -643,14 +643,14 @@ class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> MetaCLIP2TextModelOutput:
+    ) -> MetaClip2TextModelOutput:
         r"""
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, MetaCLIP2TextModelWithProjection
+        >>> from transformers import AutoTokenizer, MetaClip2TextModelWithProjection
 
-        >>> model = MetaCLIP2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2TextModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -669,7 +669,7 @@ class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
         pooled_output = text_outputs.pooler_output
         text_embeds = self.text_projection(pooled_output)
 
-        return MetaCLIP2TextModelOutput(
+        return MetaClip2TextModelOutput(
             text_embeds=text_embeds,
             last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
@@ -679,7 +679,7 @@ class MetaCLIP2TextModelWithProjection(MetaCLIP2PreTrainedModel):
 
 @dataclass
 @auto_docstring
-class MetaCLIP2Output(ModelOutput):
+class MetaClip2Output(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
@@ -690,13 +690,13 @@ class MetaCLIP2Output(ModelOutput):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`MetaCLIP2TextModel`].
+        The text embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2TextModel`].
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`MetaCLIP2VisionModel`].
+        The image embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`MetaCLIP2TextModel`].
+        The output of the [`MetaClip2TextModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`MetaCLIP2VisionModel`].
+        The output of the [`MetaClip2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -714,15 +714,15 @@ class MetaCLIP2Output(ModelOutput):
         )
 
 
-class MetaCLIP2VisionTransformer(nn.Module):
-    def __init__(self, config: MetaCLIP2VisionConfig):
+class MetaClip2VisionTransformer(nn.Module):
+    def __init__(self, config: MetaClip2VisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = MetaCLIP2VisionEmbeddings(config)
+        self.embeddings = MetaClip2VisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MetaCLIP2Encoder(config)
+        self.encoder = MetaClip2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @auto_docstring
@@ -786,22 +786,22 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 
 @auto_docstring
-class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2Config
-    _no_split_modules = ["MetaCLIP2TextEmbeddings", "MetaCLIP2EncoderLayer", "MetaCLIP2VisionEmbeddings"]
+class MetaClip2Model(MetaClip2PreTrainedModel):
+    config: MetaClip2Config
+    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer", "MetaClip2VisionEmbeddings"]
 
-    def __init__(self, config: MetaCLIP2Config):
+    def __init__(self, config: MetaClip2Config):
         super().__init__(config)
 
-        if not isinstance(config.text_config, MetaCLIP2TextConfig):
+        if not isinstance(config.text_config, MetaClip2TextConfig):
             raise TypeError(
-                "config.text_config is expected to be of type MetaCLIP2TextConfig but is of type"
+                "config.text_config is expected to be of type MetaClip2TextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, MetaCLIP2VisionConfig):
+        if not isinstance(config.vision_config, MetaClip2VisionConfig):
             raise TypeError(
-                "config.vision_config is expected to be of type MetaCLIP2VisionConfig but is of type"
+                "config.vision_config is expected to be of type MetaClip2VisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -812,10 +812,10 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = MetaCLIP2TextModel._from_config(text_config)
+        text_model = MetaClip2TextModel._from_config(text_config)
         self.text_model = text_model.text_model
 
-        vision_model = MetaCLIP2VisionModel._from_config(vision_config)
+        vision_model = MetaClip2VisionModel._from_config(vision_config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
@@ -837,14 +837,14 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`MetaCLIP2TextModel`].
+            applying the projection layer to the pooled output of [`MetaClip2TextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, MetaCLIP2Model
+        >>> from transformers import AutoTokenizer, MetaClip2Model
 
-        >>> model = MetaCLIP2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> tokenizer = AutoTokenizer.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -880,16 +880,16 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`MetaCLIP2VisionModel`].
+            applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, MetaCLIP2Model
+        >>> from transformers import AutoProcessor, MetaClip2Model
 
-        >>> model = MetaCLIP2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -929,7 +929,7 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> MetaCLIP2Output:
+    ) -> MetaClip2Output:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -939,9 +939,9 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, MetaCLIP2Model
+        >>> from transformers import AutoProcessor, MetaClip2Model
 
-        >>> model = MetaCLIP2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2Model.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -996,7 +996,7 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
         if return_loss:
             loss = metaclip_2_loss(logits_per_text)
 
-        return MetaCLIP2Output(
+        return MetaClip2Output(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1012,14 +1012,14 @@ class MetaCLIP2Model(MetaCLIP2PreTrainedModel):
     The vision model from METACLIP_2 without any head or projection on top.
     """
 )
-class MetaCLIP2VisionModel(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2VisionConfig
+class MetaClip2VisionModel(MetaClip2PreTrainedModel):
+    config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
-    _no_split_modules = ["MetaCLIP2EncoderLayer"]
+    _no_split_modules = ["MetaClip2EncoderLayer"]
 
-    def __init__(self, config: MetaCLIP2VisionConfig):
+    def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
-        self.vision_model = MetaCLIP2VisionTransformer(config)
+        self.vision_model = MetaClip2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1041,9 +1041,9 @@ class MetaCLIP2VisionModel(MetaCLIP2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, MetaCLIP2VisionModel
+        >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
-        >>> model = MetaCLIP2VisionModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2VisionModel.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1070,7 +1070,7 @@ class MetaCLIP2VisionModel(MetaCLIP2PreTrainedModel):
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
-class MetaCLIP2VisionModelOutput(ModelOutput):
+class MetaClip2VisionModelOutput(ModelOutput):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -1083,14 +1083,14 @@ class MetaCLIP2VisionModelOutput(ModelOutput):
 
 
 @auto_docstring
-class MetaCLIP2VisionModelWithProjection(MetaCLIP2PreTrainedModel):
-    config: MetaCLIP2VisionConfig
+class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
+    config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: MetaCLIP2VisionConfig):
+    def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
 
-        vision_model = MetaCLIP2VisionModel._from_config(config)
+        vision_model = MetaClip2VisionModel._from_config(config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1109,16 +1109,16 @@ class MetaCLIP2VisionModelWithProjection(MetaCLIP2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> MetaCLIP2VisionModelOutput:
+    ) -> MetaClip2VisionModelOutput:
         r"""
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, MetaCLIP2VisionModelWithProjection
+        >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
-        >>> model = MetaCLIP2VisionModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
+        >>> model = MetaClip2VisionModelWithProjection.from_pretrained("openai/metaclip_2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/metaclip_2-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1139,7 +1139,7 @@ class MetaCLIP2VisionModelWithProjection(MetaCLIP2PreTrainedModel):
         pooled_output = vision_outputs.pooler_output
         image_embeds = self.visual_projection(pooled_output)
 
-        return MetaCLIP2VisionModelOutput(
+        return MetaClip2VisionModelOutput(
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
@@ -1153,14 +1153,14 @@ class MetaCLIP2VisionModelWithProjection(MetaCLIP2PreTrainedModel):
     the patch tokens) e.g. for ImageNet.
     """
 )
-class MetaCLIP2ForImageClassification(MetaCLIP2PreTrainedModel):
+class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: MetaCLIP2Config) -> None:
+    def __init__(self, config: MetaClip2Config) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        vision_model = MetaCLIP2VisionModel._from_config(config.vision_config)
+        vision_model = MetaClip2VisionModel._from_config(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         # Classifier head
@@ -1238,11 +1238,11 @@ class MetaCLIP2ForImageClassification(MetaCLIP2PreTrainedModel):
 
 
 __all__ = [
-    "MetaCLIP2Model",
-    "MetaCLIP2PreTrainedModel",
-    "MetaCLIP2TextModel",
-    "MetaCLIP2TextModelWithProjection",
-    "MetaCLIP2VisionModel",
-    "MetaCLIP2VisionModelWithProjection",
-    "MetaCLIP2ForImageClassification",
+    "MetaClip2Model",
+    "MetaClip2PreTrainedModel",
+    "MetaClip2TextModel",
+    "MetaClip2TextModelWithProjection",
+    "MetaClip2VisionModel",
+    "MetaClip2VisionModelWithProjection",
+    "MetaClip2ForImageClassification",
 ]
