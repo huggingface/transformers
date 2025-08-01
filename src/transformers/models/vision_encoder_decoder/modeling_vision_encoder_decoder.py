@@ -113,6 +113,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         self.encoder = encoder
         self.decoder = decoder
+        self._can_compile_fullgraph = decoder._can_compile_fullgraph
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(

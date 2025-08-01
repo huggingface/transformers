@@ -4677,9 +4677,13 @@ class ModelTesterMixin:
                 sub_config = getattr(config, key)
                 update_config_for_flex(sub_config)
 
-            model = model_class(config).to(device=torch_device)
-            model.set_attn_implementation("flex_attention")
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
+            if model_class._can_set_attn_implementation():
+                model = model_class(config).to(device=torch_device)
+                model.set_attn_implementation("flex_attention")
+                self.assertTrue(model.config._attn_implementation == "flex_attention")
+            else:
+                config._attn_implementation = "flex_attention"
+                model = model_class(config).to(device=torch_device)
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
