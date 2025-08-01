@@ -405,8 +405,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "metaclip-2",
             (
-                "CLIPTokenizer",
-                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                "XLMRobertaTokenizer",
+                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
         ("mgp-str", ("MgpstrTokenizer", None)),
