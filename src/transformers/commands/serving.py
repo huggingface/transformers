@@ -949,11 +949,10 @@ class ServeCommand(BaseTransformersCLICommand):
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in streamer:
-
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
                         if result.endswith("<|return|>"):
-                            result = result[:-len("<|return|>")]
+                            result = result[: -len("<|return|>")]
                     results += result
 
                     # (related to temporary hack 2)
@@ -1065,7 +1064,27 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True).to(model.device)
+        if isinstance(req["input"], str):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append({"role": "user", "content": req["input"]})
+        elif isinstance(req["input"], list):
+            if "instructions" in req:
+                if req["input"][0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+                else:
+                    inputs = req["input"]
+                    inputs[0]["content"] = req["instructions"]
+            else:
+                inputs = req["input"]
+        elif isinstance(req["input"], dict):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append(req["input"])
+        else:
+            raise ValueError("inputs should be a list, dict, or str")
+
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = inputs.to(model.device)
+
         request_id = req.get("previous_response_id", "req_0")
 
         # Temporary hack for GPTOSS 1: don't filter special tokens
@@ -1094,7 +1113,6 @@ class ServeCommand(BaseTransformersCLICommand):
         }
 
         def stream_response(streamer, _request_id):
-
             # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
             # classes and piping the reasoning trace into a new field
             filter_cot = False
@@ -1189,17 +1207,17 @@ class ServeCommand(BaseTransformersCLICommand):
                 # Stream the actual generated text
                 results = ""
                 for result in streamer:
-
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
                         if result.endswith("<|return|>"):
-                            result = result[:-len("<|return|>")]
+                            result = result[: -len("<|return|>")]
                     results += result
 
                     # (related to temporary hack 2)
                     if filter_cot:
                         if cot_trace_end in results:  # end of reasoning trace observed -> stop filtering
                             filter_cot = False
+                            results = ""  # reset the results -> results will now track the final response
                             continue
                         else:
                             continue
@@ -1211,6 +1229,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         output_index=output_index,
                         content_index=content_index,
                         delta=result,
+                        logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
                     )
                     sequence_number += 1
                     yield self.build_response_event(response_output_text_delta)
@@ -1223,6 +1242,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     output_index=output_index,
                     content_index=0,
                     text=results,
+                    logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
                 )
                 sequence_number += 1
                 yield self.build_response_event(response_output_text_done)
