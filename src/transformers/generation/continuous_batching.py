@@ -1106,7 +1106,8 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        self.model = model
+        self.model = model.eval()
+        generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
@@ -1118,7 +1119,6 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
-        generation_config = model.generation_config if generation_config is None else generation_config
         self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
