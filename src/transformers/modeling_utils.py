@@ -2830,9 +2830,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             )
                             break
                 # check the module can use correctly, otherwise we silently set the config without the model using it
-                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                submodule.config._attn_implementation = sub_implementation
-                subconfigs_changed.add(submodule.config.__class__)
+                try:
+                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                    submodule.config._attn_implementation = sub_implementation
+                    subconfigs_changed.add(submodule.config.__class__)
+                except Exception as e:
+                    pass
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
