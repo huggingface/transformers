@@ -741,7 +741,9 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = MMGroundingDinoForObjectDetection.from_pretrained("openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det")
+        model = MMGroundingDinoForObjectDetection.from_pretrained(
+            "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
+        )
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering (idxs 195<->196 and 267<->268 on my machine)
         # which causes different query position embedding assingments
@@ -822,7 +824,9 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         prompt = ". ".join(id2label.values()) + "."
 
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
-        image_inputs = image_processor(images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt")
+        image_inputs = image_processor(
+            images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt"
+        )
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = MMGroundingDinoForObjectDetection.from_pretrained(
