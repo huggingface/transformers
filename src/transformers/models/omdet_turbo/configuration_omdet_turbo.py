@@ -289,5 +289,13 @@ class OmDetTurboConfig(PretrainedConfig):
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
 
 __all__ = ["OmDetTurboConfig"]

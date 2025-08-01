@@ -121,6 +121,14 @@ class VitMatteConfig(PretrainedConfig):
         self.convstream_hidden_sizes = convstream_hidden_sizes
         self.fusion_hidden_sizes = fusion_hidden_sizes
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:

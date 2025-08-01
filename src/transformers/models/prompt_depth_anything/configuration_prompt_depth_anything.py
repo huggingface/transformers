@@ -154,6 +154,14 @@ class PromptDepthAnythingConfig(PretrainedConfig):
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:

@@ -200,6 +200,14 @@ class MaskFormerConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
         super().__init__(**kwargs)
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_and_decoder_configs(
         cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
