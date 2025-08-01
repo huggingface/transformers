@@ -15,7 +15,6 @@
 # limitations under the License.
 import logging
 import queue
-import statistics
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -604,6 +603,30 @@ class PrefillFirstScheduler(Scheduler):
                 del self.active_requests[request_id]
 
 
+def get_device_and_memory():
+    # Select best available device
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        total_memory = torch.cuda.get_device_properties(device).total_memory
+        reserved_memory = torch.cuda.memory_reserved(device)
+        allocated_memory = torch.cuda.memory_allocated(device)
+
+    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        device = torch.device("mps")
+        # MPS memory reporting (PyTorch 2.0+)
+        total_memory = torch.mps.driver_allocated_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = allocated_memory  # MPS does not track reserved separately
+
+    else:
+        device = torch.device("cpu")
+        total_memory = None
+        reserved_memory = 0
+        allocated_memory = 0
+
+    return device, total_memory, reserved_memory, allocated_memory
+
+
 @traced(standalone=True)
 def compute_optimal_blocks(
     max_memory_percent: float = 0.9,
@@ -637,16 +660,9 @@ def compute_optimal_blocks(
         }
     """
     # 1. Get GPU memory information
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available.")
-
-    device = torch.device("cuda")
-    total_memory = torch.cuda.get_device_properties(device).total_memory
-    reserved_memory = torch.cuda.memory_reserved(device)
-    allocated_memory = torch.cuda.memory_allocated(device)
-
+    device, total, reserved, allocated = get_device_and_memory()
     # Available memory is total minus current allocations, times the allowed percentage
-    available_memory = (total_memory - max(allocated_memory, reserved_memory)) * max_memory_percent
+    available_memory = (total - max(allocated, reserved)) * max_memory_percent
 
     # 2. Compute per-token cache memory requirement
     # Typical KV cache size: 2 (K and V) * num_heads * head_dim * sizeof(float16)
