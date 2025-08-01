@@ -422,7 +422,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
   In addition to the normal inputs of `messages` and `tools`, this template also accepts the
   following kwargs:
   - "builtin_tools": A list, can contain "browser" and/or "python".
-  - "model_identity": A string that optionally describes the model identity".
+  - "model_identity": A string that optionally describes the model identity.
   - "reasoning_effort": A string that describes the reasoning effort, defaults to "medium".
  #}
 
