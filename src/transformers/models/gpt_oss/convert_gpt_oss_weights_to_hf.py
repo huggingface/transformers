@@ -536,9 +536,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {{- "_: " }}
             {{- "{\n" }}
             {%- for param_name, param_spec in tool.parameters.properties.items() %}
-                {%- if param_spec.description -%}
-                    {{- "// " + param_spec.description + "\n" }}
-                {%- endif -%}
+                {{- "// " + param_spec.description + "\n" }}
                 {{- param_name }}
                 {%- if param_name not in (tool.parameters.required or []) -%}
                     {{- "?" }}
@@ -638,27 +636,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     {{- "Calls to these tools must go to the commentary channel: 'functions'." }}
 {%- endmacro -%}
 
-{#- CoT Dropping Logic ================================================== #}
-{%- set cot_final_indices = [] -%}
-{%- for idx in range(messages|length) -%}
-    {%- set m = messages[idx] -%}
-    {%- if m.role == 'assistant' and m.get('channel', '') == 'final' -%}
-        {%- if cot_final_indices.append(idx) -%}{%- endif -%}
-    {%- endif -%}
-{%- endfor -%}
-{%- set cot_last_final_idx = cot_final_indices[-1] if cot_final_indices else none -%}
-{%- set cot_last_user_idx = none -%}
-{%- if cot_last_final_idx is not none -%}
-    {%- for idx in range(cot_last_final_idx - 1, -1, -1) -%}
-        {%- if messages[idx].role == 'user' and cot_last_user_idx is none -%}
-            {%- set cot_last_user_idx = idx -%}
-        {%- endif -%}
-    {%- endfor -%}
-{%- endif -%}
-
 {#- Main Template Logic ================================================= #}
 {#- Set defaults #}
-{%- set auto_drop = auto_drop_analysis if auto_drop_analysis is defined else true -%}
 
 {#- Render system message #}
 {{- "<|start|>system<|message|>" }}
@@ -692,45 +671,39 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 {#- Render messages #}
 {%- set last_tool_call = namespace(name=none) %}
 {%- for message in loop_messages -%}
-    {%- set skip = false -%}
-    
-    {# Apply CoT dropping logic #}
-    {%- if auto_drop and cot_last_final_idx is not none and loop.index0 < cot_last_final_idx -%}
-        {%- if message.role == 'assistant' and message.get('channel', '') != 'final' -%}
-            {%- if cot_last_user_idx is none or loop.index0 > cot_last_user_idx -%}
-                {%- set skip = true -%}
-            {%- endif -%}
-        {%- elif message.role == 'user' and message.get('channel', '') == 'analysis' -%}
-            {%- set skip = true -%}
-        {%- endif -%}
-    {%- endif -%}
-    
-    {%- if not skip -%}
-        {#- At this point only assistant/user/tool messages should remain #}
-        {%- if message.role == 'assistant' -%}
-            {%- if "tool_calls" in message %}
-                {# I'm assuming max 1 tool call per message here, which might be wrong #}
-                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content }}
-                {{- "<|end|><|start|>assistant to=" }}
-                {{- "functions." + message.tool_calls[0].name + "<|channel|>commentary json<|message|>" }}
-                {{- message.tool_calls[0].arguments|tojson }}
-                {{- "<|end|>" }}
-                {%- set last_tool_call.name = message.tool_calls[0].name %}
-            {%- elif "thinking" in message %}
-                {#- CoT is dropped during all model inputs, so we never actually render it #}
-                {{- "<|start|>assistant<|channel|>final<|message|>" + message.content + "<|end|>" }}
-            {%- else %}
-                {{- "<|start|>assistant<|message|>" + message.content + "<|end|>" }}
-            {%- endif %}
-        {%- elif message.role == 'tool' -%}
-            {%- if last_tool_call.name is none %}
-                {{- raise_exception("Message has tool role, but there was no previous assistant message with a tool call!") }}
-            {%- endif %}
-            {{- "<|start|>functions." + last_tool_call.name }}
-            {{- " to=assistant<|channel|>commentary<|message|>" + message.content|tojson + "<|end|>" }}
-        {%- else -%}
-            {{- "<|start|>user<|message|>" + message.content + "<|end|>" }}
-        {%- endif -%}
+    {#- At this point only assistant/user/tool messages should remain #}
+    {%- if message.role == 'assistant' -%}
+        {%- if "tool_calls" in message %}
+            {#- We assume max 1 tool call per message, and so we infer the tool call name #}
+            {#- in "tool" messages from the most recent assistant tool call name #}
+            {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content }}
+            {{- "<|end|><|start|>assistant to=" }}
+            {{- "functions." + message.tool_calls[0].name + "<|channel|>commentary json<|message|>" }}
+            {{- message.tool_calls[0].arguments|tojson }}
+            {{- "<|end|>" }}
+            {%- set last_tool_call.name = message.tool_calls[0].name %}
+        {%- elif "thinking" in message and loop.last and not add_generation_prompt %}
+            {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
+            {#- This is a situation that should only occur in training, never in inference. #}
+            {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {{- "<|start|>assistant<|channel|>final<|message|>" + message.content + "<|end|>" }}
+            {%- set last_tool_call.name = none %}
+        {%- elif "thinking" in message %}
+            {#- CoT is dropped during all previous turns, so we never render it for inference #}
+            {{- "<|start|>assistant<|channel|>final<|message|>" + message.content + "<|end|>" }}
+            {%- set last_tool_call.name = none %}
+        {%- else %}
+            {{- "<|start|>assistant<|message|>" + message.content + "<|end|>" }}
+            {%- set last_tool_call.name = none %}
+        {%- endif %}
+    {%- elif message.role == 'tool' -%}
+        {%- if last_tool_call.name is none %}
+            {{- raise_exception("Message has tool role, but there was no previous assistant message with a tool call!") }}
+        {%- endif %}
+        {{- "<|start|>functions." + last_tool_call.name }}
+        {{- " to=assistant<|channel|>commentary<|message|>" + message.content|tojson + "<|end|>" }}
+    {%- else -%}
+        {{- "<|start|>user<|message|>" + message.content + "<|end|>" }}
     {%- endif -%}
 {%- endfor -%}
 
