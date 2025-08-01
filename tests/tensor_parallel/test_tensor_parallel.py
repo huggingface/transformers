@@ -110,6 +110,7 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
+            print(response)
             assert response == "with"
 
             torch.distributed.barrier()

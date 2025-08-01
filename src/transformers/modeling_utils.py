@@ -63,6 +63,7 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
     distribute_model,
     initialize_tensor_parallelism,
@@ -4067,8 +4068,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
-                    full_tensor = state_dict[tensor].full_tensor()
+                if _is_dtensor_available and self._device_mesh is not None:
+                    plan = _get_parameter_tp_plan(tensor, self._tp_plan)
+                    layer = ALL_PARALLEL_STYLES.get(plan, None)
+                    if isinstance(state_dict[tensor], DTensor):
+                        full_tensor = state_dict[tensor].full_tensor()
+                    else:
+                        full_tensor = DTensor.from_local(
+                            state_dict[tensor], layer.device_mesh, layer.sharding_spec, layer.metadata
+                        ).full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
