@@ -449,7 +449,13 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             This flag is used for nested quantization where the quantization constants from the first quantization are
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
-            This sets the storage type to pack the quantized 4-bit params.
+            This sets the storage type to pack the quanitzed 4-bit params.
+        bnb_4bit_target_parameters (`list[str]`, *optional*):
+            A list of extra parameters that should be quantized in 4-bit. This is useful for models that have
+            additional parameters that are not Linear layers. Parameters that exactly match or end with the names
+            provided here will be quantized in addition to the Linear weights. As an example, for
+            [Llama4](https://huggingface.co/collections/meta-llama/llama-4-67f0c30d9fe03840bc9d0164),
+            you can pass: `bnb_4bit_target_parameters=['feed_forward.experts.gate_up_proj', 'feed_forward.experts.down_proj]`
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -466,6 +472,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_storage=None,
+        bnb_4bit_target_parameters=None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -481,6 +488,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
         self.bnb_4bit_quant_type = bnb_4bit_quant_type
         self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
+        self.bnb_4bit_target_parameters = bnb_4bit_target_parameters
 
         if bnb_4bit_compute_dtype is None:
             self.bnb_4bit_compute_dtype = torch.float32
@@ -539,6 +547,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
+
+        bnb_version = version.parse(version.parse(importlib.metadata.version("bitsandbytes")).base_version)
+
         if not isinstance(self.load_in_4bit, bool):
             raise TypeError("load_in_4bit must be a boolean")
 
@@ -565,11 +576,14 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
+        if self.load_in_4bit and not bnb_version >= version.parse("0.39.0"):
             raise ValueError(
                 "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
+            )
+
+        if self.bnb_4bit_target_parameters is not None and bnb_version < version.parse("0.47.0"):
+            raise ValueError(
+                "bnb_4bit_target_parameters requires bitsandbytes>=0.47.0 - please upgrade your bitsandbytes version"
             )
 
     def is_quantizable(self):
