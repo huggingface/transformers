@@ -16,14 +16,14 @@ model = AutoModelForCausalLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=16,
+    max_new_tokens=512,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     do_sample=True,
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-
+train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
 print("--- Running CB Generation Example ---")
 
 
