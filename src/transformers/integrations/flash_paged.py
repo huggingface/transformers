@@ -63,5 +63,6 @@ def paged_attention_forward(
         # block_table=block_tables, -> torch.Tensor
         # **kwargs,
     )
-
+    if isinstance(attn_output, tuple):
+        attn_output = attn_output[0]
     return attn_output, None
