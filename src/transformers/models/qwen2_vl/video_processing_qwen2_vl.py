@@ -116,8 +116,21 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
-        self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
+        size = kwargs.pop("size", None)
+        min_pixels = kwargs.pop("min_pixels", None)
+        max_pixels = kwargs.pop("max_pixels", None)
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        size = self.size if size is None else size
+        if min_pixels is not None:
+            size["shortest_edge"] = min_pixels
+            size.pop("min_pixels", None)
+        if max_pixels is not None:
+            size["longest_edge"] = max_pixels
+            size.pop("max_pixels", None)
+        if "shortest_edge" not in size or "longest_edge" not in size:
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
     def sample_frames(
         self,

@@ -175,16 +175,14 @@ class VoxtralConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(audio_config, dict):
-            audio_config["model_type"] = (
-                audio_config["model_type"] if "model_type" in audio_config else "voxtral_encoder"
-            )
+            audio_config["model_type"] = audio_config.get("model_type", "voxtral_encoder")
             audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
         elif audio_config is None:
             audio_config = CONFIG_MAPPING["voxtral_encoder"]()
         self.audio_config = audio_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](
                 **{**self._default_text_config_kwargs, **text_config}
             )

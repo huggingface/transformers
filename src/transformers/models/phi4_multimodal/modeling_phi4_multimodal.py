@@ -577,7 +577,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self.config._attn_implementation == "flash_attention_2"
+                if self.config._attn_implementation != "flash_attention_2"
                 else patch_attention_mask
             )
 

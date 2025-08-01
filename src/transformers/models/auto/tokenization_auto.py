@@ -193,6 +193,20 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "deepseek_vl",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
+            "deepseek_vl_hybrid",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("dia", ("DiaTokenizer", None)),
         (
             "diffllama",
@@ -216,6 +230,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("ernie4_5_moe", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
         ("esm", ("EsmTokenizer", None)),
+        (
+            "exaone4",
+            (
+                "GPT2Tokenizer" if is_tokenizers_available() else None,
+                "GPT2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -704,6 +725,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLNetTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlstm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "xmod",
             (
@@ -808,7 +830,7 @@ def get_tokenizer_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -853,7 +875,7 @@ def get_tokenizer_config(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    commit_hash = kwargs.get("_commit_hash", None)
+    commit_hash = kwargs.get("_commit_hash")
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
@@ -978,7 +1000,7 @@ class AutoTokenizer:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -990,7 +1012,7 @@ class AutoTokenizer:
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        gguf_file = kwargs.get("gguf_file", None)
+        gguf_file = kwargs.get("gguf_file")
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -1000,7 +1022,7 @@ class AutoTokenizer:
             if tokenizer_class_tuple is None:
                 raise ValueError(
                     f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
-                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES.keys())}."
+                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES)}."
                 )
 
             tokenizer_class_name, tokenizer_fast_class_name = tokenizer_class_tuple
@@ -1120,7 +1142,7 @@ class AutoTokenizer:
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING)}."
         )
 
     @staticmethod

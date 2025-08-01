@@ -24,26 +24,25 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
-    MixtralModel,
     MixtralPreTrainedModel,
 )
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
-from .configuration_ernie4_5_moe import Ernie4_5_MoEConfig
+from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_MoERMSNorm(LlamaRMSNorm):
+class Ernie4_5_MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ernie4_5_MoEMLP(Qwen3MoeMLP):
+class Ernie4_5_MoeMLP(Qwen3MoeMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config, intermediate_size)
 
@@ -52,12 +51,13 @@ class Ernie4_5_MoEMLP(Qwen3MoeMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
-class Ernie4_5_MoERotaryEmbedding(Ernie4_5RotaryEmbedding):
-    pass
+class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
+    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
+        super().__init__(config, device)
 
 
-class Ernie4_5_MoEAttention(LlamaAttention):
-    def __init__(self, config: Ernie4_5_MoEConfig, layer_idx: int):
+class Ernie4_5_MoeAttention(LlamaAttention):
+    def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
         self.attention_dropout = 0.0
@@ -68,7 +68,7 @@ class Ernie4_5_MoEAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
 
-class Ernie4_5_MoEStatics(nn.Module):
+class Ernie4_5_MoeStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
         - Bias for the gating
@@ -95,7 +95,7 @@ class Ernie4_5_MoEStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoESparseMoeBlock(nn.Module):
+class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -116,19 +116,19 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoEStatics(config)
+        self.moe_statics = Ernie4_5_MoeStatics(config)
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
-            [Ernie4_5_MoEMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
+            [Ernie4_5_MoeMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
         )
         self.norm_min = config.moe_norm_min
 
         # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_MoEMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
+            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
 
     def forward(
         self,
@@ -190,38 +190,63 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoEDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
+class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
     def __init__(self, config, layer_idx):
         nn.Module().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
+        self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
 
         if (
             ((layer_idx + 1) % config.moe_layer_interval == 0)
             and layer_idx >= config.moe_layer_start_index
             and layer_idx <= config.moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoESparseMoeBlock(config)
+            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
         else:
-            self.mlp = Ernie4_5_MoEMLP(config)
+            self.mlp = Ernie4_5_MoeMLP(config)
 
-        self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
 
 @auto_docstring
-class Ernie4_5_MoEPreTrainedModel(MixtralPreTrainedModel):
+class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
+    config: Ernie4_5_MoeConfig
+    _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
+    # Not supporting multi-token prediction (MTP) atm
+    _keys_to_ignore_on_load_unexpected = ["mtp"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Ernie4_5_MoeSparseMoeBlock, index=1),
+        "hidden_states": Ernie4_5_MoeDecoderLayer,
+        "attentions": Ernie4_5_MoeAttention,
+    }
 
     def _init_weights(self, module):
         MixtralPreTrainedModel._init_weights(module)
-        if isinstance(module, Ernie4_5_MoEStatics):
+        if isinstance(module, Ernie4_5_MoeStatics):
             module.e_score_correction_bias.data.zero_()
 
 
 @auto_docstring
-class Ernie4_5_MoEModel(MixtralModel):
+class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
+    def __init__(self, config: Ernie4_5_MoeConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Ernie4_5_MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_MoeRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -287,10 +312,10 @@ class Ernie4_5_MoEModel(MixtralModel):
 
 
 @auto_docstring
-class Ernie4_5_MoEForCausalLM(MixtralForCausalLM, Ernie4_5_MoEPreTrainedModel):
+class Ernie4_5_MoeForCausalLM(MixtralForCausalLM, Ernie4_5_MoePreTrainedModel):
     def __init__(self, config):
-        Ernie4_5_MoEPreTrainedModel().__init__(config)
-        self.model = Ernie4_5_MoEModel(config)
+        Ernie4_5_MoePreTrainedModel().__init__(config)
+        self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
@@ -314,7 +339,7 @@ class Ernie4_5_MoEForCausalLM(MixtralForCausalLM, Ernie4_5_MoEPreTrainedModel):
 
 
 __all__ = [
-    "Ernie4_5_MoEForCausalLM",
-    "Ernie4_5_MoEModel",
-    "Ernie4_5_MoEPreTrainedModel",
+    "Ernie4_5_MoeForCausalLM",
+    "Ernie4_5_MoeModel",
+    "Ernie4_5_MoePreTrainedModel",
 ]

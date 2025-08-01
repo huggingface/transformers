@@ -284,7 +284,7 @@ class InternVLProcessor(ProcessorMixin):
             images_kwargs.update(kwargs)
 
             num_image_patches = [
-                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
             # Add 2 for BOI and EOI tokens
