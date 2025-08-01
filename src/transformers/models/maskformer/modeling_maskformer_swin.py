@@ -740,7 +740,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MaskFormerSwinStage"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -770,6 +770,9 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
