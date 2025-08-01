@@ -137,7 +137,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
-    "openai",
+    "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
