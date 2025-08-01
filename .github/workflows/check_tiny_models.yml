@@ -9,6 +9,7 @@ on:
     - cron: "0 2 * * *"
 
 env:
+  HF_HOME: /mnt/cache
   TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TRANSFORMERS_IS_CI: yes
@@ -18,43 +19,32 @@ jobs:
   check_tiny_models:
     name: Check tiny models
     runs-on:
-      group: aws-general-8-plus
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-quantization-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - uses: actions/checkout@v4
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          # Semantic version range syntax or exact version of a Python version
-          python-version: '3.9'
-          # Optional - x64 or x86 architecture, defaults to x64
-          architecture: 'x64'
-
-      - name: Install
-        run: |
-          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake
-          pip install --upgrade pip
-          python -m pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]
-          python -m pip install -U essentia librosa pretty_midi
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: Create all tiny models (locally)
         run: |
           free -g
 
       - name: Create all tiny models (locally)
+        working-directory: /transformers
         run: |
-          python utils/create_dummy_models.py tiny_local_models --all --num_workers 7
+          python3 utils/create_dummy_models.py tiny_local_models --all --num_workers 7
 
       - name: Create all tiny models (locally)
+        working-directory: /transformers
         run: |
-          python utils/check_tiny.py
+          python3 utils/check_tiny.py
 
       - name: Local tiny model reports artifacts
         if: ${{ always() }}
+        working-directory: /transformers
         uses: actions/upload-artifact@v4
         with:
           name: tiny_local_model_creation_reports
