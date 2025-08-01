@@ -61,7 +61,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             raise ValueError("The model must have caching enabled to be performant.")
 
         if hasattr(config, "layer_types") and getattr(config, "sliding_window", None) is not None:
-            self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+            self.model = TorchExportableModuleWithHybridCache(
+                model,
+                config=config,
+                generation_config=generation_config
+            )
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
@@ -146,7 +150,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
-        elif input_emebds:
+        elif inputs_embeds:
             exported_program = torch.export.export(
                 self.model,
                 args=(),
@@ -299,7 +303,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap. The model must have caching
             enabled and use a 'static' caching implementation.
-            config (`PreTrainedConfig`): The pretrained text config for the decoder model.
+            config (`PreTrainedConfig`): The pretrained text config for the model.
             generation_config (`GenerationConfig`): The generation config for the model.
 
         Raises:
@@ -446,14 +450,16 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        max_batch_size: int = 1,
-        max_cache_len: int = 4096,
+        config: PretrainedConfig,
+        generation_config: GenerationConfig,
     ):
         """
         Initializes the exportable module with `HybridCache`.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
+            config (`PreTrainedConfig`): The pretrained text config for the model.
+            generation_config (`GenerationConfig`): The generation config for the model.
             max_batch_size (int): Maximum batch size for the cache.
             max_cache_len (int): Maximum sequence length for the cache.
 
@@ -462,17 +468,19 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         """
         super().__init__()
         self.model = model
+        self.config = config
+        self.generation_config = generation_config
 
         # Verify the model is configured for HybridCache
-        if not self.model.config.use_cache:
-            raise AssertionError("Model must have caching enabled")
+        if not config.use_cache:
+            raise AssertionError("Model must have caching enabled.")
 
         # Initialize the HybridCache
         self.cache = HybridCache(
-            config=self.model.config,
-            max_batch_size=max_batch_size,
-            max_cache_len=max_cache_len,
-            device=self.model.device,
+            config=config,
+            max_batch_size=self.generation_config.cache_config.get("batch_size"),
+            max_cache_len=self.generation_config.cache_config.get("max_cache_len"),
+            device=self.generation_config.cache_config.get("device"),
             dtype=self.model.dtype,
         )
 
@@ -483,23 +491,31 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        cache_position: torch.Tensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
 
         Args:
             input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
+            inputs_embeds (`Optional[torch.Tensor]`): Tensor representing current input embeddings to the module.
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
 
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        batch_size = input_ids.shape[0]
+        batch_size = None
+        if input_ids:
+            batch_size = input_ids.shape[0]
+        elif inputs_embeds:
+            batch_size = inputs_embeds.shape[0]
 
         # Generate position_ids from cache_position
-        position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
+        position_ids = None
+        if batch_size:
+            position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
 
         # Forward pass with the model
         outputs = self.model(
@@ -517,6 +533,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
 def convert_and_export_with_cache(
     model: PreTrainedModel,
+    config: PreTrainedConfig,
+    generation_config: GenerationConfig,
     example_input_ids: Optional[torch.Tensor] = None,
     example_cache_position: Optional[torch.Tensor] = None,
     dynamic_shapes: Optional[dict] = None,
@@ -528,6 +546,8 @@ def convert_and_export_with_cache(
 
     Args:
         model (`PreTrainedModel`): The pretrained model to be exported.
+        config (`PreTrainedConfig`): The pretrained text config for the decoder model.
+        generation_config (`GenerationConfig`): The generation config for the model.
         example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
         example_cache_position (`Optional[torch.Tensor]`): Example current cache position used by `torch.export`.
         dynamic_shapes(`Optional[dict]`): Dynamic shapes used by `torch.export`.
