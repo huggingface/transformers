@@ -2188,7 +2188,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
-            self.get_correct_attn_implementation(self.config._attn_implementation), is_init_check=True
+            self.config._attn_implementation, is_init_check=True
         )
 
         # for initialization of the loss
@@ -2716,6 +2716,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
 
                 applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+        else:
+            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: str, is_init_check: bool = False) -> str:
@@ -2822,7 +2824,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             )
                             break
                 # check the module can use correctly, otherwise we silently set the config without the model using it
-                if submodule._can_set_attn_implementation():
+                if submodule._can_set_attn_implementation() and sub_implementation is not None:
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
                     submodule.config._attn_implementation = sub_implementation
                     subconfigs_changed.add(submodule.config.__class__)
