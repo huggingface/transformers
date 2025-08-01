@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for ImageGPT."""
-
+import PIL
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -24,9 +24,9 @@ from ...image_processing_utils_fast import (
 )
 from ...processing_utils import Unpack
 from ...image_utils import (
-  PILImageResampling,
-  ImageInput,
-  ChannelDimension
+    PILImageResampling,
+    ImageInput,
+    ChannelDimension, SizeDict
 )
 from ...utils import (
     auto_docstring,
@@ -71,7 +71,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     # Default values should be checked against the slow image processor
     # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
-    size = {"height": 256, "width": 256} # import get_size_dict?
+    size = {"height": 256, "width": 256} # import get_size_dict?, can be overridden in preprocess
     do_resize = True
     do_normalize = True
 
@@ -102,8 +102,20 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
     # PRIVATE preprocess:
-    def _preprocess(self):
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        do_normalize: bool,
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> BatchFeature:
         # TODO: Override
+        # Resize to specific size
+        # Normalize pixel values
+        # Optionally color quantize into clusters
+        # Return processed images in a specified tensor format
         pass
 
 __all__ = ["ImageGPTImageProcessorFast"]
