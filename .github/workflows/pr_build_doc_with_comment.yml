@@ -8,6 +8,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'build-doc') }}
   cancel-in-progress: true
+permissions: {}
+
 
 jobs:
   get-pr-number:
@@ -53,4 +55,4 @@ jobs:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
       package: transformers
-      languages: en
+      languages: ar de en es fr hi it ko pt tr zh ja te
