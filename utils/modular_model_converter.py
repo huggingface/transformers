@@ -1767,18 +1767,11 @@ if __name__ == "__main__":
                     raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
                 files_to_parse[i] = full_path
 
-    priority_list, _ = find_priority_list(args.files_to_parse)
+    priority_list, _ = find_priority_list(files_to_parse)
+    priority_list = [item for sublist in priority_list for item in sublist]  # flatten the list of lists
+    assert len(priority_list) == len(files_to_parse), "Some files will not be converted"
 
-    # Handle standalone models that don't have dependencies from other modular files
-    standalone_files = [f for f in args.files_to_parse if f not in priority_list]
-    all_files_to_process = priority_list + standalone_files
-
-    # Assert that all files will be processed
-    assert len(all_files_to_process) == len(args.files_to_parse), (
-        f"Some files will not be converted. Missing: {set(args.files_to_parse) - set(all_files_to_process)}"
-    )
-
-    for file_name in all_files_to_process:
+    for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_modular_file(file_name)
