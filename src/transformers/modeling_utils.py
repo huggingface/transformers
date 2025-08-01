@@ -5763,6 +5763,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check if base model has a TP plan
         if getattr(self.base_model, "_tp_plan", None) is not None:
             return True
+        if self.config.base_model_tp_plan is not None:
+            return True
         return False
 
     @property
