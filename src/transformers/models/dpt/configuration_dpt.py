@@ -294,11 +294,7 @@ class DPTConfig(PretrainedConfig):
 
     @property
     def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        return {"backbone_config": type(self.backbone_config)} if hasattr(self, "backbone_config") else {}
 
 
 __all__ = ["DPTConfig"]

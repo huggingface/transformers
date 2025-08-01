@@ -343,6 +343,10 @@ class RTDetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if hasattr(self, "backbone_config") else {}
+
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`RTDetrConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model

@@ -256,5 +256,9 @@ class DabDetrConfig(PretrainedConfig):
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if hasattr(self, "backbone_config") else {}
+
 
 __all__ = ["DabDetrConfig"]

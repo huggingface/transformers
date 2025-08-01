@@ -168,5 +168,9 @@ class ViTHybridConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
 
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if hasattr(self, "backbone_config") else {}
+
 
 __all__ = ["ViTHybridConfig"]

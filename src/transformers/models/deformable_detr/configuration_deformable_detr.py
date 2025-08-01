@@ -278,5 +278,9 @@ class DeformableDetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        return {"backbone_config": type(self.backbone_config)} if hasattr(self, "backbone_config") else {}
+
 
 __all__ = ["DeformableDetrConfig"]
