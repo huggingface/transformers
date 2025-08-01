@@ -822,7 +822,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         prompt = ". ".join(id2label.values()) + "."
 
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
-        image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
+        image_inputs = image_processor(images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt")
 
         # Passing auxiliary_loss=True to compare with the expected loss
         model = MMGroundingDinoForObjectDetection.from_pretrained(
