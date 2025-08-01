@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 모델 로드하기[[loading-models]]
 
-Transformers는 한 줄의 코드로 사용할 수 있는 많은 사전훈련된 모델을 제공합니다. 모델 클래스와 [`~PreTrainedModel.from_pretrained`] 메소드가 필요합니다.
+Transformers는 한 줄의 코드로 사용할 수 있는 많은 사전 훈련된 모델을 제공합니다. 모델 클래스와 [`~PreTrainedModel.from_pretrained`] 메소드가 필요합니다.
 
 [`~PreTrainedModel.from_pretrained`]를 호출하여 Hugging Face [Hub](https://hf.co/models)에 저장된 모델의 가중치와 구성을 다운로드하고 로드하세요.
 
@@ -85,7 +85,7 @@ model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
 
 ## 모델 클래스[[model-classes]]
 
-사전훈련된 모델을 가져오려면 모델에 가중치를 로드해야 합니다. 이는 Hugging Face Hub 또는 로컬 디렉터리에서 가중치를 받아들이는 [`~PreTrainedModel.from_pretrained`]를 호출하여 수행됩니다.
+사전 훈련된 모델을 가져오려면 모델에 가중치를 로드해야 합니다. 이는 Hugging Face Hub 또는 로컬 디렉터리에서 가중치를 받아들이는 [`~PreTrainedModel.from_pretrained`]를 호출하여 수행됩니다.
 
 두 가지 모델 클래스로 [AutoModel](./model_doc/auto) 클래스와 모델별 클래스가 있습니다.
 
@@ -138,13 +138,13 @@ model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
 
 ## 대규모 모델[[large-models]]
 
-대규모 사전훈련된 모델은 로드하는 데 많은 메모리가 필요합니다. 로드 과정은 다음을 포함합니다:
+대규모 사전 훈련된 모델은 로드하는 데 많은 메모리가 필요합니다. 로드 과정은 다음을 포함합니다:
 
 1. 무작위 가중치로 모델 생성
-2. 사전훈련된 가중치 로드
-3. 사전훈련된 가중치를 모델에 적용
+2. 사전 훈련된 가중치 로드
+3. 사전 훈련된 가중치를 모델에 적용
 
-모델 가중치의 복사본 두 가지(무작위 가중치와 사전훈련된 가중치)를 보관할 수 있는 충분한 메모리가 필요하며, 이는 보유한 하드웨어에 따라 불가능할 수 있습니다. 분산 학습 환경에서는 각 프로세스가 사전훈련된 모델을 로드하기 때문에 이는 더욱 어려운 과제입니다.
+모델 가중치의 복사본 두 가지(무작위 가중치와 사전 훈련된 가중치)를 보관할 수 있는 충분한 메모리가 필요하며, 이는 보유한 하드웨어에 따라 불가능할 수 있습니다. 분산 학습 환경에서는 각 프로세스가 사전 훈련된 모델을 로드하기 때문에 이는 더욱 어려운 과제입니다.
 
 transformers는 빠른 초기화, 분할된 체크포인트, Accelerate의 [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) 기능, 그리고 더 낮은 비트 데이터 타입 지원을 통해 이러한 메모리 관련 문제들을 일부 줄여줍니다.
 
@@ -231,14 +231,14 @@ index["weight_map"]
 
 대형 모델 추론은 PyTorch [meta](https://pytorch.org/docs/main/meta.html) 장치에서 *모델 스켈레톤*을 생성합니다. meta 장치는 실제 데이터를 저장하지 않고 메타데이터만 저장합니다.
 
-무작위로 초기화된 가중치는 사전훈련된 가중치가 로드될 때만 생성되어 메모리에 동시에 모델의 두 복사본을 유지하는 것을 방지합니다. 최대 메모리 사용량은 모델 크기만큼입니다.
+무작위로 초기화된 가중치는 사전 훈련된 가중치가 로드될 때만 생성되어 메모리에 동시에 모델의 두 복사본을 유지하는 것을 방지합니다. 최대 메모리 사용량은 모델 크기만큼입니다.
 
 > [!TIP]
 > 장치 할당에 대한 자세한 내용은 [장치 맵 설계하기](https://hf.co/docs/accelerate/v0.33.0/en/concept_guides/big_model_inference#designing-a-device-map)를 참조하세요.
 
 대형 모델 추론의 두 번째 기능은 불러온 가중치가 모델 스켈레톤에 할당되는 방식과 관련이 있습니다. 모델 가중치는 사용 가능한 모든 디바이스에 분산되며, 가장 빠른 디바이스(보통 GPU)부터 시작해 나머지 가중치는 느린 디바이스(CPU 및 하드 디스크)로 순차적으로 할당됩니다.
 
-두 기능을 결합하면 대형 사전훈련된 모델의 메모리 사용량과 로딩 시간이 줄어듭니다.
+두 기능을 결합하면 대형 사전 훈련된 모델의 메모리 사용량과 로딩 시간이 줄어듭니다.
 
 대형 모델 추론을 활성화하려면 [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061)을 `"auto"`로 설정합니다.
 
