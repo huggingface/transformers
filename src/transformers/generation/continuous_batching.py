@@ -205,7 +205,7 @@ class PagedAttentionCache:
             dtype=dtype,
             num_blocks=num_blocks,
         )
-        logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+        logger.warning(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
         self.max_batch_tokens = max_batch_tokens
         self.block_size = block_size
         self.num_blocks = num_blocks

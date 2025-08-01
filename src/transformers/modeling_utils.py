@@ -2715,8 +2715,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
 
-                applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            return applicable_attn_implementation
+                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+            return attn_implementation
         else:
             return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
 
