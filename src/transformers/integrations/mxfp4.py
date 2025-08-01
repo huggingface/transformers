@@ -61,7 +61,6 @@ def swizzle_mxfp4(w, w_scale):
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-
     # TODO : add that when we are actually sure that it works on B200
     # if torch.cuda.get_device_capability()[0] == 10:
     #     constraints = {
@@ -319,10 +318,8 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
-            if not hasattr(module, blocks_attr) and not hasattr(module, scales_attr):
-                setattr(module, param_name.rsplit(".", 1)[1], param_value)
-            else:
-                setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
                 # TODO: this is perhaps necessary since if target_device is cpu, and the param was on gpu
@@ -338,7 +335,6 @@ def load_and_swizzle_mxfp4(
     from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
     from ..integrations.tensor_parallel import shard_and_distribute_module
-    from ..modeling_utils import _load_parameter_into_model
 
     model = kwargs.get("model", None)
     empty_param = kwargs.get("empty_param", None)
@@ -354,7 +350,7 @@ def load_and_swizzle_mxfp4(
                     model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
                 )
             else:
-                _load_parameter_into_model(model, param_name, param_value)
+                setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
             blocks = getattr(module, blocks_attr)
@@ -384,7 +380,7 @@ def load_and_swizzle_mxfp4(
                 delattr(module, scales_attr)
                 delattr(module, blocks_attr)
                 # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-
+                del blocks
 def _replace_with_mxfp4_linear(
     model,
     modules_to_not_convert=None,
