@@ -4073,13 +4073,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     layer = ALL_PARALLEL_STYLES.get(plan, None)
                     if isinstance(state_dict[tensor], DTensor):
                         full_tensor = state_dict[tensor].full_tensor()
-                    elif layer is not None:
-                        full_tensor = DTensor.from_local(
-                            state_dict[tensor], self._device_mesh, layer.output_layouts
-                        ).full_tensor()
                     else:
                         full_tensor = state_dict[tensor]
                     # to get the correctly ordered tensor we need to repack if packed
+                    shards = [local_tensor.clone() for local_tensor in self._device_mesh.all_gather(local_tensor)]
+                    full_tensor = torch.cat(shards, dim=0)
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
