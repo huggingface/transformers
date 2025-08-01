@@ -1106,7 +1106,8 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        self.model = model
+        self.model = model.eval()
+        generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
@@ -1118,7 +1119,6 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
-        generation_config = model.generation_config if generation_config is None else generation_config
         self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", True)
         self.profile = getattr(generation_config, "profile", False)
@@ -1242,7 +1242,7 @@ class ContinuousBatchingManager:
 
     @traced
     def warmup(self, batch_processor):
-        stream = torch.cuda.Stream()
+        stream = torch.cuda.Stream(device=self.model.device)
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):
             # Warmup the model with a dummy forward pass
@@ -1250,7 +1250,7 @@ class ContinuousBatchingManager:
         torch.cuda.current_stream().wait_stream(stream)
 
         self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph):
+        with torch.cuda.graph(self.graph, stream=stream):
             self._generation_step(batch_processor)
 
     @traced
@@ -1326,7 +1326,7 @@ class ContinuousBatchingManager:
             is_first = True
 
             if self.profile:
-                tracing_schedule = schedule(skip_first=2, warmup=3, active=200, repeat=100, wait=1)
+                tracing_schedule = schedule(skip_first=2, warmup=1, active=1, repeat=3, wait=1)
                 trace_handler = tensorboard_trace_handler(
                     dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile"
                 )
