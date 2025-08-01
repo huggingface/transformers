@@ -1446,7 +1446,7 @@ def create_tiny_models(
             "mpt",
 
         ]
-        skip = ["fuyu", "kyutai_speech_to_text", "moshi"]
+        skip += ["fuyu", "kyutai_speech_to_text", "moshi"]
         # skip = []
         all_build_args = [x for x in all_build_args if x[0].model_type not in skip]
 
@@ -1470,14 +1470,14 @@ def create_tiny_models(
         with open(os.path.join("tiny_local_models", "models.txt"), "w") as fp:
             fp.write(msg)
 
-        # with multiprocessing.Pool() as pool:
-        #     results = pool.starmap(build, all_build_args)
-        #     results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
+        with multiprocessing.Pool(num_workers) as pool:
+            results = pool.starmap(build, all_build_args)
+            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
 
-        for build_args in all_build_args:
-            result = build(*build_args)
-            results[c.__name__] = result
-            print("=" * 40)
+        # for build_args in all_build_args:
+        #     result = build(*build_args)
+        #     results[c.__name__] = result
+        #     print("=" * 40)
 
     if upload:
         if organization is None:
