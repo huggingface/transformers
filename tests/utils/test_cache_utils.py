@@ -349,7 +349,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(0)
         gen_out = model.generate(
-            **inputs, do_sample=True, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
+            **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
         decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
@@ -360,21 +360,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
-            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have a body that is "
-            "covered in fur. They are carnivores, so they eat meat. They are also very clean animals, they groom "
-            "themselves. They have a lot of different breeds. Some are small, some are large. Some are friendly, "
-            "some are not. They have a lot of different personalities. They can be very independent, or they can be "
-            "very affectionate. They can be very playful, or they can be very lazy. They can be very intelligent, or "
-            "they can be very silly. They have a lot of different behaviors. They can be very curious, or they can "
-            "be very cautious. They can be very vocal, or they can be very quiet. They can be very social, or they "
-            "can be very solitary. They can be very active, or they can be very inactive. They can be very "
-            "affectionate, or they can be very aloof. They can be very playful, or they can be very lazy. They can "
-            "be very intelligent, or they can be very silly. They have a lot of different behaviors. They can be "
-            "very curious, or they can"
+            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
+            "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
+            "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
+            "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
+            "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
+            "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
+            "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
+            "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
+            "disabilities. They have a long life span, and they can live for many years. They are also known for "
+            "their agility and gracefulness. They are often associated with mystery and independence. They are also "
+            "known for their ability to land on their feet when they fall. They"
         )
-        EXPECTED_SCORE_SUM = 11017.4971
+        EXPECTED_SCORE_SUM = 10834.7919921875
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
-        self.assertAlmostEqual(score_sum, EXPECTED_SCORE_SUM, places=2)
+        self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
         self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
@@ -485,11 +485,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an "
-            "enriching experience that broadens our horizons and allows us to explore the world beyond our comfort "
-            "zones. Whether it's a short weekend getaway",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
-            "of France.\n\n\n\n\n\n\n<|endoftext|>",
+            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+            "memories. Whether you're a seasoned traveler or someone",
+            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
         ]
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
