@@ -396,6 +396,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         audios: AudioInput,
         sampling_rate: Optional[int] = 16000,
         device: Optional[str] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several audio sequence(s).
