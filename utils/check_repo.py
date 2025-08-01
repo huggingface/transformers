@@ -138,6 +138,8 @@ IGNORE_NON_TESTED = (
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+        "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam2VideoModel",  # inherit from Sam2Model (tested).
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -243,6 +245,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "Sam2Model",
+    "Sam2VideoModel",
     "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
