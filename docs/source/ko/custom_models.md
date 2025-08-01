@@ -277,7 +277,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 터미널에서 다음 코드를 실행해 확인할 수 있습니다:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 주피터 노트북의 경우에는 다음과 같습니다:

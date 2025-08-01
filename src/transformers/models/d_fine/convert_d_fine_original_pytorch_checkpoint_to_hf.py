@@ -158,7 +158,7 @@ def load_original_state_dict(repo_id, model_name):
 
     original_state_dict = {}
     model = torch.load(directory_path, map_location="cpu")["model"]
-    for key in model.keys():
+    for key in model:
         original_state_dict[key] = model[key]
 
     return original_state_dict
@@ -406,7 +406,7 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config, model_name)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage

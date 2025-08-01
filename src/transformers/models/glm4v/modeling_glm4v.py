@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import itertools
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
@@ -753,6 +752,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = self.post_self_attn_layernorm(hidden_states)

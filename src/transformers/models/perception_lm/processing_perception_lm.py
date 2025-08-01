@@ -17,9 +17,11 @@ Processor class for PerceptionLM.
 
 from typing import Iterable, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
@@ -32,6 +34,7 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
     }
 
@@ -157,9 +160,17 @@ class PerceptionLMProcessor(ProcessorMixin):
             prompt_strings.append(sample)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image", "video"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _expand_media_tokens(self, sample, media_token: str, media_iter: Iterable):
         media_count = sample.count(media_token)
@@ -182,6 +193,50 @@ class PerceptionLMProcessor(ProcessorMixin):
                 sample += media_token * num_media_tokens
             sample += sample_splits[-1]
         return sample
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = PerceptionLMProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            tile_size = images_kwargs.get("tile_size", None) or self.image_processor.tile_size
+
+            num_image_tokens = []
+            num_image_patches = []
+            for height, width in image_sizes:
+                if self.image_processor.vision_input_type == "thumb+tile":
+                    aspect_ratio = self.image_processor._fit_image_to_canvas(
+                        img_width=width, img_height=height, tile_size=tile_size
+                    )
+                    if aspect_ratio is None:
+                        aspect_ratio = self.image_processor._find_closest_aspect_ratio(
+                            img_width=width, img_height=height, tile_size=tile_size
+                        )
+                    num_tiles = aspect_ratio[0] * aspect_ratio[1] + 1  # base image and tiles
+                else:
+                    num_tiles = 1
+
+                num_image_tokens.append(
+                    (tile_size // self.patch_size // self.pooling_ratio)
+                    * (tile_size // self.patch_size // self.pooling_ratio)
+                    * num_tiles
+                )
+                num_image_patches.append(num_tiles)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

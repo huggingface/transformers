@@ -49,6 +49,7 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    _no_split_modules = None
 
 
 # TODO: @eustlb, I would really prefer to use WhisperEncoder but it's messing with modular
