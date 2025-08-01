@@ -18,6 +18,7 @@ try:
     from kernels import (
         Device,
         LayerRepository,
+        Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
@@ -45,11 +46,12 @@ try:
                 layer_name="LigerRMSNorm",
                 # revision="pure-layer-test",
             ),
-            "rocm": LayerRepository(
+            "rocm": {
+                Mode.INFERENCE: LayerRepository(
                 repo_id="kernels-community/liger_kernels",
                 layer_name="LigerRMSNorm",
                 # revision="pure-layer-test",
-            )
+            )}
         },
         "MLP": {
             "cuda": LayerRepository(
@@ -62,10 +64,11 @@ try:
                 repo_id="kernels-community/megablocks",
                 layer_name="MegaBlocksMoeMLP",
             ),
-            "rocm": LayerRepository(
+            "rocm": {
+                Mode.INFERENCE: LayerRepository(
                 repo_id="ahadnagy/megablocks",
                 layer_name="MegaBlocksMoeMLP",
-            ),
+            )}
         },
     }
 
