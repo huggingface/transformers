@@ -19,7 +19,7 @@ jobs:
   check_tiny_models:
     name: Check tiny models
     runs-on:
-      group: aws-general-8-plus
+      group: aws-g4dn-4xlarge-cache
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
