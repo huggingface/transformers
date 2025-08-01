@@ -4075,7 +4075,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         full_tensor = state_dict[tensor].full_tensor()
                     elif layer is not None:
                         full_tensor = DTensor.from_local(
-                            state_dict[tensor], layer.device_mesh, layer.output_layouts
+                            state_dict[tensor], self._device_mesh, layer.output_layouts
                         ).full_tensor()
                     else:
                         full_tensor = state_dict[tensor]
