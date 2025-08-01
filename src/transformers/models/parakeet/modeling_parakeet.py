@@ -156,7 +156,7 @@ class ParakeetEncoderAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.scaling = self.head_dim**-0.5
+        self.scaling = 1 / math.sqrt(self.head_dim)
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -208,7 +208,7 @@ class ParakeetEncoderAttention(nn.Module):
             matrix_bd = matrix_bd * self.scaling
 
             if attention_mask is not None:
-                matrix_bd = attention_mask + matrix_bd
+                matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), -10000.0)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -236,7 +236,7 @@ class ParakeetEncoderAttention(nn.Module):
 
 
 class ParakeetEncoderSubsamplingConv2D(nn.Module):
-    def __init__(self, config: ParakeetEncoderConfig, num_mel_bins: int):
+    def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
 
         self.kernel_size = config.subsampling_conv_kernel_size
@@ -264,15 +264,36 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
 
         self.layers = nn.Sequential(*layers)
 
-        out_length = num_mel_bins // (self.stride**self.num_layers)
+        out_length = config.num_mel_bins // (self.stride**self.num_layers)
         self.linear = nn.Linear(config.subsampling_conv_channels * out_length, config.hidden_size, bias=True)
 
-    def forward(self, input_features: torch.Tensor):
-        hidden_states = input_features.unsqueeze(1)
-        hidden_states = self.layers(hidden_states)
+    def _get_output_length(self, input_lengths: torch.Tensor, conv_layer: nn.Conv2d):
+        if hasattr(conv_layer, 'stride') and conv_layer.stride != (1, 1):
+            padding = conv_layer.padding
+            kernel_size = conv_layer.kernel_size[0]
+            stride = conv_layer.stride[0]
 
-        batch_size, conv_channels, time_steps, freq_bins = hidden_states.size()
-        hidden_states = self.linear(hidden_states.transpose(1, 2).reshape(batch_size, time_steps, -1))
+            output_lenghts = (input_lengths + padding[0] + padding[1] - kernel_size) // stride + 1
+            return output_lenghts
+
+        return input_lengths
+
+    def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor = None):
+        hidden_states = input_features.unsqueeze(1)
+        current_lenghts = attention_mask.sum(-1)
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+
+            # mask the hidden states
+            if isinstance(layer, nn.Conv2d) and attention_mask is not None:
+                current_lenghts = self._get_output_length(current_lenghts, layer)
+                current_seq_length = hidden_states.shape[2]
+                channel_mask = torch.arange(current_seq_length, device=attention_mask.device) < current_lenghts[:, None]
+                hidden_states *= channel_mask[:, None, :, None]
+
+        hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)
+        hidden_states = self.linear(hidden_states)
 
         return hidden_states
 
@@ -301,8 +322,9 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         pad_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        ff1_output = self.feed_forward1(self.norm_feed_forward1(hidden_states))
-        hidden_states = hidden_states + 0.5 * ff1_output
+        residual = hidden_states
+        hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
+        hidden_states = residual + 0.5 * hidden_states
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
         attn_output, _ = self.self_attn(
@@ -392,7 +414,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self.layerdrop = config.layerdrop
 
         self.input_scale = math.sqrt(config.hidden_size) if config.scale_input else 1.0
-        self.subsampling = ParakeetEncoderSubsamplingConv2D(config, config.num_mel_bins)
+        self.subsampling = ParakeetEncoderSubsamplingConv2D(config)
         self.encode_positions = ParakeetEncoderRelPositionalEncoding(config)
 
         self.layers = nn.ModuleList(
@@ -409,7 +431,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        hidden_states = self.subsampling(input_features)
+        hidden_states = self.subsampling(input_features, attention_mask)
         hidden_states = hidden_states * self.input_scale
         position_embeddings = self.encode_positions(hidden_states)
 
@@ -420,6 +442,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         if attention_mask is not None:
             attention_mask = self._get_output_attention_mask(attention_mask)
+
             # TODO: @eustlb, which mask utils to do the same?
             attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
             attention_mask = attention_mask & attention_mask.transpose(1, 2)
@@ -477,7 +500,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetConfig):
         super().__init__(config)
         self.encoder = ParakeetEncoder(config.encoder_config)
-        self.ctc_head = nn.Linear(config.encoder_config.hidden_size, config.vocab_size)
+        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
 
@@ -496,7 +519,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states)
+        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         loss = None
         if labels is not None:
