@@ -76,7 +76,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
-    # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T
+    # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
@@ -91,7 +91,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer with Whisper->SeamlessM4T
+    # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer with Whisper->SeamlessM4T
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
@@ -107,7 +107,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
-    # Copied from test.models.whisper.test_processor_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->SeamlessM4T
+    # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->SeamlessM4T
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()

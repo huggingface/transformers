@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_torch
 @require_sentencepiece
 @require_torchaudio
-# Copied from tests.models.musicgen.test_processor_musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask, input_values->input_features
+# Copied from tests.models.musicgen.test_processing_musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask, input_values->input_features
 class MusicgenMelodyProcessorTest(unittest.TestCase):
     def setUp(self):
         # Ignore copy

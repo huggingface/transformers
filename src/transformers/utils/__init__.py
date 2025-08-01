@@ -179,6 +179,7 @@ from .import_utils import (
     is_keras_nlp_available,
     is_kernels_available,
     is_levenshtein_available,
+    is_libcst_available,
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,

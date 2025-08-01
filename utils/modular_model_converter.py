@@ -17,12 +17,12 @@ import glob
 import importlib
 import os
 import re
+import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from typing import Optional, Union
 
 import libcst as cst
-from check_copies import run_ruff
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
@@ -1674,6 +1674,16 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
         files[file] = new_module
 
     return files
+
+
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
 
 
 def convert_modular_file(modular_file):
