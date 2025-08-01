@@ -1242,7 +1242,7 @@ class ContinuousBatchingManager:
 
     @traced
     def warmup(self, batch_processor):
-        stream = torch.cuda.Stream()
+        stream = torch.cuda.Stream(device=self.model.device)
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):
             # Warmup the model with a dummy forward pass
@@ -1250,7 +1250,7 @@ class ContinuousBatchingManager:
         torch.cuda.current_stream().wait_stream(stream)
 
         self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph):
+        with torch.cuda.graph(self.graph, stream=stream):
             self._generation_step(batch_processor)
 
     @traced
@@ -1326,7 +1326,7 @@ class ContinuousBatchingManager:
             is_first = True
 
             if self.profile:
-                tracing_schedule = schedule(skip_first=2, warmup=3, active=200, repeat=100, wait=1)
+                tracing_schedule = schedule(skip_first=2, warmup=1, active=1, repeat=3, wait=1)
                 trace_handler = tensorboard_trace_handler(
                     dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile"
                 )
