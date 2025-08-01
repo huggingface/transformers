@@ -106,7 +106,7 @@ def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) ->
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
     audio = decoder.get_all_samples().data
-    return audio
+    return audio[0]
 
 
 def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
