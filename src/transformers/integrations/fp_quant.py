@@ -28,6 +28,8 @@ from transformers.utils.quantization_config import FPQuantConfig
 def adapt_fp_quant_config(config: FPQuantConfig):
     if config.forward_dtype == "mxfp4":
         forward_dtype = FPQuantDtype.MXFP4
+    elif config.forward_dtype == "nvfp4":
+        forward_dtype = FPQuantDtype.NVFP4
     else:
         raise ValueError(f"Unsupported forward dtype: {config.forward_dtype}")
 
