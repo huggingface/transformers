@@ -178,7 +178,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-분할된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 로드할 수 있습니다.
+분할된 체크포인트는 [`~transformers.modeling_utils.load_sharded_checkpoint`]로도 직접 불러올 수 있습니다.
 
 ```py
 from transformers.modeling_utils import load_sharded_checkpoint
@@ -236,7 +236,7 @@ index["weight_map"]
 > [!TIP]
 > 장치 할당에 대한 자세한 내용은 [장치 맵 설계하기](https://hf.co/docs/accelerate/v0.33.0/en/concept_guides/big_model_inference#designing-a-device-map)를 참조하세요.
 
-대형 모델 추론의 두 번째 기능은 가중치가 로드되고 모델 스켈레톤에 할당되는 방식과 관련이 있습니다. 모델 가중치는 사용 가능한 모든 디바이스에 분산되며, 가장 빠른 디바이스(보통 GPU)부터 시작해 나머지 가중치는 느린 디바이스(CPU 및 하드 디스크)로 순차적으로 할당됩니다..
+대형 모델 추론의 두 번째 기능은 가중치가 로드되고 모델 스켈레톤에 할당되는 방식과 관련이 있습니다. 모델 가중치는 사용 가능한 모든 디바이스에 분산되며, 가장 빠른 디바이스(보통 GPU)부터 시작해 나머지 가중치는 느린 디바이스(CPU 및 하드 디스크)로 순차적으로 할당됩니다.
 
 두 기능을 결합하면 대형 사전훈련된 모델의 메모리 사용량과 로딩 시간이 줄어듭니다.
 
