@@ -423,8 +423,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
         if modality == "video":
-            # qwen pixels don't scale with bs same way as other models, calulate expected video token count based on video_grid_thw
-            # TODO: update expected video token count calculation based on the internal processing logic of Qwen2_5OmniProcessor
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
             expected_video_token_count = 0
             for thw in out_dict["video_grid_thw"]:
                 expected_video_token_count += thw[0] * thw[1] * thw[2]
