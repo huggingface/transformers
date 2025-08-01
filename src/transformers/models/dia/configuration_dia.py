@@ -356,9 +356,9 @@ class DiaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 
-        assert self.decoder_config.num_channels == len(self.delay_pattern), (
-            "Number of channels must match delay pattern length."
-        )
+        assert self.decoder_config.num_channels == len(
+            self.delay_pattern
+        ), "Number of channels must match delay pattern length."
 
         super().__init__(
             pad_token_id=pad_token_id,

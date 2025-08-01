@@ -94,9 +94,9 @@ def main():
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
 
-        assert world_size == tp_size * dp_size * cp_size, (
-            f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size}) * CP size ({cp_size})"
-        )
+        assert (
+            world_size == tp_size * dp_size * cp_size
+        ), f"World size ({world_size}) must equal TP size ({tp_size}) * DP size ({dp_size}) * CP size ({cp_size})"
 
         mesh = torch.arange(world_size).reshape(dp_size, tp_size, cp_size)
         world_mesh = DeviceMesh(device_type="cuda", mesh=mesh, mesh_dim_names=("dp", "tp", "cp"))
@@ -210,9 +210,9 @@ def main():
 
     # Calculate local batch size
     if dist.is_initialized():
-        assert global_batch_size % dp_mesh.size() == 0, (
-            f"Global batch size ({global_batch_size}) must be divisible by DP size ({dp_mesh.size()})"
-        )
+        assert (
+            global_batch_size % dp_mesh.size() == 0
+        ), f"Global batch size ({global_batch_size}) must be divisible by DP size ({dp_mesh.size()})"
         local_batch_size = global_batch_size // dp_mesh.size()
     else:
         local_batch_size = global_batch_size

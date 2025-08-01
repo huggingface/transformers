@@ -1,13 +1,14 @@
-from logging import Logger
 import os
+from logging import Logger
 from threading import Event, Thread
 from time import perf_counter, sleep
 from typing import Optional
-from benchmarks_entrypoint import MetricsRecorder
+
 import gpustat
 import psutil
 import psycopg2
 import torch
+from benchmarks_entrypoint import MetricsRecorder
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
 
