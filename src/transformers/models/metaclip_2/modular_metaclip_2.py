@@ -6,7 +6,9 @@ from torch import nn
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import check_model_inputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -64,7 +66,6 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel._init_weights with CLIP->MetaCLIP2
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
@@ -123,20 +124,16 @@ class MetaCLIP2PreTrainedModel(PreTrainedModel):
 
 
 class MetaCLIP2TextTransformer(CLIPTextTransformer):
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -157,8 +154,7 @@ class MetaCLIP2TextTransformer(CLIPTextTransformer):
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
