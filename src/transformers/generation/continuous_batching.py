@@ -206,10 +206,6 @@ class PagedAttentionCache:
             num_blocks=num_blocks,
         )
         logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
-        print(
-            f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
-        )
-
         self.max_batch_tokens = max_batch_tokens
         self.block_size = block_size
         self.num_blocks = num_blocks
@@ -257,7 +253,7 @@ class PagedAttentionCache:
             blocks_to_free = self._block_tables.pop(request_id)
             self._free_blocks.extend(blocks_to_free)
         else:
-            logger.warning(f"Attempted to free blocks for non-existent request_id: {request_id}")
+            logger.info(f"Attempted to free blocks for non-existent request_id: {request_id}")
 
     def get_num_free_blocks(self) -> int:
         """Returns the number of free blocks available."""
@@ -351,7 +347,7 @@ class Scheduler(ABC):
     @traced
     def has_pending_requests(self) -> bool:
         """Check if there are requests ready to be processed."""
-        return self.active_requests or self.waiting_requests
+        return len(self.active_requests) or len(self.waiting_requests)
 
     @abstractmethod
     def finish_request(self, request_id: str, evict_from_cache: bool = True):
@@ -615,8 +611,8 @@ def get_device_and_memory():
         device = torch.device("mps")
         # MPS memory reporting (PyTorch 2.0+)
         total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = torch.mps.current_allocated_memory()
-        reserved_memory = allocated_memory  # MPS does not track reserved separately
+        allocated_memory = total_memory - torch.mps.recommended_max_memory()
+        reserved_memory = 0  # MPS does not track reserved separately
 
     else:
         device = torch.device("cpu")
@@ -638,26 +634,6 @@ def compute_optimal_blocks(
     num_blocks=None,
     dtype=torch.float16,
 ):
-    """
-    Compute the optimal number of memory blocks and maximum concurrent tokens
-    for continuous batching given memory constraints.
-
-    Args:
-        max_memory_percent (float): Percentage of total GPU memory to use (default 0.9).
-        max_num_tokens (int): Maximum number of tokens to generate per request.
-        total_requests (int): Total number of requests in the queue.
-        block_size (int): Memory block size in tokens (default 32).
-        head_dim (int): Head dimension of the model (default 32).
-        hidden_dim (int): Hidden dimension of the model (default 1024).
-        num_heads (int): Number of attention heads (default 16).
-
-    Returns:
-        dict: {
-            "available_memory_bytes": float,
-            "optimal_num_blocks": int,
-            "max_concurrent_tokens": int
-        }
-    """
     device, total, reserved, allocated = get_device_and_memory()
     available_memory = int((total - max(allocated, reserved)) * max_memory_percent)
 
@@ -666,13 +642,16 @@ def compute_optimal_blocks(
     if num_blocks is not None:
         # TODO
         max_possible_concurrent_requests = num_blocks * bytes_per_token
-
-    max_possible_concurrent_requests = int(available_memory // (bytes_per_token * max_num_tokens))
+    # FIXME: forgot to add the inintial prompt length in the mix....
+    max_possible_concurrent_requests = int(
+        available_memory // (bytes_per_token * max_num_tokens * max_num_tokens // 4)
+    )
     if max_possible_concurrent_requests <= 0:
         logger.warning("you are trying to generate a bit too many tokens")
         max_possible_concurrent_requests = 32
     max_concurrent_tokens = min(64, max_possible_concurrent_requests)
-    optimal_num_blocks = ((max_concurrent_tokens * max_num_tokens) // block_size) + 1
+    # FIXME: Optimal means uses all memory
+    optimal_num_blocks = max(((max_concurrent_tokens * max_num_tokens) // block_size) + 1, 64)
     return optimal_num_blocks, max_concurrent_tokens
 
 
@@ -1011,6 +990,8 @@ class ContinuousBatchProcessor:
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+        if self.cache.get_num_free_blocks() == 0:
+            raise ValueError("No more free blocks")
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -1032,7 +1013,9 @@ class ContinuousBatchProcessor:
         Args:
             error: The error to report in the failure message
         """
-        for state in self.scheduler.active_requests.values():
+
+        requests = list(self.scheduler.active_requests.values())
+        for state in requests:
             self._handle_request_error(error, state)
             self.scheduler.finish_request(state.request_id)
 
@@ -1295,33 +1278,10 @@ class ContinuousBatchingManager:
             )
             self.batch_processor = batch_processor
             is_first = True
-
-            if self.profile:
-                tracing_schedule = schedule(skip_first=2, warmup=1, active=1, repeat=3, wait=1)
-                trace_handler = tensorboard_trace_handler(
-                    dir_name="/fsx/arthur/transformers", use_gzip=True, worker_name="paged_compile"
-                )
-                activities = [
-                    torch.profiler.ProfilerActivity.CPU,
-                    torch.profiler.ProfilerActivity.CUDA,
-                ]
-                with profile(
-                    activities=activities,
-                    schedule=tracing_schedule,
-                    on_trace_ready=trace_handler,
-                    record_shapes=False,
-                    with_stack=True,
-                ) as prof:
-                    while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                        self._inner_generation_loop(batch_processor, is_first)
-                        if is_first:
-                            is_first = False
-                        prof.step()
-            else:
-                while not self.stop_event.is_set() or batch_processor.has_pending_requests():
-                    self._inner_generation_loop(batch_processor, is_first)
-                    if is_first:
-                        is_first = False
+            while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
+                self._inner_generation_loop(batch_processor, is_first)
+                if is_first:
+                    is_first = False
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1334,6 +1294,8 @@ class ContinuousBatchingManager:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
+        device, total, reserved, allocated = get_device_and_memory()
+        logger.info(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if is_first:
                 self.warmup(batch_processor)
@@ -1473,6 +1435,7 @@ class ContinuousMixin:
                                 results[req_id] = result
                                 finished_count += 1
                                 pbar.update(1)
+                            logger.debug(manager.batch_processor.tokenizer.decode(result.generated_tokens))
                         else:
                             if not manager.is_running():
                                 logger.error("Generation thread terminated unexpectedly.")
