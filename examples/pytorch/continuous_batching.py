@@ -11,12 +11,15 @@ torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    model_id,
+    attn_implementation="paged_attention|kernels-community/flash-attn3",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
-    max_new_tokens=16,
+    max_new_tokens=512,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     do_sample=True,
