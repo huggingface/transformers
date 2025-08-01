@@ -38,10 +38,8 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        config: PretrainedConfig,
-        generation_config: GenerationConfig,
-        max_batch_size: int = 1,
-        max_cache_len: int = 4096,
+        config: Optional[PretrainedConfig] = None,
+        generation_config: Optional[GenerationConfig] = None,
     ):
         """
         Initializes the exportable module with `HybridCache`.
@@ -49,14 +47,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
             config (`PretrainedConfig`): The pretrained text config for the decoder model.
+            If not specified will try to resolve with the model's config.
             generation_config (`GenerationConfig`): The generation config for the model.
-            max_batch_size (int): Maximum batch size for the cache.
-            max_cache_len (int): Maximum sequence length for the cache.
+            If not specified will try to resolve with the model's generation config.
 
         Raises:
             ValueError: If the model is configured with a unsupported cache implementation.
         """
         super().__init__()
+
+        if not config:
+            config = model.config
+        if not generation_config:
+            generation_config = model.generation_config
 
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
@@ -167,13 +170,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
             )
 
-        example_cache_position = (
-            cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
-        )
-
         if input_ids is not None:
             if cache_position is None:
-                cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long)
+                cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long, model=model_device)
             exported_program = torch.export.export(
                 self.model,
                 args=(),
@@ -183,11 +182,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             )
         else:  # inputs_embeds
             if cache_position is None:
-                cache_position = torch.arange(inputs_embeds.shape[1], dtype=torch.long)
+                cache_position = torch.arange(inputs_embeds.shape[1], dtype=torch.long, model=model_device)
             exported_program = torch.export.export(
                 self.model,
                 args=(),
-                kwargs={"inputs_embeds": inputs_embeds, "cache_position": example_cache_position},
+                kwargs={"inputs_embeds": inputs_embeds, "cache_position": cache_position},
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
