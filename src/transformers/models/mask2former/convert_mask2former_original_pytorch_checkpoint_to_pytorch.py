@@ -804,7 +804,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
 
-        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track}
         mask2former.load_state_dict(state_dict)
         return mask2former
 
@@ -816,7 +816,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         self.replace_universal_segmentation_module(dst_state_dict, src_state_dict)
 
-        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track}
         mask2former.load_state_dict(state_dict)
 
         return mask2former
