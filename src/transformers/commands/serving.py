@@ -692,7 +692,6 @@ class ServeCommand(BaseTransformersCLICommand):
             "Qwen/Qwen2.5-14B-Instruct",
             "meta-llama/Llama-3.1-8B-Instruct",
             "meta-llama/Llama-3.2-1B-Instruct",
-            "meta-llama/Meta-Llama-3-8B-Instruct",
             "meta-llama/Llama-3.3-70B-Instruct",
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
