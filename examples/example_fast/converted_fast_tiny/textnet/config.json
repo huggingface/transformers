@@ -1,0 +1,146 @@
+{
+  "architectures": [
+    "TextNetBackbone"
+  ],
+  "batch_norm_eps": 1e-05,
+  "conv_layer_kernel_sizes": [
+    [
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        3
+      ]
+    ],
+    [
+      [
+        3,
+        3
+      ],
+      [
+        1,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        1
+      ]
+    ],
+    [
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        1
+      ],
+      [
+        1,
+        3
+      ]
+    ],
+    [
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        1
+      ],
+      [
+        1,
+        3
+      ],
+      [
+        3,
+        3
+      ]
+    ]
+  ],
+  "conv_layer_strides": [
+    [
+      1,
+      2,
+      1
+    ],
+    [
+      2,
+      1,
+      1,
+      1
+    ],
+    [
+      2,
+      1,
+      1,
+      1
+    ],
+    [
+      2,
+      1,
+      1,
+      1
+    ]
+  ],
+  "depths": [
+    3,
+    4,
+    4,
+    4
+  ],
+  "hidden_sizes": [
+    64,
+    64,
+    128,
+    256,
+    512
+  ],
+  "image_size": [
+    640,
+    640
+  ],
+  "initializer_range": 0.02,
+  "model_type": "textnet",
+  "out_features": [
+    "stage1",
+    "stage2",
+    "stage3",
+    "stage4"
+  ],
+  "out_indices": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "stage_names": [
+    "stem",
+    "stage1",
+    "stage2",
+    "stage3",
+    "stage4"
+  ],
+  "stem_act_func": "relu",
+  "stem_kernel_size": 3,
+  "stem_num_channels": 3,
+  "stem_out_channels": 64,
+  "stem_stride": 2,
+  "torch_dtype": "float32",
+  "transformers_version": "4.55.0.dev0"
+}
