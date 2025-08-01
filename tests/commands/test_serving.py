@@ -25,7 +25,7 @@ from parameterized import parameterized
 import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
 from transformers.commands.serving import Modality, ServeArguments, ServeCommand
-from transformers.testing_utils import CaptureStd, require_openai
+from transformers.testing_utils import CaptureStd, require_openai, slow
 from transformers.utils.import_utils import is_openai_available
 
 
@@ -369,7 +369,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                 raise ValueError("VLMs should only receive content as lists.")
 
 
-# @slow  # server startup time is slow on our push CI
+@slow  # server startup time is slow on our push CI
 @require_openai
 class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `generate` version of the Completions API."""
@@ -384,7 +384,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         thread.daemon = True
         thread.start()
 
-    # @slow
+    @slow
     def test_tool_call(self):
         """Tests that the tool call is correctly handled and that the payloads are correctly structured."""
         # TODO: move to the mixin when CB also supports tool calls
@@ -461,7 +461,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
-# @slow  # server startup time is slow on our push CI
+@slow  # server startup time is slow on our push CI
 @require_openai
 class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, unittest.TestCase):
     """Tests the `continuous_batching` version of the Completions API."""
@@ -529,7 +529,7 @@ class ServeResponsesMixin:
     # TODO: speed-based test to confirm that KV cache is working across requests
 
 
-# @slow  # server startup time is slow on our push CI
+@slow  # server startup time is slow on our push CI
 @require_openai
 class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     """Tests the Responses API."""
@@ -544,7 +544,7 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
         thread.daemon = True
         thread.start()
 
-    # @slow
+    @slow
     def test_full_request(self):
         """Tests that an inference using the Responses API works"""
 
