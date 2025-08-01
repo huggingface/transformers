@@ -180,7 +180,7 @@ else:
             ("timesformer", ("VideoMAEImageProcessor",)),
             ("timm_wrapper", ("TimmWrapperImageProcessor",)),
             ("tvlt", ("TvltImageProcessor",)),
-            ("tvp", ("TvpImageProcessor",)),
+            ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor",)),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
