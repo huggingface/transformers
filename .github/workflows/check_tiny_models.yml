@@ -30,7 +30,9 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: |
+          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+          python3 -m pip install -U essentia librosa pretty_midi
 
       - name: Create all tiny models (locally)
         run: |
