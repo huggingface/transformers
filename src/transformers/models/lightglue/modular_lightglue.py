@@ -25,7 +25,7 @@ from ...image_utils import ImageInput, is_vision_available, to_numpy_array
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, is_matplotlib_available, logging, requires_backends
+from ...utils import ModelOutput, TensorType, auto_docstring, is_matplotlib_available, logging
 from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
