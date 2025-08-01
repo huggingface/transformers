@@ -18,14 +18,14 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class OpenAIMoeConfig(PretrainedConfig):
+class GptOssConfig(PretrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     """
 
-    model_type = "openai_moe"
+    model_type = "gpt_oss"
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -116,4 +116,4 @@ class OpenAIMoeConfig(PretrainedConfig):
         )
 
 
-__all__ = ["OpenAIMoeConfig"]
+__all__ = ["GptOssConfig"]

@@ -16,7 +16,7 @@ import gc
 import unittest
 from unittest.mock import patch
 
-from transformers import AutoTokenizer, Mxfp4Config, OpenAIMoeForCausalLM
+from transformers import AutoTokenizer, Mxfp4Config, GptOssForCausalLM
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -353,7 +353,7 @@ class Mxfp4ModelTest(unittest.TestCase):
 
         self.assertIn(generated_text, self.EXPECTED_OUTPUTS)
 
-    def test_openai_moe_model_loading_quantized_with_device_map(self):
+    def test_gpt_oss_model_loading_quantized_with_device_map(self):
         """Test loading OpenAI MoE model with mxfp4 quantization and device_map"""
 
         quantization_config = Mxfp4Config(dequantize=False)
@@ -361,7 +361,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         # Test that config is properly set up
         self.assertFalse(quantization_config.dequantize)
 
-        model = OpenAIMoeForCausalLM.from_pretrained(
+        model = GptOssForCausalLM.from_pretrained(
             self.model_name_packed,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
@@ -370,7 +370,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_name_packed)
         self.check_inference_correctness_quantized(model, tokenizer)
 
-    def test_openai_moe_model_loading_dequantized_with_device_map(self):
+    def test_gpt_oss_model_loading_dequantized_with_device_map(self):
         """Test loading OpenAI MoE model with mxfp4 dequantization and device_map"""
 
         quantization_config = Mxfp4Config(dequantize=True)
@@ -378,7 +378,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         # Test that config is properly set up
         self.assertTrue(quantization_config.dequantize)
 
-        model = OpenAIMoeForCausalLM.from_pretrained(
+        model = GptOssForCausalLM.from_pretrained(
             self.model_name_packed,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
@@ -404,12 +404,12 @@ class Mxfp4ModelTest(unittest.TestCase):
 
         # Expected: quantized < dequantized < unquantized memory usage
         quantization_config = Mxfp4Config(dequantize=True)
-        quantized_model = OpenAIMoeForCausalLM.from_pretrained(
+        quantized_model = GptOssForCausalLM.from_pretrained(
             self.model_name_packed,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        dequantized_model = OpenAIMoeForCausalLM.from_pretrained(
+        dequantized_model = GptOssForCausalLM.from_pretrained(
             self.model_name_packed,
             torch_dtype=torch.bfloat16,
             device_map="auto",

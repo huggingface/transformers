@@ -26,8 +26,8 @@ from safetensors.torch import load_file as safe_load
 
 from transformers import (
     GenerationConfig,
-    OpenAIMoeConfig,
-    OpenAIMoeForCausalLM,
+    GptOssConfig,
+    GptOssForCausalLM,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
@@ -162,7 +162,7 @@ def write_model(
         "original_max_position_embeddings": 4096,
     }
 
-    config = OpenAIMoeConfig(
+    config = GptOssConfig(
         num_local_experts=num_local_experts, rope_scaling=rope_scaling, eos_token_id=eos_token_id, **original_config
     )
 
@@ -230,9 +230,9 @@ def write_model(
     gc.collect()
 
     if not mxfp4:
-        print("Loading the checkpoint in a OpenAIMoe model for unpacked format")
+        print("Loading the checkpoint in a GptOss model for unpacked format")
         with torch.device("meta"):
-            model = OpenAIMoeForCausalLM(config)
+            model = GptOssForCausalLM(config)
         model.load_state_dict(state_dict, strict=True, assign=True)
         print("Checkpoint loaded successfully.")
         del config._name_or_path
@@ -253,14 +253,14 @@ def write_model(
             ],
         }
         # required as we don't save the model with save_pretrained
-        config.architectures = ["OpenAIMoeForCausalLM"]
+        config.architectures = ["GptOssForCausalLM"]
         config.save_pretrained(model_path)
         save_sharded_model(state_dict, model_path)
         del state_dict
 
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    GptOssForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config
@@ -291,8 +291,6 @@ def save_sharded_model(state_dict, model_path):
     safetensors_index["weight_map"] = {}
     for key in state_dict.keys():
         size = state_dict[key].numel() * state_dict[key].element_size()
-        safetensors_index["metadata"]["total_size"] += size
-        safetensors_index["weight_map"][key] = shard_id
         if shard_size_counter + size > max_shard_size:
             total_sharded_dict[shard_id] = shard_state_dict
             shard_id += 1
@@ -300,6 +298,8 @@ def save_sharded_model(state_dict, model_path):
             shard_state_dict = {}
         shard_state_dict[key] = state_dict[key]
         shard_size_counter += size
+        safetensors_index["metadata"]["total_size"] += size
+        safetensors_index["weight_map"][key] = shard_id
     total_sharded_dict[shard_id] = shard_state_dict
     num_shards = len(total_sharded_dict) - 1
     for shard_id, shard_state_dict in total_sharded_dict.items():
@@ -340,7 +340,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-class OpenAIMoeConverter(TikTokenConverter):
+class GptOssConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
         self.pattern = tokenizer._pat_str
@@ -486,7 +486,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 {%- endif -%}
 """
 
-    converter = OpenAIMoeConverter(
+    converter = GptOssConverter(
         vocab_file=tokenizer_path,
         model_max_length=None,
         chat_template=chat_template if instruct else None,

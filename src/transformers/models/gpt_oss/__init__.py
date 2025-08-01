@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_openai_moe import *
-    from .modeling_openai_moe import *
+    from .configuration_gpt_oss import *
+    from .modeling_gpt_oss import *
 else:
     import sys
 

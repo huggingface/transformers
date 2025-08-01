@@ -234,7 +234,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
-    from .openai_moe import *
+    from .gpt_oss import *
     from .opt import *
     from .owlv2 import *
     from .owlvit import *
