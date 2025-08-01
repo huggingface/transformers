@@ -680,8 +680,10 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {%- if tool_call.function %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
-            {{- "<|start|>assistant<|channel|>analysis<|message|>" }}
-            {{- "<|end|><|start|>assistant to=" }}
+            {%- if message.content %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content + "<|end|>" }}
+            {%- endif %}
+            {{- "<|start|>assistant to=" }}
             {{- "functions." + tool_call.name + "<|channel|>commentary json<|message|>" }}
             {{- tool_call.arguments|tojson }}
             {{- "<|end|>" }}
