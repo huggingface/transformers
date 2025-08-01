@@ -159,8 +159,8 @@ class PagedAttentionCache:
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
+        num_requests: int = 100,
         layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
-        initial_prompt_shapes: Optional[list[list[int]]] = None,
         tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
@@ -179,23 +179,6 @@ class PagedAttentionCache:
             if getattr(config, "num_key_value_heads", None) is None
             else config.num_key_value_heads
         )
-        self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
-        )
-        self.num_hidden_layers = config.num_hidden_layers
-
-        # Calculate optimal block size and number if not provided
-        num_blocks = getattr(generation_config, "num_blocks", None)
-        block_size = getattr(generation_config, "block_size", None)
-        if num_blocks is None or block_size is None:
-            logger.info("Calculating optimal block size and number...")
-            num_blocks, block_size = compute_optimal_blocks(
-                device, config, generation_config, initial_prompt_shapes or [], dtype, median_prefill_length=200
-            )
-            logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
-
-        self.block_size = block_size
-        self.num_blocks = num_blocks
         num_key_value_heads = self.num_key_value_heads
         if tp_size is not None and tp_size > 1:
             if num_key_value_heads % tp_size != 0:
@@ -203,8 +186,34 @@ class PagedAttentionCache:
                     f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            num_key_value_heads //= tp_size
+            self.num_key_value_heads //= tp_size
 
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+        self.num_hidden_layers = config.num_hidden_layers
+
+        # Calculate optimal block size and number if not provided
+        num_blocks = getattr(generation_config, "num_blocks", None)
+        block_size = getattr(generation_config, "block_size", 32)
+        max_memory_percent = getattr(generation_config, "max_memory", 0.9)
+        if num_blocks is None:
+            logger.info("Calculating optimal block size and number...")
+            num_blocks, max_batch_tokens = compute_optimal_blocks(
+                max_memory_percent,
+                generation_config.max_new_tokens,
+                num_requests,
+                block_size,
+                self.head_dim,
+                self.num_hidden_layers,
+                self.num_key_value_heads,
+                dtype,
+            )
+            logger.info(f"Using calculated num_blocks={num_blocks}, block_size={block_size}")
+
+        self.max_batch_tokens = max_batch_tokens
+        self.block_size = block_size
+        self.num_blocks = num_blocks
         self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
         self.dtype = dtype
@@ -597,92 +606,69 @@ class PrefillFirstScheduler(Scheduler):
 
 @traced(standalone=True)
 def compute_optimal_blocks(
-    device: torch.device,
-    config: PretrainedConfig,
-    generation_config: GenerationConfig,
-    inputs: list[list[int]],
-    dtype: torch.dtype = torch.bfloat16,
-    safety_margin: float = 0.9,
-    median_prefill_length: Optional[int] = None,
+    max_memory_percent: float = 0.9,
+    max_num_tokens: int = 512,
+    total_requests: int = 100,
+    block_size: int = 32,
+    head_dim: int = 32,
+    hidden_dim: int = 1024,
+    num_heads: int = 16,
+    num_layers: int = 27,
+    dtype=torch.float16,
 ):
-    """Calculate optimal number and size of blocks for the KV cache.
+    """
+    Compute the optimal number of memory blocks and maximum concurrent tokens
+    for continuous batching given memory constraints.
 
     Args:
-        device: The device where the model runs
-        config: The model configuration
-        generation_config: The generation configuration
-        inputs: Sample input sequences to estimate memory requirements
-        dtype: Data type for cache tensors
-        safety_margin: Fraction of available memory to use
-        median_prefill_length: Override for median prefill length calculation
+        max_memory_percent (float): Percentage of total GPU memory to use (default 0.9).
+        max_num_tokens (int): Maximum number of tokens to generate per request.
+        total_requests (int): Total number of requests in the queue.
+        block_size (int): Memory block size in tokens (default 32).
+        head_dim (int): Head dimension of the model (default 32).
+        hidden_dim (int): Hidden dimension of the model (default 1024).
+        num_heads (int): Number of attention heads (default 16).
 
     Returns:
-        Tuple of (num_blocks, block_size)
+        dict: {
+            "available_memory_bytes": float,
+            "optimal_num_blocks": int,
+            "max_concurrent_tokens": int
+        }
     """
-    # Extract model dimensions
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-    num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-    num_hidden_layers = getattr(config, "num_hidden_layers", 40)
+    # 1. Get GPU memory information
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available.")
 
-    # Get available device memory
-    if device.type == "cuda":
-        device_properties = torch.cuda.get_device_properties(device)
-        total_memory = device_properties.total_memory
-        allocated_memory = torch.cuda.memory_allocated(device)
-        reserved_memory = torch.cuda.memory_reserved(device)
-        available_memory = total_memory - max(allocated_memory, reserved_memory)
-    elif device.type == "mps":
-        logger.warning("MPS memory estimation is approximate. Using conservative defaults.")
-        return 2048, 256
-    else:
-        logger.warning(f"Unsupported device type {device.type} for optimal block calculation. Using defaults.")
-        return 32, 128
+    device = torch.device("cuda")
+    total_memory = torch.cuda.get_device_properties(device).total_memory
+    reserved_memory = torch.cuda.memory_reserved(device)
+    allocated_memory = torch.cuda.memory_allocated(device)
 
-    # Apply safety margin
-    available_memory = int(available_memory * safety_margin)
-    if available_memory <= 0:
-        logger.warning("Not enough available memory. Using minimum configuration.")
-        return 8, 128  # Minimum viable configuration
+    # Available memory is total minus current allocations, times the allowed percentage
+    available_memory = (total_memory - max(allocated_memory, reserved_memory)) * max_memory_percent
 
-    # Calculate memory per token
+    # 2. Compute per-token cache memory requirement
+    # Typical KV cache size: 2 (K and V) * num_heads * head_dim * sizeof(float16)
+    # Assume FP16 = 2 bytes
     dtype_size = torch.tensor([], dtype=dtype).element_size()
-    memory_per_token = 2 * num_kv_heads * head_dim * dtype_size * num_hidden_layers  # For K and V caches
+    kv_cache_bytes_per_token = 2 * num_heads * head_dim * dtype_size * num_layers
 
-    # Estimate sequence length requirements
-    tokens_to_generate = getattr(generation_config, "max_new_tokens") or 20
+    # Also include hidden states (optional)
+    hidden_bytes_per_token = hidden_dim * 2  # bytes per token
 
-    if median_prefill_length is None and inputs:
-        non_empty_inputs = [len(seq) for seq in inputs if seq]
-        median_prefill_length = int(statistics.median(non_empty_inputs)) if non_empty_inputs else 64
-    elif median_prefill_length is None:
-        median_prefill_length = 64  # Reasonable default if no inputs provided
+    bytes_per_token = kv_cache_bytes_per_token + hidden_bytes_per_token
 
-    # Total sequence length including generated tokens
-    seq_length = median_prefill_length + tokens_to_generate
+    # 3. Compute concurrent tokens
+    # At least we need enough tokens to hold total_requests * max_num_tokens
+    max_possible_concurrent_tokens = int(available_memory // (bytes_per_token * max_num_tokens))
+    max_concurrent_tokens = min(total_requests, max_possible_concurrent_tokens)
 
-    # Calculate block parameters
-    MIN_BLOCK_SIZE = 16
+    # 4. Compute optimal number of blocks
+    # Blocks are allocated per token in multiples of block_size
+    optimal_num_blocks = (max_concurrent_tokens * max_num_tokens + block_size - 1) // block_size
 
-    # Estimate number of concurrent sequences
-    per_sequence_memory = seq_length * memory_per_token
-    max_concurrent_sequences = max(1, int(available_memory // per_sequence_memory))
-
-    # Total tokens that can fit in memory
-    total_tokens = available_memory // memory_per_token
-
-    # Calculate block size (rounded to power of 2)
-    initial_block_size = max(MIN_BLOCK_SIZE, total_tokens // (max_concurrent_sequences * 2))
-    block_size = 1 << (initial_block_size - 1).bit_length()  # Round to power of 2
-
-    # Calculate number of blocks
-    num_blocks = max(1, total_tokens // block_size)
-
-    logger.info(
-        f"Optimal cache: {num_blocks} blocks of size {block_size} "
-        f"(can handle ~{num_blocks * block_size // seq_length} sequences of length {seq_length})"
-    )
-
-    return int(num_blocks), int(block_size)
+    return optimal_num_blocks, max_concurrent_tokens
 
 
 @dataclass
@@ -775,11 +761,9 @@ class ContinuousBatchProcessor:
 
         self.requests_in_batch: list[RequestState] = []
 
-        # Get batch size parameters from generation config
-        self._configure_batch_parameters()
-
         # Set up metrics collector
-        self.metrics = ContinuousBatchProcessorMetrics(self.max_batch_tokens)
+        self.max_batch_tokens = cache.max_batch_tokens
+        self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         self.setup_static_tensors()
 
@@ -846,25 +830,6 @@ class ContinuousBatchProcessor:
             f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
             + self.get_model_kwargs().__repr__()
         )
-
-    @traced(standalone=True)
-    def _configure_batch_parameters(self):
-        """Set up batch processing parameters based on generation config."""
-        # Calculate total cache capacity
-        total_cache_tokens = self.cache.num_blocks * self.cache.block_size
-
-        # Get or calculate max tokens per batch
-        user_batch_tokens = getattr(self.generation_config, "max_batch_tokens", None)
-        if user_batch_tokens is not None:
-            self.max_batch_tokens = user_batch_tokens
-        else:
-            # Default to 1/8 of total cache capacity, adjusted for context
-            self.max_context_len = getattr(self.generation_config, "max_position_embeddings", 2048)
-            recommended_batch_size = min(total_cache_tokens // 8, self.max_context_len)
-            self.max_batch_tokens = max(64, recommended_batch_size)
-
-        # Context length and EOS token
-        self.max_context_len = getattr(self.generation_config, "max_position_embeddings", 2048)
 
     @traced
     def _get_new_requests(self):
@@ -1296,6 +1261,7 @@ class ContinuousBatchingManager:
                 self.generation_config,
                 self.model.device,
                 self.model.dtype,
+                num_requests=len(self.input_queue.queue),
                 tp_size=getattr(self.model, "tp_size"),
             )
 
