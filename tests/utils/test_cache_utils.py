@@ -813,7 +813,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(
+            model, config=model.config, generation_config=model.generation_config
+        )
         exported_program = exportable_module.export(
             input_ids=input_ids,
             cache_position=cache_position,
@@ -841,8 +843,25 @@ class CacheExportIntegrationTest(unittest.TestCase):
         model.eval()
         max_batch_size = 1
         max_cache_len = 23
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, max_batch_size, max_cache_len)
-        exported_program = exportable_module.export()
+        # Create generation config for the hybrid cache model
+        from transformers.generation.configuration_utils import GenerationConfig
+        generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation="hybrid",
+            max_length=max_cache_len,
+            cache_config={
+                "batch_size": max_batch_size,
+                "max_cache_len": max_cache_len,
+                "device": model.device,
+            },
+        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(
+            model, config=model.config, generation_config=generation_config
+        )
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device)
+        )
         n_g_key_caches = n_g_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():
             if buffer_name.startswith("key_cache"):
