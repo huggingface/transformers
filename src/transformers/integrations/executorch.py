@@ -289,12 +289,18 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
         self.model = model
         self.static_cache = StaticCache(
-            config=self.model.config,
-            max_batch_size=self.model.generation_config.cache_config.get("batch_size"),
             max_cache_len=self.model.generation_config.cache_config.get("max_cache_len"),
-            device=self.model.generation_config.cache_config.get("device"),
-            dtype=self.model.dtype,
+            config=self.model.config,
         )
+        batch_size = self.model.generation_config.cache_config.get("batch_size")
+        head_dim = getattr(
+            self.model.config, "head_dim", self.model.config.hidden_size // self.model.config.num_attention_heads
+        )
+        num_heads = getattr(self.model.config, "num_key_value_heads", self.model.config.num_attention_heads)
+        device = self.model.generation_config.cache_config.get("device")
+        dtype = self.model.dtype
+        # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
+        self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
         for i in range(len(self.static_cache)):
             self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
@@ -420,13 +426,15 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             raise AssertionError("Model must have caching enabled")
 
         # Initialize the HybridCache
-        self.cache = HybridCache(
-            config=self.model.config,
-            max_batch_size=max_batch_size,
-            max_cache_len=max_cache_len,
-            device=self.model.device,
-            dtype=self.model.dtype,
+        self.cache = HybridCache(max_cache_len=max_cache_len, config=self.model.config)
+        head_dim = getattr(
+            self.model.config, "head_dim", self.model.config.hidden_size // self.model.config.num_attention_heads
         )
+        num_heads = getattr(self.model.config, "num_key_value_heads", self.model.config.num_attention_heads)
+        device = self.model.device
+        dtype = self.model.dtype
+        # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
+        self.cache.early_initialization(max_batch_size, num_heads, head_dim, dtype, device)
 
         # Register all key and value cache tensors as buffers
         for i in range(len(self.cache)):
@@ -570,13 +578,10 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.config = model.config
 
         # Initialize static cache for decoder and DynamicCache for encoder
-        self.static_cache = StaticCache(
-            config=self.config,
-            max_batch_size=batch_size,
-            max_cache_len=max_static_cache_length,
-            device="cpu",
-            dtype=torch.float32,
-        )
+        self.static_cache = StaticCache(max_cache_len=max_static_cache_length, config=self.config)
+        head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
+        num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
+        self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, "cpu")
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
 
         # Register cache buffers to make them exportable

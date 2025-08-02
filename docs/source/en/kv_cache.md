@@ -312,7 +312,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Init StaticCache with big enough max-length (1024 tokens for the below example)
 # You can also init a DynamicCache, if that suits you better
-prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device=model.device.type, dtype=torch.bfloat16)
+prompt_cache = StaticCache(config=model.config, max_cache_len=1024)
 
 INITIAL_PROMPT = "You are a helpful assistant. "
 inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(model.device.type)

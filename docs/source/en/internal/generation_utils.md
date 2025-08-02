@@ -376,21 +376,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] SlidingWindowLayer
     - update
 
-[[autodoc]] CacheProcessor
-    - pre_update
-    - post_update
+[[autodoc]] QuantoQuantizedLayer
+    - update
 
-[[autodoc]] OffloadedCacheProcessor
-    - pre_update
-
-[[autodoc]] QuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] QuantoQuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] HQQQuantizedCacheProcessor
-    - post_update
+[[autodoc]] HQQQuantizedLayer
+    - update
 
 [[autodoc]] Cache
     - update
@@ -411,11 +401,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] QuantoQuantizedCache
 
-[[autodoc]] QuantoQuantizedCacheProcessor
-
 [[autodoc]] HQQQuantizedCache
-
-[[autodoc]] HQQQuantizedCacheProcessor
 
 [[autodoc]] OffloadedCache
 
