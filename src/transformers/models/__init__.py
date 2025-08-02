@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -128,6 +129,7 @@ if TYPE_CHECKING:
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *
+    from .gemma3n import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -260,6 +262,7 @@ if TYPE_CHECKING:
     from .pvt import *
     from .pvt_v2 import *
     from .qwen2 import *
+    from .qwen2_5_omni import *
     from .qwen2_5_vl import *
     from .qwen2_audio import *
     from .qwen2_moe import *

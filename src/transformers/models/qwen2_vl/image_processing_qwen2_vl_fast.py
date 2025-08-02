@@ -299,10 +299,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of image patches per image.
         """
-        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
-        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
