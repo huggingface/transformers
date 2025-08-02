@@ -1584,6 +1584,13 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
                 return_dict=return_dict,
             )
 
+        if isinstance(encoder_outputs, tuple):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1602,7 +1609,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            return decoder_outputs + (
+                encoder_outputs.last_hidden_state,
+                encoder_outputs.hidden_states,
+                encoder_outputs.attentions,
+            )
+
         return ProphetNetSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             last_hidden_state_ngram=decoder_outputs.last_hidden_state_ngram,
