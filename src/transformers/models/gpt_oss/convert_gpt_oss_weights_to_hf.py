@@ -710,7 +710,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         {%- endif %}
         {{- "<|start|>functions." + last_tool_call.name }}
         {{- " to=assistant<|channel|>commentary<|message|>" + message.content|tojson + "<|end|>" }}
-    {%- else -%}
+    {%- elif message.role == 'user' -%}
         {{- "<|start|>user<|message|>" + message.content + "<|end|>" }}
     {%- endif -%}
 {%- endfor -%}
