@@ -21,7 +21,7 @@ import unittest
 
 from transformers import is_speech_available, is_torch_available
 from transformers.models.speecht5 import SpeechT5Tokenizer
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import get_tests_dir, require_speech, require_torch
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 
@@ -35,6 +35,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
 
 @require_torch
+@require_speech
 class SpeechT5ProcessorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -121,7 +122,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(audio=raw_speech, return_tensors="np")
         input_processor = processor(audio=raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_feature_extractor_target(self):
@@ -135,7 +136,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(audio_target=raw_speech, return_tensors="np")
         input_processor = processor(audio_target=raw_speech, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -149,7 +150,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         encoded_processor = processor(text=input_str)
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_target(self):
@@ -163,7 +164,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         encoded_processor = processor(text_target=input_str)
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):

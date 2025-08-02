@@ -180,13 +180,20 @@ class EncodecConfig(PretrainedConfig):
             return max(1, int((1.0 - self.overlap) * self.chunk_length))
 
     @property
+    def hop_length(self) -> int:
+        return int(np.prod(self.upsampling_ratios))
+
+    @property
+    def codebook_nbits(self) -> int:
+        return math.ceil(math.log2(self.codebook_size))
+
+    @property
     def frame_rate(self) -> int:
-        hop_length = np.prod(self.upsampling_ratios)
-        return math.ceil(self.sampling_rate / hop_length)
+        return math.ceil(self.sampling_rate / self.hop_length)
 
     @property
     def num_quantizers(self) -> int:
-        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
 
 
 __all__ = ["EncodecConfig"]

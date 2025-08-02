@@ -16,62 +16,22 @@ rendered properly in your Markdown viewer.
 
 # Serving
 
-Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users.
+Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backends) for usage examples.
 
-You can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
-
-## TGI
-
-[TGI](https://huggingface.co/docs/text-generation-inference/index) can serve models that aren't [natively implemented](https://huggingface.co/docs/text-generation-inference/supported_models) by falling back on the Transformers implementation of the model. Some of TGIs high-performance features aren't available in the Transformers implementation, but other features like continuous batching and streaming are still supported.
-
-> [!TIP]
-> Refer to the [Non-core model serving](https://huggingface.co/docs/text-generation-inference/basic_tutorials/non_core_models) guide for more details.
-
-Serve a Transformers implementation the same way you'd serve a TGI model.
-
-```docker
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:latest --model-id gpt2
-```
-
-Add `--trust-remote_code` to the command to serve a custom Transformers model.
-
-```docker
-docker run --gpus all --shm-size 1g -p 8080:80 -v $volume:/data ghcr.io/huggingface/text-generation-inference:latest --model-id <CUSTOM_MODEL_ID> --trust-remote-code
-```
-
-## vLLM
-
-[vLLM](https://docs.vllm.ai/en/latest/index.html) can also serve a Transformers implementation of a model if it isn't [natively implemented](https://docs.vllm.ai/en/latest/models/supported_models.html#list-of-text-only-language-models) in vLLM.
-
-Many features like quantization, LoRA adapters, and distributed inference and serving are supported for the Transformers implementation.
-
-> [!TIP]
-> Refer to the [Transformers fallback](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers-fallback) section for more details.
-
-By default, vLLM serves the native implementation and if it doesn't exist, it falls back on the Transformers implementation. But you can also set `--model-impl transformers` to explicitly use the Transformers model implementation.
-
-```shell
-vllm serve Qwen/Qwen2.5-1.5B-Instruct \
-    --task generate \
-    --model-impl transformers
-```
-
-Add the `trust-remote-code` parameter to enable loading a remote code model.
-
-```shell
-vllm serve Qwen/Qwen2.5-1.5B-Instruct \
-    --task generate \
-    --model-impl transformers \
-    --trust-remote-code
-```
+Apart from that you can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
 
 ## Serve CLI
 
 > [!WARNING]
 > This section is experimental and subject to change in future versions
 
-<!-- TODO: LLMs -> models, after we add audio/image input/output support -->
-You can serve LLMs supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers a chat Completions API compatible with the OpenAI SDK, which is the _de facto_ standard for LLM conversations. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
+You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
+
+The server supports the following REST APIs:
+- `/v1/chat/completions`
+- `/v1/responses`
+- `/v1/audio/transcriptions`
+- `/v1/models`
 
 To launch a server, simply use the `transformers serve` CLI command:
 
@@ -109,7 +69,7 @@ The server is also an MCP client, so it can interact with MCP tools in agentic u
 <!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
 
 
-### Usage example 1: apps with local requests (feat. Jan)
+### Usage example 1: chat with local requests (feat. Jan)
 
 This example shows how to use `transformers serve` as a local LLM provider for the [Jan](https://jan.ai/) app. Jan is a ChatGPT-alternative graphical interface, fully running on your machine. The requests to `transformers serve` come directly from the local app -- while this section focuses on Jan, you can extrapolate some instructions to other apps that make local requests.
 
@@ -139,17 +99,17 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 Port forwarding is not Jan-specific: you can use it to connect `transformers serve` running in a different machine with an app of your choice.
 
 
-### Usage example 2: apps with external requests (feat. Cursor)
+### Usage example 2: chat with external requests (feat. Cursor)
 
 This example shows how to use `transformers serve` as a local LLM provider for [Cursor](https://cursor.com/), the popular IDE. Unlike in the previous example, requests to `transformers serve` will come from an external IP (Cursor's server IPs), which requires some additional setup. Furthermore, some of Cursor's requests require [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS), which is disabled by default for security reasons.
 
-To launch our server with CORS enabled, run
+To launch a server with CORS enabled, run
 
 ```shell
 transformers serve --enable-cors
 ```
 
-We'll also need to expose our server to external IPs. A potential solution is to use [`ngrok`](https://ngrok.com/), which has a permissive free tier. After setting up your `ngrok` account and authenticating on your server machine, you run
+You'll also need to expose your server to external IPs. A potential solution is to use [`ngrok`](https://ngrok.com/), which has a permissive free tier. After setting up your `ngrok` account and authenticating on your server machine, you run
 
 ```shell
 ngrok http [port]
@@ -161,7 +121,7 @@ where `port` is the port used by `transformers serve` (`8000` by default). On th
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_serve_ngrok.png"/>
 </h3>
 
-We're now ready to set things up on the app side! In Cursor, while we can't set a new provider, we can change the endpoint for OpenAI requests in the model selection settings. First, navigate to "Settings" > "Cursor Settings", "Models" tab, and expand the "API Keys" collapsible. To set our `transformers serve` endpoint, follow this order:
+You're now ready to set things up on the app side! In Cursor, while you can't set a new provider, you can change the endpoint for OpenAI requests in the model selection settings. First, navigate to "Settings" > "Cursor Settings", "Models" tab, and expand the "API Keys" collapsible. To set your `transformers serve` endpoint, follow this order:
 1. Unselect ALL models in the list above (e.g. `gpt4`, ...);
 2. Add and select the model you want to use (e.g. `Qwen/Qwen3-4B`)
 3. Add some random text to OpenAI API Key. This field won't be used, but it can’t be empty;
@@ -225,3 +185,26 @@ Image URL: https://evalstate-flux1-schnell.hf.space/gradio_api/file=/tmp/gradio/
 
 I have generated an image of a cat on the moon using the Flux 1 Schnell Image Generator. The image is 1024x1024 pixels and was created with 4 inference steps. Let me know if you would like to make any changes or need further assistance!
 ```
+
+### Usage example 4: speech to text transcription (feat. Open WebUI)
+
+This guide shows how to do audio transcription for chat purposes, using `transformers serve` and [Open WebUI](https://openwebui.com/). This guide assumes you have Open WebUI installed on your machine and ready to run. Please refer to the examples above to use the text functionalities of `transformer serve` with Open WebUI -- the instructions are the same.
+
+To start, let's launch the server. Some of Open WebUI's requests require [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS), which is disabled by default for security reasons, so you need to enable it:
+
+```shell
+transformers serve --enable-cors
+```
+
+Before you can speak into Open WebUI, you need to update its settings to use your server for speech to text (STT) tasks. Launch Open WebUI, and navigate to the audio tab inside the admin settings. If you're using Open WebUI with the default ports, [this link (default)](http://localhost:3000/admin/settings/audio) or [this link (python deployment)](http://localhost:8080/admin/settings/audio) will take you there. Do the following changes there:
+1. Change the type of "Speech-to-Text Engine" to "OpenAI";
+2. Update the address to your server's address -- `http://localhost:8000/v1` by default;
+3. Type your model of choice into the "STT Model" field, e.g. `openai/whisper-large-v3` ([available models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending)).
+
+If you've done everything correctly, the audio tab should look like this
+
+<h3 align="center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_openwebui_stt_settings.png"/>
+</h3>
+
+You're now ready to speak! Open a new chat, utter a few words after hitting the microphone button, and you should see the corresponding text on the chat input after the model transcribes it.

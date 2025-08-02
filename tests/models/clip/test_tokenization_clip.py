@@ -174,7 +174,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_log_warning(self):
         # Test related to the breaking change introduced in transformers v4.17.0
         # We need to check that an error in raised when the user try to load a previous version of the tokenizer.
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(TypeError) as context:
             self.get_rust_tokenizer("robot-test/old-clip-tokenizer")
 
         self.assertTrue(

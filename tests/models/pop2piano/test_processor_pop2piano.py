@@ -155,7 +155,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         )
         processor_outputs = processor(audio=input_speech, sampling_rate=sampling_rate, return_tensors="np")
 
-        for key in feature_extractor_outputs.keys():
+        for key in feature_extractor_outputs:
             self.assertTrue(np.allclose(feature_extractor_outputs[key], processor_outputs[key], atol=1e-4))
 
     def test_processor_batch_decode(self):

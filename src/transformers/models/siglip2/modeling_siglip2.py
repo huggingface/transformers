@@ -702,7 +702,7 @@ class Siglip2TextTransformer(nn.Module):
 
 @auto_docstring
 class Siglip2PreTrainedModel(PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
     base_model_prefix = "siglip2"
     supports_gradient_checkpointing = True
 
@@ -770,7 +770,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
     """
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
-    config_class = Siglip2TextConfig
+    config: Siglip2TextConfig
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -857,7 +857,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
     """
 )
 class Siglip2VisionModel(Siglip2PreTrainedModel):
-    config_class = Siglip2VisionConfig
+    config: Siglip2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Siglip2VisionConfig):
@@ -917,7 +917,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
 
 @auto_docstring
 class Siglip2Model(Siglip2PreTrainedModel):
-    config_class = Siglip2Config
+    config: Siglip2Config
 
     def __init__(self, config: Siglip2Config):
         super().__init__(config)

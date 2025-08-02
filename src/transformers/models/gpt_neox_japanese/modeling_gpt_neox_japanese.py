@@ -43,13 +43,12 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoXJapaneseConfig
+    config: GPTNeoXJapaneseConfig
     base_model_prefix = "gpt_neox_japanese"
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -749,15 +748,6 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
-                + layer_past[2:],
-            )
-        return reordered_past
 
 
 __all__ = [

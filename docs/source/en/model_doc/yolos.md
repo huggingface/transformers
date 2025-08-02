@@ -13,76 +13,95 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # YOLOS
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[YOLOS](https://huggingface.co/papers/2106.00666) uses a [Vision Transformer (ViT)](./vit) for object detection with minimal modifications and region priors. It can achieve performance comparable to specialized object detection models and frameworks with knowledge about 2D spatial structures.
 
-## Overview
 
-The YOLOS model was proposed in [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://huggingface.co/papers/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.
-YOLOS proposes to just leverage the plain [Vision Transformer (ViT)](vit) for object detection, inspired by DETR. It turns out that a base-sized encoder-only Transformer can also achieve 42 AP on COCO, similar to DETR and much more complex frameworks such as Faster R-CNN.
+You can find all the original YOLOS checkpoints under the [HUST Vision Lab](https://huggingface.co/hustvl/models?search=yolos) organization.
 
-The abstract from the paper is the following:
-
-*Can Transformer perform 2D object- and region-level recognition from a pure sequence-to-sequence perspective with minimal knowledge about the 2D spatial structure? To answer this question, we present You Only Look at One Sequence (YOLOS), a series of object detection models based on the vanilla Vision Transformer with the fewest possible modifications, region priors, as well as inductive biases of the target task. We find that YOLOS pre-trained on the mid-sized ImageNet-1k dataset only can already achieve quite competitive performance on the challenging COCO object detection benchmark, e.g., YOLOS-Base directly adopted from BERT-Base architecture can obtain 42.0 box AP on COCO val. We also discuss the impacts as well as limitations of current pre-train schemes and model scaling strategies for Transformer in vision through YOLOS.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png"
-alt="drawing" width="600"/>
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png" alt="drawing" width="600"/>
 
 <small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/hustvl/YOLOS).
 
-## Using Scaled Dot Product Attention (SDPA)
+> [!TIP]
+> This model wasa contributed by [nielsr](https://huggingface.co/nielsr).
+> Click on the YOLOS models in the right sidebar for more examples of how to apply YOLOS to different object detection tasks.
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
+The example below demonstrates how to detect objects with [`Pipeline`] or the [`AutoModel`] class.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
+```py
+import torch
+from transformers import pipeline
+
+detector = pipeline(
+    task="object-detection",
+    model="hustvl/yolos-base",
+    torch_dtype=torch.float16,
+    device=0
+)
+detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
 ```
-from transformers import AutoModelForObjectDetection
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", attn_implementation="sdpa", torch_dtype=torch.float16)
-...
+
+</hfoption>
+<hfoption id="Automodel">
+
+```py
+import torch
+from PIL import Image
+import requests
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
+processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_dtype=torch.float16, attn_implementation="sdpa").to("cuda")
+
+url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+inputs = processor(images=image, return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+logits = outputs.logits.softmax(-1)
+scores, labels = logits[..., :-1].max(-1)
+boxes = outputs.pred_boxes
+
+threshold = 0.3
+keep = scores[0] > threshold
+
+filtered_scores = scores[0][keep]
+filtered_labels = labels[0][keep]
+filtered_boxes  = boxes[0][keep]
+
+width, height = image.size
+pixel_boxes = filtered_boxes * torch.tensor([width, height, width, height], device=boxes.device)
+
+for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
+    x0, y0, x1, y1 = box.tolist()
+    print(f"Label {model.config.id2label[label.item()]}: {score:.2f} at [{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}]")
 ```
 
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+</hfoption>
+</hfoptions>
 
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `hustvl/yolos-base` model, we saw the following speedups during inference.
 
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                       106 |                                        76 |                      1.39 |
-|            2 |                                       154 |                                        90 |                      1.71 |
-|            4 |                                       222 |                                       116 |                      1.91 |
-|            8 |                                       368 |                                       168 |                      2.19 |
+## Notes
+- Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](./detr), YOLOS doesn't require a `pixel_mask`.
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with YOLOS.
-
-<PipelineTag pipeline="object-detection"/>
-
-- All example notebooks illustrating inference + fine-tuning [`YolosForObjectDetection`] on a custom dataset can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/YOLOS).
-- Scripts for finetuning [`YolosForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
-- See also: [Object detection task guide](../tasks/object_detection)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<Tip>
-
-Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](detr), YOLOS doesn't require a `pixel_mask` to be created.
-
-</Tip>
+- Refer to these [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/YOLOS) for inference and fine-tuning with [`YolosForObjectDetection`] on a custom dataset.
 
 ## YolosConfig
 

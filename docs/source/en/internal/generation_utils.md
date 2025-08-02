@@ -356,65 +356,92 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 ## Caches
 
-[[autodoc]] Cache
-    - update
-
-[[autodoc]] CacheConfig
-	- update
-
-[[autodoc]] QuantizedCacheConfig
-	- validate
-
-[[autodoc]] DynamicCache
+[[autodoc]] CacheLayerMixin
     - update
     - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
     - reorder_cache
+
+[[autodoc]] DynamicLayer
+    - update
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] StaticLayer
+    - update
+
+[[autodoc]] SlidingWindowLayer
+    - update
+
+[[autodoc]] CacheProcessor
+    - pre_update
+    - post_update
+
+[[autodoc]] OffloadedCacheProcessor
+    - pre_update
+
+[[autodoc]] QuantizedCacheProcessor
+    - post_update
+
+[[autodoc]] QuantoQuantizedCacheProcessor
+    - post_update
+
+[[autodoc]] HQQQuantizedCacheProcessor
+    - post_update
+
+[[autodoc]] Cache
+    - update
+    - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
+    - reorder_cache
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] DynamicCache
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] QuantizedCache
-    - update
-    - get_seq_length
 
 [[autodoc]] QuantoQuantizedCache
 
+[[autodoc]] QuantoQuantizedCacheProcessor
+
 [[autodoc]] HQQQuantizedCache
 
+[[autodoc]] HQQQuantizedCacheProcessor
+
 [[autodoc]] OffloadedCache
-    - update
-    - prefetch_layer
-    - evict_previous_layer
 
 [[autodoc]] StaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] OffloadedStaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] HybridCache
-    - update
-    - get_seq_length
-    - reset
+
+[[autodoc]] HybridChunkedCache
 
 [[autodoc]] SlidingWindowCache
-    - update
-    - reset
 
 [[autodoc]] EncoderDecoderCache
-    - get_seq_length
     - to_legacy_cache
     - from_legacy_cache
-    - reset
-    - reorder_cache
 
 [[autodoc]] MambaCache
     - update_conv_state
     - update_ssm_state
     - reset
+
+[[autodoc]] CacheConfig
+
+[[autodoc]] QuantizedCacheConfig
+
 
 ## Watermark Utils
 
