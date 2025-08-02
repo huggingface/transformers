@@ -1,0 +1,15 @@
+# python src/transformers/models/llasa/convert_llasa_to_hf.py -cn llasa_8b
+original_model:
+  repo: HKUSTAudio/Llasa-8B
+  max_length: 2048
+  codebook_size: 65536
+  sampling_rate: 16000
+
+llm_model: meta-llama/Llama-3.1-8B-Instruct
+
+local_model_path:
+
+remote_repo:
+  dtype: bfloat16   # as in original Hub model: https://huggingface.co/HKUSTAudio/Llasa-8B
+  id: bezzam/Llasa-8B
+  private: true
