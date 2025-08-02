@@ -378,7 +378,10 @@ class MiniMaxLightningAttention(nn.Module):
 
 
 class MiniMaxAttention(MixtralAttention):
-    pass
+    def __init__(self, config: MiniMaxConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del is_sliding  # noqa: F821
+        self.sliding_window = getattr(config, "sliding_window", None)
 
 
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
