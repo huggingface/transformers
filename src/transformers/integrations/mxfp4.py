@@ -368,10 +368,9 @@ def load_and_swizzle_mxfp4(
                 else:
                     blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
                 # TODO: we need to have the weights on cuda, refactor later
-                if target_device == "cpu":
+                if getattr(target_device, "type", target_device) == "cpu":
                     target_device = "cuda"
-
-                # TODO: not use why torch.cuda.device
+                # TODO: check why we still do move the tensors despite the context manager
                 blocks = blocks.to(target_device)
                 scales = scales.to(target_device)
                 with torch.cuda.device(target_device):
