@@ -350,13 +350,18 @@ class MllamaVisionEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
 
         """
+        encoder_states = ()
+
         for encoder_layer in self.layers:
+            encoder_states = encoder_states + (hidden_states,)
             hidden_states = encoder_layer(
                 hidden_state=hidden_states,
                 attention_mask=attention_mask,
             )
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        encoder_states = encoder_states + (hidden_states,)
+
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MllamaText
@@ -1106,7 +1111,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, dim)
 
         # Collect intermediate layer outputs from encoder output
-        all_intermediate_hidden_states = [output.last_hidden_state for _ in self.intermediate_layers_indices]
+        all_intermediate_hidden_states = [output.hidden_states[i] for i in self.intermediate_layers_indices]
         intermediate_hidden_states = torch.stack(all_intermediate_hidden_states, dim=-1)
 
         # Remove padding from intermediate hidden states
