@@ -13,13 +13,13 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# CPU
+# CPU[[cpu]]
 
-A modern CPU is capable of efficiently training large models by leveraging the underlying optimizations built into the hardware and training on fp16 or bf16 data types.
+최신 CPU는 하드웨어에 내장된 최적화를 활용하고 fp16 또는 bf16 데이터 타입으로 학습을 수행함으로써 대규모 모델 학습을 효율적으로 처리할 수 있습니다.
 
-This guide focuses on how to train large models on an Intel CPU using mixed precision. AMP is enabled for CPU backends training with PyTorch.
+이 가이드는 Intel CPU에서 혼합 정밀도(mixed precision)를 사용하여 대규모 모델을 학습하는 방법에 중점을 둡니다. PyTorch를 사용하는 CPU 백엔드 학습에서는 AMP가 활성화됩니다.
 
-[`Trainer`] supports AMP training with CPU by adding the `--use_cpu`, and `--bf16` parameters. The example below demonstrates the [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) script.
+[`Trainer`]는 `--use_cpu` 및 `--bf16` 파라미터를 추가하여 CPU에서의 AMP 학습을 지원합니다. 아래 예시는 [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) 스크립트를 활용한 사용법을 보여줍니다.
 
 ```bash
 python run_qa.py \
@@ -37,7 +37,7 @@ python run_qa.py \
  --use_cpu
 ```
 
-These parameters can also be added to [`TrainingArguments`] as shown below.
+ 이러한 파라미터들은 아래와 같이 [TrainingArguments]에도 추가할 수 있습니다.
 
 ```py
 training_args = TrainingArguments(
@@ -47,6 +47,6 @@ training_args = TrainingArguments(
 )
 ```
 
-## Resources
+## 리소스[[resources]]
 
-Learn more about training on Intel CPUs in the [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids) blog post.
+Intel CPU에서의 학습에 대해 더 알아보고 싶다면 [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids) 블로그 게시물을 참고하세요.
