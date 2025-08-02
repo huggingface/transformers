@@ -330,8 +330,8 @@ class WhisperAttention(nn.Module):
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = past_key_value.layers[self.layer_idx].keys
+            value_states = past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
@@ -553,7 +553,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         std = self.config.init_std

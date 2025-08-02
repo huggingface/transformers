@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, TypedDict, Union
 
 import torch
 import torch.nn.functional as F
@@ -27,13 +27,14 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -221,7 +222,7 @@ class GraniteMoeHybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HybridMambaAttentionDynamicCache(DynamicCache):
+class HybridMambaAttentionDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -235,8 +236,12 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
+    key_cache = None
+    value_cache = None
+    is_compileable = False
+
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__()
+        super().__init__(layer_classes=DynamicLayer)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
@@ -914,6 +919,31 @@ class GraniteMoeHybridMLP(nn.Module):
         return hidden_states
 
 
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
+
+
 class GraniteMoeHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1121,7 +1151,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1145,8 +1175,8 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs.Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -1157,6 +1187,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 cache_position=cache_position,
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
+                **kwargs,
             )
             # No attention weights for state space layers
             self_attn_weights = None
@@ -1208,28 +1239,14 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _is_stateful = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeHybridParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GraniteMoeHybridRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GraniteMoeHybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        # Initialize Mamba modules
-        if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, GraniteMoeHybridMambaLayer):
+        if isinstance(module, GraniteMoeHybridMambaLayer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -1313,6 +1330,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1384,6 +1402,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1716,6 +1735,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         # Only compute necessary logits

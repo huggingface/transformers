@@ -418,7 +418,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Dots1DecoderLayer,
@@ -426,19 +426,9 @@ class Dots1PreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Dots1RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Dots1TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=std)
+        super()._init_weights(module)
+        if isinstance(module, Dots1TopkRouter):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring

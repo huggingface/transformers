@@ -78,6 +78,9 @@ RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submod
 # RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
 # RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
 
+# Add fp-quant for quantization testing
+RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"
+
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
 

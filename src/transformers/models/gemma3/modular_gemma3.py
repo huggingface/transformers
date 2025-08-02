@@ -31,8 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutpu
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -464,7 +463,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -529,19 +527,8 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     ]
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Gemma3RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Gemma3MultiModalProjector):
+        Gemma2PreTrainedModel._init_weights(module)
+        if isinstance(module, Gemma3MultiModalProjector):
             module.mm_input_projection_weight.data.zero_()
 
 
@@ -716,7 +703,11 @@ class Gemma3MultiModalProjector(nn.Module):
         return projected_vision_outputs.type_as(vision_outputs)
 
 
-def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor], tokens_per_image: int) -> Optional[Callable]:
+def token_type_ids_mask_function(
+    token_type_ids: Optional[torch.Tensor],
+    image_group_ids: Optional[torch.Tensor],
+    tokens_per_image: int,
+) -> Optional[Callable]:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
@@ -726,10 +717,18 @@ def token_type_ids_mask_function(token_type_ids: Optional[torch.Tensor], tokens_
         return None
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # If the difference is less than image size, both are part of the same image block
-        same_image_block = torch.abs(kv_idx - q_idx) <= tokens_per_image
         # If it's 1 for both query and key/value, we are in an image block
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids[batch_idx, kv_idx] == 1)
+        # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
+        # Since vmap doesn't support `if statement` we workaround it with `torch.where`
+        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
+
+        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_idx]
+        image_group_ids_at_kv_idx = torch.where(kv_idx < image_group_ids.shape[1], image_group_ids_at_kv_idx, -1)
+
+        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
+        same_image_block = image_group_ids[batch_idx, q_idx] == image_group_ids_at_kv_idx
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & same_image_block
@@ -806,25 +805,10 @@ class Gemma3Model(PaliGemmaModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
-                    "tokens from image embeddings."
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # It may already have been prepared by e.g. `generate`
@@ -840,8 +824,15 @@ class Gemma3Model(PaliGemmaModel):
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+
+                # First find where a new image block starts: 1 if image and previous not image
+                # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+                is_image = (token_type_ids == 1).to(cache_position.device)
+                new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+                image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+                image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                    token_type_ids.to(cache_position.device), self.config.mm_tokens_per_image
+                    token_type_ids.to(cache_position.device), image_group_ids, self.config.mm_tokens_per_image
                 )
 
             # Create the masks
@@ -1062,8 +1053,15 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
             # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+
+            # First find where a new image block starts: 1 if image and previous not image
+            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+            is_image = (token_type_ids == 1).to(cache_position.device)
+            new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+            image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+            image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
             mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-                token_type_ids.to(cache_position.device), config.mm_tokens_per_image
+                token_type_ids.to(cache_position.device), image_group_ids, config.mm_tokens_per_image
             )
 
         return create_masks_for_generate(**mask_kwargs)

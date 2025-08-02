@@ -374,9 +374,9 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargs_encoder:
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
@@ -616,7 +616,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        decoder_attention_mask = decoder_inputs.get("attention_mask", None)
         past_key_values = decoder_inputs.get("past_key_values")
         if past_key_values is None:
             past_key_values = decoder_inputs.get("past")  # e.g. on TF GPT2

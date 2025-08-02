@@ -154,7 +154,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
             # Choices with mixed type have custom function as "type"
             # So we need to compare results directly for equality
-            if xx.get("choices", None) and yy.get("choices", None):
+            if xx.get("choices") and yy.get("choices"):
                 for expected_choice in yy["choices"] + xx["choices"]:
                     self.assertEqual(xx["type"](expected_choice), yy["type"](expected_choice))
                 del xx["type"], yy["type"]

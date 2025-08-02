@@ -425,7 +425,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     def _convert_lang_code_special_format(self, lang: str) -> str:
         """Convert Language Codes to format tokenizer uses if required"""
-        lang = FAIRSEQ_LANGUAGE_CODES_MAP[lang] if lang in FAIRSEQ_LANGUAGE_CODES_MAP.keys() else lang
+        lang = FAIRSEQ_LANGUAGE_CODES_MAP.get(lang, lang)
         return lang
 
 
