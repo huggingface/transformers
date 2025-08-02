@@ -438,12 +438,11 @@ def cached_files(
                         f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
                 else:
-                    return None
+                    continue
             existing_files.append(resolved_file)
 
-    # All files exist
-    if len(existing_files) == len(full_filenames):
-        return existing_files
+    if os.path.isdir(path_or_repo_id):
+        return existing_files if existing_files else None
 
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
