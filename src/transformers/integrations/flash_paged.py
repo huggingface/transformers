@@ -52,7 +52,7 @@ def paged_attention_forward(
 
     if implementation is not None:
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
-    custom_kwargs = {"s_aux", kwargs.get("s_aux")}
+    custom_kwargs = {"s_aux": kwargs.get("s_aux")}
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
         k.transpose(1, 2).squeeze(0).contiguous(),

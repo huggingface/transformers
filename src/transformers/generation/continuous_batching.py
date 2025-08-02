@@ -182,7 +182,7 @@ class PagedAttentionCache:
                     f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            self.num_key_value_heads //= tp_size
+            # self.num_key_value_heads //= tp_size
 
         self.head_dim = (
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
@@ -1250,7 +1250,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 num_requests=len(self.input_queue.queue),
-                tp_size=getattr(self.model, "tp_size"),
+                tp_size=getattr(self.model, "_tp_size", 8),  # TODO quantized converted don't set this
             )
 
             scheduler = None
