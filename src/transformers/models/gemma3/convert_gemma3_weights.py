@@ -641,6 +641,10 @@ def main(*args):
             )
             linears.append(dense)
 
+        # TODO - sindhusindhuraghuram: Add `prompts` to cover: 1) the `query` and `document` default options for
+        # SentenceTransformers; and 2) any MTEB tasks we want to specifically include for reproducibility purposes,
+        # following the docs at
+        # https://github.com/embeddings-benchmark/mteb/blob/main/docs/usage/usage.md#running-sentencetransformer-model-with-prompts
         model = SentenceTransformer(modules=[transformer, pooling, *linears])
         model.save_pretrained(output_path)
 
