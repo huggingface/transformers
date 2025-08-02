@@ -362,18 +362,21 @@ def load_and_swizzle_mxfp4(
             # Check if both blocks and scales both not on on meta device
             if blocks.device.type != "meta" and scales.device.type != "meta":
                 # need it for ep
-                local_experts = getattr(module, blocks_attr).size(0)
+                local_experts = blocks.size(0)
                 if proj == "gate_up_proj":
-                    blocks = module.gate_up_proj_blocks.view(local_experts, module.intermediate_size * 2, -1)
+                    blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
                 else:
-                    blocks = module.down_proj_blocks.view(local_experts, -1, module.intermediate_size // 2)
+                    blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
                 # TODO: we need to have the weights on cuda, refactor later
                 if target_device == "cpu":
                     target_device = "cuda"
 
+                # TODO: not use why torch.cuda.device
+                blocks = blocks.to(target_device)
+                scales = scales.to(target_device)
                 with torch.cuda.device(target_device):
                     triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                        blocks.transpose(-2, -1), getattr(module, scales_attr).transpose(-2, -1)
+                        blocks.transpose(-2, -1), scales.transpose(-2, -1)
                     )
 
                 # need to overwrite the shapes for the kernels
@@ -387,11 +390,7 @@ def load_and_swizzle_mxfp4(
                     )
 
                 # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
-                triton_weight_tensor.storage.data = triton_weight_tensor.storage.data.to(target_device)
-                weight_scale.storage.data = weight_scale.storage.data.to(target_device)
-
                 setattr(module, proj, triton_weight_tensor)
-
                 setattr(
                     module,
                     f"{proj}_precision_config",
