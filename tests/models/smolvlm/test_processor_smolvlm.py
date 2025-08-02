@@ -596,3 +596,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("SmolVLM cannot accept image URL as video frames, because it needs to know video fps and duration")
     def test_apply_chat_template_video_1(self):
         pass
+
+    @unittest.skip(
+        "SmolVLM cannot accept list of decoded video frames, because it needs to know video fps and duration"
+    )
+    def test_apply_chat_template_video_2(self):
+        pass
