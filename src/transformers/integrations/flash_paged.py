@@ -49,6 +49,11 @@ def paged_attention_forward(
         softcap: float. Anything > 0 activates softcapping attention.
     """
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
+    sliding_window = getattr(kwargs, "sliding_window", None)
+    if sliding_window is None:
+        window_size = (-1, -1)  # -1 means infinite context window
+    else:
+        window_size = (sliding_window, 0)
 
     if implementation is not None:
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
@@ -62,7 +67,7 @@ def paged_attention_forward(
         max_seqlen_k,
         softmax_scale=module.scaling,
         causal=True,  # kind of a must, it automatically aligns the mask for q < k
-        window_size=(-1, -1),  # -1 means infinite context window
+        window_size=window_size,
         # block_table=block_tables, -> torch.Tensor
         # **kwargs,
     )

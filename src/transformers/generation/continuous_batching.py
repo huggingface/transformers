@@ -50,6 +50,12 @@ class RequestStatus(Enum):
 logger = logging.getLogger(__name__)
 
 
+class AttentionMaskMode(Enum):
+    FULL = 0
+    SLIDING = 1
+    HYBRID = 2
+
+
 @dataclass
 class GenerationOutput:
     """Tracks the output of a generation request.
@@ -189,6 +195,11 @@ class PagedAttentionCache:
         )
         self.num_hidden_layers = config.num_hidden_layers
 
+        self.sliding_window = getattr(config, "sliding_window", None)
+        if self.sliding_window is not None and self.sliding_window < 0:
+            raise ValueError(f"'sliding_window' must be a non-negative integer, got: {self.sliding_window}")
+        self.layer_types: Optional[list[str]] = getattr(config, "layer_types", None)
+
         # Calculate optimal block size and number if not provided
         num_blocks = getattr(generation_config, "num_blocks", None)
         block_size = getattr(generation_config, "block_size", 32)
@@ -304,16 +315,83 @@ class PagedAttentionCache:
         return physical_indices
 
     @traced
+    def _get_physical_sliding_indices(
+        self, state: RequestState, logical_indices: list[int], query_length: int
+    ) -> tuple[Optional[list[int]], Optional[list[int]]]:
+        """
+        Maps logical sequence indices to physical cache indices using the sliding window mechanism.
+
+        Args:
+            state: The request state containing the block table.
+            logical_indices: A list of logical indices.
+
+        Returns:
+            A list of physical indices.
+
+        Raises:
+            ValueError: If no block table is found for the request ID.
+            IndexError: If a logical index maps to a block index that is out of bounds.
+        """
+        if self.sliding_window is None:
+            return None, None
+
+        request_id = state.request_id
+        block_table = self._block_tables.get(request_id)
+        if not block_table:
+            raise ValueError(f"No block table found for request {request_id}")
+
+        block_size = self.block_size
+        current_seq_len = len(logical_indices)
+        sliding_window = self.sliding_window
+
+        def get_circular_physical_index(logical_index: int, sliding_window: int) -> int:
+            """Convert a logical index to a physical index using circular mapping."""
+            circular_pos = logical_index % sliding_window
+            block_idx = circular_pos // block_size
+            block_offset = circular_pos % block_size
+
+            if block_idx >= len(block_table):
+                raise IndexError(
+                    f"Logical index {logical_index} maps to block index {block_idx} which is out of bounds "
+                    f"for request {request_id}"
+                )
+
+            physical_block_num = block_table[block_idx]
+            return physical_block_num * block_size + block_offset
+
+        if current_seq_len <= sliding_window:
+            # Window is not full, we can read all logical indices
+            read_logical_indices = logical_indices
+        else:
+            # Window is full, we need to read the last `sliding_window` indices
+            read_logical_indices = logical_indices[-sliding_window:]
+
+        read_indices = []
+        for idx in read_logical_indices:
+            read_indices.append(get_circular_physical_index(idx, sliding_window))
+
+        write_logical_indices = logical_indices[-query_length:]
+        write_indices = []
+        for idx in write_logical_indices:
+            write_indices.append(get_circular_physical_index(idx, sliding_window))
+        return read_indices, write_indices
+
+    @traced
     def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        read_index,
-        write_index,
+        cache_index: dict[str, tuple[Optional[list[int]], Optional[list[int]]]],
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
+        layer_type = self.layer_types[layer_idx] if self.layer_types else "full_attention"
+        read_index, write_index = cache_index[layer_type]
+        if layer_type == "sliding_attention" and read_index is None or write_index is None:
+            raise ValueError(
+                f"layer {layer_idx} is sliding attention, but `model.config.sliding_window` is set to None."
+            )
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
@@ -363,6 +441,7 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
+    # TODO: different behaviour for sliding window?
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
         # 1. we check that the occupancy is less than the requested length
@@ -439,6 +518,7 @@ class FIFOScheduler(Scheduler):
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
+            # TODO: different behaviour for sliding window?
             if not self._allocate_blocks_if_needed(
                 state, len(state.prompt_ids)
             ):  # don't schedule if we can't allocate blocks
@@ -543,7 +623,8 @@ class PrefillFirstScheduler(Scheduler):
         scheduled_requests = []
 
         for state in self.active_requests.values():
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+            # XXX: when cache is full (len(self.cache._free_blocks) == 0), state can stay on `PREFILLING_SPLIT` we need to take those into account
+            if state.status in [RequestStatus.PREFILLING_SPLIT, RequestStatus.SPLIT_PENDING_REMAINDER]:
                 priority_states.append(state)
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
@@ -658,7 +739,7 @@ def compute_optimal_blocks(
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
-    attention_mask: torch.Tensor
+    attention_mask: Union[torch.Tensor, dict[str, torch.Tensor]]
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
@@ -762,13 +843,39 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata)
         self.position_ids = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask = torch.zeros(
-            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
-        )
+
+        if hasattr(self.config, "layer_types") and self.config.layer_types:
+            unique_layer_types = set(self.config.layer_types)
+            if "sliding_attention" in unique_layer_types and "full_attention" in unique_layer_types:
+                self.attention_mask_mode = AttentionMaskMode.HYBRID
+            elif "sliding_attention" in unique_layer_types:
+                self.attention_mask_mode = AttentionMaskMode.SLIDING
+            else:
+                self.attention_mask_mode = AttentionMaskMode.FULL
+        else:
+            self.attention_mask_mode = AttentionMaskMode.FULL
+
+        if self.attention_mask_mode == AttentionMaskMode.HYBRID:
+            self.attention_mask = {
+                "full_attention": torch.zeros(
+                    (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+                ),
+                "sliding_attention": torch.zeros(
+                    (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+                ),
+            }
+        else:
+            self.attention_mask = torch.zeros(
+                (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+            )
+
         self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.cache_index = {}
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.read_sliding_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.write_index = torch.zeros((T,), **tensor_metadata)
+        self.write_sliding_index = torch.zeros((T,), **tensor_metadata)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
@@ -780,7 +887,12 @@ class ContinuousBatchProcessor:
         """Reset static tensors for the next batch."""
         self.input_ids.zero_()
         self.position_ids.zero_()
-        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
+        min_value = torch.finfo(self.model_dtype).min
+        if isinstance(self.attention_mask, dict):
+            for attention_type in self.attention_mask:
+                self.attention_mask[attention_type].fill_(min_value)
+        else:
+            self.attention_mask.fill_(min_value)
         self.cumulative_seqlens_q.zero_()
         self.cumulative_seqlens_k.zero_()
         self.write_index.fill_(-1)
@@ -799,8 +911,7 @@ class ContinuousBatchProcessor:
             "attention_mask": self.attention_mask,
             "cumulative_seqlens_q": self.cumulative_seqlens_q,
             "cumulative_seqlens_k": self.cumulative_seqlens_k,
-            "write_index": self.write_index,
-            "read_index": self.read_index,
+            "cache_index": self.cache_index,
             "logits_indices": self.logits_indices,
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
@@ -866,6 +977,7 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors()
         position_ids = []
         input_ids = []
+        cache_index = {}
         read_index = []
         write_index = []
         cumulative_seqlens_q = [0]
@@ -884,6 +996,9 @@ class ContinuousBatchProcessor:
             positions_to_add = cache_index[past_length:]
             read_indices = self.cache._get_physical_indices(state, cache_index)
             write_indices = read_indices[-query_length:]
+            sliding_read_indices, sliding_write_indices = self.cache._get_physical_sliding_indices(
+                state, cache_index, query_length
+            )
 
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
@@ -903,7 +1018,9 @@ class ContinuousBatchProcessor:
             input_ids,
             position_ids,
             read_index,
+            sliding_read_indices,
             write_index,
+            sliding_write_indices,
             cumulative_seqlens_q,
             cumulative_seqlens_k,
             logits_indices,
@@ -917,20 +1034,33 @@ class ContinuousBatchProcessor:
         input_ids,
         position_ids,
         read_index,
+        read_sliding_index: Optional[list[int]],
         write_index,
+        write_sliding_index: Optional[list[int]],
         cumulative_seqlens_q,
         cumulative_seqlens_k,
         logits_indices,
     ):
+        sliding_window_enabled = read_sliding_index is not None and write_sliding_index is not None
+
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
         self.input_ids[:, : len(input_ids)] = to_tensor(input_ids)
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
-        self.write_index[: len(write_index)] = to_tensor(write_index)
         self.read_index[: len(read_index)] = to_tensor(read_index)
+        self.write_index[: len(write_index)] = to_tensor(write_index)
+        if sliding_window_enabled:
+            self.read_sliding_index[: len(read_sliding_index)] = to_tensor(read_sliding_index)
+            self.write_sliding_index[: len(write_sliding_index)] = to_tensor(write_sliding_index)
+        self.cache_index = {
+            "full_attention": (self.read_index, self.write_index),
+            "sliding_attention": (self.read_sliding_index, self.write_sliding_index),
+        }
+
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
+
         if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
             for i in range(len(cumulative_seqlens_q) - 1):
                 if (
@@ -947,16 +1077,49 @@ class ContinuousBatchProcessor:
                 query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
                 key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
 
+                mask_shape = (
+                    self.attention_mask["full_attention"][..., query_range, key_range].shape
+                    if isinstance(self.attention_mask, dict)
+                    else self.attention_mask[..., query_range, key_range].shape
+                )
                 mask = torch.triu(
                     torch.full(
-                        self.attention_mask[..., query_range, key_range].shape,
+                        mask_shape,
                         min_value,
                         dtype=self.model_dtype,
                         device=self.model_device,
                     ),
                     diagonal=diagonal,
                 )
-                self.attention_mask[..., query_range, key_range] = mask
+
+                if sliding_window_enabled:
+                    sliding_mask = mask.clone()
+
+                    query_length = cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
+                    key_length = cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
+
+                    query_positions = torch.arange(query_length, device=self.model_device)
+                    key_positions = torch.arange(key_length, device=self.model_device)
+
+                    # TODO: handle when `(query_positions + key_length - query_length)[:, None]` is smoller than sliding_window
+                    sliding_window_mask = key_positions[None, :] <= (
+                        (query_positions + key_length - query_length)[:, None] - self.cache.sliding_window
+                    )
+
+                    sliding_mask = sliding_mask.masked_fill(sliding_window_mask, min_value)
+                else:
+                    # XXX: do we want to fallback to full attention if sliding window is not enabled?
+                    sliding_mask = mask
+
+                if self.attention_mask_mode == AttentionMaskMode.HYBRID:
+                    self.attention_mask["full_attention"][..., query_range, key_range] = mask
+                    self.attention_mask["sliding_attention"][..., query_range, key_range] = sliding_mask
+
+                elif self.attention_mask_mode == AttentionMaskMode.SLIDING:
+                    self.attention_mask[..., query_range, key_range] = sliding_mask
+
+                else:
+                    self.attention_mask[..., query_range, key_range] = mask
 
     @traced
     def _sync(self):
@@ -1160,11 +1323,15 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
-    def add_requests(self, inputs: list[list[int]], **kwargs):
+    def add_requests(self, inputs: list[list[int]], **kwargs) -> list[str]:
+        req_ids = []
         for i, input_ids in enumerate(inputs):
             # Assign a predictable request ID for ordering results later
             req_id = f"batch_req_{i}"
             self.add_request(input_ids, request_id=req_id, **kwargs)
+            req_ids.append(req_id)
+
+        return req_ids
 
     def get_result(self, timeout=None) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
@@ -1394,7 +1561,7 @@ class ContinuousMixin:
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
         **kwargs,
-    ) -> list[list[int]]:
+    ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
 
         Args:
@@ -1403,12 +1570,12 @@ class ContinuousMixin:
             **kwargs: Additional generation parameters
 
         Returns:
-            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
-                                if not handled otherwise) for each input prompt, in the same order.
-                                Returns an empty list `[]` for requests that failed.
+            `dict[str, GenerationOutput]`: A dict containing the generated sequences (including prompt tokens
+                                        if not handled otherwise) for each input prompt, in the same order.
+                                        There is a `status` field to check wether a request failed or succeeded.
         """
         if not inputs:
-            return []
+            return {}
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)
