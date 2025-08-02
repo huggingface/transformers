@@ -49,6 +49,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
+from accelerate.utils import AORecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
@@ -183,6 +184,12 @@ from .utils.quantization_config import QuantizationMethod
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
+
+MP_BACKEND_TO_KWARGS = {
+    "AO": AORecipeKwargs,
+    "TE": TERecipeKwargs,
+    "MSAMP": MSAMPRecipeKwargs,
+}
 
 if is_in_notebook():
     from .utils.notebook import NotebookProgressCallback
@@ -5249,6 +5256,34 @@ class Trainer:
             args["dataloader_config"] = dataloader_config
         else:
             args.update(accelerator_config)
+
+        if "mixed_precision" in accelerator_config:
+            args["mixed_precision"] = accelerator_config["mixed_precision"]
+        if "fp8_config" in accelerator_config and accelerator_config["fp8_config"] is not None:
+            if "backend" in accelerator_config["fp8_config"]:
+                recipe_kwargs = MP_BACKEND_TO_KWARGS[accelerator_config["fp8_config"]["backend"]]
+                fp8_config = accelerator_config["fp8_config"].copy()
+
+                if fp8_config["backend"] == "AO":
+                    from torchao.float8 import Float8LinearConfig
+
+                    if "recipe_name" in fp8_config:
+                        recipe_name = fp8_config["recipe_name"]
+                        fp8_config["config"] = (
+                            Float8LinearConfig.from_recipe_name(recipe_name=recipe_name)
+                        )
+                        fp8_config.pop("recipe_name")
+                    elif "config" in accelerator_config["fp8_config"]:
+                        config = fp8_config["config"]
+                        kwargs = {k: v for k, v in config.items() if v is not None}
+                        fp8_config["config"] = Float8LinearConfig(
+                            **kwargs
+                        )
+
+                fp8_config.pop("backend")
+                kwargs_handlers = [recipe_kwargs(**fp8_config)]
+                args["kwargs_handlers"] = kwargs_handlers
+
         # tp is initialized at Accelerator init phase so
         # args should be prepared here
         if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
