@@ -90,6 +90,18 @@
       title: Tools and RAG
     title: Chat with models
   - sections:
+      - local: serving
+        title: Serving LLMs, VLMs, and other chat-based models
+      - local: jan
+        title: Jan
+      - local: cursor
+        title: Cursor
+      - local: tiny_agents
+        title: Tiny-Agents CLI and MCP tools
+      - local: open_webui
+        title: Open WebUI
+    title: Serving
+  - sections:
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_one
