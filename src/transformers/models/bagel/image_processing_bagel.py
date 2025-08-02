@@ -133,11 +133,11 @@ class BagelImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
         max_size: Optional[int] = None,
         min_size: Optional[int] = None,
         stride: Optional[int] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """

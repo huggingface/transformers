@@ -59,6 +59,7 @@ class BagelVQVAEConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_factor=0.2611,
         shift_factor=0.1159,
+        downsample = 8,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -75,6 +76,7 @@ class BagelVQVAEConfig(PretrainedConfig):
         self.scale_factor = scale_factor
         self.shift_factor = shift_factor
         self.latent_patch_size = latent_patch_size
+        self.downsample = downsample
 
 
 llm_config = {

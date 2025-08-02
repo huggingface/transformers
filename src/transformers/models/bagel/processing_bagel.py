@@ -159,6 +159,20 @@ class BagelProcessor(ProcessorMixin):
                 images=images, **output_kwargs["images_kwargs"], transforms_type=transforms_type
             )["pixel_values"]
 
+        image_related_token_ids = set(
+            self.tokenizer.convert_tokens_to_ids(
+                [self.image_start_token, self.image_end_token, self.image_token]
+            )
+        )
+
+        # token_type_ids: 1 for image tokens, 0 for text ones
+        token_type_ids = []
+        for input_ids in data["input_ids"]:
+            type_ids = [1 if token_id in image_related_token_ids else 0 for token_id in input_ids.tolist()]
+            token_type_ids.append(type_ids)
+
+        data["token_type_ids"] = token_type_ids
+
         return BatchFeature(data=data)
 
     def batch_decode(self, *args, **kwargs):
