@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 이미지 프로세서(Image processor) [[image-processors]]
 
-이미지 프로세서는 이미지를 픽셀 값, 즉 이미지의 색상과 크기를 나타내는 텐서로 변환해요. 이 픽셀 값은 비전 모델의 입력으로 사용됩니다. 이때 사전 학습된 모델이 새로운 이미지를 올바르게 인식하려면 입력되는 이미지의 형식이 학습 당시 사용했던 데이터와 똑같아야만 해요. 그래서 이미지 프로세서는 다음과 같은 작업을 통해 이미지 형식을 통일시켜주는 역할을 합니다.
+이미지 프로세서는 이미지를 픽셀 값, 즉 이미지의 색상과 크기를 나타내는 텐서로 변환합니다. 이 픽셀 값은 비전 모델의 입력으로 사용됩니다. 이때 사전 학습된 모델이 새로운 이미지를 올바르게 인식하려면 입력되는 이미지의 형식이 학습 당시 사용했던 데이터와 똑같아야 합니다. 이미지 프로세서는 다음과 같은 작업을 통해 이미지 형식을 통일시켜주는 역할을 합니다.
 
 - 이미지 크기를 조절하는 [`~BaseImageProcessor.center_crop`] 
 - 픽셀 값을 정규화하는 [`~BaseImageProcessor.normalize`] 또는 크기를 재조정하는 [`~BaseImageProcessor.rescale`]
@@ -40,16 +40,16 @@ image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 inputs = image_processor(image, return_tensors="pt")
 ```
 
-이 가이드에서는 이미지 프로세서 클래스와 비전 모델을 위한 이미지 전처리 방법에 대해 다룰겁니다.
+이 가이드에서는 이미지 프로세서 클래스와 비전 모델을 위한 이미지 전처리 방법에 대해 다룰 예정입니다.
 
 ## 이미지 프로세서 클래스(Image processor classes) [[image-processor-classes]]
 
-이미지 프로세서들은 [`~BaseImageProcessor.center_crop`], [`~BaseImageProcessor.normalize`], [`~BaseImageProcessor.rescale`] 함수를 제공하는 [`BaseImageProcessor`] 클래스를 상속받습니다. 이미지 프로세서에는 두 가지 종류가 있어요.
+이미지 프로세서들은 [`~BaseImageProcessor.center_crop`], [`~BaseImageProcessor.normalize`], [`~BaseImageProcessor.rescale`] 함수를 제공하는 [`BaseImageProcessor`] 클래스를 상속받습니다. 이미지 프로세서에는 두 가지 종류가 있습니다.
 
 - 1) [`BaseImageProcessor`]는 파이썬 기반 구현체입니다.
-- 2) [`BaseImageProcessorFast`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있어요. [`BaseImageProcessorFast`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
+- 2) [`BaseImageProcessorFast`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있습니다. [`BaseImageProcessorFast`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
 
-각 이미지 프로세서는 이미지 프로세서를 불러오고 저장하기 위한 [`~ImageProcessingMixin.from_pretrained`]와 [`~ImageProcessingMixin.save_pretrained`] 메서드를 제공하는 [`ImageProcessingMixin`] 클래스를 상속받아 기능을 확장시킵니다.
+각 이미지 프로세서는 이미지 프로세서를 불러오고 저장하기 위한 [`~ImageProcessingMixin.from_pretrained`]와 [`~ImageProcessingMixin.save_pretrained`] 메소드를 제공하는 [`ImageProcessingMixin`] 클래스를 상속받아 기능을 확장시킵니다.
 
 이미지 프로세서를 불러오는 방법은 [`AutoImageProcessor`]를 사용하거나 모델별 이미지 프로세서를 사용하는 방식 두 가지가 있습니다.
 
@@ -133,9 +133,9 @@ images_processed = processor(images, return_tensors="pt", device="cuda")
 
 ## 전처리(Preprocess) [[preprocess]]
 
-Transformers의 비전 모델은 입력값으로 PyTorch 텐서 형태의 픽셀 값을 받습니다. 이미지 프로세서는 이미지를 바로 이 픽셀 값 텐서(배치 크기, 채널 수, 높이, 너비)로 변환하는 역할을 하죠. 이 과정에서 모델이 요구하는 크기로 이미지를 조절하고, 픽셀 값 또한 모델 기준에 맞춰 정규화하거나 재조정합니다.
+Transformers의 비전 모델은 입력값으로 PyTorch 텐서 형태의 픽셀 값을 받습니다. 이미지 프로세서는 이미지를 바로 이 픽셀 값 텐서(배치 크기, 채널 수, 높이, 너비)로 변환하는 역할을 합니다. 이 과정에서 모델이 요구하는 크기로 이미지를 조절하고, 픽셀 값 또한 모델 기준에 맞춰 정규화하거나 재조정합니다.
 
-이러한 이미지 전처리는 이미지 증강과는 다른 개념입니다. 이미지 증강은 학습 데이터를 늘리거나 과적합을 막기 위해 이미지에 의도적인 변화(밝기, 색상, 회전 등)를 주는 기술이죠. 반면, 이미지 전처리는 이미지를 사전 학습된 모델이 요구하는 입력 형식에 정확히 맞춰주는 작업에만 집중합니다.
+이러한 이미지 전처리는 이미지 증강과는 다른 개념입니다. 이미지 증강은 학습 데이터를 늘리거나 과적합을 막기 위해 이미지에 의도적인 변화(밝기, 색상, 회전 등)를 주는 기술입니다. 반면, 이미지 전처리는 이미지를 사전 학습된 모델이 요구하는 입력 형식에 정확히 맞춰주는 작업에만 집중합니다.
 
 일반적으로 모델 성능을 높이기 위해, 이미지는 보통 증강 과정을 거친 뒤 전처리되어 모델에 입력됩니다. 이때 증강 작업은 [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb), [Kornia](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb)) 와 같은 라이브러리를 사용할 수 있으며, 이후 전처리 단계에서 이미지 프로세서를 사용하면 됩니다.
 
@@ -175,7 +175,7 @@ def transforms(examples):
     return examples
 ```
 
-결합된 증강 및 전처리 함수를 [`~datasets.Dataset.set_transform`]을 사용하면 데이터셋을 사용할 때마다 이 변환이 실시간으로 적용됩니다.
+[`~datasets.Dataset.set_transform`]을 사용하면 결합된 증강 및 전처리 기능을 전체 데이터셋에 실시간으로 적용됩니다.
 
 ```py
 dataset.set_transform(transforms)
@@ -208,7 +208,7 @@ plt.imshow(img.permute(1, 2, 0))
 
 [DETR](./model_doc/detr)과 같은 일부 모델은 훈련 중에 [scale augmentation](https://paperswithcode.com/method/image-scale-augmentation)을 사용하기 때문에 한 배치 내에 포함된 이미지들의 크기가 제각각 일 수 있습니다. 아시다시피 크기가 서로 다른 이미지들은 하나의 배치로 묶을 수 없죠.
 
-이 문제를 해결하려면 이미지에 특수 패딩 토큰인 `0`을 채워 넣어 크기를 통일시켜주면 됩니다. [pad](https://github.com/huggingface/transformers/blob/9578c2597e2d88b6f0b304b5a05864fd613ddcc1/src/transformers/models/detr/image_processing_detr.py#L1151) 메서드로 패딩을 적용하고, 이렇게 크기가 통일된 이미지들을 배치로 묶기 위해 사용자 정의 `collate` 함수를 만들어 사용하세요.
+이 문제를 해결하려면 이미지에 특수 패딩 토큰인 `0`을 채워 넣어 크기를 통일시켜주면 됩니다. [pad](https://github.com/huggingface/transformers/blob/9578c2597e2d88b6f0b304b5a05864fd613ddcc1/src/transformers/models/detr/image_processing_detr.py#L1151) 메소드로 패딩을 적용하고, 이렇게 크기가 통일된 이미지들을 배치로 묶기 위해 사용자 정의 `collate` 함수를 만들어 사용하세요.
 
 ```py
 def collate_fn(batch):
