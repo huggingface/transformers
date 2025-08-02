@@ -100,11 +100,11 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.offload = False
         device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
-            if "cpu" in device_map.values() or "disk" in device_map.values():
+            if "disk" in device_map.values():
                 if self.pre_quantized:
                     raise ValueError(
-                        "You are attempting to perform cpu/disk offload with a pre-quantized torchao model "
-                        "This is not supported yet . Please remove the CPU or disk device from the device_map."
+                        "You are attempting to perform disk offload with a pre-quantized torchao model "
+                        "This is not supported yet . Please remove the disk device from the device_map."
                     )
                 else:
                     self.offload = True
