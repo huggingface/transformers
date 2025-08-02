@@ -122,7 +122,7 @@ class TestFSDPGeneration(TestCasePlus):
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()
-        args = "--fsdp".split()
+        args = ["--fsdp"]
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
@@ -135,7 +135,7 @@ class TestFSDPGeneration(TestCasePlus):
             --master_port={get_torch_dist_unique_port()}
             {self.test_file_dir}/test_fsdp.py
         """.split()
-        args = "--fsdp2".split()
+        args = ["--fsdp2"]
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call

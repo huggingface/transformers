@@ -1300,7 +1300,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 
         # Check if conditioning_embeds are provided or not, if yes then concatenate the bos_token_id at the end of the conditioning_embeds.
         # Then we must subtract the positional_ids because during the forward pass it will be added anyways, so we must cancel them out here.
-        conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
+        conditioning_embeds = model_kwargs.get("conditioning_embeds")
 
         if conditioning_embeds is not None:
             mel_start_token_embedding = self.model.decoder.input_embeds_layer(

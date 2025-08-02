@@ -1411,8 +1411,8 @@ def _process_regular_parameters(
                     param_type = f"[`{class_name}`]"
                 else:
                     param_type = f"[`{param_type.split('.')[-1]}`]"
-            elif param_type == "" and False:  # TODO: Enforce typing for all parameters
-                print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+            # elif param_type == "" and False:  # TODO: Enforce typing for all parameters
+            #     print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
             param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
             if additional_info:
@@ -1840,7 +1840,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
         elif is_dataclass:
             # No init function, we have a data class
-            docstring += "\nArgs:\n" if not docstring_args else docstring_args
+            docstring += docstring_args if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs, _ = parse_docstring(doc_class)

@@ -197,7 +197,7 @@ class FillMaskPipeline(Pipeline):
             vocab = {}
         target_ids = []
         for target in targets:
-            id_ = vocab.get(target, None)
+            id_ = vocab.get(target)
             if id_ is None:
                 input_ids = self.tokenizer(
                     target,

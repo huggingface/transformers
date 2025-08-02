@@ -277,7 +277,7 @@ def flex_attention_forward(
     num_local_query_heads = query.shape[1]
 
     # When running TP this helps:
-    if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
+    if (num_local_query_heads & (num_local_query_heads - 1)) != 0:
         key = repeat_kv(key, query.shape[1] // key.shape[1])
         value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False
