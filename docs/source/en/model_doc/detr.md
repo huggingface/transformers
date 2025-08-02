@@ -14,38 +14,87 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DETR
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+	<div class="flex flex-wrap space-x-1">
+		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+	</div>
 </div>
 
-## Overview
+# DETR
 
-The DETR model was proposed in [End-to-End Object Detection with Transformers](https://huggingface.co/papers/2005.12872) by
-Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov and Sergey Zagoruyko. DETR
-consists of a convolutional backbone followed by an encoder-decoder Transformer which can be trained end-to-end for
-object detection. It greatly simplifies a lot of the complexity of models like Faster-R-CNN and Mask-R-CNN, which use
-things like region proposals, non-maximum suppression procedure and anchor generation. Moreover, DETR can also be
-naturally extended to perform panoptic segmentation, by simply adding a mask head on top of the decoder outputs.
+[DETR](https://huggingface.co/papers/2005.12872) consists of a convolutional backbone followed by an encoder-decoder Transformer which can be trained end-to-end for object detection. It greatly simplifies a lot of the complexity of models like Faster-R-CNN and Mask-R-CNN, which use things like region proposals, non-maximum suppression procedure and anchor generation. Moreover, DETR can also be naturally extended to perform panoptic segmentation, by simply adding a mask head on top of the decoder outputs.
 
-The abstract from the paper is the following:
+You can find all the original DETR checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=detr) organization.
 
-*We present a new method that views object detection as a direct set prediction problem. Our approach streamlines the
-detection pipeline, effectively removing the need for many hand-designed components like a non-maximum suppression
-procedure or anchor generation that explicitly encode our prior knowledge about the task. The main ingredients of the
-new framework, called DEtection TRansformer or DETR, are a set-based global loss that forces unique predictions via
-bipartite matching, and a transformer encoder-decoder architecture. Given a fixed small set of learned object queries,
-DETR reasons about the relations of the objects and the global image context to directly output the final set of
-predictions in parallel. The new model is conceptually simple and does not require a specialized library, unlike many
-other modern detectors. DETR demonstrates accuracy and run-time performance on par with the well-established and
-highly-optimized Faster RCNN baseline on the challenging COCO object detection dataset. Moreover, DETR can be easily
-generalized to produce panoptic segmentation in a unified manner. We show that it significantly outperforms competitive
-baselines.*
+> [!TIP]
+> This model was contributed by [nielsr](https://huggingface.co/nielsr).
+>
+> Click on the DETR models in the right sidebar for more examples of how to apply DETR to different object detection and segmentation tasks.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/facebookresearch/detr).
+The example below demonstrates how to perform object detection with the [`Pipeline`] or the [`AutoModel`] class.
 
-## How DETR works
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+pipeline = pipeline(
+    "object-detection", 
+    model="facebook/detr-resnet-50",
+    torch_dtype=torch.float16,
+    device_map=0
+)
+
+# Run inference
+results = pipeline(image)
+
+# Display results
+for obj in results:
+    print(f"{obj['label']} - {obj['score']:.3f} - {obj['box']}")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+```
+
+</hfoption>
+</hfoptions>
+
+<details>
+<summary>How DETR works</summary>
 
 Here's a TLDR explaining how [`~transformers.DetrForObjectDetection`] works:
 
@@ -85,7 +134,9 @@ where one first trains a [`~transformers.DetrForObjectDetection`] model to detec
 the mask head for 25 epochs. Experimentally, these two approaches give similar results. Note that predicting boxes is
 required for the training to be possible, since the Hungarian matching is computed using distances between boxes.
 
-## Usage tips
+</details>
+
+## Notes
 
 - DETR uses so-called **object queries** to detect objects in an image. The number of queries determines the maximum
   number of objects that can be detected in a single image, and is set to 100 by default (see parameter
@@ -120,26 +171,27 @@ required for the training to be possible, since the Hungarian matching is comput
 - The size of the images will determine the amount of memory being used, and will thus determine the `batch_size`.
   It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
 
-There are three ways to instantiate a DETR model (depending on what you prefer):
+There are three other ways to instantiate a DETR model (depending on what you prefer):
 
 Option 1: Instantiate DETR with pre-trained weights for entire model
-```py
->>> from transformers import DetrForObjectDetection
+```python
+from transformers import DetrForObjectDetection
 
->>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 ```
 
 Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
-```py
->>> from transformers import DetrConfig, DetrForObjectDetection
+```python
+from transformers import DetrConfig, DetrForObjectDetection
 
->>> config = DetrConfig()
->>> model = DetrForObjectDetection(config)
+config = DetrConfig()
+model = DetrForObjectDetection(config)
 ```
+
 Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
-```py
->>> config = DetrConfig(use_pretrained_backbone=False)
->>> model = DetrForObjectDetection(config)
+```python
+config = DetrConfig(use_pretrained_backbone=False)
+model = DetrForObjectDetection(config)
 ```
 
 As a summary, consider the following table:
@@ -169,8 +221,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - All example notebooks illustrating fine-tuning [`DetrForObjectDetection`] and [`DetrForSegmentation`] on a custom dataset can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR).
 - Scripts for finetuning [`DetrForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
 - See also: [Object detection task guide](../tasks/object_detection).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## DetrConfig
 
