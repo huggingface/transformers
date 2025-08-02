@@ -398,6 +398,31 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_model_is_small(self):
         pass
 
+    def test_rope_deltas_preserved_for_cfg_generation(self):
+        """Test that rope_deltas are preserved during CFG generation to prevent corruption."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen2VLForConditionalGeneration(config).eval()
+
+        # Create mock outputs with rope_deltas
+        class MockOutput:
+            def __init__(self):
+                self.rope_deltas = torch.tensor([[1.0, 2.0, 3.0]])
+                self.past_key_values = None
+
+            def __contains__(self, key):
+                return hasattr(self, key)
+
+        mock_outputs = MockOutput()
+        initial_kwargs = {"cache_position": torch.tensor([0, 1, 2])}
+
+        # Test that _update_model_kwargs_for_generation preserves rope_deltas
+        updated_kwargs = model._update_model_kwargs_for_generation(
+            mock_outputs, initial_kwargs, is_encoder_decoder=False, num_new_tokens=1
+        )
+
+        self.assertIn("rope_deltas", updated_kwargs, "rope_deltas should be preserved for CFG generation")
+        torch.testing.assert_close(updated_kwargs["rope_deltas"], mock_outputs.rope_deltas)
+
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):
