@@ -120,6 +120,9 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
         },
+        "videos_kwargs": {
+            "return_metadata": True,
+        },
     }
 
 
@@ -178,6 +181,8 @@ class SmolVLMProcessor(ProcessorMixin):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
+        images = self.image_processor.fetch_images(images)
+        images = make_nested_list_of_images(images)
         n_images_in_images = [len(sublist) for sublist in images]
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
@@ -225,9 +230,8 @@ class SmolVLMProcessor(ProcessorMixin):
         n_videos_in_videos = [len(sublist) for sublist in videos]
         video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
+        video_metadata = iter(video_inputs.pop("video_metadata", []))
         num_frames = video_inputs["pixel_values"].shape[1]
-        batch_timestamps = iter(video_inputs.pop("timestamps"))
-        batch_durations = iter(video_inputs.pop("durations"))
 
         if text is None:
             return None, video_inputs
@@ -240,8 +244,9 @@ class SmolVLMProcessor(ProcessorMixin):
         prompt_strings = []
         for sample in text:
             while self.video_token in sample:
-                timestamps = next(batch_timestamps)
-                duration = next(batch_durations)
+                metadata = next(video_metadata)
+                timestamps = [(int(second // 60), int(second % 60)) for second in metadata["timestamps"]]
+                duration = int(metadata["duration"])
                 duration_td = timedelta(seconds=int(duration))
                 image_prompt_strings = DEFAULT_VIDEO_INTRO.format(
                     frame_count=num2words(num_frames), video_duration=str(duration_td)
@@ -341,7 +346,6 @@ class SmolVLMProcessor(ProcessorMixin):
         inputs = {}
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
-            images = make_nested_list_of_images(images)
             text, vision_inputs = self.process_vision(
                 text,
                 images,

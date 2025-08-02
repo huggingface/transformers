@@ -52,7 +52,7 @@ class Glm4vVideoProcessingTester:
         image_std=IMAGENET_STANDARD_STD,
         do_convert_rgb=True,
     ):
-        size = size if size is not None else {"longest_edge": 20}
+        size = size if size is not None else {"longest_edge": 58 * 58, "shortest_edge": 26 * 26}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -96,7 +96,7 @@ class Glm4vVideoProcessingTester:
             metadata = {
                 "fps": 2,
                 "duration": num_frames / 2,
-                "total_frames": num_frames,
+                "total_num_frames": num_frames,
             }
             video_metadata.append(metadata)
         return video_metadata
@@ -129,6 +129,8 @@ class Glm4vVideoProcessingTester:
                 height,
                 width,
                 factor=self.patch_size * self.merge_size,
+                max_pixels=self.size["longest_edge"],
+                min_pixels=self.size["shortest_edge"],
             )
             grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
             seq_len += grid_t * grid_h * grid_w
@@ -163,7 +165,7 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"longest_edge": 20})
+        self.assertEqual(video_processor.size, {"longest_edge": 3364, "shortest_edge": 676})
 
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"height": 42, "width": 42})
