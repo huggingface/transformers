@@ -140,7 +140,7 @@
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_special
-      title: Apple 실리콘에서 PyTorch 학습
+      title: Apple 실리콘
     - local: in_translation
       title: (번역중) Intel Gaudi
     - local: perf_hardware
