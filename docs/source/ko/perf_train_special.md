@@ -13,19 +13,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Apple Silicon
+# Apple Silicon[[apple-silicon]]
 
-Apple Silicon (M series) features a unified memory architecture, making it possible to efficiently train large models locally and improves performance by reducing latency associated with data retrieval. You can take advantage of Apple Silicon for training with PyTorch due to its integration with [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html).
+Apple Silicon(M 시리즈)는 통합 메모리 아키텍처를 갖추고 있어, 대규모 모델을 로컬에서 효율적으로 학습할 수 있으며, 데이터 접근 지연을 줄여 성능을 향상시킵니다. [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html)와의 통합 덕분에 PyTorch를 사용할 때 Apple Silicon을 학습에 활용할 수 있습니다.
 
-The `mps` backend requires macOS 12.3 or later.
+`mps` 백엔드는 macOS 12.3 이상에서 사용 가능합니다.
 
 > [!WARNING]
-> Some PyTorch operations are not implemented in MPS yet. To avoid an error, set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1` to fallback on the CPU kernels. Please open an issue in the [PyTorch](https://github.com/pytorch/pytorch/issues) repository if you encounter any other issues.
+> 일부 PyTorch 연산은 아직 MPS에서 구현되지 않았습니다. 오류를 방지하려면 환경 변수 `PYTORCH_ENABLE_MPS_FALLBACK=1`을 설정하여 CPU 커널로 대체 실행되도록 하세요. 다른 문제가 발생하면 [PyTorch](https://github.com/pytorch/pytorch/issues) 저장소에 이슈를 등록해 주세요.
 
-[`TrainingArguments`] and [`Trainer`] detects and sets the backend device to `mps` if an Apple Silicon device is available. No additional changes are required to enable training on your device.
+[`TrainingArguments`]와 [`Trainer`]는 Apple Silicon 디바이스가 사용 가능한 경우 자동으로 백엔드 디바이스를 `mps`로 설정합니다. 별도의 설정 없이도 학습이 가능합니다.
 
-The `mps` backend doesn't support [distributed training](https://pytorch.org/docs/stable/distributed.html#backends).
+`mps` 백엔드는 [분산 학습](https://pytorch.org/docs/stable/distributed.html#backends)을 지원하지 않습니다.
 
-## Resources
+## 자료[[resources]]
 
-Learn more about the MPS backend in the [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) blog post.
+MPS 백엔드에 대한 자세한 내용은 [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) 블로그 글을 참고하세요.
