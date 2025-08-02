@@ -584,6 +584,43 @@ class VocabParallel(TensorParallelLayer):
         return outputs.to_local() if use_local_output else outputs
 
 
+class ReduceFromModelParallelRegion(torch.autograd.Function):
+    """
+    All-reduce in forward pass, identity in backward pass.
+    This is the `g` function in the paper: https://arxiv.org/abs/1909.08053
+    """
+
+    @staticmethod
+    def forward(ctx, x, device_mesh):
+        if device_mesh.size() == 1:
+            return x
+        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
+        return x
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output
+
+
+class CopyToModelParallelRegion(torch.autograd.Function):
+    """
+    Copy in forward pass, all-reduce in backward pass.
+    This is the `f` function in the paper: https://arxiv.org/abs/1909.08053
+    """
+
+    @staticmethod
+    def forward(ctx, x, device_mesh):
+        ctx.device_mesh = device_mesh
+        return x
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        if ctx.device_mesh.size() == 1:
+            return grad_output
+        dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=ctx.device_mesh.get_group())
+        return grad_output
+
+
 class ColwiseParallel(TensorParallelLayer):
     """
     General tensor parallel layer for transformers.
