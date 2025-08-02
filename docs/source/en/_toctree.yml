@@ -521,6 +521,8 @@
         title: HGNet-V2
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/interns1
+        title: InternS1
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
