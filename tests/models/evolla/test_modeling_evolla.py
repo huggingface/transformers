@@ -363,7 +363,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
 
     @cached_property
     def default_processor(self):
-        return EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf", revision="refs/pr/11")
+        return EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf")
 
     @require_bitsandbytes
     @slow
@@ -382,16 +382,10 @@ class EvollaModelIntegrationTest(TestCasePlus):
         model = EvollaForProteinText2Text.from_pretrained(
             "westlake-repl/Evolla-10B-hf",
             quantization_config=quantization_config,
-            device_map="auto",
+            device_map=torch_device,
         )
         generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # keep for debugging
-        for i, t in enumerate(generated_text):
-            t = bytes(t, "utf-8").decode("unicode_escape")
-            print(f"{i}:\n{t}\n")
-
         self.assertIn("This protein", generated_text[0])
-
         self.assertIn("purine", generated_text[0])

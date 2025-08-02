@@ -263,6 +263,14 @@ class StaticLayer(CacheLayerMixin):
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
+
         if cache_position is None:
             # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
             self.keys.copy_(key_states)
@@ -317,8 +325,9 @@ class SlidingWindowLayer(StaticLayer):
             sliding_window (`int`):
                 Effective window size: number of tokens that are kept on each update call.
         """
-        kwargs.pop("max_cache_len", None)
-        super().__init__(*args, max_cache_len=sliding_window, *args, **kwargs)
+        max_cache_len = kwargs.pop("max_cache_len", None)
+        max_cache_len = min(sliding_window, max_cache_len) if max_cache_len is not None else sliding_window
+        super().__init__(*args, max_cache_len=max_cache_len, *args, **kwargs)
 
     def update(
         self,
@@ -341,6 +350,14 @@ class SlidingWindowLayer(StaticLayer):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
 
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
+
         key_states = key_states.to(self.keys.dtype)
         value_states = value_states.to(self.values.dtype)
 
@@ -354,7 +371,7 @@ class SlidingWindowLayer(StaticLayer):
             return key_states, value_states
 
         # Sliding window logic for generation phase or prefill < window
-        slicing = torch.arange(self.max_cache_len, device=value_states.device)
+        slicing = torch.arange(self.max_cache_len, device=self.device)
         current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
         to_shift = current_seq_len > self.max_cache_len
         indices = (slicing + to_shift.sum()) % self.max_cache_len
@@ -410,6 +427,14 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for ChunkedSlidingLayer.")
+
+        # This may be needed if the Layer was not created with the right device in the beginning, i.e. if it did not respect
+        # the device_map. However, even if it is the case, this will only run once, because then the new states received
+        # will always have the same device
+        if self.device != key_states.device:
+            self.device = key_states.device
+            self.keys = self.keys.to(self.device)
+            self.values = self.values.to(self.device)
 
         cumulative_length = self.cumulative_length
         self.cumulative_length += key_states.shape[-2]
@@ -1139,7 +1164,7 @@ class Cache:
         while len(self.layers) <= layer_idx:
             kwargs = self.layer_init_kwargs.copy()
             if self.layer_init_kwargs.get("layer_device_map", None) is not None:
-                kwargs["device"] = kwargs.pop("layer_device_map")[layer_idx]
+                kwargs["device"] = kwargs.pop("layer_device_map")[len(self.layers)]
 
             new_layer_class = (
                 self.layer_classes[len(self.layers)] if isinstance(self.layer_classes, list) else self.layer_classes
@@ -1253,9 +1278,7 @@ class Cache:
     def max_cache_len(self) -> int:
         """Return the maximum cache length of the cache"""
         values = [layer.max_cache_len for layer in self.layers]
-        if len(set(values)) > 1:
-            raise ValueError(f"Max cache length is not consistent across layers: {values}")
-        return values[0]
+        return max(values)
 
     @property
     def is_compileable(self) -> bool:
@@ -1631,7 +1654,7 @@ class QuantoQuantizedCache(QuantizedCache):
     """
 
     def __init__(self, **kwargs) -> None:
-        Cache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=QuantoQuantizedCacheProcessor, **kwargs)
 
 
 class HQQQuantizedCache(QuantizedCache):
@@ -1673,7 +1696,7 @@ class HQQQuantizedCache(QuantizedCache):
 
     def __init__(self, backend="HQQ", **kwargs) -> None:
         assert backend == "HQQ"
-        Cache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
+        DynamicCache.__init__(self, cache_processor=HQQQuantizedCacheProcessor, **kwargs)
 
 
 class EncoderDecoderCache(Cache):
@@ -1927,10 +1950,6 @@ def parse_layer_args_from_model_config(
                 )
         # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
         max_cache_len = max_cache_len or config.max_position_embeddings
-        if getattr(config, "sliding_window", None) is not None:
-            sliding_window_len = min(config.sliding_window, max_cache_len)
-        else:
-            sliding_window_len = None
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads:
         head_dim = (
             config.head_dim
@@ -1957,7 +1976,7 @@ def parse_layer_args_from_model_config(
             "layer_device_map": layer_device_map,
             "head_dim": head_dim,
             "num_heads": num_heads,
-            "sliding_window": sliding_window_len,
+            "sliding_window": getattr(config, "sliding_window", None),
         }
         return {k: v for k, v in layer_args.items() if v is not None}
 

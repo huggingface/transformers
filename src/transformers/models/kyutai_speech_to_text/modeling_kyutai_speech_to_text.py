@@ -690,7 +690,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = causal_mask is None and q_len > 1
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1215,11 +1215,14 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         cache_methods = [
             "_prepare_cache_for_generation",
             "_get_cache",
-            "_supports_default_dynamic_cache",
             "_get_layer_device_map_for_cache_init",
         ]
         for method in cache_methods:
             setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
+
+        setattr(
+            self.codec_model, "_supports_default_dynamic_cache", types.MethodType(lambda x: True, self.codec_model)
+        )
 
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,

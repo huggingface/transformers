@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import packaging.version
 
+from transformers.utils.import_utils import _is_package_available
+
 
 if os.getenv("WANDB_MODE") == "offline":
     print("⚙️  Running in WANDB offline mode")
@@ -856,7 +858,7 @@ class WandbCallback(TrainerCallback):
             init_args = {}
             if trial_name is not None:
                 init_args["name"] = trial_name
-                init_args["group"] = args.run_name
+                init_args["group"] = args.run_name or args.output_dir
             elif args.run_name is not None:
                 init_args["name"] = args.run_name
                 if args.run_name == args.output_dir:
@@ -1043,6 +1045,14 @@ class WandbCallback(TrainerCallback):
 class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
+
+    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
+    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+
+    **Requires**:
+    ```bash
+    pip install trackio
+    ```
     """
 
     def __init__(self):
@@ -1119,12 +1129,14 @@ class TrackioCallback(TrainerCallback):
             device_idx = torch.cuda.current_device()
             total_memory = torch.cuda.get_device_properties(device_idx).total_memory
             memory_allocated = torch.cuda.memory_allocated(device_idx)
-            power = torch.cuda.power_draw(device_idx)
+
             gpu_memory_logs = {
                 f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
                 f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-                f"gpu/{device_idx}/power": power / 1000,  # Watts
             }
+            if _is_package_available("pynvml"):
+                power = torch.cuda.power_draw(device_idx)
+                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
             if dist.is_available() and dist.is_initialized():
                 gathered_logs = [None] * dist.get_world_size()
                 dist.all_gather_object(gathered_logs, gpu_memory_logs)
@@ -1230,11 +1242,7 @@ class CometCallback(TrainerCallback):
 
             import comet_ml
 
-            # Do not use the default run_name as the experiment name
-            if args.run_name is not None and args.run_name != args.output_dir:
-                experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
-            else:
-                experiment_config = comet_ml.ExperimentConfig()
+            experiment_config = comet_ml.ExperimentConfig(name=args.run_name)
 
             self._experiment = comet_ml.start(online=online, mode=mode, experiment_config=experiment_config)
             self._experiment.__internal_api__set_model_graph__(model, framework="transformers")
@@ -2357,10 +2365,12 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
-            if trial_name is not None:
+            if trial_name is not None and args.run_name is not None:
                 init_args["experiment_name"] = f"{args.run_name}-{trial_name}"
             elif args.run_name is not None:
                 init_args["experiment_name"] = args.run_name
+            elif trial_name is not None:
+                init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
 
             if self._swanlab.get_run() is None:

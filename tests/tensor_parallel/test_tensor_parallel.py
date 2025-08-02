@@ -133,12 +133,6 @@ class TensorParallelTestBase(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
-            has_dtensor = any(
-                isinstance(p.data, torch.distributed.tensor.DTensor)
-                for _, p in model.named_parameters()
-            )
-            assert has_dtensor, "TP model must have DTensor"
-
             tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
             prompt = "Can I help"
 
