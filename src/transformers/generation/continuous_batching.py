@@ -25,7 +25,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from tokenizers import Tokenizer
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
 
@@ -33,6 +32,7 @@ from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..utils.logging import logging
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 class RequestStatus(Enum):
@@ -751,7 +751,7 @@ class ContinuousBatchProcessor:
 
         self.setup_static_tensors()
 
-        self.tokenizer = Tokenizer.from_pretrained(self.config._name_or_path)
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(self.config._name_or_path)
         self.decode_stream = DecodeStream(skip_special_tokens=True)
 
     @traced(standalone=True)
