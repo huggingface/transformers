@@ -267,3 +267,8 @@ def npu_apply_rotary_emb(x, cos, sin, **kwargs):
         sin = sin.unsqueeze(0).unsqueeze(2)
 
     return npu_rotary_mul(x, cos, sin)
+
+
+def get_npu_flash_attn_funcs():
+    # return flash attention related functions used for Ascend NPU in order
+    return npu_flash_attn_func, npu_flash_attn_varlen_func, pad_input, unpad_input, False
