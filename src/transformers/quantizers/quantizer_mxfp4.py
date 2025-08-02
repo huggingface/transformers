@@ -152,7 +152,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if is_triton_kernels_availalble():
             from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
-        from ..integrations import Mxfp4GptOssExperts, dequantize, dequantize_and_quantize, quantize_to_mxfp4
+        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
@@ -214,7 +214,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     dq_param_name = param_name[: -len("_blocks")]
                     dequantize(module, param_name, param_value, target_device, dq_param_name, **shard_kwargs)
                 else:
-                    dequantize_and_quantize(
+                    load_and_swizzle_mxfp4(
                         module,
                         param_name,
                         param_value,
@@ -226,6 +226,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # we are not really dequantizing, we are just removing everthing related to quantization here
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
+        # clean cache due to triton ops
+        if not torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants
