@@ -122,14 +122,13 @@ _VISION_CONFIG = {
     "vision_use_head": False,
 }
 
-_VARIANT_GEMMA_3_EMBEDDING = "gemma3_embedding"
-_VARIANT_GEMMA_3_270M = "gemma3_270m"
+_VARIANT_EMBEDDINGGEMMA = "embedding"
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
 _VARIANT_GEMMA_3_12B = "gemma3_12b"
 _VARIANT_GEMMA_3_27B = "gemma3_27b"
 _VARIANTS = {
-    _VARIANT_GEMMA_3_EMBEDDING: Gemma3Config(
+    _VARIANT_EMBEDDINGGEMMA: Gemma3Config(
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
             hidden_size=768,
@@ -143,22 +142,6 @@ _VARIANTS = {
             sliding_window=512,
             rope_scaling=None,
             use_bidirectional_attention=True,
-        ),
-        vision_config=None,
-    ),
-    _VARIANT_GEMMA_3_270M: Gemma3Config(
-        text_config=Gemma3TextConfig(
-            vocab_size=262_144,
-            hidden_size=640,
-            intermediate_size=2048,
-            num_hidden_layers=18,
-            num_attention_heads=4,
-            num_key_value_heads=1,
-            head_dim=256,
-            max_position_embeddings=32768,
-            query_pre_attn_scalar=256,
-            sliding_window=512,
-            rope_scaling=None,
         ),
         vision_config=None,
     ),
@@ -236,7 +219,7 @@ _VARIANTS = {
     ),
 }
 
-_TEXT_ONLY_VARIANTS = (_VARIANT_GEMMA_3_EMBEDDING, _VARIANT_GEMMA_3_270M, _VARIANT_GEMMA_3_1B)
+_TEXT_ONLY_VARIANTS = (_VARIANT_EMBEDDINGGEMMA, _VARIANT_GEMMA_3_1B)
 
 # ==== Flags ====
 
@@ -531,12 +514,12 @@ def convert(
             for path, weights in convert_transformer_weights(config=config.text_config, paths=paths, weights=value):
                 if variant in _TEXT_ONLY_VARIANTS:
                     path = path[len("language_model.") :]
-                if variant == _VARIANT_GEMMA_3_EMBEDDING:
+                if variant == _VARIANT_EMBEDDINGGEMMA:
                     path = path[len("model.") :]
 
                 update_tree(path, weights, config.text_config.dtype)
 
-    if variant == _VARIANT_GEMMA_3_EMBEDDING:
+    if variant == _VARIANT_EMBEDDINGGEMMA:
         return hf_tree, [weight[1].T for weight in orbax_tree_flat[: _NUM_LINEAR_LAYERS.value]]
     elif config.vision_config is None:
         hf_tree["lm_head.weight"] = hf_tree["model.embed_tokens.weight"]
@@ -575,7 +558,7 @@ def main(*args):
     logging.info("Converted Gemma 3 (%s) state tree from Orbax to Hugging Face.", variant)
 
     with accelerate.init_empty_weights():
-        if variant == _VARIANT_GEMMA_3_EMBEDDING:
+        if variant == _VARIANT_EMBEDDINGGEMMA:
             model = Gemma3TextModel(config=config.text_config)
         elif variant in _TEXT_ONLY_VARIANTS:
             model = Gemma3ForCausalLM(config=config.text_config)
@@ -601,7 +584,7 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(
         _TOKENIZER_PATH.value,
         add_bos_token=True,
-        padding_side="right" if variant == _VARIANT_GEMMA_3_EMBEDDING else "left",
+        padding_side="right" if variant == _VARIANT_EMBEDDINGGEMMA else "left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
             "boi_token": "<start_of_image>",  # Should be ID=255_999
@@ -643,7 +626,7 @@ def main(*args):
     )
     generation_config.save_pretrained(output_path)
 
-    if variant == _VARIANT_GEMMA_3_EMBEDDING:
+    if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
         transformer = models.Transformer(output_path)
