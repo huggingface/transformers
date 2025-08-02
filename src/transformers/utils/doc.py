@@ -924,8 +924,8 @@ IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE = r"""
 
 PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
     [
-        ("text-to-audio-spectrogram", TEXT_TO_AUDIO_SPECTROGRAM_SAMPLE),
-        ("text-to-audio-waveform", TEXT_TO_AUDIO_WAVEFORM_SAMPLE),
+        ("text-to-audio", TEXT_TO_AUDIO_SPECTROGRAM_SAMPLE),
+        ("text-to-audio", TEXT_TO_AUDIO_WAVEFORM_SAMPLE),
         ("automatic-speech-recognition", AUTOMATIC_SPEECH_RECOGNITION_SAMPLE),
         ("audio-frame-classification", AUDIO_FRAME_CLASSIFICATION_SAMPLE),
         ("audio-classification", AUDIO_CLASSIFICATION_SAMPLE),
@@ -962,8 +962,8 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
 MODELS_TO_PIPELINE = OrderedDict(
     [
         # Audio
-        ("MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "text-to-audio-spectrogram"),
-        ("MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "text-to-audio-waveform"),
+        ("MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "text-to-audio"),
+        ("MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "text-to-audio"),
         ("MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES", "automatic-speech-recognition"),
         ("MODEL_FOR_CTC_MAPPING_NAMES", "automatic-speech-recognition"),
         ("MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES", "audio-frame-classification"),

@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -249,7 +250,9 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase, PipelineTesterMixin
+):
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
@@ -259,6 +262,14 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     test_pruning = False
     test_head_masking = False
     _is_composite = True
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": Qwen2_5OmniThinkerForConditionalGeneration,
+            # TODO (joao, raushan): add other pipelines here
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
