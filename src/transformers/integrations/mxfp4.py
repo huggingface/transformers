@@ -50,9 +50,11 @@ FP4_VALUES = [
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
     from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
     w, w_scale = swizzle_mxfp4(w, w_scale)
     return w, w_scale
+
 
 def swizzle_mxfp4(w, w_scale):
     from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
@@ -75,6 +77,7 @@ def swizzle_mxfp4(w, w_scale):
     # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
     return w, w_scale
+
 
 # Copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
@@ -329,6 +332,7 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
+
 def load_and_swizzle_mxfp4(
     module, param_name, param_value, target_device, **kwargs
 ):
@@ -358,34 +362,48 @@ def load_and_swizzle_mxfp4(
             # Check if both blocks and scales both not on on meta device
             if blocks.device.type != "meta" and scales.device.type != "meta":
                 # need it for ep
-                local_experts = getattr(module, blocks_attr).size(0)
+                local_experts = blocks.size(0)
                 if proj == "gate_up_proj":
-                    blocks = module.gate_up_proj_blocks.view(local_experts, module.intermediate_size * 2, -1)
+                    blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
                 else:
-                    blocks = module.down_proj_blocks.view(local_experts, -1, module.intermediate_size // 2)
-                
+                    blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
                 # TODO: we need to have the weights on cuda, refactor later
                 if target_device == "cpu":
                     target_device = "cuda"
 
+                # TODO: not use why torch.cuda.device
+                blocks = blocks.to(target_device)
+                scales = scales.to(target_device)
                 with torch.cuda.device(target_device):
-                    triton_weight_tensor, weight_scale = swizzle_mxfp4(blocks.transpose(-2, -1), getattr(module, scales_attr).transpose(-2, -1))
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                        blocks.transpose(-2, -1), scales.transpose(-2, -1)
+                    )
 
                 # need to overwrite the shapes for the kernels
                 if proj == "gate_up_proj":
-                    triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+                    triton_weight_tensor.shape = torch.Size(
+                        [local_experts, module.hidden_size, module.intermediate_size * 2]
+                    )
                 else:
-                    triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
+                    triton_weight_tensor.shape = torch.Size(
+                        [local_experts, module.intermediate_size, module.hidden_size]
+                    )
 
                 # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
                 setattr(module, proj, triton_weight_tensor)
-                setattr(module, f"{proj}_precision_config", PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+                setattr(
+                    module,
+                    f"{proj}_precision_config",
+                    PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                )
 
                 # delete blocks and scales
                 delattr(module, scales_attr)
                 delattr(module, blocks_attr)
                 # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
                 del blocks
+
+
 def _replace_with_mxfp4_linear(
     model,
     modules_to_not_convert=None,
