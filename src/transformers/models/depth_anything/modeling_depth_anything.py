@@ -180,7 +180,7 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
 
 class DepthAnythingFeatureFusionStage(nn.Module):
     # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage.__init__ with DPT->DepthAnything
-    def __init__(self, config):
+    def __init__(self, config: DepthAnythingConfig):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):

@@ -230,9 +230,12 @@ class BackboneMixin:
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
+            return self(*args, **filtered_kwargs)
+        else:
+            return self(*args, **kwargs)
 
     def forward(
         self,
