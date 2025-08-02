@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 도구를 만들 때는 아래 규칙을 따르세요.
 
 1. 함수는 기능을 잘 설명하는 이름을 가져야 합니다.
-2. 함수의 인수는 함수 헤더에 타입 힌트를 가져야 합니다(`Args` 블록에는 포함하지 마세요).
+2. 함수의 인수는 함수 헤더에 타입 힌트를 포함해야 합니다(`Args` 블록에는 포함하지 마세요).
 3. 함수에는 [Google 스타일](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) 의 독스트링(dockstring)이 포함되어야 합니다.
 4. 함수에 반환 타입과 `Returns` 블록을 포함할 수 있지만, 도구를 활용하는 대부분의 모델에서 이를 사용하지 않기 때문에 무시할 수 있습니다.
 
@@ -80,7 +80,7 @@ messages = [
 ]
 ```
 
-`messages`와 도구 목록을 [`~PreTrainedTokenizerBase.apply_chat_template`]에 전달한 뒤, 이를 모델의 입력으로 사용하여 텍스트를 생성할 수 있습니다.
+`messages`와 도구 목록 `tools`를 [`~PreTrainedTokenizerBase.apply_chat_template`]에 전달한 뒤, 이를 모델의 입력으로 사용하여 텍스트를 생성할 수 있습니다.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -95,7 +95,7 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 </tool_call><|im_end|>
 ```
 
-채팅 모델은 독스트링(docstring)에서 올바른 매개변수를 사용하여 `get_current_temperature` 도구를 호출했습니다. 파리를 기준으로 위치를 프랑스로 추론했으며, 온도 단위는 섭씨를 사용해야 한다고 판단했습니다.
+채팅 모델은 독스트링(docstring)에 정의된 형식에 따라 `get_current_temperature` 함수에 올바른 매개변수를 전달해 호출했습니다. 파리를 기준으로 위치를 프랑스로 추론했으며, 온도 단위는 섭씨를 사용해야 한다고 판단했습니다.
 
 이제 `get_current_temperature` 함수와 해당 인수들을 `tool_call` 딕셔너리에 담아 채팅 메시지에 추가합니다. `tool_call` 딕셔너리는 `system`이나 `user`가 아닌 `assistant` 역할로 제공되어야 합니다.
 
@@ -146,9 +146,9 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 
 ## 스키마[[Schema]]
 
-[`~PreTrainedTokenizerBase.apply_chat_template`]은 함수를 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환하여 채팅 템플릿에 전달합니다. LLM은 함수 내부의 코드를 보지 못합니다. 다시 말해, LLM은 함수가 기술적으로 어떻게 작동하는지는 신경 쓰지 않고, 함수의 **정의**와 **인수**에만 관심을 갖습니다.
+[`~PreTrainedTokenizerBase.apply_chat_template`]은 함수를 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환하여 채팅 템플릿에 전달합니다. LLM은 함수 내부의 코드를 보지 못합니다. 다시 말해, LLM은 함수가 기술적으로 어떻게 작동하는지는 신경 쓰지 않고, 함수의 **정의**와 **인수**만 참조합니다.
 
-함수가 앞서 나열된 규칙을 따르면, JSON 스키마는 내부에서 자동으로 생성됩니다. 하지만 더 나은 가독성이나 디버깅을 위해 [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205)를 사용하여 스키마를 수동으로 변환할 수 있습니다.
+함수가 앞서 나열된 규칙을 따르면, 내부에서 JSON 스키마가 자동으로 생성됩니다. 하지만 더 나은 가독성이나 디버깅을 위해 [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205)를 사용하여 스키마를 수동으로 변환할 수 있습니다.
 
 ```py
 from transformers.utils import get_json_schema
