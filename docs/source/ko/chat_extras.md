@@ -14,53 +14,53 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tools and RAG
+# 도구와 RAG[[tools-and-rag]]
 
-The [`~PreTrainedTokenizerBase.apply_chat_template`] method supports virtually any additional argument types - strings, lists, dicts - besides the chat message. This makes it possible to use chat templates for many use cases.
+[`~PreTrainedTokenizerBase.apply_chat_template`] 메소드는 채팅 메시지 외에도 문자열, 리스트, 딕셔너리 등 거의 모든 추가 인수 타입을 지원합니다. 이를 통해 다양한 사용 사례에서 채팅 템플릿을 활용할 수 있습니다.
 
-This guide will demonstrate how to use chat templates with tools and retrieval-augmented generation (RAG).
+이 가이드에서는 도구 및 검색 증강 생성(RAG)과 함께 채팅 템플릿을 사용하는 방법을 보여드립니다.
 
-## Tools
+## 도구[[tools]]
 
-Tools are functions a large language model (LLM) can call to perform specific tasks. It is a powerful way to extend the capabilities of conversational agents with real-time information, computational tools, or access to large databases.
+도구는 대규모 언어 모델(LLM)이 특정 작업을 수행하기 위해 호출할 수 있는 함수입니다. 실시간 정보, 계산 도구 또는 대규모 데이터베이스에 대한 액세스로 대화형 에이전트의 기능을 확장하는 강력한 방법입니다.
 
-Follow the rules below when creating a tool.
+도구를 만들 때는 아래 규칙을 따르세요.
 
-1. The function should have a descriptive name.
-2. The function arguments must have a type hint in the function header (don't include in the `Args` block).
-3. The function must have a [Google-style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) docstring.
-4. The function can have a return type and `Returns` block, but these are optional because most tool use models ignore them.
+1. 함수는 설명적인 이름을 가져야 합니다.
+2. 함수 인수는 함수 헤더에 타입 힌트를 가져야 합니다(`Args` 블록에는 포함하지 마세요).
+3. 함수는 [Google 스타일](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) 독스트링을 가져야 합니다.
+4. 함수는 반환 타입과 `Returns` 블록을 가질 수 있지만, 대부분의 도구 사용 모델이 이를 무시하므로 선택 사항입니다.
 
-An example tool to get temperature and wind speed is shown below.
+온도와 풍속을 가져오는 예시 도구는 아래와 같습니다.
 
 ```py
 def get_current_temperature(location: str, unit: str) -> float:
     """
-    Get the current temperature at a location.
+    특정 위치의 현재 온도를 가져옵니다.
     
     Args:
-        location: The location to get the temperature for, in the format "City, Country"
-        unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
+        location: 온도를 가져올 위치, "도시, 국가" 형식
+        unit: 온도를 반환할 단위. (선택지: ["celsius", "fahrenheit"])
     Returns:
-        The current temperature at the specified location in the specified units, as a float.
+        지정된 위치의 지정된 단위로 표시된 현재 온도(float).
     """
-    return 22.  # A real function should probably actually get the temperature!
+    return 22.  # 실제 함수는 아마도 실제로 온도를 가져와야 합니다!
 
 def get_current_wind_speed(location: str) -> float:
     """
-    Get the current wind speed in km/h at a given location.
+    주어진 위치의 현재 풍속을 km/h 단위로 가져옵니다.
     
     Args:
-        location: The location to get the temperature for, in the format "City, Country"
+        location: 온도를 가져올 위치, "도시, 국가" 형식
     Returns:
-        The current wind speed at the given location in km/h, as a float.
+        주어진 위치의 현재 풍속(km/h, float).
     """
-    return 6.  # A real function should probably actually get the wind speed!
+    return 6.  # 실제 함수는 아마도 실제로 풍속을 가져와야 합니다!
 
 tools = [get_current_temperature, get_current_wind_speed]
 ```
 
-Load a model and tokenizer that supports tool-use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
+[NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B)와 같이 도구 사용을 지원하는 모델과 토크나이저를 로드하세요. 하드웨어가 지원한다면 [Command-R](./model_doc/cohere)이나 [Mixtral-8x22B](./model_doc/mixtral)와 같은 더 큰 모델도 고려할 수 있습니다.
 
 ```py
 import torch
@@ -71,7 +71,7 @@ tokenizer = AutoTokenizer.from_pretrained( "NousResearch/Hermes-2-Pro-Llama-3-8B
 model = AutoModelForCausalLM.from_pretrained( "NousResearch/Hermes-2-Pro-Llama-3-8B", torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-Create a chat message.
+채팅 메시지를 생성합니다.
 
 ```py
 messages = [
@@ -80,7 +80,7 @@ messages = [
 ]
 ```
 
-Pass `messages` and a list of tools to [`~PreTrainedTokenizerBase.apply_chat_template`]. Then you can pass the inputs to the model for generation.
+`messages`와 도구 목록을 [`~PreTrainedTokenizerBase.apply_chat_template`]에 전달합니다. 그런 다음 입력을 모델에 전달하여 생성할 수 있습니다.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -95,12 +95,12 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 </tool_call><|im_end|>
 ```
 
-The chat model called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature. 
+채팅 모델은 독스트링에서 올바른 매개변수를 사용하여 `get_current_temperature` 도구를 호출했습니다. 파리를 기반으로 프랑스를 위치로 추론했고, 온도 단위로 섭씨를 사용해야 한다고 추론했습니다.
 
-Now append the `get_current_temperature` function and these arguments to the chat message as `tool_call`. The `tool_call` dictionary should be provided to the `assistant` role instead of the `system` or `user`.
+이제 `get_current_temperature` 함수와 이러한 인수를 `tool_call`로 채팅 메시지에 추가합니다. `tool_call` 딕셔너리는 `system`이나 `user`가 아닌 `assistant` 역할에 제공되어야 합니다.
 
 > [!WARNING]
-> The OpenAI API uses a JSON string as its `tool_call` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
+> OpenAI API는 `tool_call` 형식으로 JSON 문자열을 사용합니다. 이는 딕셔너리를 기대하는 트랜스포머에서 사용할 경우 오류나 이상한 모델 동작을 일으킬 수 있습니다.
 
 <hfoptions id="tool-call">
 <hfoption id="Llama">
@@ -110,7 +110,7 @@ tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
-Allow the assistant to read the function outputs and chat with the user.
+어시스턴트가 함수 출력을 읽고 사용자와 채팅할 수 있도록 합니다.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -126,7 +126,7 @@ The temperature in Paris, France right now is approximately 12°C (53.6°F).<|im
 </hfoption>
 <hfoption id="Mistral/Mixtral">
 
-For [Mistral](./model_doc/mistral) and [Mixtral](./model_doc/mixtral) models, you need an additional `tool_call_id`. The `tool_call_id` is 9 randomly generated alphanumeric characters assigned to the `id` key in the `tool_call` dictionary.
+[Mistral](./model_doc/mistral) 및 [Mixtral](./model_doc/mixtral) 모델의 경우 추가적인 `tool_call_id`가 필요합니다. `tool_call_id`는 `tool_call` 딕셔너리의 `id` 키에 할당된 9개의 무작위로 생성된 영숫자 문자입니다.
 
 ```py
 tool_call_id = "9Ae3bDc2F"
@@ -144,22 +144,22 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 </hfoption>
 </hfoptions>
 
-## Schema
+## 스키마[[schema]]
 
-[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the function works technically, it only cares about function **definition** and **arguments**.
+[`~PreTrainedTokenizerBase.apply_chat_template`]은 함수를 [JSON 스키마](https://json-schema.org/learn/getting-started-step-by-step)로 변환하여 채팅 템플릿에 전달합니다. LLM은 함수 내부의 코드를 보지 못합니다. 다시 말해, LLM은 함수가 기술적으로 어떻게 작동하는지는 신경 쓰지 않고, 함수의 **정의**와 **인수**에만 관심을 갖습니다.
 
-The JSON schema is automatically generated behind the scenes as long as your function follows the [rules](#tools) listed earlier above. But you can use [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) to manually convert a schema for more visibility or debugging.
+JSON 스키마는 함수가 앞서 나열된 [규칙](#tools)을 따르는 한 백그라운드에서 자동으로 생성됩니다. 하지만 더 나은 가시성이나 디버깅을 위해 [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205)를 사용하여 수동으로 스키마를 변환할 수 있습니다.
 
 ```py
 from transformers.utils import get_json_schema
 
 def multiply(a: float, b: float):
     """
-    A function that multiplies two numbers
+    두 숫자를 곱하는 함수
     
     Args:
-        a: The first number to multiply
-        b: The second number to multiply
+        a: 곱할 첫 번째 숫자
+        b: 곱할 두 번째 숫자
     """
     return a * b
 
@@ -191,15 +191,15 @@ print(schema)
 }
 ```
 
-You can edit the schema or write one entirely from scratch. This gives you a lot of flexibility to define precise schemas for more complex functions.
+스키마를 편집하거나 처음부터 완전히 작성할 수 있습니다. 이를 통해 더 복잡한 함수에 대한 정확한 스키마를 정의할 수 있는 많은 유연성을 얻을 수 있습니다.
 
 > [!WARNING]
-> Try keeping your function signatures simple and the arguments to a minimum. These are easier for a model to understand and use than complex functions for example with nested arguments.
+> 함수 시그니처를 단순하게 유지하고 인수를 최소한으로 유지하세요. 이러한 함수는 예를 들어 중첩된 인수를 가진 복잡한 함수보다 모델이 이해하고 사용하기 쉽습니다.
 
-The example below demonstrates writing a schema manually and then passing it to [`~PreTrainedTokenizerBase.apply_chat_template`].
+아래 예시는 스키마를 수동으로 작성한 다음 [`~PreTrainedTokenizerBase.apply_chat_template`]에 전달하는 방법을 보여줍니다.
 
 ```py
-# A simple function that takes no arguments
+# 인수를 받지 않는 간단한 함수
 current_time = {
   "type": "function", 
   "function": {
@@ -212,7 +212,7 @@ current_time = {
   }
 }
 
-# A more complete function that takes two numerical arguments
+# 두 개의 숫자 인수를 받는 더 완전한 함수
 multiply = {
   'type': 'function',
   'function': {
@@ -240,14 +240,14 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-## RAG
+## RAG[[rag]]
 
-Retrieval-augmented generation (RAG) models enhance a models existing knowledge by allowing it to search documents for additional information before returning a query. For RAG models, add a `documents` parameter to [`~PreTrainedTokenizerBase.apply_chat_template`]. This `documents` parameter should be a list of documents, and each document should be a single dict with `title` and `content` keys.
+검색 증강 생성(Retrieval-augmented generation, RAG) 모델은 쿼리를 반환하기 전에 추가 정보를 위해 문서를 검색할 수 있도록 하여 모델의 기존 지식을 향상시킵니다. RAG 모델의 경우, [`~PreTrainedTokenizerBase.apply_chat_template`]에 `documents` 매개변수를 추가하세요. 이 `documents` 매개변수는 문서 목록이어야 하며, 각 문서는 `title`과 `content` 키를 가진 단일 딕셔너리여야 합니다.
 
 > [!TIP]
-> The `documents` parameter for RAG isn't widely supported and many models have chat templates that ignore `documents`. Verify if a model supports `documents` by reading its model card or executing `print(tokenizer.chat_template)` to see if the `documents` key is present. [Command-R](https://hf.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://hf.co/CohereForAI/c4ai-command-r-plus-08-2024) both support `documents` in their RAG chat templates.
+> RAG를 위한 `documents` 매개변수는 널리 지원되지 않으며 많은 모델들이 `documents`를 무시하는 채팅 템플릿을 가지고 있습니다. 모델이 `documents`를 지원하는지 확인하려면 모델 카드를 읽거나 `print(tokenizer.chat_template)`를 실행하여 `documents` 키가 있는지 확인하세요. [Command-R](https://hf.co/CohereForAI/c4ai-command-r-08-2024)과 [Command-R+](https://hf.co/CohereForAI/c4ai-command-r-plus-08-2024)는 모두 RAG 채팅 템플릿에서 `documents`를 지원합니다.
 
-Create a list of documents to pass to the model.
+모델에 전달할 문서 목록을 생성하세요.
 
 ```py
 documents = [
@@ -262,17 +262,17 @@ documents = [
 ]
 ```
 
-Set `chat_template="rag"` in [`~PreTrainedTokenizerBase.apply_chat_template`] and generate a response.
+[`~PreTrainedTokenizerBase.apply_chat_template`]에서 `chat_template="rag"`를 설정하고 응답을 생성하세요.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Load the model and tokenizer
+# 모델과 토크나이저 로드
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01-4bit")
 model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01-4bit", device_map="auto")
-device = model.device # Get the device the model is loaded on
+device = model.device # 모델이 로드된 장치 가져오기
 
-# Define conversation input
+# 대화 입력 정의
 conversation = [
     {"role": "user", "content": "What has Man always dreamed of?"}
 ]
@@ -285,7 +285,7 @@ input_ids = tokenizer.apply_chat_template(
     add_generation_prompt=True,
     return_tensors="pt").to(device)
 
-# Generate a response 
+# 응답 생성
 generated_tokens = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -293,7 +293,7 @@ generated_tokens = model.generate(
     temperature=0.3,
     )
 
-# Decode and print the generated text along with generation prompt
+# 생성된 텍스트를 디코딩하고 생성 프롬프트와 함께 출력
 generated_text = tokenizer.decode(generated_tokens[0])
 print(generated_text)
 ```
