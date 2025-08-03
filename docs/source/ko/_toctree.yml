@@ -408,6 +408,8 @@
         title: (번역중) HerBERT
       - local: in_translation
         title: (번역중) I-BERT
+      - local: model_doc/jamba
+        title: Jamba
       - local: in_translation
         title: (번역중) Jukebox
       - local: in_translation
