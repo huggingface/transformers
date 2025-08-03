@@ -595,14 +595,14 @@ class ReduceFromModelParallelRegion(torch.autograd.Function):
         if device_mesh.size() == 1:
             return x
         if isinstance(x, tuple):
-            dist.all_reduce(x[0], op=dist.ReduceOp.SUM, group=device_mesh.get_group())
+            dist.all_reduce(x[0], op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
         else:
-            dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
+            dist.all_reduce(x, op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
         return x
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output
+        return grad_output, None
 
 
 class CopyToModelParallelRegion(torch.autograd.Function):
@@ -621,7 +621,7 @@ class CopyToModelParallelRegion(torch.autograd.Function):
         if ctx.device_mesh.size() == 1:
             return grad_output
         dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=ctx.device_mesh.get_group())
-        return grad_output
+        return grad_output, None
 
 
 class ColwiseParallel(TensorParallelLayer):
@@ -721,12 +721,14 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(mod, "bias") and mod.bias is not None:
             mod._bias = mod.bias
             mod.bias = None
-
-        input_tensor = inputs[0]
-        return input_tensor
+        return inputs
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        """
+        We add the bias after outputs have been collected because the bias is replicated across shards.
+        If you add it before you are adding it as many time as the world size.
+        """
         outputs = ReduceFromModelParallelRegion.apply(outputs, device_mesh)
         if hasattr(mod, "_bias"):
             outputs += mod._bias
