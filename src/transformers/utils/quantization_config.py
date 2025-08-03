@@ -1556,7 +1556,7 @@ class FPQuantConfig(QuantizationConfigMixin):
     FPQuantConfig is a configuration class for quantization using the FPQuant method.
 
     Args:
-        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+        forward_dtype (`str`, *optional*, defaults to `"nvfp4"`):
             The dtype to use for the forward pass.
         forward_method (`str`, *optional*, defaults to `"abs_max"`):
             The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
@@ -1575,7 +1575,7 @@ class FPQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        forward_dtype: str = "mxfp4",
+        forward_dtype: str = "nvfp4",
         forward_method: str = "abs_max",
         backward_dtype: str = "bf16",
         store_master_weights: bool = False,
