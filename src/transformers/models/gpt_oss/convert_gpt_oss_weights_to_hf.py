@@ -610,10 +610,9 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 {#- System Message Construction ============================================ #}
 {%- macro build_system_message() -%}
     {%- if model_identity is not defined %}
-        {{- "You are ChatGPT, a large language model trained by OpenAI.\n" -}}
-    {%- else %}
-        {{- model_identity }}
+        {%- set model_identity = "You are ChatGPT, a large language model trained by OpenAI." %}
     {%- endif %}
+    {{- model_identity + "\n" }}
     {{- "Knowledge cutoff: 2024-06\n" }}
     {{- "Current date: " + strftime_now("%Y-%m-%d") + "\n\n" }}
     {%- if reasoning_effort is not defined %}
