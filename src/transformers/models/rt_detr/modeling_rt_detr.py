@@ -341,7 +341,7 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = RTDetrFrozenBatchNorm2d(module.num_features)
 
-            if not module.weight.device == torch.device("meta"):
+            if module.weight.device != torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
                 new_module.bias.data.copy_(module.bias)
                 new_module.running_mean.data.copy_(module.running_mean)
@@ -1000,7 +1000,7 @@ class RTDetrDecoderLayer(nn.Module):
 
 @auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
-    config_class = RTDetrConfig
+    config: RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]

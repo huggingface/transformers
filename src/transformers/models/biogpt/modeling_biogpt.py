@@ -207,8 +207,8 @@ class BioGptAttention(nn.Module):
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -245,7 +245,7 @@ class BioGptAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class BioGptDecoderLayer(GradientCheckpointingLayer):
@@ -307,7 +307,7 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, past_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
@@ -335,39 +335,19 @@ class BioGptDecoderLayer(GradientCheckpointingLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         return outputs
 
 
 @auto_docstring
 class BioGptPreTrainedModel(PreTrainedModel):
-    config_class = BioGptConfig
+    config: BioGptConfig
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_static_cache = True
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    _can_compile_fullgraph = True
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
@@ -526,12 +506,6 @@ class BioGptModel(BioGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     def forward(
         self,
@@ -636,7 +610,6 @@ class BioGptModel(BioGptPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = None
-        next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -661,9 +634,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -673,19 +643,18 @@ class BioGptModel(BioGptPreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        next_cache = next_decoder_cache if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -779,15 +748,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring

@@ -26,6 +26,7 @@ rendered properly in your Markdown viewer.
 You can find all the original Mamba 2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization, but the examples shown below use [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) because a Hugging Face implementation isn't supported yet for the original checkpoints.
 
 > [!TIP]
+> This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.

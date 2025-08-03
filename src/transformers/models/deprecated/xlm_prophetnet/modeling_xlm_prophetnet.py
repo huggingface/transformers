@@ -540,7 +540,7 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
 
 
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
-    config_class = XLMProphetNetConfig
+    config: XLMProphetNetConfig
     base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
@@ -597,7 +597,7 @@ class XLMProphetNetPositionalEmbeddings(nn.Embedding):
             if past_key_values is not None:
                 # position_ids is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                prev_num_input_ids = past_key_values[0][0].shape[2]
+                prev_num_input_ids = past_key_values.get_seq_length()
                 num_input_ids = inputs_shape[1] + prev_num_input_ids
                 position_ids = torch.ones((1, 1), dtype=torch.long, device=device) * (
                     int(self.padding_idx + num_input_ids)
@@ -1843,12 +1843,6 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
@@ -2073,12 +2067,6 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def _tie_weights(self):
         if self.config.tie_word_embeddings:

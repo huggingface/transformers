@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -127,11 +126,11 @@ class TFLayoutLMEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        bbox: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        bbox: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -158,7 +157,7 @@ class TFLayoutLMEmbeddings(keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
         if bbox is None:
-            bbox = bbox = tf.fill(input_shape + [4], value=0)
+            bbox = tf.fill(input_shape + [4], value=0)
         try:
             left_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 0])
             upper_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 1])
@@ -584,12 +583,12 @@ class TFLayoutLMEncoder(keras.layers.Layer):
         encoder_hidden_states: tf.Tensor | None,
         encoder_attention_mask: tf.Tensor | None,
         past_key_values: tuple[tuple[tf.Tensor]] | None,
-        use_cache: Optional[bool],
+        use_cache: bool | None,
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPastAndCrossAttentions | tuple[tf.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -825,11 +824,11 @@ class TFLayoutLMMainLayer(keras.layers.Layer):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions | tuple[tf.Tensor]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1070,11 +1069,11 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions | tuple[tf.Tensor]:
         r"""
         Returns:
 
@@ -1175,12 +1174,12 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFMaskedLMOutput, tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1304,12 +1303,12 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1440,12 +1439,12 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFTokenClassifierOutput, tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1572,13 +1571,13 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

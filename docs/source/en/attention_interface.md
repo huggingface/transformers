@@ -60,17 +60,45 @@ You will see it prints "I just entered the attention computation" as many times 
 
 ## Dynamically switching attention function
 
-You could dynamically change the model's attention function as well, by overriding the `config._attn_implementation` field:
+You could dynamically change the model's attention function as well:
 
 ```python
 # Back to use original sdpa implementation
-model.config._attn_implementation = "sdpa"
+model.set_attn_implementation("sdpa")
 
 model(torch.ones(1, 5, dtype=int))
 ```
 
 and it will stop printing the statements, as it now uses the `sdpa` attention.  
 This allows to quickly change an attention function, without needing to reload the model!
+
+## Different attention per backbone in multimodal models
+
+For multimodal models different attention functions may work better for each backbone module. For example, some vision backbones perform better in fp32, but are incompatible with FlashAttention. To continue using FlashAttention while keeping the vision encoder in fp32, create a dict and map each config to an attention implementation as shown below.
+
+```python
+from transformers import AutoModelForImageTextToText
+
+model_id = "facebook/chameleon-7b"
+
+attention_implementation_per_backbone = {"vision_config": "sdpa", "text_config": "flash_attention_2"}
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation=attention_implementation_per_backbone)
+
+# NOTE: keys in the attention implementation have to be the same as the sub-config names
+for key in attention_implementation_per_backbone:
+    assert key in model.config.sub_configs, f"Invalid key in `attention_implementation`"
+
+# You can omit certain backbones - the default attention function (SDPA) will be used
+# This is equivalent to the previous example
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"text_config": "flash_attention_2"})
+
+
+# Set the same attention implementation for all backbones with single string, same as in non-multimodal models
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation="eager")
+
+# Alternatively use a dict with an empty key for global configuration
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"": "eager"})
+```
 
 ## What about new args needed in my custom attention function?
 

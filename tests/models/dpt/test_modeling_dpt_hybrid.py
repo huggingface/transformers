@@ -281,7 +281,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             backbone_params = []
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DPTViTHybridEmbeddings":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
                     break
 
             for name, param in model.named_parameters():

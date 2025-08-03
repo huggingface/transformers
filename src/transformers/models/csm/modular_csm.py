@@ -124,19 +124,17 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 )
 @auto_docstring
 class CsmPreTrainedModel(PreTrainedModel):
-    config_class = CsmConfig
+    config: CsmConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     # does not because of Mimi codec model
     # _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": CsmDecoderLayer,
@@ -144,26 +142,16 @@ class CsmPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, CsmCodebooksHead):
+        super()._init_weights(module)
+        if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=std)
-        elif isinstance(module, CsmRMSNorm):
-            module.weight.data.fill_(1.0)
+                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
 class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
-    config_class = CsmDepthDecoderConfig
+    config: CsmDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -297,12 +285,6 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
         del self.lm_head
         self.codebooks_head = CsmCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
         self.model = CsmDepthDecoderModel(config)
-
-    def get_output_embeddings(self):
-        raise AttributeError("Not needed for Csm")
-
-    def set_output_embeddings(self, new_embeddings):
-        raise AttributeError("Not needed for Csm")
 
     def prepare_inputs_for_generation(
         self,
@@ -459,12 +441,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def _tie_weights(self):
         if self.config.tie_codebooks_embeddings:

@@ -894,31 +894,20 @@ class Zamba2HybridLayer(ZambaHybridLayer):
 
 
 class Zamba2PreTrainedModel(PreTrainedModel):
-    config_class = Zamba2Config
+    config: Zamba2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (Zamba2RMSNorm, Zamba2RMSNormGated)):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Zamba2MambaMixer):
+        super()._init_weights(module)
+        if isinstance(module, Zamba2MambaMixer):
             dt = torch.exp(
                 torch.rand(self.config.n_mamba_heads)
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
@@ -1134,7 +1123,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if past_key_values and not past_key_values.has_previous_state:
+        if past_key_values is not None and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
         output = BaseModelOutputWithPast(

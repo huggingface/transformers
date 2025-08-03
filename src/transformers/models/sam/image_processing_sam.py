@@ -387,6 +387,11 @@ class SamImageProcessor(BaseImageProcessor):
 
         return segmentation_map, original_size
 
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `BaseImageProcessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
@@ -663,7 +668,7 @@ class SamImageProcessor(BaseImageProcessor):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
@@ -1114,7 +1119,7 @@ def _generate_crop_boxes(
     """
 
     if isinstance(image, list):
-        raise ValueError("Only one image is allowed for crop generation.")
+        raise TypeError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
     original_size = get_image_size(image, input_data_format)
 

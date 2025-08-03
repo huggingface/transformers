@@ -304,18 +304,16 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class OPTPreTrainedModel(PreTrainedModel):
-    config_class = OPTConfig
+    config: OPTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
     _supports_attention_backend = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
+
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -376,12 +374,6 @@ class OPTDecoder(OPTPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
@@ -777,12 +769,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def set_decoder(self, decoder):
         self.model.decoder = decoder
 
@@ -872,15 +858,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 @auto_docstring(

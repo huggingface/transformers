@@ -470,17 +470,14 @@ class GPTNeoBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class GPTNeoPreTrainedModel(PreTrainedModel):
-    config_class = GPTNeoConfig
+    config: GPTNeoConfig
     load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = False  # TODO: needs a HybridCache
+    _supports_flash_attn = True
+    _can_compile_fullgraph = False  # TODO: needs a HybridCache
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -543,7 +540,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -791,12 +788,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def forward(
         self,
@@ -818,7 +809,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -884,20 +875,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
-    @staticmethod
-    def _reorder_cache(
-        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor]]:
-        """
-        This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
-        [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-        beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past_key_values
-        )
-
 
 @auto_docstring(
     custom_intro="""
@@ -942,7 +919,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1065,7 +1042,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1147,7 +1124,7 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as

@@ -81,7 +81,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             generator(4)
 
     @require_torch

@@ -423,7 +423,7 @@ class MCTCTPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = MCTCTConfig
+    config: MCTCTConfig
     base_model_prefix = "mctct"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
@@ -589,7 +589,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = encoder_layer(

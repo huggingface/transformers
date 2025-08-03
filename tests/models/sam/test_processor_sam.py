@@ -98,7 +98,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
         for image in input_feat_extract.pixel_values:
@@ -123,7 +123,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
         input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
         for label in input_feat_extract.labels:
@@ -154,7 +154,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
 
     def test_rle_encoding(self):

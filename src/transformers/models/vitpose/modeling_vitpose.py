@@ -62,7 +62,7 @@ class VitPoseEstimatorOutput(ModelOutput):
 
 @auto_docstring
 class VitPosePreTrainedModel(PreTrainedModel):
-    config_class = VitPoseConfig
+    config: VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
