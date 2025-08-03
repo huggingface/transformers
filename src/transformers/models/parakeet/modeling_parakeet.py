@@ -108,14 +108,15 @@ class ParakeetEncoderConvModule(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=1, bias=config.use_bias)
 
-    def forward(self, hidden_states, pad_mask=None):
+    def forward(self, hidden_states, attention_mask=None):
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         # Apply padding mask before convolution
-        if pad_mask is not None:
-            hidden_states = hidden_states.masked_fill(pad_mask.unsqueeze(1), 0.0)
+        if attention_mask is not None:
+            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         hidden_states = nn.functional.pad(hidden_states, (self.padding, self.padding))
         hidden_states = self.depthwise_conv(hidden_states)
@@ -222,6 +223,13 @@ class ParakeetEncoderAttention(nn.Module):
             **kwargs,
         )
 
+        # to match the original implementation
+        # cf https://github.com/NVIDIA/NeMo/blob/620d2ba07835c230b2e1ee25fe1322504ce01d79/nemo/collections/asr/parts/submodules/multi_head_attention.py#L336-L340
+        if attention_mask is not None:
+            all_masked_rows = torch.all(~attention_mask, dim=-1).transpose(1, 2)
+            all_masked_rows = all_masked_rows.unsqueeze_(-1)
+            attn_output = attn_output.masked_fill(all_masked_rows, 0.0)
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -319,7 +327,6 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
-        pad_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
@@ -335,7 +342,7 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + attn_output
 
-        conv_output = self.conv(self.norm_conv(hidden_states), pad_mask=pad_mask)
+        conv_output = self.conv(self.norm_conv(hidden_states), attention_mask=attention_mask)
         hidden_states = hidden_states + conv_output
 
         ff2_output = self.feed_forward2(self.norm_feed_forward2(hidden_states))
