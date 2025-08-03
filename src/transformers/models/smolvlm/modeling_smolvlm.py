@@ -47,6 +47,26 @@ from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
 logger = logging.get_logger(__name__)
 
 
+class SmolVLMRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        SmolVLMRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 @auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
     config: SmolVLMConfig
@@ -74,6 +94,8 @@ class SmolVLMPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
+        elif isinstance(module, SmolVLMRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
 class SmolVLMVisionEmbeddings(nn.Module):

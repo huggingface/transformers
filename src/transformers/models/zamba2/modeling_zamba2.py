@@ -97,7 +97,7 @@ class Zamba2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Zamba2HybridDynamicCache(DynamicCache):
+class Zamba2HybridDynamicCache(Cache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -110,6 +110,10 @@ class Zamba2HybridDynamicCache(DynamicCache):
     while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
+
+    key_cache = None
+    value_cache = None
+    is_compileable = False
 
     def __init__(
         self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
@@ -142,6 +146,12 @@ class Zamba2HybridDynamicCache(DynamicCache):
                 self.transformer_layers.append(i)
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+
+    def __len__(self):
+        return len(self.key_cache)
+
+    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def update(
         self,
@@ -1183,18 +1193,8 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _is_stateful = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (Zamba2RMSNorm, Zamba2RMSNormGated)):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, Zamba2MambaMixer):
+        super()._init_weights(module)
+        if isinstance(module, Zamba2MambaMixer):
             dt = torch.exp(
                 torch.rand(self.config.n_mamba_heads)
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
@@ -1364,7 +1364,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        if past_key_values and not past_key_values.has_previous_state:
+        if past_key_values is not None and not past_key_values.has_previous_state:
             past_key_values.has_previous_state = True
 
         output = BaseModelOutputWithPast(

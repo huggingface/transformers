@@ -217,16 +217,14 @@ class MiniMaxCache(DynamicCache):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
             else:
-                self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
-                self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
+                self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
@@ -470,8 +468,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
-    # Note: only supports MiniMaxCache
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
         "hidden_states": MiniMaxDecoderLayer,

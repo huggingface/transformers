@@ -310,7 +310,7 @@ class MptModelTester:
     def create_and_check_mpt_weight_initialization(self, config, *args):
         model = MptModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)

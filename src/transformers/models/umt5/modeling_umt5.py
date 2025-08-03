@@ -288,8 +288,8 @@ class UMT5Attention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
@@ -508,7 +508,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
 

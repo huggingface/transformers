@@ -117,7 +117,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub>=0.30.0,<1.0",
+    "huggingface-hub>=0.34.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jax>=0.4.1,<=0.4.13",
@@ -144,7 +144,7 @@ _deps = [
     "optax>=0.0.8,<=0.1.4",
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
-    "parameterized",
+    "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
     "phonemizer",
     "protobuf",
     "psutil",
@@ -188,7 +188,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=1.0.11",
+    "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.21,<0.22",
     "torch>=2.1",
     "torchaudio",
@@ -363,6 +363,7 @@ extras["testing"] = (
         "pydantic",
         "sentencepiece",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
+        "libcst",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -462,7 +463,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.54.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.55.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
