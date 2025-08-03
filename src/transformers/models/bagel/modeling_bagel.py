@@ -890,6 +890,7 @@ class BagelTextAttention(nn.Module):
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
+        self.is_causal = is_causal
 
         if mode == "und":
             query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim)
@@ -1274,17 +1275,11 @@ def token_type_ids_mask_function(token_type_ids, causal_mask):
     if token_type_ids is None:
         return causal_mask  # fallback
 
-    # Create a (B, L, L) mask for image tokens (wherever either dim is image)
     image_mask = (token_type_ids == 1)  # (B, L)
-
-    # Expand to (B, L, L)
     image_mask_row = image_mask.unsqueeze(2)
     image_mask_col = image_mask.unsqueeze(1)
-
-    # Set bi-directional attention
     full_image_attention = image_mask_row | image_mask_col
 
-    # Combine with causal mask
     return causal_mask | full_image_attention
 
 
@@ -1535,28 +1530,106 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         initial_noise = torch.rand(num_image_tokens, self.latent_channel*self.latent_patch_size**2)
         return {"initial_noise": initial_noise, "vae_position_ids": position_ids}
 
-    def forward_step(self, timestep, vae_position_ids):
-        
+    def forward_step(self, initial_latents, timestep, vae_position_ids,cfg_text_scale, cfg_img_scale,
+                      past_key_values, vae_token_indices,cfg_renorm_type):
+
+        # Lets assume that boi+latents+eoi will always be the structure in forward step.
+        length = initial_latents.shape[1]
+        vae_token_indices = torch.arange(1, length+1, device=initial_latents.device)
+        text_token_indices = torch.tensor([0,length+1], device=initial_latents.device)
+
         boi_token_id, eoi_token_id = 151652, 151653
-        # boi_embed = self.get_input_embeddings()(torch.tensor([boi_token_id])).expand(B, -1)
-        # eoi_embed = self.get_input_embeddings()(torch.tensor([eoi_token_id])).expand(B, -1)
-        timestep_pos_embed = self.model.latent_pos_embed(vae_position_ids)
+        boi_embed = self.get_input_embeddings()(torch.tensor([boi_token_id])).expand(1, -1)
+        eoi_embed = self.get_input_embeddings()(torch.tensor([eoi_token_id])).expand(1, -1)
+
+        timestep_pos_embed = self.latent_pos_embed(vae_position_ids)
         timestep_embeds = self.timestep_embedder(timestep)
-        return timestep_pos_embed
+        initial_latent = self.vae2llm_connector(initial_latents) + timestep_pos_embed + timestep_embeds
+
+        combined_embeds = torch.concat([boi_embed, initial_latent, eoi_embed], dim=1)
+
+        output = self.model.language_model(input_embeds=combined_embeds,
+                                           mode="gen",
+                                           vae_position_ids=vae_position_ids,
+                                           past_key_values=past_key_values,
+                                           is_causal=False,
+                                           vae_token_indices=vae_token_indices,
+                                           text_token_indices=text_token_indices,
+                                           )
+        v_t = self.llm2vae_connector(output.last_hidden_state)
+        v_t = v_t[vae_token_indices]
+
+        text_position_ids = torch.tensor([0]*length, device=initial_latents.device)
+        image_position_ids = torch.tensor([76]*length, device=initial_latents.device)
+
+        if cfg_text_scale > 1.0:
+            cfg_text_output = self.model.language_model(input_embeds=combined_embeds,
+                                                        mode='gen',
+                                                        vae_position_ids=vae_position_ids,
+                                                        past_key_values=past_key_values,
+                                                        is_causal=False,
+                                                        vae_token_indices=vae_token_indices,
+                                                        text_token_indices=text_token_indices,
+                                                        position_ids=text_position_ids
+                                                        )
+            cfg_text_v_t = self.llm2vae_connector(cfg_text_output.last_hidden_state)
+            cfg_text_v_t = cfg_text_v_t[vae_token_indices]
+
+        if cfg_img_scale > 1.0:
+            cfg_img_output = self.model.image_model(input_embeds=combined_embeds,
+                                                     mode='gen',
+                                                     vae_position_ids=vae_position_ids,
+                                                     past_key_values=past_key_values, # should of be of cfg
+                                                     is_causal=False,
+                                                     vae_token_indices=vae_token_indices,
+                                                     text_token_indices=text_token_indices,
+                                                     position_ids=image_position_ids
+                                                     )
+            cfg_img_v_t = self.llm2vae_connector(cfg_img_output.last_hidden_state)
+            cfg_img_v_t = cfg_img_v_t[vae_token_indices]
+
+        if cfg_text_scale > 1.0:
+            if cfg_renorm_type == "text_channel":
+                v_t_text_ = cfg_text_v_t + cfg_text_scale * (v_t - cfg_text_v_t)
+                norm_v_t = torch.norm(v_t, dim=-1, keepdim=True)
+                norm_v_t_text_ = torch.norm(v_t_text_, dim=-1, keepdim=True)
+                scale = (norm_v_t / (norm_v_t_text_ + 1e-8)).clamp(min=0, max=1.0)
+                v_t_text = v_t_text_ * scale
+                if cfg_img_scale > 1.0:
+                    v_t = cfg_img_v_t + cfg_img_scale * (v_t_text - cfg_img_v_t)
+                else:
+                    v_t = v_t_text
+            else:
+                v_t_text_ = cfg_text_v_t + cfg_text_scale * (v_t - cfg_text_v_t)
+
+                if cfg_img_scale > 1.0:
+                    v_t_ = cfg_img_v_t + cfg_img_scale * (v_t_text_ - cfg_img_v_t)
+                else:
+                    v_t_ = v_t_text_
+                norm_v_t = torch.norm(v_t)
+                norm_v_t_ = torch.norm(v_t_)
+                scale = (norm_v_t / (norm_v_t_ + 1e-8)).clamp(min=0, max=1.0)
+                v_t = v_t_ * scale
+        else:
+            # No CFG
+            pass
+
+        return v_t
+
 
     def generate_image(self, pixel_values, input_ids, attention_mask, generation_config, **kwargs):
 
         output = self.model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        cache = output.past_key_values
+        past_key_values = output.past_key_values
 
         prepared_latent_features = self.prepare_vae_latent(pixel_values)
         initial_latents = prepared_latent_features["initial_noise"]
-        
+
         # boi_embed = self.get_input_embeddings()(torch.tensor([boi_token_id])).expand(B, -1)
         # eoi_embed = self.get_input_embeddings()(torch.tensor([eoi_token_id])).expand(B, -1)
         # initial_latents = torch.cat([boi_embed, initial_latents, eoi_embed], dim=1)
 
-        position_ids = torch.tensor([cache.get_seq_length()] * initial_latents.shape[-1],device=initial_latents.device)
+        position_ids = torch.tensor([past_key_values.get_seq_length()] * initial_latents.shape[-1],device=initial_latents.device)
 
 
         num_steps = generation_config.num_timesteps
@@ -1574,9 +1647,9 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         delta_ts = time_schedule[:-1] - time_schedule[1:]
         time_schedule = time_schedule[:-1]
 
-
         for step_idx, t in enumerate(time_schedule):
             t_batch = torch.full((latents.shape[0],), t, device=device)
+            past_key_values_copy = past_key_values.copy(deep=True)
 
             if t > cfg_interval[0] and t <= cfg_interval[1]:
                 cfg_text_scale_ = cfg_text_scale
@@ -1584,7 +1657,7 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
             else:
                 cfg_text_scale_ = 1.0
                 cfg_img_scale_ = 1.0
-            velocity = self.forward_step(latents, t_batch, generation_config, cfg_text_scale_, cfg_img_scale_)
+            velocity = self.forward_step(latents, t_batch, generation_config, cfg_text_scale_, cfg_img_scale_, past_key_values_copy)
             latents = latents - velocity * delta_ts[step_idx]
 
         # latent = delta_ts.split((packed_seqlens - 2).tolist())
