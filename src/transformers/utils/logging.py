@@ -101,7 +101,7 @@ def _configure_library_root_logger() -> None:
             _default_handler.setFormatter(formatter)
 
         is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
-        library_root_logger.propagate = True if is_ci else False
+        library_root_logger.propagate = is_ci
 
 
 def _reset_library_root_logger() -> None:

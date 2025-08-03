@@ -1800,7 +1800,7 @@ class GenerationMixin(ContinuousMixin):
     def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "cache_position" in model_kwargs and model_kwargs["cache_position"]:
+        if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
             return model_kwargs
         if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
@@ -1867,7 +1867,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             decoder_mapped_modules = [
-                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+                module_name for module_name in execution_device_map if decoder_name in module_name
             ]
             # The decoder name may be present in `execution_device_map` in two forms:
             # a) each layer has a device mapping
@@ -2055,11 +2055,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(), "cache_implementation", None
+            self.config.get_text_config(decoder=True), "cache_implementation", None
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-                if generation_config.cache_implementation == "static" and not self._supports_static_cache:
+                if generation_config.cache_implementation == "static" and not self._can_compile_fullgraph:
                     raise ValueError(
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
@@ -2215,7 +2215,8 @@ class GenerationMixin(ContinuousMixin):
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
-        can_compile = valid_hardware and using_compilable_cache and self._supports_static_cache
+        # TODO @raushan `self._can_compile_fullgraph` can be removed and inferred from model arch (e.g. MoE doesn't support compile)
+        can_compile = valid_hardware and using_compilable_cache and self._can_compile_fullgraph
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -5274,7 +5275,7 @@ def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConf
     # Use a dictionary comprehension to gather attributes from all objects and concatenate them
     concatenated_data = {
         k: _concat([getattr(model_output, k) for model_output in model_outputs])
-        for k in model_output_cls.__dataclass_fields__.keys()
+        for k in model_output_cls.__dataclass_fields__
     }
 
     # Return a new object of the inferred class with the concatenated attributes

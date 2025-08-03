@@ -75,6 +75,8 @@ def handle_test_results(test_results):
 
     failed = 0
     success = 0
+    errors = 0
+    skipped = 0
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
@@ -83,10 +85,14 @@ def handle_test_results(test_results):
     for i, expression in enumerate(expressions):
         if "failed" in expression:
             failed += int(expressions[i - 1])
+        if "errors" in expression:
+            errors += int(expressions[i - 1])
         if "passed" in expression:
             success += int(expressions[i - 1])
+        if "skipped" in expression:
+            skipped += int(expressions[i - 1])
 
-    return failed, success, time_spent
+    return failed, errors, success, skipped, time_spent
 
 
 def handle_stacktraces(test_results):
@@ -1053,7 +1059,7 @@ if __name__ == "__main__":
     runner_not_available = False
     runner_failed = False
     # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
-    setup_failed = False if setup_status in ["skipped", "success"] else True
+    setup_failed = setup_status not in ["skipped", "success"]
 
     org = "huggingface"
     repo = "transformers"
@@ -1188,7 +1194,9 @@ if __name__ == "__main__":
     matrix_job_results = {
         matrix_name: {
             "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in test_categories},
+            "errors": 0,
             "success": 0,
+            "skipped": 0,
             "time_spent": "",
             "failures": {},
             "job_link": {},
@@ -1199,7 +1207,7 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    for matrix_name in matrix_job_results.keys():
+    for matrix_name in matrix_job_results:
         for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
@@ -1213,8 +1221,10 @@ if __name__ == "__main__":
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
                 matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
-                failed, success, time_spent = handle_test_results(artifact["stats"])
+                failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
                 matrix_job_results[matrix_name]["success"] += success
+                matrix_job_results[matrix_name]["errors"] += errors
+                matrix_job_results[matrix_name]["skipped"] += skipped
                 matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
@@ -1317,16 +1327,18 @@ if __name__ == "__main__":
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "errors": 0,
             "success": 0,
+            "skipped": 0,
             "time_spent": "",
             "error": False,
             "failures": {},
             "job_link": {},
         }
-        for key in additional_files.keys()
+        for key in additional_files
     }
 
-    for key in additional_results.keys():
+    for key in additional_results:
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True
@@ -1343,9 +1355,11 @@ if __name__ == "__main__":
             artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
-            failed, success, time_spent = handle_test_results(artifact["stats"])
+            failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
             additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
+            additional_results[key]["errors"] += errors
+            additional_results[key]["skipped"] += skipped
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
             if len(artifact["errors"]):

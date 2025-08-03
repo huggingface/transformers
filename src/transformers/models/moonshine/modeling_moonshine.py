@@ -266,7 +266,7 @@ class MoonshineAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+        is_causal = self.is_causal and attention_mask is None and q_len > 1
 
         if self.head_dim_padding > 0:
             query_states = torch.nn.functional.pad(query_states, (0, self.head_dim_padding))
@@ -462,7 +462,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):

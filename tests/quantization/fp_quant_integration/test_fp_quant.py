@@ -76,6 +76,7 @@ class FPQuantBaseTest(unittest.TestCase):
         """
         Setup quantized model
         """
+
         quantization_config = cls.getQuantizationConfig()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(

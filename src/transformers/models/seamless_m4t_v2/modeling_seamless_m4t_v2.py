@@ -611,9 +611,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = (
-                True if self.training and (dropout_probability < self.config.speech_encoder_layerdrop) else False
-            )
+            skip_the_layer = self.training and dropout_probability < self.config.speech_encoder_layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = layer(
@@ -930,8 +928,8 @@ class SeamlessM4Tv2Attention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -4208,7 +4206,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
               shape `(batch_size, sequence_length)` and `waveform_lengths` which gives the length of each sample.
             - If `generate_speech=False`, it will returns `ModelOutput`.
         """
-        if input_ids is None and input_features is None and kwargs.get("inputs_embeds", None) is None:
+        if input_ids is None and input_features is None and kwargs.get("inputs_embeds") is None:
             raise ValueError(
                 "`input_ids`,`input_features` and `inputs_embeds` are all empty. Make sure at least one of them is not."
             )

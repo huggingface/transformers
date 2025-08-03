@@ -577,7 +577,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     is_parallelizable = False
     supports_gradient_checkpointing = True
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
@@ -1072,7 +1072,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
                 - 0 for tokens that are **padded**.
         """
         composer_to_feature_token = generation_config.composer_to_feature_token
-        if composer not in composer_to_feature_token.keys():
+        if composer not in composer_to_feature_token:
             raise ValueError(
                 f"Please choose a composer from {list(composer_to_feature_token.keys())}. Composer received - {composer}"
             )

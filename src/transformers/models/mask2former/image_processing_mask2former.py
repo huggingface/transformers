@@ -50,7 +50,6 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -442,9 +441,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
@@ -486,21 +482,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         self.num_labels = num_labels
         self.pad_size = pad_size
 
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `Mask2FormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "size_divisibility" in kwargs:
-            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
-
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.to_dict
     def to_dict(self) -> dict[str, Any]:
         """
@@ -511,7 +492,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         image_processor_dict.pop("_max_size", None)
         return image_processor_dict
 
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     def resize(
         self,
@@ -722,7 +702,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             segmentation_map = segmentation_map.squeeze(0)
         return segmentation_map
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,

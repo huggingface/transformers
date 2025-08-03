@@ -757,7 +757,7 @@ class MT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]
@@ -898,7 +898,7 @@ class MT5Stack(MT5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.block))
         self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.first_device = "cpu" if "cpu" in self.device_map else "cuda:" + str(min(self.device_map.keys()))
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
         # Load onto devices
         for k, v in self.device_map.items():
