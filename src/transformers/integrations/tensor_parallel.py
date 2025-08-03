@@ -18,7 +18,6 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -151,7 +150,6 @@ str_to_torch_dtype = {
     "F64": torch.float64,
     "I64": torch.int64,
     "F8_E4M3": torch.float8_e4m3fn,
-    "F8_E5M2": torch.float8_e5m2,
 }
 
 
@@ -442,9 +440,9 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         if isinstance(outputs, torch.Tensor):
-            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
+            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
         else:
-            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
+            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
         return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -527,103 +525,6 @@ class ReplicateParallel(TensorParallelLayer):
         return param
 
 
-class VocabParallel(TensorParallelLayer):
-    """
-    VocabParallel is a tensor parallel layer that shards the embedding table along the last dimension.
-    No need to do input masking as embedding would be stored in `_MaskPartial` which handles it (https://github.com/pytorch/pytorch/blob/main/torch/distributed/tensor/_ops/_embedding_ops.py#L70)
-
-    This is useful if you want to train with long sequence length!
-    """
-
-    def __init__(
-        self,
-        *,
-        input_layouts: Optional[Placement] = None,
-        output_layouts: Optional[Placement] = None,
-        weight_dim_sharding: int = 0,
-        use_local_output: bool = True,
-        use_dtensor=True,
-    ):
-        super().__init__()
-        self.input_layouts = (input_layouts or Replicate(),)
-        self.desired_input_layouts = (Replicate(),)
-        self.output_layouts = (output_layouts or Replicate(),)
-        self.use_local_output = use_local_output
-        self.use_dtensor = use_dtensor
-        self.weight_dim_sharding = weight_dim_sharding
-
-    @staticmethod
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        input_tensor = inputs[0]
-        if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
-
-        if input_layouts != desired_input_layouts:
-            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
-        return input_tensor
-
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        # Shard the embedding table along dim 0 (vocab dimension)
-        if param_type == "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
-            placements = [Shard(-1)]
-        else:
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, self.weight_dim_sharding)
-            placements = [Shard(self.weight_dim_sharding)]
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, placements, run_check=False)
-        return nn.Parameter(parameter)
-
-    @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        if outputs.placements != output_layouts:
-            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
-        return outputs.to_local() if use_local_output else outputs
-
-
-class ReduceFromModelParallelRegion(torch.autograd.Function):
-    """
-    All-reduce in forward pass, identity in backward pass.
-    This is the `g` function in the paper: https://arxiv.org/abs/1909.08053
-    """
-
-    @staticmethod
-    def forward(ctx, x, device_mesh):
-        if device_mesh.size() == 1:
-            return x
-        if isinstance(x, tuple):
-            dist.all_reduce(x[0], op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
-        else:
-            dist.all_reduce(x, op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output, None
-
-
-class CopyToModelParallelRegion(torch.autograd.Function):
-    """
-    Copy in forward pass, all-reduce in backward pass.
-    This is the `f` function in the paper: https://arxiv.org/abs/1909.08053
-    """
-
-    @staticmethod
-    def forward(ctx, x, device_mesh):
-        ctx.device_mesh = device_mesh
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        if ctx.device_mesh.size() == 1:
-            return grad_output
-        dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=ctx.device_mesh.get_group())
-        return grad_output, None
-
-
 class ColwiseParallel(TensorParallelLayer):
     """
     General tensor parallel layer for transformers.
@@ -646,8 +547,15 @@ class ColwiseParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
+        # TODO: figure out dynamo support for instance method and switch this to instance method
         # annotate module input placements/sharding with input_layouts
         input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        # transform the input layouts to the desired layouts of ColwiseParallel
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=False)
         return input_tensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -656,19 +564,41 @@ class ColwiseParallel(TensorParallelLayer):
         # weight would become Shard(1)
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
         else:
+            shard = [Shard(-2)]
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
 
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-
+        if self.use_dtensor:
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        outputs = CopyToModelParallelRegion.apply(outputs, device_mesh)
-        return outputs
+        # outputs is a shard on last dimension DTensor, i.e. Shard(-1)
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=False)
+        # back to local tensor
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
+
+
+class PackedColwiseParallel(ColwiseParallel):
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
+        # means Colwise as Linear is input * weight^T + bias, where
+        # weight would become Shard(1)
+        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        if self.use_dtensor:
+            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
+        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -705,15 +635,23 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_dtensor = use_dtensor
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        if param_type == "bias":
-            parameter = param[:]
-        else:
+        # Rowwise shard weight to Shard(1), bias to Replicate(), weight be Shard(1)
+        # means Rowwise as nn.Linear is input * weight^T + bias, where
+        # weight would become Shard(0)
+        if param_type != "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
+            shard = [Shard(-1)]
+        else:
+            shard = [Replicate()]
+            parameter = param[:]
 
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
-
+        if self.use_dtensor:
+            parameter = DTensor.from_local(
+                parameter, device_mesh, shard, run_check=False, shape=empty_param.size(), stride=empty_param.stride()
+            )
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
     @staticmethod
@@ -721,18 +659,26 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(mod, "bias") and mod.bias is not None:
             mod._bias = mod.bias
             mod.bias = None
-        return inputs
+
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(placements=desired_input_layouts, async_op=True)
+        return input_tensor
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        """
-        We add the bias after outputs have been collected because the bias is replicated across shards.
-        If you add it before you are adding it as many time as the world size.
-        """
-        outputs = ReduceFromModelParallelRegion.apply(outputs, device_mesh)
+        # Rowwise sharding produces partial output, depending on output layouts:
+        # 1. to replicate -> allreduce
+        # 2. to shard -> reduce_scatter
+        if outputs.placements != output_layouts:
+            outputs = outputs.redistribute(placements=output_layouts, async_op=True)
         if hasattr(mod, "_bias"):
             outputs += mod._bias
-        return outputs
+        # back to local tensor if use_local_output is True
+        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -755,21 +701,6 @@ class RowwiseParallel(TensorParallelLayer):
                 partial(self._prepare_input_fn, self.input_layouts, self.desired_input_layouts),
                 partial(self._prepare_output_fn, self.output_layouts, self.use_local_output),
             )
-
-
-class PackedColwiseParallel(ColwiseParallel):
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        # NOTE(3outeille): need to be deprecated as no longer using dtensors
-        # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
-        # means Colwise as Linear is input * weight^T + bias, where
-        # weight would become Shard(1)
-        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        if self.use_dtensor:
-            parameter = DTensor.from_local(parameter, device_mesh, [Shard(-2)], run_check=False)
-        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
 class PackedRowwiseParallel(RowwiseParallel):
@@ -975,8 +906,6 @@ class ParallelInterface(GeneralInterface):
     # a new instance is created (in order to locally override a given entry)
     _global_mapping = (
         {
-            "vocab_parallel_rowwise": VocabParallel(weight_dim_sharding=0),
-            "vocab_parallel_colwise": VocabParallel(weight_dim_sharding=-2, output_layouts=Replicate()),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
@@ -1067,7 +996,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1091,9 +1020,9 @@ def shard_and_distribute_module(
 
     if dist.get_rank() == 0:
         if current_shard_plan is None:
-            logger.debug(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
+            logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
         else:
-            logger.debug(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
+            logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
     if current_shard_plan is not None:
         try:
@@ -1112,8 +1041,7 @@ def shard_and_distribute_module(
     # otherwise loading is crazy slow
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
-    if set_param:
-        setattr(module_to_tp, param_type, param)
+    setattr(module_to_tp, param_type, param)
     # module_to_tp.load_state_dict({param_type: param}, strict=False, assign=True)
     return param
 
@@ -1163,6 +1091,7 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
             _plan = "_ep_plan"
             model._tp_plan = getattr(model.config, "base_model_ep_plan", model._tp_plan).copy()
 
+    # now fetch my childrens
     for name, module in model.named_children():
         if plan := getattr(module, _plan, getattr(module, "tp_plan", None)):
             model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
@@ -1172,7 +1101,6 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 plan = getattr(module.config, "base_model_tp_plan", {})
             model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
-    logger.debug(f"Final TP plan for the model: {model._tp_plan}")
     if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
         for v in model._tp_plan.values():
             if v not in ALL_PARALLEL_STYLES:
@@ -1182,8 +1110,6 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
-                if plan is not None:
-                    logger.debug(f"adding hooks for {name},{plan}")
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
