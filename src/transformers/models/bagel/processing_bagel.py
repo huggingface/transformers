@@ -25,7 +25,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-
+import torch
 
 logger = logging.get_logger(__name__)
 
@@ -171,7 +171,7 @@ class BagelProcessor(ProcessorMixin):
             type_ids = [1 if token_id in image_related_token_ids else 0 for token_id in input_ids.tolist()]
             token_type_ids.append(type_ids)
 
-        data["token_type_ids"] = token_type_ids
+        data["token_type_ids"] = torch.tensor(token_type_ids)
 
         return BatchFeature(data=data)
 
