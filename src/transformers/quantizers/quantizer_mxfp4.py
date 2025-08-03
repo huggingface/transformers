@@ -227,7 +227,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
         # clean cache due to triton ops
-        if not torch.cuda.is_available():
+        if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
