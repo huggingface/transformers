@@ -442,9 +442,9 @@ class GatherParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         if isinstance(outputs, torch.Tensor):
-            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
+            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
         else:
-            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
+            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False, group=device_mesh.get_group())
         return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -594,7 +594,10 @@ class ReduceFromModelParallelRegion(torch.autograd.Function):
     def forward(ctx, x, device_mesh):
         if device_mesh.size() == 1:
             return x
-        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
+        if isinstance(x, tuple):
+            dist.all_reduce(x[0], op=dist.ReduceOp.SUM, group=device_mesh.get_group())
+        else:
+            dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return x
 
     @staticmethod
@@ -1086,9 +1089,9 @@ def shard_and_distribute_module(
 
     if dist.get_rank() == 0:
         if current_shard_plan is None:
-            logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
+            logger.debug(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
         else:
-            logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
+            logger.debug(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
     if current_shard_plan is not None:
         try:
@@ -1167,6 +1170,7 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 plan = getattr(module.config, "base_model_tp_plan", {})
             model._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
+    logger.debug(f"Final TP plan for the model: {model._tp_plan}")
     if model._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
         for v in model._tp_plan.values():
             if v not in ALL_PARALLEL_STYLES:
@@ -1176,6 +1180,8 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model._tp_plan, is_weight=False)
+                if plan is not None:
+                    logger.debug(f"adding hooks for {name},{plan}")
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
