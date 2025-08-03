@@ -1,5 +1,4 @@
 import copy
-import importlib.metadata
 import json
 import os
 from abc import ABC, abstractmethod
@@ -8,24 +7,21 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
-from packaging import version
 
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
 from .utils import (
     is_hqq_available,
-    is_optimum_quanto_available,
+    is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
     logging,
 )
 
 
-if is_optimum_quanto_available():
-    _optimum_quanto_version = version.parse(importlib.metadata.version("optimum-quanto"))
-    if _optimum_quanto_version > version.parse("0.2.5"):
-        from optimum.quanto import MaxOptimizer, qint2, qint4, quantize_weight
+if _is_quanto_greater_than_0_2_5 := is_quanto_greater("0.2.5", accept_dev=True):
+    from optimum.quanto import MaxOptimizer, qint2, qint4, quantize_weight
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
@@ -356,10 +352,9 @@ class SlidingWindowLayer(StaticLayer):
 
         cache_position = cache_kwargs.get("cache_position")
 
-        cumulative_length = self.cumulative_length
+        is_full = self.cumulative_length >= self.max_cache_len
         # Update it now that we saved the value above
         self.cumulative_length += key_states.shape[-2]
-        is_full = cumulative_length >= self.max_cache_len
 
         # Handle prefill phase when prompt length > sliding_window_size.
         # Note that we store cropped key/value states in the cache but return the full key/value states.
@@ -422,9 +417,9 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_position = cache_kwargs.get("cache_position")
 
         cumulative_length = self.cumulative_length
+        is_full = cumulative_length >= self.max_cache_len
         # Update it now that we saved the value above
         self.cumulative_length += key_states.shape[-2]
-        is_full = cumulative_length >= self.max_cache_len
 
         if is_full:
             full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
@@ -578,7 +573,7 @@ class QuantoQuantizedLayer(QuantizedLayer):
             residual_length=residual_length,
         )
 
-        if not is_optimum_quanto_available() or _optimum_quanto_version <= version.parse("0.2.5"):
+        if not _is_quanto_greater_than_0_2_5:
             raise ImportError(
                 "You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
                 "Detected version {optimum_quanto_version}."
