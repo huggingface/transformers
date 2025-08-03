@@ -1230,7 +1230,7 @@ class EvollaRMSNorm(nn.Module):
 class EvollaRotaryEmbedding(nn.Module):
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
-
+        # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
@@ -1241,11 +1241,17 @@ class EvollaRotaryEmbedding(nn.Module):
         self.config = config
         if self.rope_type == "default":
             base = self.config.rope_theta
-            partial_rotary_factor = self.config.partial_rotary_factor if hasattr(self.config, "partial_rotary_factor") else 1.0
-            head_dim = getattr(self.config, "head_dim", None) or self.config.hidden_size // self.config.num_attention_heads
+            partial_rotary_factor = (
+                self.config.partial_rotary_factor if hasattr(self.config, "partial_rotary_factor") else 1.0
+            )
+            head_dim = (
+                getattr(self.config, "head_dim", None) or self.config.hidden_size // self.config.num_attention_heads
+            )
             dim = int(head_dim * partial_rotary_factor)
             self.attention_scaling = 1.0
-            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+            inv_freq = 1.0 / (
+                base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+            )
         else:
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
             inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device=device)
