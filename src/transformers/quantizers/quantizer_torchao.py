@@ -100,14 +100,13 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.offload = False
         device_map = kwargs.get("device_map", None)
         if isinstance(device_map, dict):
-            if "disk" in device_map.values():
-                if self.pre_quantized:
+            if ("disk" in device_map.values() or "cpu" in device_map.values()) and len(device_map) > 1:
+                self.offload = True
+                if self.pre_quantized and "disk" in device_map.values():
                     raise ValueError(
                         "You are attempting to perform disk offload with a pre-quantized torchao model "
                         "This is not supported yet . Please remove the disk device from the device_map."
                     )
-                else:
-                    self.offload = True
         if self.pre_quantized:
             weights_only = kwargs.get("weights_only", None)
             if weights_only:
@@ -210,7 +209,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
             return False
-        elif param_device == "cpu" and self.offload:
+        elif param_device == "disk" and self.offload:
             # We don't quantize weights that we offload
             return False
         else:
