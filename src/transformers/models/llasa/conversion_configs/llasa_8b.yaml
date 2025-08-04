@@ -12,4 +12,4 @@ local_model_path:
 remote_repo:
   dtype: bfloat16   # as in original Hub model: https://huggingface.co/HKUSTAudio/Llasa-8B
   id: bezzam/Llasa-8B
-  private: true
+  private: false

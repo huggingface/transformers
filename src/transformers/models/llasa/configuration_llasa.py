@@ -26,20 +26,19 @@ class LlasaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlasaModel`]. It is used to instantiate an Llasa
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Llasa-7B.
-    e.g. [meta-llasa/Llasa-2-7b-hf](https://huggingface.co/meta-llasa/Llasa-2-7b-hf)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    defaults will yield a similar configuration to that of
+    [HKUSTAudio/Llasa-1B](https://huggingface.co/HKUSTAudio/Llasa-1B), which is similar to
+    [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct) but with additional
+    tokens for speech generation and understanding.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
+        vocab_size (`int`, *optional*, defaults to 128256):
             Vocabulary size of the Llasa model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LlasaModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
@@ -55,9 +54,8 @@ class LlasaConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Llasa 1 supports up to 2048 tokens,
-            Llasa 2 up to 4096, CodeLlama up to 16384.
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -69,7 +67,7 @@ class LlasaConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
+        eos_token_id (`int`, *optional*, defaults to 128261):
             End of stream token id.
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
@@ -125,19 +123,9 @@ class LlasaConfig(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-
-    ```python
-    >>> from transformers import LlasaModel, LlasaConfig
-
-    >>> # Initializing a Llasa llasa-7b style configuration
-    >>> configuration = LlasaConfig()
-
-    >>> # Initializing a model from the llasa-7b style configuration
-    >>> model = LlasaModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate of the audio data used for training the model.
+    """
 
     model_type = "llasa"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -181,8 +169,6 @@ class LlasaConfig(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        codebook_size=65536,
-        llasa_start_end_tokens=None,
         sampling_rate=16000,
         **kwargs,
     ):
@@ -221,22 +207,44 @@ class LlasaConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-
-        # Adjust vocab size to accommodate the new tokenizer
-        # https://github.com/zhenye234/LLaSA_training/blob/main/train_tts.py#L249-L251
         self.sampling_rate = sampling_rate
-        self.codebook_size = codebook_size
-        if llasa_start_end_tokens is None:
-            llasa_start_end_tokens = TTS_TOKENS_DICT
-        self.llasa_start_end_tokens = llasa_start_end_tokens
 
     @classmethod
-    def from_pretrained_llm(cls, *args, **kwargs):
+    def from_pretrained_llm(cls, codebook_size=65536, llasa_start_end_tokens=None, *args, **kwargs):
         """
         Load LLM config and add relevant Llasa tokens.
+
+        See https://github.com/zhenye234/LLaSA_training/blob/main/train_tts.py#L249-L251
+
+        Args:
+            codebook_size (int): Size of the codebook for speech tokens. Default is 65536.
+            llasa_start_end_tokens (dict, optional): Dictionary containing start and end tokens for Llasa processing.
+                Defaults to 8 tokens for text and speech generation/understanding: `<|TEXT_GENERATION_START|>`,
+                `<|TEXT_GENERATION_END|>`, `<|TEXT_UNDERSTANDING_START|>`, `<|TEXT_UNDERSTANDING_END|>`,
+                `<|SPEECH_GENERATION_START|>`, `<|SPEECH_GENERATION_END|>`, `<|SPEECH_UNDERSTANDING_START|>`,
+                `<|SPEECH_UNDERSTANDING_END|>`.
+
+        Example:
+        ```python
+        >>> from transformers import LlasaForCausalLM, LlasaConfig
+
+        >>> # Initializing Llasa with `meta-llama/Llama-3.2-1B-Instruct`
+        >>> configuration = LlasaConfig.from_pretrained_llm(
+        >>>     pretrained_model_name_or_path="meta-llama/Llama-3.2-1B-Instruct",
+        >>>     codebook_size=65536
+        >>> )
+
+        >>> # Initializing a model from the llasa-7b style configuration
+        >>> model = LlasaForCausalLM(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
         """
         config = super().from_pretrained(*args, **kwargs)
-        config.vocab_size += config.codebook_size + len(config.llasa_start_end_tokens)
+        if llasa_start_end_tokens is None:
+            llasa_start_end_tokens = TTS_TOKENS_DICT
+        config.vocab_size += codebook_size + len(llasa_start_end_tokens)
         return config
 
 

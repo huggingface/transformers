@@ -35,28 +35,32 @@ class LlasaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+# TODO use "audio_tokenizer_class" when merged https://github.com/huggingface/transformers/pull/37868
+# audio_tokenizer_class = "XCodec2Model"
 class LlasaProcessor(ProcessorMixin):
     r"""
-    Constructs a Llasa processor which wraps a [`DacFeatureExtractor`], [`LlasaTokenizer`], and a [`XCodec2Model`] into
-    a single processor. It inherits, the audio feature extraction, tokenizer, and audio encode/decode functio-
-    nalities. See [`~LlasaProcessor.__call__`], [`~LlasaProcessor.encode`], and [`~LlasaProcessor.decode`] for more
-    information.
+    Constructs a Llasa processor which wraps a [`LlasaTokenizer`] and a [`XCodec2Model`] into a single processor. It
+    inherits the tokenizer, and audio encode/decode functionalities. See [`~LlasaProcessor.__call__`],
+    [`~LlasaProcessor.encode`], and [`~LlasaProcessor.decode`] for more information.
 
     Args:
         tokenizer (`LlasaTokenizer`):
             An instance of [`LlasaTokenizer`]. The tokenizer is a required input.
-        audio_tokenizer (`XCodec2Model`):
-            An instance of [`XCodec2Model`] used to encode/decode audio into/from codebooks. It is is a required input.
+        audio_codec (`XCodec2Model`):
+            An instance of [`XCodec2Model`] used to encode/decode audio into/from codebooks. It is a required input.
+            TODO when `XCodec2Model` is merged, use `audio_tokenizer` instead of `audio_codec` (see Dia).
     """
 
     tokenizer_class = "LlasaTokenizer"
-    # TODO use "audio_tokenizer_class" when merged https://github.com/huggingface/transformers/pull/37868
-    # audio_tokenizer_class = "XCodec2Model"
     attributes = ["tokenizer"]
     optional_attributes = ["audio_codec"]
 
     def __init__(self, tokenizer, audio_codec):
         super().__init__(tokenizer, audio_codec=audio_codec)
+        # `save_pretrained` requires this attribute to exist
+        self.chat_template = None
+        # TODO remove when XCodec2Model from transformers is merged
+        self.audio_tokenizer = audio_codec
 
     def __call__(
         self,

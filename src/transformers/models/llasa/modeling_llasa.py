@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llasa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 from typing import Callable, Optional, Union
 
 import torch
@@ -248,7 +249,11 @@ class LlasaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bare Llasa model that outputs raw hidden-states without any specific head on top.
+    """
+)
 class LlasaPreTrainedModel(PreTrainedModel):
     config: LlasaConfig
     base_model_prefix = "model"
@@ -301,7 +306,11 @@ class LlasaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bare Llasa model that outputs raw hidden-states without any specific head on top.
+    """
+)
 class LlasaModel(LlasaPreTrainedModel):
     def __init__(self, config: LlasaConfig):
         super().__init__(config)
@@ -380,7 +389,11 @@ class LlasaModel(LlasaPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The Llasa model consists of a Llama model with a modified configuration to support the generation of speech tokens.
+    """
+)
 class LlasaForCausalLM(LlasaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -417,22 +430,8 @@ class LlasaForCausalLM(LlasaPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, LlasaForCausalLM
-
-        >>> model = LlasaForCausalLM.from_pretrained("meta-llasa/Llasa-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llasa/Llasa-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        Forward pass for the Llasa model.
+        """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -67,7 +67,7 @@ model_repo = "bezzam/Llasa-1B"
 # model_repo = "bezzam/Llasa-8B"
 torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# load tokenizer
+# load processor (tokenizer + audio codec)
 processor = LlasaProcessor(
     LlasaTokenizer.from_pretrained(model_repo),
     XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval().to(torch_device)

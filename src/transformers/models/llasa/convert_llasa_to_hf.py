@@ -16,8 +16,9 @@ python src/transformers/models/llasa/convert_llasa_to_hf.py -cn llasa_8b
 
 import hydra
 import torch
+from xcodec2.modeling_xcodec2 import XCodec2Model
 
-from transformers import AutoModelForCausalLM, LlasaConfig, LlasaForCausalLM, LlasaTokenizer
+from transformers import AutoModelForCausalLM, LlasaConfig, LlasaForCausalLM, LlasaProcessor, LlasaTokenizer
 
 
 @hydra.main(version_base=None, config_path="conversion_configs", config_name="llasa_1b")
@@ -36,8 +37,13 @@ def conversion(config):
     )
     speech_end_id = tokenizer.convert_tokens_to_ids(tokenizer.llasa_token["speech_generation_end"])
 
+    # -- processor
+    processor = LlasaProcessor(tokenizer, XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval())
+
     # -- model config and model itself
-    model_config = LlasaConfig.from_pretrained_llm(config.llm_model, **config.original_model)
+    model_config = LlasaConfig.from_pretrained_llm(
+        pretrained_model_name_or_path=config.llm_model, **config.original_model
+    )
 
     # -- generation configuration
     model_config.eos_token_id = speech_end_id
@@ -56,12 +62,23 @@ def conversion(config):
     # -- save converted model
     if config.remote_repo.id:
         print(f"Pushing a {model.__class__.__name__} to Hugging Face Hub: {config.remote_repo.id}")
-        model.push_to_hub(config.remote_repo.id, private=config.remote_repo.private, use_temp_dir=True)
+        model.push_to_hub(
+            config.remote_repo.id, private=config.remote_repo.private, use_temp_dir=True, tags=config.remote_repo.tags
+        )
         print(f"Pushing a {tokenizer.__class__.__name__} to Hugging Face Hub: {config.remote_repo.id}")
-        tokenizer.push_to_hub(config.remote_repo.id, private=True, use_temp_dir=True)
+        tokenizer.push_to_hub(
+            config.remote_repo.id, private=config.remote_repo.private, use_temp_dir=True, tags=config.remote_repo.tags
+        )
+        print(f"Pushing a {processor.__class__.__name__} to Hugging Face Hub: {config.remote_repo.id}")
+        processor.push_to_hub(
+            config.remote_repo.id, private=config.remote_repo.private, use_temp_dir=True, tags=config.remote_repo.tags
+        )
     if config.local_model_path:
         model.save_pretrained(config.local_model_path)
+        tokenizer.save_pretrained(config.local_model_path)
+        processor.save_pretrained(config.local_model_path)
         print(f"Model saved locally at: {config.local_model_path}")
+    print("Conversion completed successfully.")
 
 
 if __name__ == "__main__":
