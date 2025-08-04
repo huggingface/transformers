@@ -146,7 +146,7 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndar
             Video inputs to turn into a list of videos.
     """
 
-    if not isinstance(videos[0], (list, tuple)):
+    if not (isinstance(videos[0], (list, tuple)) and isinstance(videos[0][0], (PIL.Image.Image))):
         return videos
 
     video_converted = []
@@ -169,35 +169,34 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "str
         videos (`VideoInput`):
             Video inputs to turn into a list of videos.
     """
-    # Check for `str` in case of URL/local path and early exit
-    if isinstance(videos, list):
-        if isinstance(videos[0], list) and isinstance(videos[0][0], list) and isinstance(videos[0][0][0], str):
+    # Early exit for deeply nested list of image frame paths. We shouldn't flatten them
+    try:
+        if isinstance(videos[0][0][0], str):
             return [image_paths for sublist in videos for image_paths in sublist]
-        if isinstance(videos[0], list) and isinstance(videos[0][0], str):
-            return [video for sublist in videos for video in sublist]
-        elif isinstance(videos[0], str):
-            return videos
-    elif isinstance(videos, str):
-        return [videos]
+    except (IndexError, TypeError):
+        pass
 
-    # Check if videos are correctly formatted, and are either 4D array or nested list of `PIL` frames
-    if not valid_videos:
+    if isinstance(videos, str) or is_valid_video(videos):
+        return convert_pil_frames_to_video([videos])
+    # only one frame passed, thus we unsqueeze time dim
+    elif is_valid_image(videos):
+        return [np.array(videos)[None, ...]]
+    elif not isinstance(videos, list):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
             f" type {type(videos)}."
         )
 
-    if is_batched_video(videos):
-        pass
-    elif is_valid_video(videos):
-        videos = [videos]
-    # only one frame passed, thus we unsqueeze time dim
-    elif is_valid_image(videos):
-        videos = [np.array(videos)[None, ...]]
-    # nested batch so we need to unflatten
-    elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
-        videos = [video for sublist in videos for video in sublist]
-    return convert_pil_frames_to_video(videos)
+    # Recursively flatten any nested structure
+    flat_videos_list = []
+    for item in videos:
+        if isinstance(item, str) or is_valid_video(item):
+            flat_videos_list.append(item)
+        elif isinstance(item, list):
+            flat_videos_list.extend(make_batched_videos(item))
+
+    flat_videos_list = convert_pil_frames_to_video(flat_videos_list)
+    return flat_videos_list
 
 
 def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):

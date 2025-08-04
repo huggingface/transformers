@@ -117,6 +117,8 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
             Whether to convert the video to RGB.
+        video_metadata (`VideoMetadata`, *optional*):
+            Metadata of the video containing information about total duration, fps and total number of frames.
         do_sample_frames (`int`, *optional*, defaults to `self.do_sample_frames`):
             Whether to sample frames from the video before processing or to process the whole video.
         num_frames (`int`, *optional*, defaults to `self.num_frames`):
@@ -362,11 +364,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         device = kwargs.pop("device")
         video_metadata = kwargs.pop("video_metadata")
 
-        if do_sample_frames:
-            sample_indices_fn = partial(self.sample_frames, **kwargs)
-        else:
-            sample_indices_fn = None
-
+        sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
         videos, video_metadata = self._decode_and_sample_videos(
             videos,
             video_metadata=video_metadata,
