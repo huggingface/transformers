@@ -208,7 +208,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 cls.model_checkpoint,
                 config=config,
                 torch_dtype=torch_dtype,
-                device_map=torch_device,
+                device_map="auto",
             )
         return cls.model
 
