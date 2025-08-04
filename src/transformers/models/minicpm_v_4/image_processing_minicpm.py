@@ -33,6 +33,7 @@ from transformers.image_utils import (
     is_batched,
     is_torch_tensor,
     make_list_of_images,
+    make_nested_list_of_images,
     to_numpy_array,
     valid_images
 )
@@ -381,12 +382,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             return_tensors: Optional[Union[str, TensorType]] = None,
             **kwargs
         ) -> MiniCPMVBatchFeature:
-        if isinstance(images, Image.Image):
-            images_list = [[images]]
-        elif isinstance(images[0], Image.Image):
-            images_list = [images]
-        else:
-            images_list = images
+        images_list = make_nested_list_of_images(images)
 
         new_images_list = []
         image_sizes_list = []

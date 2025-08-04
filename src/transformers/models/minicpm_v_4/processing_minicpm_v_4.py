@@ -103,10 +103,6 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         result_text = []
         for result in output_ids:
             result = result[result != 0]
-            if result[0] == self.tokenizer.bos_id:
-                result = result[1:]
-            if result[-1] == self.tokenizer.eos_id:
-                result = result[:-1]
             result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
         # return self.tokenizer.batch_decode(*args, **kwargs)
@@ -119,10 +115,6 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         """
         result = args[0]
         result = result[result != 0]
-        if result[0] == self.tokenizer.bos_id:
-            result = result[1:]
-        if result[-1] == self.tokenizer.eos_id or (hasattr(self.tokenizer, "eot_id") and result[-1] == self.tokenizer.eot_id):
-            result = result[:-1]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
 
     def _convert(
