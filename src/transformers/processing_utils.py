@@ -42,6 +42,7 @@ from .video_utils import VideoMetadata
 if is_vision_available():
     from .image_utils import PILImageResampling
 
+
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -56,6 +57,7 @@ from .utils import (
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
+    is_torch_available,
     TensorType,
     cached_file,
     copy_func,
@@ -63,7 +65,6 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     list_repo_templates,
     logging,
 )
