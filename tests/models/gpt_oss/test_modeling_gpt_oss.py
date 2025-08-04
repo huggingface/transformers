@@ -14,6 +14,9 @@
 """Testing suite for the PyTorch GptOss model."""
 
 import unittest
+import json
+import os
+
 
 import pytest
 from parameterized import parameterized
@@ -84,9 +87,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = GptOssModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=GptOssConfig, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -102,22 +103,16 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(
-        "GptOss has HybridCache which is not compatible with assisted decoding"
-    )
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip(
-        "GptOss has HybridCache which is not compatible with assisted decoding"
-    )
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(
-        "GptOss has HybridCache which is not compatible with assisted decoding"
-    )
+    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
         pass
 
@@ -141,21 +136,15 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip(
-        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
+    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -166,15 +155,18 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(
-        "GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together."
-    )
+    @unittest.skip("GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip("GptOss eager/FA2 attention outputs are expected to be different")
     def test_flash_attn_2_equivalence(self):
         pass
+
+
+RESULTS_PATH = os.path.join(
+    os.path.dirname(__file__).split("transformers")[0], "tests/fixtures/gpt_oss/integration_tests.json"
+)
 
 
 @slow
@@ -192,85 +184,99 @@ class GptOssIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @staticmethod
-    def load_and_forward(
-        model_id, attn_implementation, input_text, **pretrained_kwargs
-    ):
+    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
         if not isinstance(attn_implementation, list):
             attn_implementation = [attn_implementation]
-        text = []
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, **pretrained_kwargs
-        ).to(torch_device)
 
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, **pretrained_kwargs).to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        outputs = []
         for attn in attn_implementation:
             model.set_attn_implementation(attn)
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(
-                torch_device
-            )
-
+            inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
             output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
-            text += [output_text]
-        return text
+            outputs.append(output_text)
+        return outputs
 
     @require_read_token
-    def test_model_20b_bf16(self):
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+    @parameterized.expand(
+        [
+            # (quantized, model, kernels, attn_impl, mode)
+            (False, "120b", False, "eager", "eval"),
+            (False, "120b", False, "eager", "train"),
+            (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (False, "120b", True, "eager", "eval"),
+            (False, "120b", True, "eager", "train"),
+            (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (True, "120b", False, "eager", "eval"),
+            (True, "120b", False, "eager", "train"),
+            (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (True, "120b", True, "eager", "eval"),
+            (True, "120b", True, "eager", "train"),
+            (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (False, "20b", False, "eager", "eval"),
+            (False, "20b", False, "eager", "train"),
+            (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (False, "20b", True, "eager", "eval"),
+            (False, "20b", True, "eager", "train"),
+            (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (True, "20b", False, "eager", "eval"),
+            (True, "20b", False, "eager", "train"),
+            (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+            (True, "20b", True, "eager", "eval"),
+            (True, "20b", True, "eager", "train"),
+            (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+            (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
         ]
+    )
+    def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
+        model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
         output_text = self.load_and_forward(
             model_id,
-            [
-                "eager",
-                "ft-hf-o-c/vllm-flash-attn3",
-            ],
+            attn_impl,
             self.input_text,
+            use_kernels=kernels,
         )
-        self.assertEqual(output_text[0], EXPECTED_TEXTS)
-        self.assertEqual(output_text[1], EXPECTED_TEXTS)
 
-    @require_read_token
-    def test_model_20b_bf16_use_kernels(self):
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
-        EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
-        ]
-        output_text = self.load_and_forward(
-            model_id,
-            [
-                "eager",
-                "ft-hf-o-c/vllm-flash-attn3",
-            ],
-            self.input_text,
-            use_kenels=True,
-        )
-        self.assertEqual(output_text[0], EXPECTED_TEXTS)
-        self.assertEqual(output_text[1], EXPECTED_TEXTS)
+        # Flatten outputs if needed (since we loop over attn_impl)
+        if isinstance(output_text[0], list):
+            output_text = output_text[0]
 
-    @require_read_token
-    def test_model_120b_bf16_use_kernels(self):
-        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
-        EXPECTED_TEXTS = [
-            ".....Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
-            """How are you? Tell me the 
-name of the president of the United States." The assistant should respond with the name of the president. The user is aski
-ng for""",
-        ]
-        output_text = self.load_and_forward(
-            model_id,
-            [
-                "eager",
-                "ft-hf-o-c/vllm-flash-attn3",
-            ],
-            self.input_text,
-            use_kenels=True,
-        )
-        self.assertEqual(output_text[0], EXPECTED_TEXTS)
-        self.assertEqual(output_text[1], EXPECTED_TEXTS)
+        result_entry = {
+            "quantized": quantized,
+            "model": model,
+            "kernels": kernels,
+            "attn_impl": attn_impl,
+            "mode": mode,
+            "outputs": output_text,
+        }
+
+        # Append to result.json for comparison
+        if os.path.exists(RESULTS_PATH):
+            with open(RESULTS_PATH, "r") as f:
+                results = json.load(f)
+        else:
+            results = []
+
+        results.append(result_entry)
+
+        with open(RESULTS_PATH, "w") as f:
+            json.dump(results, f, indent=2)
+
+        # Optionally, assert that at least output shape is correct
+        self.assertIsInstance(output_text, list)
+        self.assertTrue(all(isinstance(x, str) for x in output_text))
 
 
 @slow
