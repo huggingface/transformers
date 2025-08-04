@@ -29,9 +29,9 @@ rendered properly in your Markdown viewer.
 
 The Ernie 4.5 model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
 This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
-model without mixture of experts (moe) with 0.3B parameters in total. It uses the standard [Llama](./llama.md) at its core.
+model without mixture of experts (moe) with 0.3B parameters in total. It uses the standard [Llama](./llama) at its core.
 
-Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe.md).
+Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe).
 
 <div class="flex justify-center">
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
