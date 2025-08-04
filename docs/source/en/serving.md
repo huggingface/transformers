@@ -20,6 +20,12 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 
 Apart from that you can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
 
+In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
+- [Jan (text and MCP user interface)](./jan.md)
+- [Cursor (IDE)](./cursor.md)
+- [Open WebUI (text, image, speech user interface)](./open_webui.md)
+- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents.md)
+
 ## Serve CLI
 
 > [!WARNING]

@@ -115,8 +115,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: serving
-    title: Serving
   - local: transformers_as_backend
     title: Inference server backends
   title: Inference
