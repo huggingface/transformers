@@ -410,6 +410,7 @@ extras["dev-torch"] = (
     + extras["modelcreation"]
     + extras["onnxruntime"]
     + extras["num2words"]
+    + deps_list("einops")
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
