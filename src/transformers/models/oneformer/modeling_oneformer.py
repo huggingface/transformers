@@ -2757,7 +2757,7 @@ class OneFormerTaskModel(nn.Module):
 
 @auto_docstring
 class OneFormerPreTrainedModel(PreTrainedModel):
-    config_class = OneFormerConfig
+    config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

@@ -754,9 +754,9 @@ def get_parameters(model: nn.Module) -> Iterable[torch.Tensor]:
     Returns:
         Iterable[torch.Tensor]: An iterator over all parameters in the model
     """
-    for name, module in model._modules.items():
+    for module in model._modules.values():
         # Look for parameters in module attributes
-        for attr_name, attr in module.__dict__.items():
+        for attr in module.__dict__.values():
             if isinstance(attr, torch.Tensor) and attr.requires_grad:
                 yield attr
         # Recursively get parameters from submodules

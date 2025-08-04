@@ -56,8 +56,7 @@ from ..gemma2.modeling_gemma2 import (
 )
 
 
-# TODO(bzhanggo): figure out these documentations
-_CHECKPOINT_FOR_DOC = "google/t5gemma-placeholder"
+_CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
 
 
 if is_torch_flex_attn_available():
@@ -76,10 +75,10 @@ class T5GemmaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to a hypothetical balanced Gemma2 encoder-decoder model.
-    e.g. [google/t5gemma-placeholder](https://huggingface.co/google/t5gemma-placeholder)
+    e.g. [google/t5gemma-2b-2b-prefixlm-it](https://huggingface.co/google/t5gemma-2b-2b-prefixlm-it)
     ```python
     >>> from transformers import T5GemmaConfig, T5GemmaModel
-    >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-placeholder")
+    >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
     Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
@@ -99,6 +98,8 @@ class T5GemmaConfig(PretrainedConfig):
             The dropout ratio for attention.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether tie input and output embeddings.
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
             Will be passed to the PretrainedConfig base class.
     """
@@ -147,6 +148,7 @@ class T5GemmaConfig(PretrainedConfig):
         classifier_dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,
         tie_word_embeddings: bool = True,
+        vocab_size: int = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -192,6 +194,9 @@ class T5GemmaConfig(PretrainedConfig):
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
+        # Used in pipeline generation.
+        self.vocab_size = vocab_size
+
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
             "output_hidden_states",
@@ -199,6 +204,7 @@ class T5GemmaConfig(PretrainedConfig):
             "_attn_implementation",
             "dropout_rate",
             "attention_dropout",
+            "vocab_size",
         ]
 
         if key in shared_attr_with_submodules:
@@ -285,8 +291,8 @@ class T5GemmaCrossAttention(Gemma2Attention):
                 key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
                 past_key_value.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -472,25 +478,16 @@ class T5GemmaLMHead(nn.Module):
 
 @auto_docstring
 class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
-    config_class = T5GemmaConfig
+    config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5GemmaBlock"]
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
+        Gemma2PreTrainedModel._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, T5GemmaRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, T5GemmaClassificationHead):
+        if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
             module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
@@ -567,12 +564,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     @check_model_inputs
     def forward(

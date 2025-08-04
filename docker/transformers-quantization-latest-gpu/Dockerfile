@@ -26,7 +26,7 @@ RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; 
 RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -77,6 +77,9 @@ RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submod
 # # TODO: create a new workflow to test them
 # RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
 # RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
+
+# Add fp-quant for quantization testing
+RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors

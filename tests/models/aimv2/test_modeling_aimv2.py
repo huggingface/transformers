@@ -478,7 +478,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -516,7 +516,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -598,7 +598,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 class Aimv2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-224-lit-HF"
+        model_name = "apple/aimv2-large-patch14-224-lit"
         model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
@@ -622,8 +622,8 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         )
 
         # handle device
-        expected_logits = torch.tensor([[34.2415, 24.6724]]).to(model.device)
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        expected_logits = torch.tensor([[33.3550, 26.4255]]).to(model.device)
+        torch.testing.assert_close(outputs.logits_per_image, expected_logits, atol=1e-3, rtol=1e-3)
 
 
 @require_vision
@@ -631,7 +631,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
 class Aimv2VisionModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-224-HF"
+        model_name = "apple/aimv2-large-patch14-224"
 
         model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
@@ -662,7 +662,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_for_native_resolution(self):
-        model_name = "yaswanthgali/aimv2-large-patch14-native-HF"
+        model_name = "apple/aimv2-large-patch14-native"
 
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)

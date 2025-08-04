@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from typing import Callable, Optional
 
 import torch
@@ -27,7 +28,6 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..cohere.modeling_cohere import (
     CohereAttention,
     CohereDecoderLayer,
@@ -237,14 +237,29 @@ class Cohere2Config(PretrainedConfig):
             **kwargs,
         )
 
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)
+
         if self.layer_types is None:
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-            sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
+            self._sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
             self.layer_types = [
-                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+    @property
+    def sliding_window_pattern(self):
+        warnings.warn(
+            "The `sliding_window_pattern` attribute is deprecated and will be removed in v4.55.0.",
+            FutureWarning,
+        )
+        return self._sliding_window_pattern
+
+    @sliding_window_pattern.setter
+    def sliding_window_pattern(self, value):
+        self._sliding_window_pattern = value
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
@@ -332,7 +347,6 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         super().__init__(config, layer_idx)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -361,7 +375,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
 
 
 class Cohere2PreTrainedModel(CoherePreTrainedModel):
-    config_class = Cohere2Config
+    config: Cohere2Config
 
 
 class Cohere2Model(Gemma2Model):

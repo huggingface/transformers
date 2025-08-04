@@ -589,7 +589,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
         for token in self._added_tokens_decoder.values():
-            if token not in self.tokens_trie._tokens:
+            if token.content not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
         for token in unique_no_split_tokens:
             if token not in self.tokens_trie._tokens:

@@ -270,7 +270,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ].shape[-1]
 
         # Load model
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"

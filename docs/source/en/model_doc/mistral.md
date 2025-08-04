@@ -139,6 +139,10 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 [[autodoc]] MistralConfig
 
+## MistralCommonTokenizer
+
+[[autodoc]] MistralCommonTokenizer
+
 ## MistralModel
 
 [[autodoc]] MistralModel

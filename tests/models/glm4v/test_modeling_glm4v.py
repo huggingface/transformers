@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
+import copy
 import gc
 import unittest
 
@@ -236,7 +237,26 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    # RoPE index doesn't match when using embeddings
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+            del inputs["image_grid_thw"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+            with torch.no_grad():
+                model(**inputs)[0]
+
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -351,6 +371,44 @@ class Glm4vIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    def test_small_model_integration_test_with_video(self):
+        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", max_image_size={"longest_edge": 50176})
+        model = Glm4vForConditionalGeneration.from_pretrained(
+            "THUDM/GLM-4.1V-9B-Thinking", torch_dtype=torch.float16, device_map="auto"
+        )
+        questions = ["Describe this video."] * 2
+        video_urls = [
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        ] * 2
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": video_url,
+                        },
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            for question, video_url in zip(questions, video_urls)
+        ]
+        inputs = processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
+        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = [
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
+            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
+        ]  # fmt: skip
+        self.assertEqual(
+            processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
     def test_small_model_integration_test_expand(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", torch_dtype="auto", device_map="auto"
@@ -419,7 +477,7 @@ class Glm4vIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky build, thick fur, and a face that's",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
             "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
         ]  # fmt: skip
         self.assertEqual(
