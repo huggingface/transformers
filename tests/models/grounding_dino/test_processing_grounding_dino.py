@@ -94,17 +94,17 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return [labels, labels_longer] + [labels] * (batch_size - 2)
 
     @classmethod
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
     def get_tokenizer(cls, **kwargs):
         return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
     def get_rust_tokenizer(cls, **kwargs):
         return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
     def get_image_processor(cls, **kwargs):
         return GroundingDinoImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
@@ -145,7 +145,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_box_slice = torch.tensor([0.6908, 0.4354, 1.0737, 1.3947])
         torch.testing.assert_close(post_processed[0]["boxes"][0], expected_box_slice, rtol=1e-4, atol=1e-4)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
@@ -171,7 +171,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_slow.image_processor, GroundingDinoImageProcessor)
         self.assertIsInstance(processor_fast.image_processor, GroundingDinoImageProcessor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_additional_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             processor = GroundingDinoProcessor(
@@ -194,7 +194,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, GroundingDinoImageProcessor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDino
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDino
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -209,7 +209,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer with CLIP->GroundingDino
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_tokenizer with CLIP->GroundingDino
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -244,7 +244,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer_decode with CLIP->GroundingDino
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_tokenizer_decode with CLIP->GroundingDino
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -258,7 +258,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDino
+    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDino
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
