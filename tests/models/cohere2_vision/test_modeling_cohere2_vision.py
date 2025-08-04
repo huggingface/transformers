@@ -197,15 +197,17 @@ class Cohere2IntegrationTest(unittest.TestCase):
     def get_model(cls):
         # Use 4-bit on T4
         device_type, major, _ = get_device_properties()
-        load_in_4bit = (device_type == "cuda") and (major < 8)
-        torch_dtype = None if load_in_4bit else torch.float16
+        torch_dtype = torch.float16
+
+        config = Cohere2VisionConfig.from_pretrained(cls.model_checkpoint)
+        config.text_config.num_hidden_layers = 4
+        config.text_config.layer_types = config.text_config.layer_types[:4]
 
         if cls.model is None:
             cls.model = Cohere2VisionForConditionalGeneration.from_pretrained(
                 cls.model_checkpoint,
-                device_map="auto",
+                config=config,
                 torch_dtype=torch_dtype,
-                load_in_4bit=load_in_4bit,
             )
         return cls.model
 
