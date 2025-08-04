@@ -87,8 +87,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.llm = Qwen2ForCausalLM(config)
-        self.llm.prepare_inputs_for_generation = types.MethodType(
-            prepare_inputs_for_generation, self.llm)  # patch llm
+        self.llm.prepare_inputs_for_generation = types.MethodType(prepare_inputs_for_generation, self.llm)  # patch llm
 
         self.embed_dim = self.llm.config.hidden_size
         self.scale_emb = getattr(self.llm.config, "scale_emb", 1.0)
@@ -97,17 +96,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         if self.config.init_vision:
             self.vpm = self.init_vision_module()
             self.vision_dim = self.vpm.embed_dim
-            self.resampler = self.init_resampler(
-                self.embed_dim, self.vision_dim)
+            self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
 
         # init audio module
         if self.config.init_audio:
             self.apm = self.init_audio_module()
             audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
-            self.audio_avg_pooler = nn.AvgPool1d(
-                self.config.audio_pool_step, stride=self.config.audio_pool_step)
-            self.audio_projection_layer = MultiModalProjector(
-                in_dim=audio_output_dim, out_dim=self.embed_dim)
+            self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
+            self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
             self.audio_encoder_layer = -1
 
         # init tts module
@@ -117,15 +113,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
 
-        image_processor = AutoImageProcessor.from_pretrained(
-            config._name_or_path)
-        feature_extractor = WhisperFeatureExtractor.from_pretrained(
-            config._name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(
-            config._name_or_path, trust_remote_code=True)
+        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
+        feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
         image_processor.tokenizer = tokenizer
-        self.processor = MiniCPM_o_2_6Processor(
-            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
+        self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
@@ -155,23 +147,18 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         from .processing_minicpm_o_2_6 import ChatTTSProcessor
 
         if tts_text_tokenizer_path is None:
-            tts_text_tokenizer_path = os.path.join(
-                self.config._name_or_path, "assets/chattts_tokenizer")
+            tts_text_tokenizer_path = os.path.join(self.config._name_or_path, "assets/chattts_tokenizer")
         if not os.path.exists(tts_text_tokenizer_path):
             # try from hf model_id
             tts_text_tokenizer_path = "openbmb/chattts_tokenizer"
 
-        tts_text_tokenizer = BertTokenizerFast.from_pretrained(
-            tts_text_tokenizer_path)
-        self.tts_processor = ChatTTSProcessor(
-            text_tokenizer=tts_text_tokenizer)
+        tts_text_tokenizer = BertTokenizerFast.from_pretrained(tts_text_tokenizer_path)
+        self.tts_processor = ChatTTSProcessor(text_tokenizer=tts_text_tokenizer)
 
         if vocos_ckpt_path is None:
-            vocos_ckpt_path = os.path.join(
-                self.config._name_or_path, "assets/Vocos.pt")
+            vocos_ckpt_path = os.path.join(self.config._name_or_path, "assets/Vocos.pt")
         if not os.path.exists(vocos_ckpt_path):
-            vocos_ckpt_path = hf_hub_download(
-                repo_id="openbmb/MiniCPM-o-2_6", subfolder="assets", filename="Vocos.pt")
+            vocos_ckpt_path = hf_hub_download(repo_id="openbmb/MiniCPM-o-2_6", subfolder="assets", filename="Vocos.pt")
 
         assert os.path.exists(vocos_ckpt_path)
         self.vocos = self.initialize_vocos(vocos_ckpt_path)
@@ -193,13 +180,10 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         )
         head = instantiate_class(
             args=(),
-            init={"class_path": "vocos.heads.ISTFTHead", "init_args": {
-                "dim": 512, "n_fft": 1024, "hop_length": 256}},
+            init={"class_path": "vocos.heads.ISTFTHead", "init_args": {"dim": 512, "n_fft": 1024, "hop_length": 256}},
         )
-        vocos = Vocos(feature_extractor, backbone, head).to(
-            "cuda").eval().to(torch.float32)
-        vocos.load_state_dict(torch.load(
-            ckpt_path, weights_only=True, mmap=True))
+        vocos = Vocos(feature_extractor, backbone, head).to("cuda").eval().to(torch.float32)
+        vocos.load_state_dict(torch.load(ckpt_path, weights_only=True, mmap=True))
         return vocos
 
     def init_vision_module(self):
@@ -289,8 +273,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             starts = ((chunk_idx - num_left_chunks).clamp(min=0)) * chunk_size
         ends = ((chunk_idx + 1) * chunk_size + num_lookhead).clamp(max=size)
 
-        jdx = torch.arange(size, device=device).view(
-            1, size).expand(size, size)
+        jdx = torch.arange(size, device=device).view(1, size).expand(size, size)
         starts_mat = starts.view(size, 1).expand(size, size)
         ends_mat = ends.view(size, 1).expand(size, size)
 
@@ -305,8 +288,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         input_lengths_after_pooling = (
             input_lengths_after_cnn - self.config.audio_pool_step
         ) // self.config.audio_pool_step + 1
-        input_lengths_after_pooling = input_lengths_after_pooling.to(
-            dtype=torch.int32)
+        input_lengths_after_pooling = input_lengths_after_pooling.to(dtype=torch.int32)
 
         return input_lengths_after_cnn, input_lengths_after_pooling
 
@@ -333,13 +315,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             img_cnt = []
             for pixel_values in pixel_values_list:
                 img_cnt.append(len(pixel_values))
-                all_pixel_values.extend(
-                    [i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
+                all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
 
             # exist image
             if all_pixel_values:
-                tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(
-                    tgt_size, torch.Tensor)]
+                tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
                 tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
 
                 max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
@@ -348,14 +328,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     all_pixel_values, batch_first=True, padding_value=0.0
                 )
                 B, L, _ = all_pixel_values.shape
-                all_pixel_values = all_pixel_values.permute(
-                    0, 2, 1).reshape(B, 3, -1, L)
+                all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
 
-                patch_attn_mask = torch.zeros(
-                    (B, 1, max_patches), dtype=torch.bool, device=device)
+                patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
                 for i in range(B):
-                    patch_attn_mask[i, 0, : tgt_sizes[i]
-                                    [0] * tgt_sizes[i][1]] = True
+                    patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
 
                 vision_batch_size = self.config.vision_batch_size
                 all_pixel_values = all_pixel_values.type(dtype)
@@ -381,8 +358,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 for pixel_values in pixel_values_list:
                     img_cnt = len(pixel_values)
                     if img_cnt > 0:
-                        vision_hidden_states.append(
-                            vision_embedding[start: start + img_cnt])
+                        vision_hidden_states.append(vision_embedding[start : start + img_cnt])
                         start += img_cnt
                     else:
                         vision_hidden_states.append([])
@@ -392,15 +368,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             vision_hidden_states = data["vision_hidden_states"]
 
-        vllm_embedding = self.llm.model.embed_tokens(
-            data["input_ids"]) * self.scale_emb
+        vllm_embedding = self.llm.model.embed_tokens(data["input_ids"]) * self.scale_emb
 
         new_vllm_embedding = vllm_embedding.clone()
-
+        
         vision_hidden_states = [
             i.type(vllm_embedding.dtype) if isinstance(i, torch.Tensor) else i for i in vision_hidden_states
         ]
-
+        
         bs = len(data["input_ids"])
         for i in range(bs):
             cur_vs_hs = vision_hidden_states[i]
@@ -409,14 +384,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 cur_image_bound = data["image_bound"][i]
                 if len(cur_image_bound) > 0:
                     image_indices = torch.stack(
-                        [torch.arange(r[0], r[1], dtype=torch.long)
-                         for r in cur_image_bound]
+                        [torch.arange(r[0], r[1], dtype=torch.long) for r in cur_image_bound]
                     ).to(vllm_embedding.device)
 
                     new_vllm_embedding[i] = cur_vllm_emb.scatter(
                         0,
-                        image_indices.view(-1, 1).repeat(1,
-                                                         cur_vllm_emb.shape[-1]),
+                        image_indices.view(-1, 1).repeat(1, cur_vllm_emb.shape[-1]),
                         cur_vs_hs.view(-1, cur_vs_hs.shape[-1]),
                     )
 
@@ -456,10 +429,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     )
                     self.audio_past_key_values = None
 
-            audio_outputs = self.apm(
-                audio_features, past_key_values=self.audio_past_key_values, use_cache=True)
-            # [:, :audio_feat_lengths, :]
-            audio_states = audio_outputs.last_hidden_state
+            audio_outputs = self.apm(audio_features, past_key_values=self.audio_past_key_values, use_cache=True)
+            audio_states = audio_outputs.last_hidden_state  # [:, :audio_feat_lengths, :]
             self.audio_past_key_values = audio_outputs.past_key_values
 
             audio_embeds = self.audio_projection_layer(audio_states)
@@ -468,8 +439,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             audio_embeds = self.audio_avg_pooler(audio_embeds)
             audio_embeds = audio_embeds.transpose(1, 2)
 
-            _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(
-                audio_feature_lens)
+            _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(audio_feature_lens)
 
             num_audio_tokens = feature_lens_after_pooling
 
@@ -478,8 +448,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             for i in range(len(audio_feature_lens_raw)):
                 target_audio_embeds = []
                 for _ in range(len(audio_feature_lens_raw[i])):
-                    target_audio_embeds.append(
-                        audio_embeds[idx, : num_audio_tokens[idx], :])
+                    target_audio_embeds.append(audio_embeds[idx, : num_audio_tokens[idx], :])
                     idx += 1
                 final_audio_embeds.append(target_audio_embeds)
             return final_audio_embeds
@@ -511,13 +480,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
             # Create a sequence tensor of shape (batch_size, max_seq_len)
             seq_range = (
-                torch.arange(0, max_seq_len, dtype=audio_feature_lens.dtype,
-                             device=audio_feature_lens.device)
+                torch.arange(0, max_seq_len, dtype=audio_feature_lens.dtype, device=audio_feature_lens.device)
                 .unsqueeze(0)
                 .expand(batch_size, max_seq_len)
             )
-            lengths_expand = audio_feature_lens.unsqueeze(
-                1).expand(batch_size, max_seq_len)
+            lengths_expand = audio_feature_lens.unsqueeze(1).expand(batch_size, max_seq_len)
             # Create mask
             padding_mask = seq_range >= lengths_expand  # 1 for padded values
 
@@ -536,8 +503,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     num_left_chunks=-1,
                     device=audio_attention_mask_.device,
                 )
-                audio_attention_mask_ = torch.logical_or(
-                    audio_attention_mask_, torch.logical_not(chunk_mask))
+                audio_attention_mask_ = torch.logical_or(audio_attention_mask_, torch.logical_not(chunk_mask))
 
             audio_attention_mask[audio_attention_mask_] = float("-inf")
             audio_states = self.apm(
@@ -549,8 +515,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             audio_embeds = self.audio_avg_pooler(audio_embeds)
             audio_embeds = audio_embeds.transpose(1, 2)
 
-            _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(
-                audio_feature_lens)
+            _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(audio_feature_lens)
 
             num_audio_tokens = feature_lens_after_pooling
 
@@ -559,8 +524,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             for i in range(len(audio_feature_lens_raw)):
                 target_audio_embeds = []
                 for _ in range(len(audio_feature_lens_raw[i])):
-                    target_audio_embeds.append(
-                        audio_embeds[idx, : num_audio_tokens[idx], :])
+                    target_audio_embeds.append(audio_embeds[idx, : num_audio_tokens[idx], :])
                     idx += 1
                 final_audio_embeds.append(target_audio_embeds)
             return final_audio_embeds
@@ -578,11 +542,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             final embeddings with audio feature
         """
         if stream_input:
-            audio_embeddings = self.get_audio_embedding_streaming(
-                data.get("audio_features", []), data.get("audio_feature_lens", []))
+            audio_embeddings = self.get_audio_embedding_streaming(data.get("audio_features", []), data.get("audio_feature_lens", []))
         else:
-            audio_embeddings = self.get_audio_embedding(data.get(
-                "audio_features", []), data.get("audio_feature_lens", []), chunk_length)
+            audio_embeddings = self.get_audio_embedding(data.get("audio_features", []), data.get("audio_feature_lens", []), chunk_length)
 
         bs = len(input_embeddings)
         if len(data.get("audio_features", [])) > 0:
@@ -597,8 +559,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     audio_start_pos = 0
                     for bound in audio_bounds[i]:
                         audio_len = bound[1] - bound[0]
-                        input_embeddings[i, bound[0]: bound[1]] = audio_embs[
-                            audio_start_pos: audio_start_pos + audio_len, :
+                        input_embeddings[i, bound[0] : bound[1]] = audio_embs[
+                            audio_start_pos : audio_start_pos + audio_len, :
                         ]
                         audio_start_pos += audio_len
             else:
@@ -615,13 +577,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                                 f"Shape mismatch: Trying to assign embeddings of shape {embs.shape} "
                                 f"to input indices of length {len(audio_indices)}"
                             )
-                        input_embeddings[i, audio_indices] = embs.to(
-                            input_embeddings.dtype)
+                        input_embeddings[i, audio_indices] = embs.to(input_embeddings.dtype)
         elif self.training:
             for i in range(bs):
                 # dummy audio_embeddings
-                input_embeddings = input_embeddings + \
-                    audio_embeddings[0].mean() * 0
+                input_embeddings = input_embeddings + audio_embeddings[0].mean() * 0
 
         return input_embeddings
 
@@ -671,8 +631,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         return self.llm(input_ids=None, position_ids=position_ids, inputs_embeds=vllm_embedding, **kwargs)
 
     def _decode(self, inputs_embeds, tokenizer, attention_mask, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(
-            i) for i in self.terminators]
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         outputs = self.llm.generate(
             inputs_embeds=inputs_embeds,
             pad_token_id=0,
@@ -685,8 +644,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         return outputs
 
     def _decode_stream(self, inputs_embeds, tokenizer, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(
-            i) for i in self.terminators]
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         streamer = TextIteratorStreamer(tokenizer=tokenizer)
         generation_kwargs = {
             "inputs_embeds": inputs_embeds,
@@ -737,8 +695,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         model_output = {}
         with torch.inference_mode():
-            model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(
-                model_inputs)
+            model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(model_inputs)
             model_inputs["inputs_embeds"] = self.get_omni_embedding(
                 model_inputs,
                 input_embeddings=model_inputs["inputs_embeds"],
@@ -746,15 +703,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             )
 
             if stream:
-                result = self._decode_stream(
-                    model_inputs["inputs_embeds"], tokenizer, **kwargs)
+                result = self._decode_stream(model_inputs["inputs_embeds"], tokenizer, **kwargs)
                 # if stream return TextIteratorStreamer and output is empty
                 outputs = {}
             else:
-                outputs = self._decode(
-                    model_inputs["inputs_embeds"], tokenizer, attention_mask, **kwargs)
-                result = self.processor.decode_text(
-                    outputs.sequences, tokenizer, self.terminators)
+                outputs = self._decode(model_inputs["inputs_embeds"], tokenizer, attention_mask, **kwargs)
+                result = self.processor.decode_text(outputs.sequences, tokenizer, self.terminators)
 
         return result, outputs
 
@@ -821,13 +775,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             assert images_list is None, "Please integrate image to msgs when using batch inference."
             images_list = [None] * len(msgs_list)
-        assert len(images_list) == len(
-            msgs_list), "The batch dim of images_list and msgs_list should be the same."
+        assert len(images_list) == len(msgs_list), "The batch dim of images_list and msgs_list should be the same."
 
         if processor is None:
             if self.processor is None:
-                self.processor = AutoProcessor.from_pretrained(
-                    self.config._name_or_path, trust_remote_code=True)
+                self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
             processor = self.processor
 
         assert (
@@ -870,8 +822,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 content = msg["content"]
                 assert role in ["system", "user", "assistant"]
                 if i == 0:
-                    assert role in [
-                        "user", "system"], "The role of first msg should be user"
+                    assert role in ["user", "system"], "The role of first msg should be user"
                 if isinstance(content, str):
                     content = [content]
                 cur_msgs = []
@@ -933,8 +884,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         if min_new_tokens > 0:
             generation_config["min_new_tokens"] = min_new_tokens
 
-        generation_config.update(
-            (k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
+        generation_config.update((k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
 
         inputs.pop("image_sizes")
         with torch.inference_mode():
@@ -970,8 +920,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
                 if use_tts_template and generate_audio:
                     mel_spec = self._generate_mel_spec(inputs, outputs, answer)
-                    wav_numpy, sr = self.decode_mel_to_audio(
-                        mel_spec, output_audio_path)
+                    wav_numpy, sr = self.decode_mel_to_audio(mel_spec, output_audio_path)
 
             if return_spk_embed:
                 spk_embeds = self._get_last_spk_embeds(inputs, outputs)
@@ -1032,8 +981,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 logger.error("Invalid content type:", c)
 
         cur_contents = "".join(cur_msgs) if omni_input else "\n".join(cur_msgs)
-        # new user add im_start
-        if not self.is_first and self.new_user_msg and msg["role"] == "user":
+        if not self.is_first and self.new_user_msg and msg["role"] == "user":  # new user add im_start
             if self.llm_generated:
                 if self.llm_generate_completed:
                     msg["content"] = "<|im_end|>\n<|im_start|>user\n" + cur_contents
@@ -1077,8 +1025,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         ).to(self.device)
 
         # 1. prepare input embeddings
-        model_inputs["inputs_embeds"], _ = self.get_vllm_embedding(
-            model_inputs)
+        model_inputs["inputs_embeds"], _ = self.get_vllm_embedding(model_inputs)
         # get audio embedding with audio_past_key_values
         inputs_embeds = self.get_omni_embedding(
             model_inputs, input_embeddings=model_inputs["inputs_embeds"], stream_input=True
@@ -1093,8 +1040,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             cache_length = 0
 
-        attention_mask = torch.ones(
-            (1, cache_length + inputs_embeds.shape[1]), dtype=torch.bool, device=self.device)
+        attention_mask = torch.ones((1, cache_length + inputs_embeds.shape[1]), dtype=torch.bool, device=self.device)
 
         # 2. do prefill and predict listen/speak label
         outputs = self.llm(
@@ -1138,8 +1084,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 "repetition_penalty": 1.2,
             }
         generation_config["min_new_tokens"] = min_new_tokens
-        generation_config.update(
-            (k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
+        generation_config.update((k, kwargs[k]) for k in generation_config.keys() & kwargs.keys())
 
         # do generate
         # reset buffer
@@ -1148,26 +1093,21 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         self.llm_generate_completed = False
         self.audio_past_key_values = None  # apm kv cache
 
-        terminators = [tokenizer.convert_tokens_to_ids(
-            i) for i in self.terminators]
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         generate_prompt = "<|im_end|>\n<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>"
-        input_ids = tokenizer(generate_prompt, return_tensors="pt",
-                              add_special_tokens=False)["input_ids"].cuda()
+        input_ids = tokenizer(generate_prompt, return_tensors="pt", add_special_tokens=False)["input_ids"].cuda()
 
         spk_start_idx = torch.where(input_ids[0] == tokenizer.spk_start_id)[0]
         spk_end_idx = torch.where(input_ids[0] == tokenizer.spk_end_id)[0]
         spk_bounds = [
-            torch.hstack([(spk_start_idx + 1).unsqueeze(-1),
-                         spk_end_idx.unsqueeze(-1)])
+            torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
         ]  # List[Tensor], (1,2)
 
         cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
-        attention_mask = torch.ones(
-            (1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
+        attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
         generation_config["max_new_tokens"] = max_new_tokens
-        streamer = self.llm_generate_chunk(
-            input_ids, attention_mask, tokenizer, terminators, generation_config)
+        streamer = self.llm_generate_chunk(input_ids, attention_mask, tokenizer, terminators, generation_config)
 
         if generate_audio:
             result = self._generate_mel_spec_audio_streaming(
@@ -1223,8 +1163,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
             cache_length = past_length = self.llm_past_key_values[0][0].shape[2]
-            attention_mask = torch.ones(
-                (1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
+            attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
             res = {"text": text}
             if first_chunk:
@@ -1236,23 +1175,20 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 self.llm_generate_completed = True
                 break
             if new_len >= max_new_tokens:
-                logger.debug(
-                    f"LLM generation {new_len} exceeds max_new_tokens({max_new_tokens}), break.")
+                logger.debug(f"LLM generation {new_len} exceeds max_new_tokens({max_new_tokens}), break.")
                 break
 
     def prepare_tts_text(self, text):
-        tts_tokens = self.tts_processor.text_tokenizer.encode(
-            text, add_special_tokens=False)
+        tts_tokens = self.tts_processor.text_tokenizer.encode(text, add_special_tokens=False)
         tts_tokens_len = len(tts_tokens)
         if tts_tokens_len < self.tts.streaming_text_reserved_len:
             num_pad_tokens = self.tts.streaming_text_reserved_len - tts_tokens_len
 
             pad_str = "[Etts]" + "[PAD]" * (num_pad_tokens - 1)
         else:
-            tts_tokens = tts_tokens[0: self.tts.streaming_text_reserved_len]
+            tts_tokens = tts_tokens[0 : self.tts.streaming_text_reserved_len]
             tts_tokens_len = len(tts_tokens)
-            text = self.tts_processor.text_tokenizer.decode(
-                tts_tokens, add_special_tokens=False)
+            text = self.tts_processor.text_tokenizer.decode(tts_tokens, add_special_tokens=False)
             pad_str = ""
         spk_emb_placeholder_tts = "[spk_emb]" * self.tts.num_spk_embs
 
@@ -1268,12 +1204,10 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
     def _build_streaming_mask(self, tts_tokens_len):
         tts_sequence_full_length = (
-            1 + self.tts.num_spk_embs * self.tts.use_speaker_embedding +
-            self.tts.streaming_text_reserved_len + 1
+            1 + self.tts.num_spk_embs * self.tts.use_speaker_embedding + self.tts.streaming_text_reserved_len + 1
         )
-        streaming_attention_mask = torch.zeros(
-            tts_sequence_full_length, dtype=torch.int8)
-        streaming_attention_mask[0: 1 + 1 + tts_tokens_len + 1] = 1
+        streaming_attention_mask = torch.zeros(tts_sequence_full_length, dtype=torch.int8)
+        streaming_attention_mask[0 : 1 + 1 + tts_tokens_len + 1] = 1
         streaming_attention_mask[-1] = 1
         return streaming_attention_mask
 
@@ -1286,7 +1220,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         # last spk
         spk_bound = inputs["spk_bounds"][0][-1]
 
-        spk_embeds = last_hidden_states[spk_bound[0]: spk_bound[1]]
+        spk_embeds = last_hidden_states[spk_bound[0] : spk_bound[1]]
         return spk_embeds
 
     def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048):
@@ -1295,25 +1229,20 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         text = text.split("<|tts_bos|>")[-1]
         gen_text = text.split("<|tts_eos|>")[0]
         tts_text, tts_token_lens = self.prepare_tts_text(gen_text)
-        tts_inputs = self.tts_processor.text_tokenizer.encode(
-            tts_text, add_special_tokens=False)
-        tts_input_ids = torch.Tensor(tts_inputs).unsqueeze(
-            0).to("cuda", dtype=torch.long)
-        streaming_tts_text_mask = self._build_streaming_mask(
-            tts_token_lens).to(device=self.tts.device)
+        tts_inputs = self.tts_processor.text_tokenizer.encode(tts_text, add_special_tokens=False)
+        tts_input_ids = torch.Tensor(tts_inputs).unsqueeze(0).to("cuda", dtype=torch.long)
+        streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
 
         logits_warpers, logits_processors = gen_logits(
             num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
         )
 
         condition_length = (
-            1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs +
-            self.tts.streaming_text_reserved_len + 1
+            1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs + self.tts.streaming_text_reserved_len + 1
         )
 
         dtype = self.tts.emb_text.weight.dtype
-        emb = torch.zeros(1, condition_length, self.tts.num_vq,
-                          dtype=dtype, device=self.tts.device)
+        emb = torch.zeros(1, condition_length, self.tts.num_vq, dtype=dtype, device=self.tts.device)
         past_key_values = [
             (
                 torch.zeros(
@@ -1336,8 +1265,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             for _ in range(self.tts.config.num_hidden_layers)
         ]
 
-        audio_input_ids = torch.zeros(
-            1, condition_length, self.tts.num_vq, dtype=torch.long, device=self.tts.device)
+        audio_input_ids = torch.zeros(1, condition_length, self.tts.num_vq, dtype=torch.long, device=self.tts.device)
 
         eos_lab = False
         for chunk_idx in range(math.ceil(emb.shape[1] / self.tts.streaming_text_chunk_size)):
@@ -1363,8 +1291,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
             if end - begin > 0:
                 text_input_ids = tts_input_ids[:, begin:end]
-                position_ids = torch.arange(
-                    begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
+                position_ids = torch.arange(begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
 
                 if begin == 0:
                     past_key_values = self.tts.prefill_text(
@@ -1384,10 +1311,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 streaming_tts_text_mask=streaming_tts_text_mask,
                 max_new_token=output_chunk_size,
                 force_no_stop=self.force_no_stop,
-                temperature=torch.tensor(
-                    [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                eos_token=torch.tensor(
-                    [625], dtype=torch.long, device=self.tts.device),
+                temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                 logits_warpers=logits_warpers,
                 logits_processors=logits_processors,
             )
@@ -1408,10 +1333,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     streaming_tts_text_mask=streaming_tts_text_mask,
                     max_new_token=output_chunk_size,
                     force_no_stop=self.force_no_stop,
-                    temperature=torch.tensor(
-                        [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                    eos_token=torch.tensor(
-                        [625], dtype=torch.long, device=self.tts.device),
+                    temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                    eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                     logits_warpers=logits_warpers,
                     logits_processors=logits_processors,
                 )
@@ -1423,8 +1346,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     logger.debug("Generation finished.")
                     break
                 if outputs.new_ids.shape[1] > tts_max_new_tokens:
-                    logger.debug(
-                        f"Generation length > {tts_max_new_tokens}, stopped.")
+                    logger.debug(f"Generation length > {tts_max_new_tokens}, stopped.")
                     break
 
         mel_spec = self.tts.decode_to_mel_specs(outputs.new_ids)
@@ -1444,19 +1366,18 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         frame1_length = frames[1].shape[-1]
         total_size = frame0_length + frame1_length - overlap
         weight_len = max(frame0_length, frame1_length) + overlap
-        t = torch.linspace(0, 1, weight_len + 2,
-                           device=device, dtype=dtype)[1:-1]
+        t = torch.linspace(0, 1, weight_len + 2, device=device, dtype=dtype)[1:-1]
         weight = 0.5 - (t - 0.5).abs()
 
         sum_weight = torch.zeros(total_size, device=device, dtype=dtype)
         out = torch.zeros(total_size, device=device, dtype=dtype)
         offset: int = 0
 
-        out[offset: offset + frame0_length] += weight[-frame0_length:] * frames[0]
-        sum_weight[offset: offset + frame0_length] += weight[-frame0_length:]
+        out[offset : offset + frame0_length] += weight[-frame0_length:] * frames[0]
+        sum_weight[offset : offset + frame0_length] += weight[-frame0_length:]
         offset += frame0_length - overlap
-        out[offset: offset + frame1_length] += weight[:frame1_length] * frames[1]
-        sum_weight[offset: offset + frame1_length] += weight[:frame1_length]
+        out[offset : offset + frame1_length] += weight[:frame1_length] * frames[1]
+        sum_weight[offset : offset + frame1_length] += weight[:frame1_length]
 
         assert sum_weight.min() > 0
         out = out / sum_weight
@@ -1483,17 +1404,15 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             txt = r["text"]
             gen_text += txt.split("<|tts_eos|>")[0]
             tts_text, tts_token_lens = self.prepare_tts_text(gen_text)
-            # output: (input_seq_len, dim)
-            last_hidden_states = r["hidden_states"][0][-1][0]
-            spk_embeds = last_hidden_states[spk_bound[0]: spk_bound[1]]
+            last_hidden_states = r["hidden_states"][0][-1][0]  # output: (input_seq_len, dim)
+            spk_embeds = last_hidden_states[spk_bound[0] : spk_bound[1]]
 
         # init past_key_values
         logits_warpers, logits_processors = gen_logits(
             num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
         )
         condition_length = (
-            1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs +
-            self.tts.streaming_text_reserved_len + 1
+            1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs + self.tts.streaming_text_reserved_len + 1
         )
         tts_start_token_len = 1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs
         dtype = self.tts.emb_text.weight.dtype
@@ -1518,8 +1437,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             )
             for _ in range(self.tts.config.num_hidden_layers)
         ]
-        audio_input_ids = torch.zeros(
-            1, condition_length, self.tts.num_vq, dtype=torch.long, device=self.tts.device)
+        audio_input_ids = torch.zeros(1, condition_length, self.tts.num_vq, dtype=torch.long, device=self.tts.device)
 
         # prefill prev segment for smooth
         chunk_idx = 0
@@ -1528,15 +1446,13 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         if prev_seg_text_ids is not None and prev_seg_audio_ids is not None:
             tts_token_lens = prev_seg_text_ids.shape[1]
             # assert tts_token_lens % self.tts.streaming_text_chunk_size == 0
-            streaming_tts_text_mask = self._build_streaming_mask(
-                tts_token_lens).to(device=self.tts.device)
+            streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
             position_ids = torch.arange(
                 0, tts_token_lens + tts_start_token_len, dtype=torch.long, device=self.tts.device
             ).unsqueeze(0)
 
             text_input_ids = self.get_tts_text_start_token_ids()
-            text_input_ids = torch.cat(
-                [text_input_ids, prev_seg_text_ids], dim=1)
+            text_input_ids = torch.cat([text_input_ids, prev_seg_text_ids], dim=1)
             past_key_values = self.tts.prefill_text(
                 input_ids=text_input_ids,
                 position_ids=position_ids,
@@ -1551,12 +1467,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             )
 
             # update init
-            chunk_idx += int(tts_token_lens /
-                             self.tts.streaming_text_chunk_size)
-            audio_input_ids = torch.cat(
-                [audio_input_ids, prev_seg_audio_ids], dim=1)
-            text = self.tts_processor.text_tokenizer.decode(
-                prev_seg_text_ids[0].tolist(), add_special_tokens=False)
+            chunk_idx += int(tts_token_lens / self.tts.streaming_text_chunk_size)
+            audio_input_ids = torch.cat([audio_input_ids, prev_seg_audio_ids], dim=1)
+            text = self.tts_processor.text_tokenizer.decode(prev_seg_text_ids[0].tolist(), add_special_tokens=False)
 
             gen_text += text
             gen_text += prev_seg_text_left
@@ -1581,9 +1494,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 return
             if t <= 2:  # do just one time, more token greater certainty
                 lang = number_converter.detect_language(gen_text_raw)
-            # markdown **
-            gen_text += number_converter.replace_numbers_with_text(
-                txt, lang).replace("*", "")
+            gen_text += number_converter.replace_numbers_with_text(txt, lang).replace("*", "")  # markdown **
 
             # TODO speed up
             tts_text, tts_token_lens = self.prepare_tts_text(gen_text)
@@ -1593,7 +1504,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 if end_c:
                     end_c_idx = gen_text.rfind(end_c)
                     assert end_c_idx != -1
-                    text_left = gen_text[end_c_idx + 1:]
+                    text_left = gen_text[end_c_idx + 1 :]
                     gen_text = gen_text[: end_c_idx + 1]
                     tts_text, tts_token_lens = self.prepare_tts_text(gen_text)
                     new_segment_gen = True
@@ -1607,23 +1518,19 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 # do prefill and generate
                 if chunk_idx == 0:
                     begin = 0
-                    end = (chunk_idx + 1) * \
-                        self.tts.streaming_text_chunk_size + tts_start_token_len
+                    end = (chunk_idx + 1) * self.tts.streaming_text_chunk_size + tts_start_token_len
                 else:
                     begin = chunk_idx * self.tts.streaming_text_chunk_size + tts_start_token_len
                     end = min(
-                        (chunk_idx + 1) * self.tts.streaming_text_chunk_size +
-                        tts_start_token_len, condition_length - 1
+                        (chunk_idx + 1) * self.tts.streaming_text_chunk_size + tts_start_token_len, condition_length - 1
                     )
 
                 tts_input_ids = self.tts_processor.text_tokenizer(
                     tts_text, return_tensors="pt", add_special_tokens=False
                 )["input_ids"].cuda()
                 text_input_ids = tts_input_ids[:, begin:end]
-                streaming_tts_text_mask = self._build_streaming_mask(
-                    tts_token_lens).to(device=self.tts.device)
-                position_ids = torch.arange(
-                    begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
+                streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
+                position_ids = torch.arange(begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
 
                 past_key_values = self.tts.prefill_text(
                     input_ids=text_input_ids,
@@ -1637,10 +1544,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     streaming_tts_text_mask=streaming_tts_text_mask,
                     max_new_token=output_chunk_size,
                     force_no_stop=self.force_no_stop,
-                    temperature=torch.tensor(
-                        [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                    eos_token=torch.tensor(
-                        [625], dtype=torch.long, device=self.tts.device),
+                    temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                    eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                     logits_warpers=logits_warpers,
                     logits_processors=logits_processors,
                 )
@@ -1650,17 +1555,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 past_key_values = outputs.past_key_values
                 chunk_idx += 1
 
-                mel_spec = self.tts.decode_to_mel_specs(
-                    outputs.new_ids[:, max(new_ids_len - 4, 0):, :])
+                mel_spec = self.tts.decode_to_mel_specs(outputs.new_ids[:, max(new_ids_len - 4, 0) :, :])
                 new_ids_len = outputs.new_ids.shape[1]  # [1, seq_len, 4]
 
-                wav_np, sr = self.decode_mel_to_audio(
-                    mel_spec)  # [1,100,50] -> [50*256]
+                wav_np, sr = self.decode_mel_to_audio(mel_spec)  # [1,100,50] -> [50*256]
 
                 if enable_regenerate:
                     if prev_wav is not None:
-                        # 2*4*256(hop)
-                        check_wav_np = wav_np[2048:].cpu().numpy()
+                        check_wav_np = wav_np[2048:].cpu().numpy()  # 2*4*256(hop)
                         check_mel = mel_spec[0, :, 8:].cpu().numpy()  # 2*4
                     else:
                         check_wav_np = wav_np.cpu().numpy()
@@ -1673,10 +1575,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     for i in range(len(past_key_values)):
                         past_kv.append(
                             (
-                                past_key_values[i][0][:, :,
-                                                      :-N, :],  # .clone(),
-                                past_key_values[i][1][:, :,
-                                                      :-N, :],  # .clone(),
+                                past_key_values[i][0][:, :, :-N, :],  # .clone(),
+                                past_key_values[i][1][:, :, :-N, :],  # .clone(),
                             )
                         )
                     outputs = self.tts.generate(
@@ -1685,10 +1585,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                         streaming_tts_text_mask=streaming_tts_text_mask,
                         max_new_token=N,
                         force_no_stop=self.force_no_stop,
-                        temperature=torch.tensor(
-                            [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                        eos_token=torch.tensor(
-                            [625], dtype=torch.long, device=self.tts.device),
+                        temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                        eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                         logits_warpers=logits_warpers,
                         logits_processors=logits_processors,
                     )
@@ -1696,14 +1594,13 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     past_key_values = outputs.past_key_values
 
                     new_ids_len -= N
-                    mel_spec = self.tts.decode_to_mel_specs(
-                        outputs.new_ids[:, new_ids_len:, :])
+                    mel_spec = self.tts.decode_to_mel_specs(outputs.new_ids[:, new_ids_len:, :])
                     new_ids_len = outputs.new_ids.shape[1]  # [1, seq_len, 4]
                     wav_np, sr = self.decode_mel_to_audio(mel_spec)
 
                     if prev_wav is not None:
                         wav_y = wav_np[: len(prev_wav)]
-                        prev_wav = wav_np[len(prev_wav):]
+                        prev_wav = wav_np[len(prev_wav) :]
                         cur_text = gen_text_raw[prev_text_len:]
                         prev_text_len = len(gen_text_raw)
                         yield OmniOutput(text=cur_text, audio_wav=wav_y, sampling_rate=sr)
@@ -1741,10 +1638,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     tts_text, return_tensors="pt", add_special_tokens=False
                 )["input_ids"].cuda()
                 text_input_ids = tts_input_ids[:, begin:end]
-                streaming_tts_text_mask = self._build_streaming_mask(
-                    tts_token_lens).to(device=self.tts.device)
-                position_ids = torch.arange(
-                    begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
+                streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
+                position_ids = torch.arange(begin, end, dtype=torch.long, device=self.tts.device).unsqueeze(0)
 
                 past_key_values = self.tts.prefill_text(
                     input_ids=text_input_ids,
@@ -1762,10 +1657,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     max_new_token=output_chunk_size,
                     force_no_stop=self.force_no_stop,
                     # temperature=torch.tensor([0.1] * self.tts.num_vq, dtype=torch.float, device=self.tts.device),
-                    temperature=torch.tensor(
-                        [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                    eos_token=torch.tensor(
-                        [625], dtype=torch.long, device=self.tts.device),
+                    temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                    eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                     logits_warpers=logits_warpers,
                     logits_processors=logits_processors,
                 )
@@ -1773,16 +1666,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 past_key_values = outputs.past_key_values
                 chunk_idx += 1
 
-                mel_spec = self.tts.decode_to_mel_specs(
-                    outputs.new_ids[:, max(new_ids_len - 4, 0):, :])
+                mel_spec = self.tts.decode_to_mel_specs(outputs.new_ids[:, max(new_ids_len - 4, 0) :, :])
                 new_ids_len = outputs.new_ids.shape[1]  # [1, seq_len, 4]
 
                 wav_np, sr = self.decode_mel_to_audio(mel_spec)
 
                 if enable_regenerate:
                     if prev_wav is not None:
-                        # 2*4*256(hop)
-                        check_wav_np = wav_np[2048:].cpu().numpy()
+                        check_wav_np = wav_np[2048:].cpu().numpy()  # 2*4*256(hop)
                         check_mel = mel_spec[0, :, 8:].cpu().numpy()  # 2*4
                     else:
                         check_wav_np = wav_np.cpu().numpy()
@@ -1795,10 +1686,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     for i in range(len(past_key_values)):
                         past_kv.append(
                             (
-                                past_key_values[i][0][:, :,
-                                                      :-N, :],  # .clone(),
-                                past_key_values[i][1][:, :,
-                                                      :-N, :],  # .clone(),
+                                past_key_values[i][0][:, :, :-N, :],  # .clone(),
+                                past_key_values[i][1][:, :, :-N, :],  # .clone(),
                             )
                         )
                     outputs = self.tts.generate(
@@ -1807,10 +1696,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                         streaming_tts_text_mask=streaming_tts_text_mask,
                         max_new_token=N,
                         force_no_stop=self.force_no_stop,
-                        temperature=torch.tensor(
-                            [0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
-                        eos_token=torch.tensor(
-                            [625], dtype=torch.long, device=self.tts.device),
+                        temperature=torch.tensor([0.1, 0.3, 0.1, 0.3], dtype=torch.float, device=self.tts.device),
+                        eos_token=torch.tensor([625], dtype=torch.long, device=self.tts.device),
                         logits_warpers=logits_warpers,
                         logits_processors=logits_processors,
                     )
@@ -1818,14 +1705,13 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     past_key_values = outputs.past_key_values
 
                     new_ids_len -= N
-                    mel_spec = self.tts.decode_to_mel_specs(
-                        outputs.new_ids[:, new_ids_len:, :])
+                    mel_spec = self.tts.decode_to_mel_specs(outputs.new_ids[:, new_ids_len:, :])
                     new_ids_len = outputs.new_ids.shape[1]  # [1, seq_len, 4]
                     wav_np, sr = self.decode_mel_to_audio(mel_spec)
 
                     if prev_wav is not None:
                         wav_y = wav_np[: len(prev_wav)]
-                        prev_wav = wav_np[len(prev_wav):]
+                        prev_wav = wav_np[len(prev_wav) :]
                         cur_text = gen_text_raw[prev_text_len:]
                         prev_text_len = len(gen_text_raw)
                         yield OmniOutput(text=cur_text, audio_wav=wav_y, sampling_rate=sr)
@@ -1853,16 +1739,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         if prev_wav is not None:
             cur_text = gen_text_raw[prev_text_len:]
-            # yield last chunk wav without smooth
-            yield OmniOutput(text=cur_text, audio_wav=prev_wav, sampling_rate=sr)
+            yield OmniOutput(text=cur_text, audio_wav=prev_wav, sampling_rate=sr)  # yield last chunk wav without smooth
 
         if new_segment_gen and not stop:
             logger.debug(
                 f"tts_text tokens {tts_token_lens} exceed {self.tts.streaming_text_reserved_len - shift_len}, start a new segment generation"
             )
             tid_len = 5  # self.tts.streaming_text_chunk_size
-            # exclude last Etts
-            prev_seg_text_ids = tts_input_ids[:, end - 1 - tid_len: end - 1]
+            prev_seg_text_ids = tts_input_ids[:, end - 1 - tid_len : end - 1]  # exclude last Etts
             aid_len = 50  # int(tid_len * new_ids_len / tts_token_lens)
             prev_seg_audio_ids = outputs.new_ids[:, -aid_len:, :]
 
@@ -1945,27 +1829,22 @@ class MiniCPMWhisperEncoderLayer(nn.Module):
             output_attentions=output_attentions,
             past_key_value=past_key_values,
         )
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(
-                hidden_states).any()
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
         ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(
-                hidden_states, min=-clamp_value, max=clamp_value)
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -1984,8 +1863,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [MiniCPMWhisperEncoderLayer(config, layer_idx=i)
-             for i in range(config.encoder_layers)]
+            [MiniCPMWhisperEncoderLayer(config, layer_idx=i) for i in range(config.encoder_layers)]
         )
 
     def forward(
@@ -2107,8 +1985,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Ignore copy
-        input_features = input_features.to(
-            dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
+        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
 
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
@@ -2119,42 +1996,34 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
         past_key_values_length = 0
         if use_cache:
             if past_key_values is None:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache(), DynamicCache())
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
             elif isinstance(past_key_values, list):
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache.from_legacy_cache(past_key_values), DynamicCache())
+                past_key_values = EncoderDecoderCache(DynamicCache.from_legacy_cache(past_key_values), DynamicCache())
             elif isinstance(past_key_values, DynamicCache):
-                past_key_values = EncoderDecoderCache(
-                    past_key_values, DynamicCache())
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             else:
                 pass
-            past_key_values_length = past_key_values.self_attention_cache.get_usable_length(
-                inputs_embeds.shape[1])
+            past_key_values_length = past_key_values.self_attention_cache.get_usable_length(inputs_embeds.shape[1])
             if inputs_embeds.shape[1] + past_key_values_length > embed_pos.shape[0]:
-                logger.warning(
-                    "seems the audio is longer than 30s. repeating the last part of the audio")
+                logger.warning("seems the audio is longer than 30s. repeating the last part of the audio")
                 embed_pos_front = embed_pos[past_key_values_length:, :]
                 embed_pos = torch.cat(
                     (
                         embed_pos_front,
                         torch.repeat_interleave(
                             embed_pos[-1, :].unsqueeze(0),
-                            inputs_embeds.shape[1] -
-                            embed_pos.shape[0] + past_key_values_length,
+                            inputs_embeds.shape[1] - embed_pos.shape[0] + past_key_values_length,
                             dim=0,
                         ),
                     )
                 )
             else:
-                embed_pos = embed_pos[past_key_values_length:
-                                      inputs_embeds.shape[1] + past_key_values_length, :]
+                embed_pos = embed_pos[past_key_values_length : inputs_embeds.shape[1] + past_key_values_length, :]
         else:
             embed_pos = embed_pos[: inputs_embeds.shape[1], :]
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -2193,8 +2062,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
-                        layer_head_mask=(
-                            head_mask[idx] if head_mask is not None else None),
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                         past_key_values=past_key_values,
                         use_cache=use_cache,
@@ -2250,8 +2118,7 @@ class ConvNeXtBlock(nn.Module):
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(intermediate_dim, dim)
         self.coef = (
-            nn.Parameter(layer_scale_init_value *
-                         torch.ones(dim), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
@@ -2411,8 +2278,7 @@ class DVAE(nn.Module):
         if mode == "encode" and hasattr(self, "encoder") and self.vq_layer is not None:
             mel = inp.clone()
             x: torch.Tensor = self.downsample_conv(
-                torch.div(mel, self.coef.view(
-                    100, 1).expand(mel.shape), out=mel),
+                torch.div(mel, self.coef.view(100, 1).expand(mel.shape), out=mel),
             ).unsqueeze_(0)
             del mel
             x = self.encoder(x)
@@ -2468,12 +2334,11 @@ def apply_spk_emb(
         input_ids_ = input_ids[idx]  # [seq_len_max]
         spk_emb_ = spk_emb[idx]  # [num_spk_emb]
         mask_ = input_ids_ == spk_emb_token_id  # [batch_size, seq_len_max]
-        nonzero_position_idx = mask_.nonzero(
-            as_tuple=False)  # [num_spk_emb, 1]
+        nonzero_position_idx = mask_.nonzero(as_tuple=False)  # [num_spk_emb, 1]
         assert nonzero_position_idx.shape[0] == num_spk_embs
         begin_idx = nonzero_position_idx.min()
         end_idx = nonzero_position_idx.max()
-        input_embeds[idx, begin_idx: end_idx + 1, :] = spk_emb_
+        input_embeds[idx, begin_idx : end_idx + 1, :] = spk_emb_
 
     return
 
@@ -2515,14 +2380,12 @@ def make_streaming_chunk_mask_generation(
     min_dtype = torch.finfo(dtype).min
 
     # Add `1` to the past seen tokens to account for new `tokens` during `generate`
-    causal_mask = torch.full(
-        (1, past_seen_tokens + inputs_embeds.shape[1]), fill_value=0, dtype=dtype, device=device)
+    causal_mask = torch.full((1, past_seen_tokens + inputs_embeds.shape[1]), fill_value=0, dtype=dtype, device=device)
 
     # Calculate the start of invisible text tokens
     invisible_text_tokens_start = (
         min(
-            math.ceil((past_seen_tokens - streaming_reserved_length) /
-                      streaming_audio_chunk_size)
+            math.ceil((past_seen_tokens - streaming_reserved_length) / streaming_audio_chunk_size)
             * streaming_text_chunk_size,
             streaming_reserved_length,
         )
@@ -2538,7 +2401,7 @@ def make_streaming_chunk_mask_generation(
     causal_mask[0, invisible_text_tokens_start:invisible_text_tokens_end] = min_dtype
 
     # Mask padding positions in the text mask
-    causal_mask[0, 0: 1 + num_spk_emb * use_spk_emb + streaming_reserved_length + 1].masked_fill_(
+    causal_mask[0, 0 : 1 + num_spk_emb * use_spk_emb + streaming_reserved_length + 1].masked_fill_(
         streaming_tts_text_mask == 0, min_dtype
     )
 
@@ -2552,8 +2415,7 @@ def make_streaming_chunk_mask_generation(
 class CustomRepetitionPenaltyLogitsProcessorRepeat:
     def __init__(self, penalty: float, max_input_ids: int, past_window: int):
         if not isinstance(penalty, float) or not (penalty > 0):
-            raise ValueError(
-                f"`penalty` has to be a strictly positive float, but is {penalty}")
+            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = penalty
         self.max_input_ids = max_input_ids
@@ -2561,12 +2423,10 @@ class CustomRepetitionPenaltyLogitsProcessorRepeat:
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.size(1) > self.past_window:
-            input_ids = input_ids.narrow(
-                1, -self.past_window, self.past_window)
+            input_ids = input_ids.narrow(1, -self.past_window, self.past_window)
         freq = F.one_hot(input_ids, scores.size(1)).sum(1)
         if freq.size(0) > self.max_input_ids:
-            freq.narrow(0, self.max_input_ids, freq.size(
-                0) - self.max_input_ids).zero_()
+            freq.narrow(0, self.max_input_ids, freq.size(0) - self.max_input_ids).zero_()
         alpha = torch.pow(self.penalty, freq)
         scores = scores.contiguous()
         inp = scores.multiply(alpha)
@@ -2599,11 +2459,9 @@ class ConditionalChatTTSGenerationOutput(ModelOutput):
 class MultiModalProjector(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
-        self.linear1 = nn.Linear(
-            in_features=in_dim, out_features=out_dim, bias=True)
+        self.linear1 = nn.Linear(in_features=in_dim, out_features=out_dim, bias=True)
         self.relu = nn.ReLU()
-        self.linear2 = nn.Linear(
-            in_features=out_dim, out_features=out_dim, bias=True)
+        self.linear2 = nn.Linear(in_features=out_dim, out_features=out_dim, bias=True)
 
     def forward(self, audio_features):
         hidden_states = self.relu(self.linear1(audio_features))
@@ -2647,19 +2505,15 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
         causal_mask = attention_mask
     else:
-        causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length,
-                                    device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None,
-                                  :, :].expand(batch_size, 1, -1, -1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[:, :, :,
-                                       :mask_length] + attention_mask[:, None, None, :]
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
             padding_mask = padding_mask == 0
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
@@ -2675,7 +2529,7 @@ class PatchLlamaModel(LlamaModel):
     """
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
-
+    
     @can_return_tuple
     def forward(
         self,
@@ -2697,8 +2551,7 @@ class PatchLlamaModel(LlamaModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -2708,8 +2561,7 @@ class PatchLlamaModel(LlamaModel):
 
         # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
         if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError(
-                "The `past_key_values` should be either a `Cache` object or `None`.")
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -2718,8 +2570,7 @@ class PatchLlamaModel(LlamaModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length(
-            ) if past_key_values is not None else 0
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -2776,6 +2627,7 @@ class PatchLlamaModel(LlamaModel):
             attentions=all_self_attns,
         )
 
+
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -2797,8 +2649,7 @@ class PatchLlamaModel(LlamaModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length(
-        ) if past_key_values is not None else 0
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
@@ -2844,11 +2695,9 @@ class PatchLlamaModel(LlamaModel):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(
-                causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
-
 
 class ConditionalChatTTS(PreTrainedModel):
     """A conditional text-to-speech model that can generate speech from text with speaker conditioning.
@@ -2968,22 +2817,17 @@ class ConditionalChatTTS(PreTrainedModel):
         self.repetition_penalty = config.repetition_penalty
 
         if self.config.use_mlp:
-            self.projector = MultiModalProjector(
-                config.llm_dim, config.hidden_size)
+            self.projector = MultiModalProjector(config.llm_dim, config.hidden_size)
         else:
-            self.projector = nn.Linear(
-                config.llm_dim, config.hidden_size, bias=False)
+            self.projector = nn.Linear(config.llm_dim, config.hidden_size, bias=False)
         self.emb_code = nn.ModuleList(
-            [nn.Embedding(config.num_audio_tokens, config.hidden_size)
-             for _ in range(config.num_vq)]
+            [nn.Embedding(config.num_audio_tokens, config.hidden_size) for _ in range(config.num_vq)]
         )
-        self.emb_text = nn.Embedding(
-            config.num_text_tokens, config.hidden_size)
+        self.emb_text = nn.Embedding(config.num_text_tokens, config.hidden_size)
         self.head_code = nn.ModuleList(
             [
                 weight_norm(
-                    nn.Linear(config.hidden_size,
-                              config.num_audio_tokens, bias=False),
+                    nn.Linear(config.hidden_size, config.num_audio_tokens, bias=False),
                     name="weight",
                 )
                 for _ in range(config.num_vq)
@@ -3033,10 +2877,8 @@ class ConditionalChatTTS(PreTrainedModel):
             if spk_emb_mask.any():
                 assert lm_spk_emb_last_hidden_states is not None
                 # Project spk emb to tts hidden size first, [batch_size, num_spk_emb, llm_dim] -> [batch_size, num_spk_emb, self.hidden_size]
-                lm_spk_emb_last_hidden_states = lm_spk_emb_last_hidden_states.to(
-                    self.projector.linear1.weight.dtype)
-                projected_spk_emb = self.projector(
-                    lm_spk_emb_last_hidden_states)
+                lm_spk_emb_last_hidden_states = lm_spk_emb_last_hidden_states.to(self.projector.linear1.weight.dtype)
+                projected_spk_emb = self.projector(lm_spk_emb_last_hidden_states)
                 projected_spk_emb = F.normalize(projected_spk_emb, p=2, dim=-1)
                 apply_spk_emb(
                     input_ids=input_ids,
@@ -3084,27 +2926,21 @@ class ConditionalChatTTS(PreTrainedModel):
         for i in range(len(past_key_values)):
             past_key_values_for_prefill.append(
                 (
-                    past_key_values[i][0][:, :,
-                                          : position_ids[:, 0], :].clone(),
-                    past_key_values[i][1][:, :,
-                                          : position_ids[:, 0], :].clone(),
+                    past_key_values[i][0][:, :, : position_ids[:, 0], :].clone(),
+                    past_key_values[i][1][:, :, : position_ids[:, 0], :].clone(),
                 )
             )
 
         # Model forward
-        past_key_values_for_prefill = DynamicCache.from_legacy_cache(
-            past_key_values_for_prefill)
+        past_key_values_for_prefill = DynamicCache.from_legacy_cache(past_key_values_for_prefill)
         outputs_prefill: BaseModelOutputWithPast = self.model(
             attention_mask=None,  # because for text, it is standard causal attention mask, do nothing
-            # position_ids denotes the position of new text tokens in the sequence
-            position_ids=position_ids,
-            # `past_key_values` will be updated by the model
-            past_key_values=past_key_values_for_prefill,
+            position_ids=position_ids,  # position_ids denotes the position of new text tokens in the sequence
+            past_key_values=past_key_values_for_prefill,  # `past_key_values` will be updated by the model
             inputs_embeds=inputs_embeds,  # contains text and language model embedding
             use_cache=True,
             output_attentions=False,
-            # which new positions will use this cache, basically the same as position_ids
-            cache_position=position_ids,
+            cache_position=position_ids,  # which new positions will use this cache, basically the same as position_ids
         )
 
         # Get model updated KV Cache
@@ -3113,15 +2949,15 @@ class ConditionalChatTTS(PreTrainedModel):
         # Update generated KV Cache to input `past_key_values`
         for layer_idx in range(len(past_key_values)):
             # Update keys
-            past_key_values[layer_idx][0][:, :, position_ids[:, 0]: position_ids[:, -1] + 1, :] = (
+            past_key_values[layer_idx][0][:, :, position_ids[:, 0] : position_ids[:, -1] + 1, :] = (
                 past_key_values_for_prefill_updated[layer_idx][0][
-                    :, :, position_ids[:, 0]: position_ids[:, -1] + 1
+                    :, :, position_ids[:, 0] : position_ids[:, -1] + 1
                 ].clone()
             )
             # Update values
-            past_key_values[layer_idx][1][:, :, position_ids[:, 0]: position_ids[:, -1] + 1, :] = (
+            past_key_values[layer_idx][1][:, :, position_ids[:, 0] : position_ids[:, -1] + 1, :] = (
                 past_key_values_for_prefill_updated[layer_idx][1][
-                    :, :, position_ids[:, 0]: position_ids[:, -1] + 1
+                    :, :, position_ids[:, 0] : position_ids[:, -1] + 1
                 ].clone()
             )
 
@@ -3148,17 +2984,14 @@ class ConditionalChatTTS(PreTrainedModel):
         assert input_ids.shape[0] == 1
         assert past_key_values is not None
 
-        code_emb = [self.emb_code[i](input_ids[:, :, i])
-                    for i in range(self.num_vq)]
+        code_emb = [self.emb_code[i](input_ids[:, :, i]) for i in range(self.num_vq)]
         inputs_embeds = torch.stack(code_emb, 3).sum(3)  # [1,seq_len,768]
         input_len = input_ids.shape[1]
 
         if add_audio_bos:
-            narrowed_input_ids = torch.tensor(
-                [[self.audio_bos_token_id]], dtype=torch.long, device=self.device)
+            narrowed_input_ids = torch.tensor([[self.audio_bos_token_id]], dtype=torch.long, device=self.device)
             bos_inputs_embeds = self.emb_text(narrowed_input_ids)
-            inputs_embeds = torch.cat(
-                [bos_inputs_embeds, inputs_embeds], dim=1)
+            inputs_embeds = torch.cat([bos_inputs_embeds, inputs_embeds], dim=1)
             input_len += 1
 
         past_key_values_length = past_key_values[0][0].shape[2]
@@ -3200,8 +3033,7 @@ class ConditionalChatTTS(PreTrainedModel):
         min_new_token=10,
         max_new_token=50,
         logits_warpers: List[LogitsProcessor] = [],
-        logits_processors: List[CustomRepetitionPenaltyLogitsProcessorRepeat] = [
-        ],
+        logits_processors: List[CustomRepetitionPenaltyLogitsProcessorRepeat] = [],
         show_tqdm=False,
     ):
         """Generate audio codes in streaming setting or non-streaming setting.
@@ -3232,22 +3064,18 @@ class ConditionalChatTTS(PreTrainedModel):
 
         # fix: this should not be `input_ids.shape[1]`
         # start_idx = input_ids.shape[1]
-        start_idx = 1 + self.num_spk_embs * self.use_speaker_embedding + \
-            self.streaming_text_reserved_len + 1
+        start_idx = 1 + self.num_spk_embs * self.use_speaker_embedding + self.streaming_text_reserved_len + 1
 
-        finish = torch.zeros(
-            input_ids.shape[0], device=input_ids.device).bool()
+        finish = torch.zeros(input_ids.shape[0], device=input_ids.device).bool()
 
-        temperature = temperature.unsqueeze(0).expand(
-            input_ids.shape[0], -1).contiguous().view(-1, 1)
+        temperature = temperature.unsqueeze(0).expand(input_ids.shape[0], -1).contiguous().view(-1, 1)
 
         progress = input_ids.shape[1]
 
         # Pre-allocate input_ids, shape is [batch_size=1, max_possible_seq_len, self.num_vqs]
         input_ids_buf = torch.zeros(
             input_ids.shape[0],  # batch_size
-            # max_possible_seq_len = input_ids.shape[1] + max_new_token
-            progress + max_new_token,
+            progress + max_new_token,  # max_possible_seq_len = input_ids.shape[1] + max_new_token
             input_ids.shape[2],  # self.num_vqs
             dtype=input_ids.dtype,
             device=input_ids.device,
@@ -3267,8 +3095,7 @@ class ConditionalChatTTS(PreTrainedModel):
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}(max) [{elapsed}, {rate_fmt}{postfix}]",
             )
 
-        condition_length = 1 + self.num_spk_embs * \
-            self.use_speaker_embedding + self.streaming_text_reserved_len + 1
+        condition_length = 1 + self.num_spk_embs * self.use_speaker_embedding + self.streaming_text_reserved_len + 1
 
         for i in range(max_new_token):
             # Prepare generation inputs
@@ -3284,16 +3111,13 @@ class ConditionalChatTTS(PreTrainedModel):
 
             if audio_bos:
                 # Generate the first token, activate the model with `self.audio_bos_token_id`, the model will predict a new audio token. This is a special case because without the `audio bos token`, it is impossible to generate the first audio token in our streaming setting.
-                narrowed_input_ids = torch.tensor(
-                    [[self.audio_bos_token_id]], dtype=torch.long, device=self.device)
+                narrowed_input_ids = torch.tensor([[self.audio_bos_token_id]], dtype=torch.long, device=self.device)
                 inputs_embeds = self.emb_text(narrowed_input_ids)
                 del narrowed_input_ids
             else:
                 # Generate the following audio tokens, it is applicable to all other cases, including second and the following calling of `generate`.
-                narrowed_input_ids = input_ids.narrow(
-                    dim=1, start=input_ids.shape[1] - 1, length=1)
-                code_emb = [self.emb_code[i](
-                    narrowed_input_ids[:, :, i]) for i in range(self.num_vq)]
+                narrowed_input_ids = input_ids.narrow(dim=1, start=input_ids.shape[1] - 1, length=1)
+                code_emb = [self.emb_code[i](narrowed_input_ids[:, :, i]) for i in range(self.num_vq)]
                 inputs_embeds = torch.stack(code_emb, 3).sum(3)
 
             position_ids = torch.tensor(
@@ -3341,8 +3165,7 @@ class ConditionalChatTTS(PreTrainedModel):
                     device=self.device,
                 )
                 for num_vq_iter in range(self.num_vq):
-                    x: torch.Tensor = self.head_code[num_vq_iter](
-                        hidden_states)
+                    x: torch.Tensor = self.head_code[num_vq_iter](hidden_states)
                     logits[..., num_vq_iter] = x
                     del x
 
@@ -3386,8 +3209,7 @@ class ConditionalChatTTS(PreTrainedModel):
             scores = F.softmax(logits, dim=-1)
 
             del logits
-            idx_next = torch.multinomial(
-                scores, num_samples=1)  # .to(finish.device)
+            idx_next = torch.multinomial(scores, num_samples=1)  # .to(finish.device)
 
             del scores
 
@@ -3419,8 +3241,7 @@ class ConditionalChatTTS(PreTrainedModel):
 
         if not finish.all():
             if show_tqdm:
-                logger.info(
-                    f"incomplete result. hit max_new_token: {max_new_token}")
+                logger.info(f"incomplete result. hit max_new_token: {max_new_token}")
 
         del input_ids_buf
 
@@ -3491,8 +3312,7 @@ def gen_logits(
 
     logits_processors = []
     if repetition_penalty is not None and repetition_penalty != 1:
-        logits_processors.append(CustomRepetitionPenaltyLogitsProcessorRepeat(
-            repetition_penalty, num_code, 16))
+        logits_processors.append(CustomRepetitionPenaltyLogitsProcessorRepeat(repetition_penalty, num_code, 16))
 
     return logits_warpers, logits_processors
 
@@ -3521,7 +3341,7 @@ def prepare_inputs_for_generation(
         # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
         # input)
         if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-            input_ids = input_ids[:, -(attention_mask.shape[1] - past_length):]
+            input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
         # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
         # input_ids based on the past_length.
         elif past_length < input_ids.shape[1]:
@@ -3533,19 +3353,17 @@ def prepare_inputs_for_generation(
         position_ids = attention_mask.long().cumsum(-1) - 1
         position_ids.masked_fill_(attention_mask == 0, 1)
         if past_key_values:
-            position_ids = position_ids[:, -input_ids.shape[1]:]
+            position_ids = position_ids[:, -input_ids.shape[1] :]
 
             # This clo≠clo≠clone call is needed to avoid recapturing cuda graphs with →rch.comπ≤→rch.comπ≤torch.compile's  mode=reduce−overheadmode=reduce-overheadmode="reduce-overhead, as otherwise the input positionidspositionidsposition_ids would have various stride during the decoding. Here, simply using .contiguous().contiguous().contiguous() is not sufficient as in the batch size = 1 case, positionidspositionidsposition_ids is already contiguous but with varying stride which retriggers a capture.
-            position_ids = position_ids.clone(
-                memory_format=torch.contiguous_format)
+            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
     # if ∈putsembeds∈putsembedsinputs_embeds are passed, we only want to use them in the 1st generation step
     if inputs_embeds is not None and cache_position[0] == 0:
         model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
     else:
         # The clone here is for the same reason as for positionidspositionidsposition_ids.
-        model_inputs = {"input_ids": input_ids.clone(
-            memory_format=torch.contiguous_format), "inputs_embeds": None}
+        model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
     if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
         if model_inputs["inputs_embeds"] is not None:
@@ -3581,6 +3399,7 @@ def prepare_inputs_for_generation(
     return model_inputs
 
 
+
 def get_2d_sincos_pos_embed(embed_dim, image_size):
     """
     image_size: image_size or (image_height, image_width)
@@ -3605,10 +3424,8 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h
-    emb_h = get_1d_sincos_pos_embed_from_grid_new(
-        embed_dim // 2, grid[0])  # (H, W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid_new(
-        embed_dim // 2, grid[1])  # (H, W, D/2)
+    emb_h = get_1d_sincos_pos_embed_from_grid_new(embed_dim // 2, grid[0])  # (H, W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid_new(embed_dim // 2, grid[1])  # (H, W, D/2)
 
     emb = np.concatenate([emb_h, emb_w], axis=-1)  # (H, W, D)
     return emb
@@ -3672,24 +3489,21 @@ class Resampler(nn.Module):
         self.ln_kv = norm_layer(embed_dim)
 
         self.ln_post = norm_layer(embed_dim)
-        self.proj = nn.Parameter(
-            (embed_dim**-0.5) * torch.randn(embed_dim, embed_dim))
+        self.proj = nn.Parameter((embed_dim**-0.5) * torch.randn(embed_dim, embed_dim))
 
         self._set_2d_pos_cache(self.max_size)
 
     def _set_2d_pos_cache(self, max_size, device="cpu"):
         if is_deepspeed_zero3_enabled():
             device = "cuda"
-        pos_embed = torch.from_numpy(get_2d_sincos_pos_embed(
-            self.embed_dim, max_size)).float().to(device)
+        pos_embed = torch.from_numpy(get_2d_sincos_pos_embed(self.embed_dim, max_size)).float().to(device)
         self.register_buffer("pos_embed", pos_embed, persistent=False)
 
     def _adjust_pos_cache(self, tgt_sizes, device):
         max_h = torch.max(tgt_sizes[:, 0])
         max_w = torch.max(tgt_sizes[:, 1])
         if max_h > self.max_size[0] or max_w > self.max_size[1]:
-            self.max_size = [max(max_h, self.max_size[0]),
-                             max(max_w, self.max_size[1])]
+            self.max_size = [max(max_h, self.max_size[0]), max(max_w, self.max_size[1])]
             self._set_2d_pos_cache(self.max_size, device)
 
     def _initialize_weights(self, m):
@@ -3713,15 +3527,13 @@ class Resampler(nn.Module):
         self._adjust_pos_cache(tgt_sizes, device=device)
 
         max_patch_len = torch.max(patch_len)
-        key_padding_mask = torch.zeros(
-            (bs, max_patch_len), dtype=torch.bool, device=device)
+        key_padding_mask = torch.zeros((bs, max_patch_len), dtype=torch.bool, device=device)
 
         pos_embed = []
         for i in range(bs):
             tgt_h, tgt_w = tgt_sizes[i]
-            pos_embed.append(self.pos_embed[:tgt_h, :tgt_w, :].reshape(
-                (tgt_h * tgt_w, -1)).to(dtype))  # patches * D
-            key_padding_mask[i, patch_len[i]:] = True
+            pos_embed.append(self.pos_embed[:tgt_h, :tgt_w, :].reshape((tgt_h * tgt_w, -1)).to(dtype))  # patches * D
+            key_padding_mask[i, patch_len[i] :] = True
 
         pos_embed = torch.nn.utils.rnn.pad_sequence(pos_embed, batch_first=True, padding_value=0.0).permute(
             1, 0, 2
@@ -3769,8 +3581,7 @@ class MultiheadAttention(nn.MultiheadAttention):
         )
 
         # rewrite out_proj layer，with nn.Linear
-        self.out_proj = nn.Linear(
-            embed_dim, embed_dim, bias=bias, device=device, dtype=dtype)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias, device=device, dtype=dtype)
 
     def forward(
         self,
@@ -3875,8 +3686,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                     "input/output projection weights or biases requires_grad"
                 )
             if not why_not_fast_path:
-                merged_mask, mask_type = self.merge_masks(
-                    attn_mask, key_padding_mask, query)
+                merged_mask, mask_type = self.merge_masks(attn_mask, key_padding_mask, query)
 
                 if self.in_proj_bias is not None and self.in_proj_weight is not None:
                     return torch._native_multi_head_attention(
@@ -3910,8 +3720,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                     query, key = (x.transpose(1, 0) for x in (query, key))
                     value = key
             else:
-                query, key, value = (x.transpose(1, 0)
-                                     for x in (query, key, value))
+                query, key, value = (x.transpose(1, 0) for x in (query, key, value))
 
         if not self._qkv_same_embed_dim:
             attn_output, attn_output_weights = self.multi_head_attention_forward(
@@ -3994,11 +3803,9 @@ class MultiheadAttention(nn.MultiheadAttention):
         average_attn_weights: bool = True,
         is_causal: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        tens_ops = (query, key, value, in_proj_weight, in_proj_bias,
-                    bias_k, bias_v, out_proj_weight, out_proj_bias)
+        tens_ops = (query, key, value, in_proj_weight, in_proj_bias, bias_k, bias_v, out_proj_weight, out_proj_bias)
 
-        is_batched = _mha_shape_check(
-            query, key, value, key_padding_mask, attn_mask, num_heads)
+        is_batched = _mha_shape_check(query, key, value, key_padding_mask, attn_mask, num_heads)
 
         # For unbatched input, we unsqueeze at the expected batch-dim to pretend that the input
         # is batched, run the computation and before returning squeeze the
@@ -4059,8 +3866,7 @@ class MultiheadAttention(nn.MultiheadAttention):
             head_dim = embed_dim.div(num_heads, rounding_mode="trunc")
         else:
             head_dim = embed_dim // num_heads
-        assert head_dim * \
-            num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
+        assert head_dim * num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
         if use_separate_proj_weight:
             # allow MHA to have different embedding dimensions when separate projection weights are used
             assert (
@@ -4074,8 +3880,7 @@ class MultiheadAttention(nn.MultiheadAttention):
         #
         if not use_separate_proj_weight:
             assert in_proj_weight is not None, "use_separate_proj_weight is False but in_proj_weight is None"
-            q, k, v = _in_projection_packed(
-                query, key, value, in_proj_weight, in_proj_bias)
+            q, k, v = _in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
         else:
             assert q_proj_weight is not None, "use_separate_proj_weight is True but q_proj_weight is None"
             assert k_proj_weight is not None, "use_separate_proj_weight is True but k_proj_weight is None"
@@ -4084,8 +3889,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 b_q = b_k = b_v = None
             else:
                 b_q, b_k, b_v = in_proj_bias.chunk(3)
-            q, k, v = _in_projection(
-                query, key, value, q_proj_weight, k_proj_weight, v_proj_weight, b_q, b_k, b_v)
+            q, k, v = _in_projection(query, key, value, q_proj_weight, k_proj_weight, v_proj_weight, b_q, b_k, b_v)
 
         # prep attention mask
 
@@ -4105,8 +3909,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                         f"The shape of the 3D attn_mask is {attn_mask.shape}, but should be {correct_3d_size}."
                     )
             else:
-                raise RuntimeError(
-                    f"attn_mask's dimension {attn_mask.dim()} is not supported")
+                raise RuntimeError(f"attn_mask's dimension {attn_mask.dim()} is not supported")
 
         # add bias along batch dimension (currently second)
         if bias_k is not None and bias_v is not None:
@@ -4133,8 +3936,7 @@ class MultiheadAttention(nn.MultiheadAttention):
             assert (
                 static_k.size(0) == bsz * num_heads
             ), f"expecting static_k.size(0) of {bsz * num_heads}, but got {static_k.size(0)}"
-            assert static_k.size(
-                2) == head_dim, f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
+            assert static_k.size(2) == head_dim, f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
             k = static_k
         if static_v is None:
             v = v.view(v.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
@@ -4143,17 +3945,14 @@ class MultiheadAttention(nn.MultiheadAttention):
             assert (
                 static_v.size(0) == bsz * num_heads
             ), f"expecting static_v.size(0) of {bsz * num_heads}, but got {static_v.size(0)}"
-            assert static_v.size(
-                2) == head_dim, f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
+            assert static_v.size(2) == head_dim, f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
             v = static_v
 
         # add zero attention along batch dimension (now first)
         if add_zero_attn:
             zero_attn_shape = (bsz * num_heads, 1, head_dim)
-            k = torch.cat(
-                [k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1)
-            v = torch.cat(
-                [v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1)
+            k = torch.cat([k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1)
+            v = torch.cat([v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1)
             if attn_mask is not None:
                 attn_mask = pad(attn_mask, (0, 1))
             if key_padding_mask is not None:
@@ -4190,12 +3989,10 @@ class MultiheadAttention(nn.MultiheadAttention):
             B, Nt, E = q.shape
             q_scaled = q / math.sqrt(E)
 
-            assert not (
-                is_causal and attn_mask is None), "FIXME: is_causal not implemented for need_weights"
+            assert not (is_causal and attn_mask is None), "FIXME: is_causal not implemented for need_weights"
 
             if attn_mask is not None:
-                attn_output_weights = torch.baddbmm(
-                    attn_mask, q_scaled, k.transpose(-2, -1))
+                attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
             else:
                 attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
             attn_output_weights = softmax(attn_output_weights, dim=-1)
@@ -4204,14 +4001,12 @@ class MultiheadAttention(nn.MultiheadAttention):
 
             attn_output = torch.bmm(attn_output_weights, v)
 
-            attn_output = attn_output.transpose(
-                0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+            attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
             attn_output = self.out_proj(attn_output)
             attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
 
             # optionally average attention weights over heads
-            attn_output_weights = attn_output_weights.view(
-                bsz, num_heads, tgt_len, src_len)
+            attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
             if average_attn_weights:
                 attn_output_weights = attn_output_weights.mean(dim=1)
 
@@ -4234,10 +4029,8 @@ class MultiheadAttention(nn.MultiheadAttention):
             k = k.view(bsz, num_heads, src_len, head_dim)
             v = v.view(bsz, num_heads, src_len, head_dim)
 
-            attn_output = F.scaled_dot_product_attention(
-                q, k, v, attn_mask, dropout_p, is_causal)
-            attn_output = attn_output.permute(
-                2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
+            attn_output = F.scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
+            attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
 
             attn_output = self.out_proj(attn_output)
             attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
@@ -4322,8 +4115,7 @@ def _canonical_mask(
         _mask_dtype = mask.dtype
         _mask_is_float = torch.is_floating_point(mask)
         if _mask_dtype != torch.bool and not _mask_is_float:
-            raise AssertionError(
-                f"only bool and floating types of {mask_name} are supported")
+            raise AssertionError(f"only bool and floating types of {mask_name} are supported")
         if check_other and other_type is not None:
             if _mask_dtype != other_type:
                 warnings.warn(
@@ -4331,8 +4123,7 @@ def _canonical_mask(
                     "is deprecated. Use same type for both instead."
                 )
         if not _mask_is_float:
-            mask = torch.zeros_like(
-                mask, dtype=target_type).masked_fill_(mask, float("-inf"))
+            mask = torch.zeros_like(mask, dtype=target_type).masked_fill_(mask, float("-inf"))
     return mask
 
 
@@ -4373,8 +4164,7 @@ def _in_projection_packed(
             # self-attention
             proj = linear(q, w, b)
             # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
-            proj = proj.unflatten(-1, (3, E)).unsqueeze(
-                0).transpose(0, -2).squeeze(-2).contiguous()
+            proj = proj.unflatten(-1, (3, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return proj[0], proj[1], proj[2]
         else:
             # encoder-decoder attention
@@ -4386,8 +4176,7 @@ def _in_projection_packed(
             q_proj = linear(q, w_q, b_q)
             kv_proj = linear(k, w_kv, b_kv)
             # reshape to 2, E and not E, 2 is deliberate for better memory coalescing and keeping same order as chunk()
-            kv_proj = kv_proj.unflatten(-1, (2, E)).unsqueeze(
-                0).transpose(0, -2).squeeze(-2).contiguous()
+            kv_proj = kv_proj.unflatten(-1, (2, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return (q_proj, kv_proj[0], kv_proj[1])
     else:
         w_q, w_k, w_v = w.chunk(3)
@@ -4438,19 +4227,14 @@ def _in_projection(
          - v': :math:`[Vdims..., Eq]`
     """
     Eq, Ek, Ev = q.size(-1), k.size(-1), v.size(-1)
-    assert w_q.shape == (
-        Eq, Eq), f"expecting query weights shape of {(Eq, Eq)}, but got {w_q.shape}"
-    assert w_k.shape == (
-        Eq, Ek), f"expecting key weights shape of {(Eq, Ek)}, but got {w_k.shape}"
-    assert w_v.shape == (
-        Eq, Ev), f"expecting value weights shape of {(Eq, Ev)}, but got {w_v.shape}"
-    assert b_q is None or b_q.shape == (
-        Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
-    assert b_k is None or b_k.shape == (
-        Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
-    assert b_v is None or b_v.shape == (
-        Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
+    assert w_q.shape == (Eq, Eq), f"expecting query weights shape of {(Eq, Eq)}, but got {w_q.shape}"
+    assert w_k.shape == (Eq, Ek), f"expecting key weights shape of {(Eq, Ek)}, but got {w_k.shape}"
+    assert w_v.shape == (Eq, Ev), f"expecting value weights shape of {(Eq, Ev)}, but got {w_v.shape}"
+    assert b_q is None or b_q.shape == (Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
+    assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
+    assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
     return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
+
 
 
 _CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"
@@ -4473,8 +4257,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0,
-                       dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -4634,8 +4417,7 @@ class MiniCPMVisionEmbedding(nn.Module):
         self.num_patches_per_side = self.image_size // self.patch_size
         self.num_patches = self.num_patches_per_side**2
         self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(
-            self.num_positions, self.embed_dim)
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
 
     def forward(
         self,
@@ -4650,8 +4432,7 @@ class MiniCPMVisionEmbedding(nn.Module):
 
         max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(
-            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
+        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
         position_ids = torch.full(
             size=(
                 batch_size,
@@ -4671,13 +4452,10 @@ class MiniCPMVisionEmbedding(nn.Module):
             fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
             fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
 
-            bucket_coords_h = torch.bucketize(
-                fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(
-                fractional_coords_w, boundaries, right=True)
+            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
 
-            pos_ids = (
-                bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
+            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
             position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
 
         position_ids = position_ids.to(self.position_embedding.weight.device)
@@ -4723,16 +4501,12 @@ class SiglipAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(
-            batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(
-            batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(
-            batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         k_v_seq_len = key_states.shape[-2]
-        attn_weights = torch.matmul(
-            query_states, key_states.transpose(2, 3)) * self.scale
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
 
         if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
             raise ValueError(
@@ -4748,10 +4522,8 @@ class SiglipAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(
-            attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -4800,17 +4572,13 @@ class SiglipFlashAttention2(SiglipAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(
-            bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(
-            bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(
-            bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(
-                kv_seq_len, self.layer_idx)
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -4856,8 +4624,7 @@ class SiglipFlashAttention2(SiglipAttention):
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
-        attn_output = attn_output.reshape(
-            bsz, q_len, self.embed_dim).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -4913,8 +4680,7 @@ class SiglipFlashAttention2(SiglipAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
@@ -4923,22 +4689,18 @@ class SiglipFlashAttention2(SiglipAttention):
         return attn_output
 
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(
-            attention_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len,
-                              num_key_value_heads, head_dim), indices_k
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len,
-                                num_key_value_heads, head_dim), indices_k
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len,
-                                    self.num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -4953,8 +4715,7 @@ class SiglipFlashAttention2(SiglipAttention):
         else:
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask)
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -4988,13 +4749,10 @@ class SiglipEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self.self_attn = SiglipAttention(
-            config) if not self._use_flash_attention_2 else SiglipFlashAttention2(config)
-        self.layer_norm1 = nn.LayerNorm(
-            self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = SiglipAttention(config) if not self._use_flash_attention_2 else SiglipFlashAttention2(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
-        self.layer_norm2 = nn.LayerNorm(
-            self.embed_dim, eps=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -5050,8 +4808,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, MiniCPMVisionEmbedding):
             width = self.config.hidden_size
-            nn.init.normal_(module.position_embedding.weight,
-                            std=1 / np.sqrt(width))
+            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, SiglipAttention):
@@ -5119,8 +4876,7 @@ class MiniCPMVisionEncoder(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList(
-            [SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     # Ignore copy
@@ -5206,8 +4962,7 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
 
         self.embeddings = MiniCPMVisionEmbedding(config)
         self.encoder = MiniCPMVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(
-            embed_dim, eps=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
@@ -5260,8 +5015,7 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
             attention_mask = None
         else:
             attention_mask = (
-                _prepare_4d_attention_mask(
-                    patch_attention_mask, hidden_states.dtype)
+                _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
                 if not self._use_flash_attention_2
                 else patch_attention_mask
             )
@@ -5287,6 +5041,4 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-
-__all__ = ["MiniCPM_o_2_6ForConditionalGeneration",
-           "MiniCPM_o_2_6Model", "MiniCPM_o_2_6PreTrainedModel"]
+__all__ = ["MiniCPM_o_2_6ForConditionalGeneration", "MiniCPM_o_2_6Model", "MiniCPM_o_2_6PreTrainedModel"]
