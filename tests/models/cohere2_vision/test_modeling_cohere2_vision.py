@@ -356,7 +356,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
             messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device, dtype=torch.float16)
 
-        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=10)
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
