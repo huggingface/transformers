@@ -41,7 +41,7 @@ from .configuration_auto import AutoConfig, model_type_to_module_name, replace_l
 
 if is_torch_available():
     from ...generation import GenerationMixin
-    from ...modeling_utils import PreTrainedModel
+
 
 logger = logging.get_logger(__name__)
 
@@ -662,11 +662,6 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-
-# class for better type annotations
-class _BaseModelWithGenerate(PreTrainedModel, GenerationMixin):
-    pass
 
 
 def insert_head_doc(docstring, head_doc: str = ""):

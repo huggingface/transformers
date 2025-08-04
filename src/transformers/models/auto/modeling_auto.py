@@ -17,17 +17,25 @@
 import os
 import warnings
 from collections import OrderedDict
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
     _BaseAutoModelClass,
-    _BaseModelWithGenerate,
     _LazyAutoMapping,
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
+
+
+if TYPE_CHECKING:
+    from ...generation import GenerationMixin
+    from ...modeling_utils import PreTrainedModel
+
+    # class for better type annotations
+    class _BaseModelWithGenerate(PreTrainedModel, GenerationMixin):
+        pass
 
 
 logger = logging.get_logger(__name__)
