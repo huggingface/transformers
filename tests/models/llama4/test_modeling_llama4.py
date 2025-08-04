@@ -46,7 +46,7 @@ class Llama4IntegrationTest(unittest.TestCase):
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",
-            torch_dtype=torch.float32,
+            torch_dtype=torch.bfloat16,
             attn_implementation="eager",
         )
 
@@ -83,7 +83,7 @@ class Llama4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_17b_16e_fp16(self):
+    def test_model_17b_16e_bf16(self):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ['system\n\nYou are a helpful assistant.user\n\nWhat is shown in this image?assistant\n\nThe image shows a cow standing on a beach with a blue sky and a body of water in the background. The cow is brown with a white face'],
@@ -109,7 +109,7 @@ class Llama4IntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             add_generation_prompt=True,
-        ).to(device=torch_device, dtype=torch.float32)
+        ).to(device=torch_device)
 
         output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
