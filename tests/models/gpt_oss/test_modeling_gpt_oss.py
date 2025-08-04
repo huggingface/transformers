@@ -252,10 +252,10 @@ class GptOssIntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
-        ).to(torch_device)
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-        inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
         return output_text
