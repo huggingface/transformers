@@ -47,12 +47,7 @@ pipeline = pipeline(
     device_map=0
 )
 
-# Run inference
-results = pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
-
-# Display results
-for obj in results:
-    print(f"{obj['label']} - {obj['score']:.3f} - {obj['box']}")
+pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
 
 </hfoption>
