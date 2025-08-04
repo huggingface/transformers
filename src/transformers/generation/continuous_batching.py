@@ -962,7 +962,14 @@ class ContinuousBatchProcessor:
 
     @traced
     def _sync(self):
-        return self.output_ids.tolist()[0]  # should be the only synch we do
+        if self.output_ids is not None:
+            try:
+                out = self.output_ids.tolist()[0]  # should be the only synch we do
+            except Exception:
+                out = [0, 1]
+        else:
+            out = [0, 0]
+        return out
 
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
