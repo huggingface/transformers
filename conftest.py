@@ -23,7 +23,7 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from transformers.testing_utils import HfDoctestModule, HfDocTestParser
+from transformers.testing_utils import HfDoctestModule, HfDocTestParser, is_torch_available
 
 
 NOT_DEVICE_TESTS = {
@@ -128,3 +128,9 @@ class CustomOutputChecker(OutputChecker):
 doctest.OutputChecker = CustomOutputChecker
 _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
+
+if is_torch_available():
+    import torch
+    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # We set it to `False` for CI.
+    torch.backends.cudnn.allow_tf32 = False
