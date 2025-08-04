@@ -237,8 +237,8 @@ class StaticLayer(CacheLayerMixin):
         )
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
         # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
-        # As prefill should never be compiled, this is not an issue and will still be run (except when users compile
-        # prefill explicitly)
+        # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
+        # prefill explicitly, but this should be avoided!)
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
@@ -707,35 +707,22 @@ class KeyValuesWrapper:
 
 class Cache:
     """
-    Base container for per-layer key/value caches.
-
-    A `Cache` behaves like a list of `CacheLayerMixin` objects, one per model layer.
-    Sub-classes such as `DynamicCache`, `StaticCache`, or `SlidingWindowCache`
-    simply pre-select which `CacheLayerMixin` class to use.
+    A `Cache` is mostly a list of `CacheLayerMixin` objects, one per model layer. It serves as a container for
+    the Cache of each layer.
 
     Parameters:
         layers (`Optional`, *optional*):
-            FILL ME
+            A list of pre-created `CacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate` will
+            be used.
         layer_class_to_replicate (`type[CacheLayerMixin]`, *optional*):
-            FILL ME
+            Only used if `layers` is omitted (`None`), in which case it will be used as the base class for each layer,
+            and the layers will be added lazily as soon as `update` is called with a `layer_idx` greater than the current
+            list of layers.
         offloading (`bool`, *optional*, defaults to `False`):
-            FILL ME
+            Whether to perform offloading of the layers to `cpu`, to save GPU memory.
         offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
-            FILL ME
-
-    Examples:
-
-    ```python
-    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
-
-    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
-    tok   = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-    inputs = tok("Hello", return_tensors="pt")
-
-    cache = DynamicCache()
-    outputs = model(**inputs, past_key_values=cache, use_cache=True)
-    ```
-
+            If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
+            usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
     """
 
     def __init__(
@@ -1089,15 +1076,10 @@ if is_torch_greater_or_equal("2.3"):
 
 class OffloadedCache(Cache):
     """
-    A drop-in replacement for DynamicCache that conserves accelerator(GPU, XPU) memory at the expense of more CPU memory.
+    A drop-in replacement for DynamicCache that conserves accelerator (GPU, XPU) memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
 
-    In addition to the default accelerator stream, where all forward() computations happen,
-    this class uses another stream, the prefetch stream, which it creates itself.
-    Since scheduling of operations on separate streams happens independently, this class uses
-    the prefetch stream to asynchronously prefetch the KV cache of layer k+1 when layer k is executing.
-    The movement of the layer k-1 cache to the CPU is handled by the default stream as a simple way to
-    ensure the eviction is scheduled after all computations on that cache are finished.
+    See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
     def __init__(self) -> None:
@@ -1123,7 +1105,7 @@ class StaticCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = StaticCache(config=model.config, max_batch_size=1, max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+        >>> past_key_values = StaticCache(max_cache_len=max_generated_length, config=model.config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         StaticCache()
@@ -1157,13 +1139,7 @@ class OffloadedStaticCache(Cache):
 
         >>> # Prepare a cache class with offloading
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = OffloadedStaticCache(
-        ...     config=model.config,
-        ...     max_batch_size=1,
-        ...     max_cache_len=max_generated_length,
-        ...     device=model.device,
-        ...     dtype=model.dtype
-        ... )
+        >>> past_key_values = OffloadedStaticCache(max_cache_len=max_generated_length, config=model.config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache with offloaded layers
         OffloadedStaticCache()
@@ -1194,7 +1170,7 @@ class SlidingWindowCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = SlidingWindowCache(config=model.config, max_cache_len=max_generated_length)
+        >>> past_key_values = SlidingWindowCache(max_cache_len=max_generated_length, config=model.config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         SlidingWindowCache()
@@ -1211,7 +1187,7 @@ class HybridCache(Cache):
     """
     Hybrid Cache class to be used with `torch.compile` for models that alternate between a local sliding window
     attention and global attention in every other layer (originally implemented for Gemma2).
-    Under the hood, Hybrid Cache leverages ["SlidingWindowCache"] for sliding window attention and ["StaticCache"]
+    Under the hood, Hybrid Cache leverages ["SlidingWindowLayer"] for sliding window attention and ["StaticLayer"]
     for global attention. For more information, see the documentation of those layer types.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
@@ -1229,7 +1205,7 @@ class HybridCache(Cache):
         >>> # Prepare a cache class and pass it to model's forward
         >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
         >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
+        >>> past_key_values = HybridCache(max_cache_len=max_generated_length, config=model.config)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         HybridCache()
@@ -1287,14 +1263,16 @@ class OffloadedHybridCache(Cache):
 
 class QuantizedCache(Cache):
     """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
-    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
-    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
-    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`.
+    A quantizer cache similar to what is described in the
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for keys and values
+    by applying quantization.
+    The cache has two types of storage, one for original precision and one for the
+    quantized cache. A `residual length` is set as a maximum capacity for the original precision cache. When the
+    length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache.
+    The quantization is done per-channel with a set `q_group_size` for both keys and values, in contrast to what was
+    described in the paper.
+
     See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
@@ -1324,12 +1302,15 @@ class QuantizedCache(Cache):
 
 class QuantoQuantizedCache(QuantizedCache):
     """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
+    A quantizer cache similar to what is described in the
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for keys and values
+    by applying quantization.
+    The cache has two types of storage, one for original precision and one for the
+    quantized cache. A `residual length` is set as a maximum capacity for the original precision cache. When the
+    length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache.
+    The quantization is done per-channel with a set `q_group_size` for both keys and values, in contrast to what was
+    described in the paper.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
@@ -1337,7 +1318,7 @@ class QuantoQuantizedCache(QuantizedCache):
 
         ```python
         >>> # Run pip install quanto first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache, QuantizedCacheConfig
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
 
         >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
         >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
@@ -1345,8 +1326,7 @@ class QuantoQuantizedCache(QuantizedCache):
         >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_config = QuantizedCacheConfig(nbits=4)
-        >>> past_key_values = QuantoQuantizedCache(cache_config=cache_config)
+        >>> past_key_values = QuantoQuantizedCache(config=model.config, nbits=4)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         QuantoQuantizedCache()
@@ -1367,12 +1347,15 @@ class QuantoQuantizedCache(QuantizedCache):
 
 class HQQQuantizedCache(QuantizedCache):
     """
-    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
-
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
-    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
-    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
+    A quantizer cache similar to what is described in the
+    [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for keys and values
+    by applying quantization.
+    The cache has two types of storage, one for original precision and one for the
+    quantized cache. A `residual length` is set as a maximum capacity for the original precision cache. When the
+    length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache.
+    The quantization is done per-channel with a set `q_group_size` for both keys and values, in contrast to what was
+    described in the paper.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
@@ -1380,7 +1363,7 @@ class HQQQuantizedCache(QuantizedCache):
 
         ```python
         >>> # Run pip install hqq first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache, QuantizedCacheConfig
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
 
         >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
         >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
@@ -1388,8 +1371,7 @@ class HQQQuantizedCache(QuantizedCache):
         >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_config = QuantizedCacheConfig(nbits=4, axis_key=1, axis_value=1)
-        >>> past_key_values = HQQQuantizedCache(cache_config=cache_config)
+        >>> past_key_values = HQQQuantizedCache(config=model.config, nbits=4, axis_key=1, axis_value=1)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         HQQQuantizedCache()
