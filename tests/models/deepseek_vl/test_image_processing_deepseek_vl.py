@@ -17,13 +17,20 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
+if is_torch_available():
+    import torch
+
+
 if is_vision_available():
     from transformers import DeepseekVLImageProcessor
+
+    if is_torchvision_available():
+        from transformers import DeepseekVLImageProcessorFast
 
 
 # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester with ViT->DeepseekVL
@@ -83,10 +90,9 @@ class DeepseekVLImageProcessingTester:
 
 @require_torch
 @require_vision
-# Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTest with ViT->DeepseekVL
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    # Ignore copy
     image_processing_class = DeepseekVLImageProcessor if is_vision_available() else None
+    fast_image_processing_class = DeepseekVLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -112,6 +118,33 @@ class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors=None)
+        encoding_fast = image_processor_fast(dummy_images, return_tensors=None)
+
+        # Overwrite as the outputs are not always all of the same shape (kept for BC)
+        for i in range(len(encoding_slow.pixel_values)):
+            self._assert_slow_fast_tensors_equivalence(
+                torch.from_numpy(encoding_slow.pixel_values[i]), encoding_fast.pixel_values[i]
+            )
 
     # Ignore copy
     @unittest.skip(reason="Not supported")
