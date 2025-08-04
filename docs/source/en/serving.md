@@ -268,7 +268,7 @@ The Responses API is the newest addition to the supported APIs of `transformers 
 > This API is still experimental: expect bug patches and additition of new features in the coming weeks.
 > If you run into any issues, please let us know and we'll work on fixing them ASAP.
 
-Instead of the previous `/v1/chat/completions` path, the Responses API lies begind the `/v1/responses` path.
+Instead of the previous `/v1/chat/completions` path, the Responses API lies behind the `/v1/responses` path.
 See below for examples interacting with our Responses endpoint with `curl`, as well as the Python OpenAI client.
 
 So far, this endpoint only supports text and therefore only LLMs. VLMs to come!
