@@ -1024,7 +1024,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             raise NotImplementedError("Training is not implemented yet")
 
         if self.backbone is not None:
-            # raise ValueError(str(type(self.backbone)))
             outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
