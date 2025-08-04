@@ -84,7 +84,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"image_seq_len": 2}
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -284,7 +284,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 2, 3, 364, 364))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (2, 2, 364, 364))
 
-    # Copied from tests.models.idefics2.test_processor_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
+    # Copied from tests.models.idefics2.test_processing_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
     def test_process_interleaved_images_prompts_image_error(self):
         processor = self.get_processor()
 
