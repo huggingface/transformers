@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -227,7 +228,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
 
 @slow
-# @require_torch_accelerator
+@require_torch_accelerator
 class GptOssIntegrationTest(unittest.TestCase):
     input_text = [
         "Roses are red, violets",
