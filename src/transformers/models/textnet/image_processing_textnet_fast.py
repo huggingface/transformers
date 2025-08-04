@@ -29,7 +29,17 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -101,11 +111,6 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
                 if width % size_divisor != 0:
                     width += size_divisor - (width % size_divisor)
 
-                # `BaseImageProcessorFast.resize` expects a `SizeDict` (a frozen dataclass with helpful
-                # attribute-style access such as `.height`, `.width`, `.shortest_edge`, ...). `get_size_dict`
-                # returns a *regular* dictionary, which caused an `AttributeError` when the fast image
-                # processor tried to access e.g. `size.shortest_edge` inside `resize`. We therefore wrap the
-                # dict into a `SizeDict` so that downstream code gets the interface it expects.
                 new_size_dict = SizeDict(height=height, width=width)
 
                 stacked_images = self.resize(image=stacked_images, size=new_size_dict, interpolation=interpolation)
