@@ -1617,6 +1617,13 @@ def require_mistral_common(test_case):
     return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
 
 
+def require_harmony(test_case):
+    """
+    Decorator marking a test that requires OpenAI Harmony. These tests are skipped when openai-harmony isn't installed.
+    """
+    return unittest.skipUnless(is_harmony_available(), "test requires harmony")(test_case)
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch, tf or jax is used)

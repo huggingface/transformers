@@ -160,6 +160,7 @@ except importlib.metadata.PackageNotFoundError:
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
+_harmony_available = _is_package_available("openai_harmony")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -1610,6 +1611,10 @@ def is_matplotlib_available():
 
 def is_mistral_common_available():
     return _mistral_common_available
+
+
+def is_harmony_available():
+    return _harmony_available
 
 
 def check_torch_load_is_safe():
