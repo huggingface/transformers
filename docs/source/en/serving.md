@@ -217,7 +217,7 @@ asyncio.run(client.close())
 
 From which you should get an iterative string printed:
 
-```shell
+```xmp
 The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
 ```
 
@@ -256,7 +256,7 @@ for chunk in completion:
 
 From which you should get an iterative string printed:
 
-```shell
+```xmp
 The image depicts an astronaut in a space suit standing on what appears to be the surface of the moon, given the barren, rocky landscape and the dark sky in the background. The astronaut is holding a large egg that has cracked open, revealing a small creature inside. The scene is imaginative and playful, combining elements of space exploration with a whimsical twist involving the egg and the creature.
 ```
 
