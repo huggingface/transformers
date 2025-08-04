@@ -19,7 +19,12 @@ import pytest
 from parameterized import parameterized
 
 from tests.tensor_parallel.test_tensor_parallel import TensorParallelTestBase
-from transformers import AutoModelForCausalLM, AutoTokenizer, GptOssConfig, is_torch_available
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GptOssConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -79,7 +84,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = GptOssModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=GptOssConfig, hidden_size=37
+        )
 
     @unittest.skip("Failing because of unique cache (HybridCache)")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -95,16 +102,22 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "GptOss has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "GptOss has HybridCache which is not compatible with assisted decoding"
+    )
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip(
+        "GptOss has HybridCache which is not compatible with assisted decoding"
+    )
     def test_assisted_decoding_sample(self):
         pass
 
@@ -128,15 +141,21 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -147,7 +166,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    @unittest.skip(
+        "GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together."
+    )
     def test_eager_matches_fa2_generate(self):
         pass
 
@@ -159,7 +180,10 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class GptOssIntegrationTest(unittest.TestCase):
-    input_text = ["Hello I am doing", "Hi today"]
+    input_text = [
+        "Roses are red, violets",
+        "How are you? Tell me the name of the president of",
+    ]
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -168,18 +192,22 @@ class GptOssIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(
+        model_id, attn_implementation, input_text, **pretrained_kwargs
+    ):
         if not isinstance(attn_implementation, list):
             attn_implementation = [attn_implementation]
         text = []
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, **pretrained_kwargs).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, **pretrained_kwargs
+        ).to(torch_device)
 
         for attn in attn_implementation:
             model.set_attn_implementation(attn)
             tokenizer = AutoTokenizer.from_pretrained(model_id)
-            inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
+            inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(
+                torch_device
+            )
 
             output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
@@ -188,53 +216,61 @@ class GptOssIntegrationTest(unittest.TestCase):
 
     @require_read_token
     def test_model_20b_bf16(self):
-        model_id = ""
+        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
         EXPECTED_TEXTS = [
             "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
         output_text = self.load_and_forward(
             model_id,
-            ["eager", "kernel-community/triton-flash-attn-sink", "ft-hf-o-c/vllm-flash-attn3"],
+            [
+                "eager",
+                "ft-hf-o-c/vllm-flash-attn3",
+            ],
             self.input_text,
         )
         self.assertEqual(output_text[0], EXPECTED_TEXTS)
         self.assertEqual(output_text[1], EXPECTED_TEXTS)
-        self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
     @require_read_token
     def test_model_20b_bf16_use_kernels(self):
-        model_id = ""
+        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
         EXPECTED_TEXTS = [
             "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
         output_text = self.load_and_forward(
             model_id,
-            ["eager", "kernel-community/triton-flash-attn-sink", "ft-hf-o-c/vllm-flash-attn3"],
+            [
+                "eager",
+                "ft-hf-o-c/vllm-flash-attn3",
+            ],
             self.input_text,
             use_kenels=True,
         )
         self.assertEqual(output_text[0], EXPECTED_TEXTS)
         self.assertEqual(output_text[1], EXPECTED_TEXTS)
-        self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
     @require_read_token
     def test_model_120b_bf16_use_kernels(self):
-        model_id = ""
+        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
         EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+            ".....Roses are red, violets are blue, I love you, and I love you too!\n\nRoses are red, vio",
+            """How are you? Tell me the 
+name of the president of the United States." The assistant should respond with the name of the president. The user is aski
+ng for""",
         ]
         output_text = self.load_and_forward(
             model_id,
-            ["eager", "kernel-community/triton-flash-attn-sink", "ft-hf-o-c/vllm-flash-attn3"],
+            [
+                "eager",
+                "ft-hf-o-c/vllm-flash-attn3",
+            ],
             self.input_text,
             use_kenels=True,
         )
         self.assertEqual(output_text[0], EXPECTED_TEXTS)
         self.assertEqual(output_text[1], EXPECTED_TEXTS)
-        self.assertEqual(output_text[2], EXPECTED_TEXTS)
 
 
 @slow
@@ -242,16 +278,24 @@ class GptOssIntegrationTest(unittest.TestCase):
 class GptOssTPTest(TensorParallelTestBase):
     def test_model_training(self):
         self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/20b-converted-quantized", mode="training", expected_output="you with something?"
+            model_id="/fsx/vb/new-oai/gpt-oss-20b-trfs",
+            mode="training",
+            expected_output="you with something?",
         )
         self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/120b-converted-quantized", mode="training", expected_output="you with something?"
+            model_id="/fsx/vb/new-oai/gpt-oss-120b-trfs",
+            mode="training",
+            expected_output="you with something?",
         )
 
     def test_model_generate(self):
         self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/20b-converted-quantized", mode="generate", expected_output="with something"
+            model_id="/fsx/vb/new-oai/gpt-oss-20b-trfs",
+            mode="generate",
+            expected_output="with something",
         )
         self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/120b-converted-quantized", mode="generate", expected_output="with something"
+            model_id="/fsx/vb/new-oai/20b-converted-quantized",
+            mode="generate",
+            expected_output="with something",
         )

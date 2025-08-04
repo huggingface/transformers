@@ -190,19 +190,21 @@ class PagedAttentionCache:
         self.num_hidden_layers = config.num_hidden_layers
 
         # Calculate optimal block size and number if not provided
-        num_blocks = getattr(generation_config, "num_blocks", None)
+        num_blocks = getattr(generation_config, "num_blocks", 1024)
         block_size = getattr(generation_config, "block_size", 32)
         max_memory_percent = getattr(generation_config, "max_memory", 0.9)
-        num_blocks, max_batch_tokens = compute_optimal_blocks(
-            generation_config.max_new_tokens,
-            block_size=block_size,
-            head_dim=self.head_dim,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_key_value_heads,
-            max_memory_percent=max_memory_percent,
-            dtype=dtype,
-            num_blocks=num_blocks,
-        )
+        max_batch_tokens = getattr(generation_config, "max_batch_tokens", 256)
+        if num_blocks is None or max_batch_tokens is None:
+            num_blocks, max_batch_tokens = compute_optimal_blocks(
+                generation_config.max_new_tokens,
+                block_size=block_size,
+                head_dim=self.head_dim,
+                num_layers=self.num_hidden_layers,
+                num_heads=self.num_key_value_heads,
+                max_memory_percent=max_memory_percent,
+                dtype=dtype,
+                num_blocks=num_blocks,
+            )
         logger.warning(
             f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max concurrent requests {max_batch_tokens}"
         )
