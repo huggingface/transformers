@@ -1881,7 +1881,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
         pretrained_model_name_or_path: Union[str, os.PathLike[str]],
         *model_args,
         **kwargs,
-    ) -> _BaseModelWithGenerate:
+    ) -> "_BaseModelWithGenerate":
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
@@ -2085,7 +2085,7 @@ class AutoModelForImageTextToText(_BaseAutoModelClass):
         pretrained_model_name_or_path: Union[str, os.PathLike[str]],
         *model_args,
         **kwargs,
-    ) -> _BaseModelWithGenerate:
+    ) -> "_BaseModelWithGenerate":
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
