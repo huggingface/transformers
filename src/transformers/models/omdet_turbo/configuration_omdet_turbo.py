@@ -291,11 +291,14 @@ class OmDetTurboConfig(PretrainedConfig):
 
     @property
     def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        sub_configs = {}
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PretrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PretrainedConfig):
+            sub_configs["text_config"] = type(text_config)
+        return sub_configs
 
 
 __all__ = ["OmDetTurboConfig"]

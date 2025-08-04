@@ -134,6 +134,7 @@ class FSMTConfig(PretrainedConfig):
 
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    sub_configs = {"decoder": DecoderConfig}
 
     # update the defaults from config file
     def __init__(

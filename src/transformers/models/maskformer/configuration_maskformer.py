@@ -202,11 +202,12 @@ class MaskFormerConfig(PretrainedConfig):
 
     @property
     def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        sub_configs = {}
+        if self.backbone_config is not None and self.backbone_config != {}:
+            sub_configs["backbone_config"] = type(self.backbone_config)
+        if self.decoder_config is not None and self.decoder_config != {}:
+            sub_configs["decoder_config"] = type(self.decoder_config)
+        return sub_configs
 
     @classmethod
     def from_backbone_and_decoder_configs(
