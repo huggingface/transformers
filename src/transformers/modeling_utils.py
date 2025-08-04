@@ -4893,10 +4893,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config = hf_quantizer.update_tp_plan(config)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-            else:
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
+            if not getattr(hf_quantizer.quantization_config, "dequantize", False):
+                quant_method = hf_quantizer.quantization_config.quant_method
+                user_agent["quant"] = getattr(quant_method, "value", quant_method)
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
