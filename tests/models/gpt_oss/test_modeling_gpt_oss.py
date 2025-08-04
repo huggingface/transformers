@@ -276,7 +276,7 @@ class GptOssIntegrationTest(unittest.TestCase):
 import sys
 import json
 
-RESULTS_PATH = {RESULTS_PATH}
+RESULTS_PATH = "{RESULTS_PATH}"
 
 {worker_src}
 
