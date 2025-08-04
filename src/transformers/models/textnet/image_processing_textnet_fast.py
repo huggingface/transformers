@@ -58,6 +58,9 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     size_divisor = 32
     valid_kwargs = TextNetFastImageProcessorKwargs
 
+    def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
+        super().__init__(**kwargs)
+        
     def _preprocess(
         self,
         images: list["torch.Tensor"],
