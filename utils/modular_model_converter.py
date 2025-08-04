@@ -17,12 +17,12 @@ import glob
 import importlib
 import os
 import re
+import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from typing import Optional, Union
 
 import libcst as cst
-from check_copies import run_ruff
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
@@ -57,7 +57,7 @@ def get_module_source_from_name(module_name: str) -> str:
 
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
-    regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
+    regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
@@ -445,7 +445,7 @@ def find_all_dependencies(
             # Add the dependencies
             all_dependencies.add(current)
             all_dependencies_with_parent += [(current, parents[current])]
-            if current in dependency_mapping.keys():
+            if current in dependency_mapping:
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
                 parents.update(dict.fromkeys(dependency_mapping[current], current))
@@ -670,7 +670,7 @@ class ModuleMapper(CSTVisitor, ABC):
         the recursive mapping, i.e. `recursive_dependencies = {"test": {"bar", "foo"}, "bar": {"foo}}`.
         """
         recursive_dependencies = {}
-        for object_name in self.object_dependency_mapping.keys():
+        for object_name in self.object_dependency_mapping:
             all_dependencies = find_all_dependencies(self.object_dependency_mapping, start_entity=object_name)
             recursive_dependencies[object_name] = all_dependencies
         return recursive_dependencies
@@ -682,7 +682,7 @@ class ModuleMapper(CSTVisitor, ABC):
         new_dependencies = dependencies.copy()
         # Go through the set of dependencies
         for dep in tuple(dependencies):
-            if dep in self.object_recursive_dependency_mapping.keys():
+            if dep in self.object_recursive_dependency_mapping:
                 new_dependencies.update(self.object_recursive_dependency_mapping[dep])
         return new_dependencies
 
@@ -790,9 +790,7 @@ class ModelFileMapper(ModuleMapper):
         """
         # Add/overwrite all needed function nodes and dependencies
         self.functions.update(functions)
-        self.object_dependency_mapping.update(
-            {obj: dep for obj, dep in object_mapping.items() if obj in functions.keys()}
-        )
+        self.object_dependency_mapping.update({obj: dep for obj, dep in object_mapping.items() if obj in functions})
         # Add them to global nodes
         self.global_nodes.update(self.functions)
 
@@ -1150,7 +1148,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
                 import_ref_count[name] = max(ref_count, import_ref_count[name])
     # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
     # a ref count > 0 at any point, the imports is actually used
-    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body.keys()}
+    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body}
 
     imports_to_keep = []
     # We need to keep track of which names were already imported, because some import may be duplicated from multiple sources
@@ -1494,8 +1492,8 @@ class ModularFileMapper(ModuleMapper):
             final_name_mapping[file] = get_lowercase_name(final_name)
 
         # Check we are not missing imported files
-        for file in self.model_specific_modules.keys():
-            if file not in final_name_mapping.keys():
+        for file in self.model_specific_modules:
+            if file not in final_name_mapping:
                 final_name_mapping[file] = self.model_name
 
         return final_name_mapping
@@ -1614,7 +1612,7 @@ def get_class_node_and_dependencies(
         nodes_to_add = {
             dep: (relative_dependency_order[dep], modular_mapper.global_nodes[dep])
             for dep in all_dependencies_to_add
-            if dep not in file_to_update.keys()
+            if dep not in file_to_update
         }
 
     # Add the class node itself to the nodes to add
@@ -1678,6 +1676,16 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     return files
 
 
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
+
+
 def convert_modular_file(modular_file):
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
@@ -1710,7 +1718,7 @@ def convert_modular_file(modular_file):
 
 
 def save_modeling_file(modular_file, converted_file):
-    for file_type in converted_file.keys():
+    for file_type in converted_file:
         file_name_prefix = file_type.split("*")[0]
         file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(

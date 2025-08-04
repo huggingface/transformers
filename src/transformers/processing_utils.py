@@ -31,6 +31,8 @@ import numpy as np
 import typing_extensions
 from huggingface_hub.errors import EntryNotFoundError
 
+from transformers.utils import is_torch_available
+
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
@@ -41,6 +43,7 @@ from .video_utils import VideoMetadata, load_video
 
 if is_vision_available():
     from .image_utils import PILImageResampling
+
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -63,7 +66,6 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     list_repo_templates,
     logging,
 )
@@ -678,7 +680,7 @@ class ProcessorMixin(PushToHubMixin):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -1107,7 +1109,7 @@ class ProcessorMixin(PushToHubMixin):
             for i, arg in enumerate(accepted_args_and_kwargs)
             if (arg in valid_kwargs and i < len(args))
         }
-        args = [arg if i not in args_to_update else args_to_update[i] for i, arg in enumerate(args)]
+        args = [args_to_update.get(i, arg) for i, arg in enumerate(args)]
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
@@ -1187,7 +1189,7 @@ class ProcessorMixin(PushToHubMixin):
         for modality in default_kwargs:  # noqa: PLC0206
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
@@ -1203,7 +1205,7 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1236,7 +1238,7 @@ class ProcessorMixin(PushToHubMixin):
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
                 if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
                         output_kwargs["common_kwargs"][key] = kwarg
                     elif key not in possible_modality_keywords:
                         logger.warning_once(
@@ -1350,7 +1352,7 @@ class ProcessorMixin(PushToHubMixin):
                 classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 if attribute_name == "image_processor":
                     # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                    use_fast = kwargs.get("use_fast", None)
+                    use_fast = kwargs.get("use_fast")
                     if use_fast is None:
                         logger.warning_once(
                             "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
@@ -1495,7 +1497,7 @@ class ProcessorMixin(PushToHubMixin):
         }
 
         for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)
@@ -1559,8 +1561,8 @@ class ProcessorMixin(PushToHubMixin):
 
                     for fname in video_fnames:
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            # Case a: Video is provided as a list of image file names
                             video = [np.array(load_image(image_fname)) for image_fname in fname]
-                            # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                             metadata = None
                             logger.warning(
@@ -1568,6 +1570,7 @@ class ProcessorMixin(PushToHubMixin):
                                 "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
                             )
                         else:
+                            # Case b: Video is provided as a single file path or URL or decoded frames in a np.ndarray or torch.tensor
                             video, metadata = load_video(
                                 fname,
                                 backend=mm_load_kwargs["video_load_backend"],
@@ -1641,7 +1644,7 @@ class ProcessorMixin(PushToHubMixin):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
-                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors", None))
+                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors"))
                 return out
             else:
                 return out["input_ids"]

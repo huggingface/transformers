@@ -47,7 +47,6 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .image_processing_mask2former import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -155,9 +154,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = False
     valid_kwargs = Mask2FormerFastImageProcessorKwargs
 
-    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
-    @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     def __init__(self, **kwargs: Unpack[Mask2FormerFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -174,21 +170,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `Mask2FormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "size_divisibility" in kwargs:
-            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
-        if "reduce_labels" in image_processor_dict:
-            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
         """

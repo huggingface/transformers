@@ -120,6 +120,7 @@ _vptq_available, _vptq_version = _is_package_available("vptq", return_version=Tr
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -377,6 +378,10 @@ def is_yt_dlp_available():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_libcst_available():
+    return _libcst_available
 
 
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
@@ -939,9 +944,9 @@ def is_torch_hpu_available():
     original_compile = torch.compile
 
     def hpu_backend_compile(*args, **kwargs):
-        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+        if kwargs.get("backend") not in ["hpu_backend", "eager"]:
             logger.warning(
-                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                f"Calling torch.compile with backend={kwargs.get('backend')} on a Gaudi device is not supported. "
                 "We will override the backend with 'hpu_backend' to avoid errors."
             )
             kwargs["backend"] = "hpu_backend"
@@ -2149,7 +2154,7 @@ class _LazyModule(ModuleType):
         self._object_missing_backend = {}
         self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
 
-        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+        if any(isinstance(key, frozenset) for key in import_structure):
             self._modules = set()
             self._class_to_module = {}
             self.__all__ = []
@@ -2247,7 +2252,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend:
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -2271,7 +2276,7 @@ class _LazyModule(ModuleType):
             Placeholder.__module__ = module_name
 
             value = Placeholder
-        elif name in self._class_to_module.keys():
+        elif name in self._class_to_module:
             try:
                 module = self._get_module(self._class_to_module[name])
                 value = getattr(module, name)
@@ -2726,7 +2731,7 @@ def spread_import_structure(nested_import_structure):
             if not isinstance(_value, dict):
                 frozenset_first_import_structure[_key] = _value
 
-            elif any(isinstance(v, frozenset) for v in _value.keys()):
+            elif any(isinstance(v, frozenset) for v in _value):
                 for k, v in _value.items():
                     if isinstance(k, frozenset):
                         # Here we want to switch around _key and k to propagate k upstream if it is a frozenset

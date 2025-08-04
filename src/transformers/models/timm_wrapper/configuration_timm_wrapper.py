@@ -77,7 +77,7 @@ class TimmWrapperConfig(PretrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
-        label_names = config_dict.get("label_names", None)
+        label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
         # if no labels added to config, use imagenet labeller in timm

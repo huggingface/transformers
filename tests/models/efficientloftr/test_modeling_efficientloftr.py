@@ -216,7 +216,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_height // 2, self.model_tester.image_width // 2],
+                [self.model_tester.image_height, self.model_tester.image_width],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
