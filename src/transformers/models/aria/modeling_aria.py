@@ -801,7 +801,6 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1004,7 +1003,6 @@ class AriaModel(AriaPreTrainedModel):
         return special_image_mask
 
     @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
