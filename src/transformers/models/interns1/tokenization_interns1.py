@@ -472,12 +472,11 @@ class InternS1Tokenizer(Qwen2Tokenizer):
         # keep order for python < 3.7
         self.tokenizer_mapping = OrderedDict([("tokenizer_original", self.encoder)])
 
-        if self._extra_tokenizer_list is not None:
-            for tokenizer_config in self._extra_tokenizer_list:
-                self._build_extra_tokenizer(tokenizer_config)
-                self._update_special_tokens(tokenizer_config)
-                self._update_logical_special_tokens(tokenizer_config)
-                self.decoder.update(self._build_extra_decoder(tokenizer_config))
+        for tokenizer_config in self._extra_tokenizer_list:
+            self._build_extra_tokenizer(tokenizer_config)
+            self._update_special_tokens(tokenizer_config)
+            self._update_logical_special_tokens(tokenizer_config)
+            self.decoder.update(self._build_extra_decoder(tokenizer_config))
 
         for token in self.protect_begin_sp_tokens:
             self.tokens_trie.add(token)
