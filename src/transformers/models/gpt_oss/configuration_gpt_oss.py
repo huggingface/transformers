@@ -105,7 +105,6 @@ class GptOssConfig(PretrainedConfig):
         rope_config_validation(self)
 
         self.attention_bias = True
-        self.mlp_bias = False
         self.max_position_embeddings = max_position_embeddings
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
