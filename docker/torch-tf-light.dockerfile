@@ -16,3 +16,5 @@ RUN uv pip install --no-cache-dir  "protobuf==3.20.3" librosa
 
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
+
+ENV PATH="/.venv/bin:$PATH"

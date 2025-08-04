@@ -19,8 +19,10 @@ RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pyt
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]" unidic unidic-lite
 # spacy is not used so not tested. Causes to failures. TODO fix later
-RUN python3 -m unidic download
+RUN uv run python -m unidic download
 RUN uv pip uninstall transformers
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN apt remove -y g++ cmake  xz-utils libprotobuf-dev protobuf-compiler
+
+ENV PATH="/.venv/bin:$PATH"

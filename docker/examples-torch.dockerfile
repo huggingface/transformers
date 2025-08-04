@@ -9,3 +9,5 @@ RUN uv pip install --no-deps timm accelerate --extra-index-url https://download.
 RUN uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[sklearn,sentencepiece,vision,testing]" seqeval albumentations jiwer
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/.venv/bin:$PATH"

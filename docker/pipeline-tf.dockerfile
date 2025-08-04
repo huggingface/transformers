@@ -7,3 +7,5 @@ RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U
 RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" tensorflow_probability
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/.venv/bin:$PATH"

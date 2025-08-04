@@ -13,3 +13,5 @@ RUN git lfs install
 
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
+
+ENV PATH="/.venv/bin:$PATH"

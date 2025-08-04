@@ -9,3 +9,5 @@ RUN uv pip install  --upgrade --no-cache-dir "git+https://github.com/huggingface
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3"
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
+
+ENV PATH="/.venv/bin:$PATH"

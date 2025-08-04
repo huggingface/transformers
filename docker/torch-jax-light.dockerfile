@@ -13,3 +13,5 @@ RUN uv pip install --no-cache-dir "scipy<1.13" "git+https://github.com/huggingfa
 
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
+
+ENV PATH="/.venv/bin:$PATH"

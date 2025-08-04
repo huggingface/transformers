@@ -14,3 +14,5 @@ RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transform
 RUN uv pip install 'git+https://github.com/facebookresearch/detectron2.git@92ae9f0b92aba5867824b4f12aa06a22a60a45d3' --no-build-isolation
 RUN uv pip uninstall transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/.venv/bin:$PATH"
