@@ -208,6 +208,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 cls.model_checkpoint,
                 config=config,
                 torch_dtype=torch_dtype,
+                device_map=torch_device,
             )
         return cls.model
 
@@ -361,9 +362,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
-                # 4-bit
-                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
                 ("cuda", 8): 'Dock stretches to calm,  \nMountains whisper through the trees,  \nLake mirrors the sky.',
             }
         )  # fmt: skip
@@ -380,9 +378,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
-                # 4-bit
-                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
                 ("cuda", 8): 'The image depicts a vibrant street scene in what appears to be a Chinatown district, likely in an urban area. The focal',
             }
         )  # fmt: skip
