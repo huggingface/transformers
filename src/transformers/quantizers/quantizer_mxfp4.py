@@ -149,7 +149,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        if is_triton_kernels_availalble():
+        if is_triton_kernels_availalble() and is_triton_available("3.4.0"):
             from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
         from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
