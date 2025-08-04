@@ -227,9 +227,11 @@ class AutoHfQuantizer:
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "":
+        if warning_msg != "" and not isinstance(quantization_config, Mxfp4Config):
             warnings.warn(warning_msg)
-
+        else:
+            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
+            logger.info(warning_msg)
         return quantization_config
 
     @staticmethod
