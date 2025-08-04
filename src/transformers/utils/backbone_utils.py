@@ -233,9 +233,10 @@ class BackboneMixin:
     def forward_with_filtered_kwargs(self, *args, **kwargs):
         if not self.has_attentions:
             kwargs.pop("output_attentions", None)
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        return self(*args, **kwargs)
 
     def forward(
         self,
