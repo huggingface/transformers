@@ -157,9 +157,13 @@ if __name__ == "__main__":
     #? (1, 16, 3, 288, 288) is the needed 
     # print(f'Input shape: {inputs.shape} and some values: {inputs[0, 0, :, 0, 0]}')
     with torch.no_grad():
-        outputs = model(inputs)
+        outputs = model(inputs, output_hidden_states=True, output_attentions=True)
     #print(outputs.last_hidden_state.shape)  # Should print the shape of the output tensor
     print(f'Encoded embedding shape: {outputs.last_hidden_state.shape}, and some values: {outputs.last_hidden_state[0, :3, :3]}')
+    print(f'{len(outputs.temporal_hidden_states)=}, {outputs.temporal_hidden_states[0].shape=}, {outputs.temporal_hidden_states[0][0, :3, :3]=}')
+    print(f'{len(outputs.spatial_hidden_states)=}, {outputs.spatial_hidden_states[0].shape=}, {outputs.spatial_hidden_states[0][0, :3, :3]=}')
+    print(f'{len(outputs.temporal_attentions)=}, {outputs.temporal_attentions[0].shape=}, {outputs.temporal_attentions[0][0, :3, :3]=}')
+    print(f'{len(outputs.spatial_attentions)=}, {outputs.spatial_attentions[0].shape=}, {outputs.spatial_attentions[0][0, :3, :3]=}')    
     print("Model loaded and ran successfully")
     # '''
     # The next steps are

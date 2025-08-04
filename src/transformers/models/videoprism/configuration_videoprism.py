@@ -5,7 +5,6 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-
 from ...configuration_utils import PretrainedConfig
 
 
@@ -72,7 +71,6 @@ class VideoPrismConfig(PretrainedConfig):
         image_size=288,
         num_frames=16,
         tubelet_size=[1, 18, 18],
-        pos_emb_shape=[16, 16, 16],
         num_channels=3,
         hidden_size=768,
         num_spatial_layers=12,
@@ -86,6 +84,7 @@ class VideoPrismConfig(PretrainedConfig):
         layer_norm_eps=1e-06,
         qkv_bias=True,
         _attn_implementation="eager",
+        atten_logit_cap=50.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -105,7 +104,8 @@ class VideoPrismConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.num_spatial_layers = num_spatial_layers
         self.num_temporal_layers = num_temporal_layers
-        self.pos_emb_shape = pos_emb_shape
         self._attn_implementation = _attn_implementation
+        self.atten_logit_cap = atten_logit_cap
+
 
 __all__ = ["VideoPrismConfig"]
