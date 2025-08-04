@@ -438,7 +438,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): 'The two landmarks depicted in the images are the Statue of Liberty and the Golden Gate Bridge. \n\n1. **Statue',
+                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
