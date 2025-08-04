@@ -17,9 +17,9 @@ import inspect
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import pytest
 from parameterized import parameterized
@@ -50,6 +50,8 @@ if is_torch_available():
         GptOssForCausalLM,
         GptOssModel,
     )
+
+    NUM_GPUS = torch.cuda.device_count()
 
 
 class GptOssModelTester(CausalLMModelTester):
@@ -165,16 +167,13 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-RESULTS_PATH = os.path.join(
-    os.path.dirname(__file__).split("transformers")[0],
-    "tests/fixtures/gpt_oss/integration_tests.json",
-)
+RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 
 
 # ------------------------
 # Worker function for distributed torchrun
 # ------------------------
-def distributed_worker(quantized, model, kernels, attn_impl, mode):
+def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
     import os
 
@@ -191,7 +190,7 @@ def distributed_worker(quantized, model, kernels, attn_impl, mode):
     kernels = kernels.lower() == "true"
 
     # Distributed model loading
-    model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+    model_id = f"/fsx/vb/new-oai/gpt-oss-{model_size}-trfs"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype="auto",
@@ -210,7 +209,7 @@ def distributed_worker(quantized, model, kernels, attn_impl, mode):
     if int(os.environ.get("RANK", "0")) == 0:
         result_entry = {
             "quantized": quantized,
-            "model": model,
+            "model": model_size,
             "kernels": kernels,
             "attn_impl": attn_impl,
             "mode": mode,
@@ -275,6 +274,10 @@ class GptOssIntegrationTest(unittest.TestCase):
         # Create a temp file that calls the worker
         script_code = f"""
 import sys
+import json
+
+RESULTS_PATH = {RESULTS_PATH}
+
 {worker_src}
 
 if __name__ == "__main__":
@@ -291,8 +294,7 @@ if __name__ == "__main__":
         # Launch torchrun
         cmd = [
             "torchrun",
-            "--nproc_per_node=8",
-            sys.executable,
+            f"--nproc_per_node={NUM_GPUS}",
             tmp_path,
         ]
         subprocess.run(cmd, check=True)
@@ -341,8 +343,8 @@ if __name__ == "__main__":
     # ------------------------
     # Non-distributed test
     # ------------------------
-    @require_read_token
     @parameterized.expand(PARAMETERS)
+    @require_read_token
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
         output_texts = self.load_and_forward(
@@ -376,7 +378,7 @@ if __name__ == "__main__":
     # ------------------------
     # Distributed test
     # ------------------------
-    @require_read_token
     @parameterized.expand(PARAMETERS)
+    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
