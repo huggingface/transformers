@@ -1,11 +1,12 @@
-from datetime import datetime
-
-from transformers.testing_utils import require_torch, is_harmony_available, require_harmony
-from transformers.utils import get_json_schema
-from transformers import AutoTokenizer
-from typing import Union, Optional
 import json
 import unittest
+from datetime import datetime
+from typing import Optional, Union
+
+from transformers import AutoTokenizer
+from transformers.testing_utils import is_harmony_available, require_harmony, require_torch
+from transformers.utils import get_json_schema
+
 
 if is_harmony_available():
     from openai_harmony import (
@@ -14,12 +15,12 @@ if is_harmony_available():
         DeveloperContent,
         HarmonyEncodingName,
         Message,
+        ReasoningEffort,
+        RenderConversationConfig,
         Role,
         SystemContent,
         ToolDescription,
         load_harmony_encoding,
-        ReasoningEffort,
-        RenderConversationConfig
     )
 
 def get_system_message(browser_tool=False, python_tool=False):
