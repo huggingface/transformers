@@ -46,22 +46,17 @@ class Sam2Processor(ProcessorMixin):
     Args:
         image_processor (`Sam2ImageProcessorFast`):
             An instance of [`Sam2ImageProcessorFast`].
-        video_processor (`Sam2VideoProcessor`):
-            An instance of [`Sam2VideoProcessor`].
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):
             The value used for padding input points.
     """
 
-    attributes = ["image_processor", "video_processor"]
+    attributes = ["image_processor"]
     image_processor_class = "Sam2ImageProcessorFast"
-    video_processor_class = "Sam2VideoProcessor"
 
-    def __init__(
-        self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
-    ):
-        super().__init__(image_processor, video_processor, **kwargs)
+    def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
+        super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 

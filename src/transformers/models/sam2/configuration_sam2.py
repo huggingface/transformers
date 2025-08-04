@@ -39,31 +39,29 @@ class Sam2HieraDetConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             The number of channels in the image.
-        image_size (`int`, *optional*, defaults to 1024):
+        image_size (`list[int]`, *optional*, defaults to [1024, 1024]):
             The size of the image.
-        patch_kernel_size (`int`, *optional*, defaults to 7):
+        patch_kernel_size (`list[int]`, *optional*, defaults to [7, 7]):
             The kernel size of the patch.
-        patch_stride (`int`, *optional*, defaults to 4):
+        patch_stride (`list[int]`, *optional*, defaults to [4, 4]):
             The stride of the patch.
-        patch_padding (`int`, *optional*, defaults to 3):
+        patch_padding (`list[int]`, *optional*, defaults to [3, 3]):
             The padding of the patch.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The stochastic depth rate.
         num_query_pool_stages (`int`, *optional*, defaults to 3):
             The number of query pool stages.
-        query_stride (`Tuple[int, int]`, *optional*, defaults to `[2, 2]`):
+        query_stride (`list[int]`, *optional*, defaults to `[2, 2]`):
             The downsample stride between stages.
-        stages (`Tuple[int, ...]`, *optional*, defaults to `[1, 2, 7, 2]`):
+        stages (`list[int]`, *optional*, defaults to `[1, 2, 7, 2]`):
             The number of blocks per stage.
         dim_mul (`float`, *optional*, defaults to 2.0):
             The dimension multiplier factor at stage shift.
         head_mul (`float`, *optional*, defaults to 2.0):
             The head multiplier factor at stage shift.
-        window_positional_embedding_background_size (`Tuple[int, int]`, *optional*, defaults to `[7, 7]`):
+        window_positional_embedding_background_size (`list[int]`, *optional*, defaults to `[7, 7]`):
             The window size per stage when not using global attention.
-        window_spec (`Tuple[int, ...]`, *optional*, defaults to `[8, 4, 14, 7]`):
+        window_spec (`list[int]`, *optional*, defaults to `[8, 4, 14, 7]`):
             The window specifications for each stage.
-        global_attention_blocks (`Tuple[int, ...]`, *optional*, defaults to `[5, 7, 9]`):
+        global_attention_blocks (`list[int]`, *optional*, defaults to `[5, 7, 9]`):
             The blocks where global attention is used.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
@@ -74,7 +72,7 @@ class Sam2HieraDetConfig(PretrainedConfig):
 
     """
 
-    base_config_key = "vision_config"
+    base_config_key = "backbone_config"
     model_type = "sam2_hiera_det_model"
 
     def __init__(
@@ -82,11 +80,10 @@ class Sam2HieraDetConfig(PretrainedConfig):
         hidden_size=96,
         num_attention_heads=1,
         num_channels=3,
-        image_size=1024,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        drop_path_rate=0.0,
+        image_size=[1024, 1024],
+        patch_kernel_size=[7, 7],
+        patch_stride=[4, 4],
+        patch_padding=[3, 3],
         num_query_pool_stages=3,
         query_stride=[2, 2],
         stages=[1, 2, 7, 2],
@@ -109,7 +106,6 @@ class Sam2HieraDetConfig(PretrainedConfig):
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
-        self.drop_path_rate = drop_path_rate
         self.num_query_pool_stages = num_query_pool_stages
         self.query_stride = query_stride
         self.stages = stages
@@ -152,12 +148,8 @@ class Sam2VisionConfig(PretrainedConfig):
             The padding for the convolutions in the neck.
         fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
             The levels for the top-down FPN connections.
-        fpn_interpolation_mode (`str`, *optional*, defaults to `"nearest"`):
-            The interpolation model for the FPN.
         num_feature_levels (`int`, *optional*, defaults to 3):
             The number of feature levels from the FPN to use.
-        fuse_type (`str`, *optional*, defaults to `"sum"`):
-            The type of fusion to use in the neck.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -183,9 +175,7 @@ class Sam2VisionConfig(PretrainedConfig):
         fpn_stride=1,
         fpn_padding=0,
         fpn_top_down_levels=[2, 3],
-        fpn_interpolation_mode="nearest",
         num_feature_levels=3,
-        fuse_type="sum",
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         initializer_range=0.02,
@@ -195,7 +185,7 @@ class Sam2VisionConfig(PretrainedConfig):
 
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = (
-                backbone_config["model_type"] if "model_type" in backbone_config else "hiera"
+                backbone_config["model_type"] if "model_type" in backbone_config else "sam2_hiera_det_model"
             )
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, Sam2HieraDetConfig):
@@ -205,7 +195,6 @@ class Sam2VisionConfig(PretrainedConfig):
 
         self.backbone_config = backbone_config
 
-        assert fuse_type in ["sum", "average"]
         # Neck
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
@@ -214,8 +203,6 @@ class Sam2VisionConfig(PretrainedConfig):
         self.fpn_stride = fpn_stride
         self.fpn_padding = fpn_padding
         self.fpn_top_down_levels = fpn_top_down_levels
-        self.fpn_interpolation_mode = fpn_interpolation_mode
-        self.fuse_type = fuse_type
         self.num_feature_levels = num_feature_levels
 
         self.hidden_act = hidden_act
@@ -308,10 +295,6 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
             The stability delta for the dynamic multimask.
         dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
             The stability threshold for the dynamic multimask.
-        feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feed-forward network.
-        two_way_transformer_activation (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the two-way transformer.
 
     """
 
@@ -331,8 +314,6 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_via_stability=True,
         dynamic_multimask_stability_delta=0.05,
         dynamic_multimask_stability_thresh=0.98,
-        feed_forward_hidden_act="relu",
-        two_way_transformer_activation="relu",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -342,7 +323,6 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.feed_forward_hidden_act = feed_forward_hidden_act
         self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
         self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
         self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
@@ -352,7 +332,6 @@ class Sam2MaskDecoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.mlp_dim = mlp_dim
-        self.two_way_transformer_activation = two_way_transformer_activation
         self.attention_downsample_rate = attention_downsample_rate
 
 
@@ -377,7 +356,7 @@ class Sam2Config(PretrainedConfig):
             Standard deviation for parameter initialization.
         num_maskmem (`int`, *optional*, defaults to 7):
             The number of memory slots for the mask memory.
-        image_size (`int`, *optional*, defaults to 1024):
+        image_size (`list[int]`, *optional*, defaults to [1024, 1024]):
             The size of the input images.
         sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
             Scale factor for the sigmoid function in the memory encoder.
@@ -421,7 +400,7 @@ class Sam2Config(PretrainedConfig):
             The dropout rate for the memory attention module.
         memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
             The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
+        memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
             The feature sizes for the Rope positional encoding.
         memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the Rope positional encoding.
@@ -451,6 +430,8 @@ class Sam2Config(PretrainedConfig):
             The number of layers in the memory fuser.
         memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
             The dimension of the memory fuser embedding.
+        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+            The dimension of the intermediate layer in the memory fuser.
         memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
             The kernel size for the memory fuser.
         memory_fuser_padding (`int`, *optional*, defaults to 3):
@@ -510,54 +491,6 @@ class Sam2Config(PretrainedConfig):
         prompt_encoder_config=None,
         mask_decoder_config=None,
         initializer_range=0.02,
-        num_maskmem=7,
-        image_size=1024,
-        sigmoid_scale_for_mem_enc=20.0,
-        sigmoid_bias_for_mem_enc=-10.0,
-        binarize_mask_from_pts_for_mem_enc=True,
-        enable_occlusion_spatial_embedding=True,
-        multimask_output_in_sam=True,
-        multimask_min_pt_num=0,
-        multimask_max_pt_num=1,
-        multimask_output_for_tracking=True,
-        non_overlap_masks_for_mem_enc=False,
-        max_object_pointers_in_encoder=16,
-        enable_temporal_pos_encoding_for_object_pointers=True,
-        project_temporal_pos_encoding_in_object_pointers=True,
-        preserve_temporal_direction_in_object_pointers=True,
-        # memory attention
-        memory_attention_hidden_size=256,
-        memory_attention_num_layers=4,
-        memory_attention_num_attention_heads=1,
-        memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
-        memory_attention_dropout=0.1,
-        memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=[64, 64],
-        memory_attention_rope_dropout=0.1,
-        memory_attention_apply_pe_at_self_attn=False,
-        memory_attention_apply_pe_at_cross_attn_keys=True,
-        memory_attention_apply_pe_at_cross_attn_queries=False,
-        # memory encoder
-        memory_encoder_hidden_size=256,
-        memory_encoder_output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_use_depthwise_conv=True,
-        memory_fuser_hidden_act="gelu",
-        # post-processing parameters
-        fill_hole_area=8,
-        non_overlap_masks=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -582,57 +515,6 @@ class Sam2Config(PretrainedConfig):
         self.mask_decoder_config = Sam2MaskDecoderConfig(**mask_decoder_config)
 
         self.initializer_range = initializer_range
-        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
-        self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
-        self.binarize_mask_from_pts_for_mem_enc = binarize_mask_from_pts_for_mem_enc
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        self.multimask_output_in_sam = multimask_output_in_sam
-        self.multimask_min_pt_num = multimask_min_pt_num
-        self.multimask_max_pt_num = multimask_max_pt_num
-        self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
-        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
-        self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
-        self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
-
-        # memory attention
-        self.memory_attention_hidden_size = memory_attention_hidden_size
-        self.memory_attention_num_layers = memory_attention_num_layers
-        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
-        self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
-        self.memory_attention_dropout = memory_attention_dropout
-        self.memory_attention_rope_theta = memory_attention_rope_theta
-        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_dropout = memory_attention_rope_dropout
-        self.memory_attention_apply_pe_at_self_attn = memory_attention_apply_pe_at_self_attn
-        self.memory_attention_apply_pe_at_cross_attn_keys = memory_attention_apply_pe_at_cross_attn_keys
-        self.memory_attention_apply_pe_at_cross_attn_queries = memory_attention_apply_pe_at_cross_attn_queries
-
-        # memory encoder
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
-        self.memory_encoder_output_channels = memory_encoder_output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
-
-        # post-processing parameters
-        self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
-        self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 __all__ = [

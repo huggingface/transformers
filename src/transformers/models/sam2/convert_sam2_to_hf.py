@@ -32,10 +32,9 @@ from transformers import (
     Sam2HieraDetConfig,
     Sam2ImageProcessorFast,
     Sam2MaskDecoderConfig,
+    Sam2Model,
     Sam2Processor,
     Sam2PromptEncoderConfig,
-    Sam2VideoModel,
-    Sam2VideoProcessor,
     Sam2VisionConfig,
 )
 
@@ -218,17 +217,20 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     state_dict = replace_keys(state_dict)
 
     image_processor = Sam2ImageProcessorFast()
-    video_processor = Sam2VideoProcessor()
-    processor = Sam2Processor(image_processor=image_processor, video_processor=video_processor)
-    hf_model = Sam2VideoModel(config)
+    processor = Sam2Processor(image_processor=image_processor)
+    hf_model = Sam2Model(config)
     hf_model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=True)
+    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     hf_model = hf_model.to(device)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    for pattern in Sam2Model._keys_to_ignore_on_load_unexpected:
+        unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
+    if missing_keys or unexpected_keys:
+        print("Missing keys:", missing_keys)
+        print("Unexpected keys:", unexpected_keys)
+        raise ValueError("Missing or unexpected keys in the state dict")
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -241,7 +243,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     ).to(device)
 
     with torch.no_grad():
-        output = hf_model._single_frame_forward(**inputs)
+        output = hf_model(**inputs)
     scores = output.iou_scores.squeeze()
 
     # commented scores are from original sam2.1 model with Sam2Processor input, changes might be from bfloat16

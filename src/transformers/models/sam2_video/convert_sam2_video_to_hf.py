@@ -144,6 +144,7 @@ def replace_keys(state_dict):
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
     output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
+    output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -201,6 +202,15 @@ def replace_keys(state_dict):
                 key = key.replace("layers.1", "layers.0")
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
+
+        if re.match(output_memory_encoder_mask_downsampler_pattern, key):
+            layer_nb = int(re.match(output_memory_encoder_mask_downsampler_pattern, key).group(1))
+            if layer_nb == 12:
+                key = key.replace(f"encoder.{layer_nb}", "final_conv")
+            elif layer_nb % 3 == 0:
+                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.conv")
+            elif layer_nb % 3 == 1:
+                key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.layer_norm")
 
         model_state_dict[key] = value
 

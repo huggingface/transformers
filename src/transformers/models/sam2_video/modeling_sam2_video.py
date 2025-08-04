@@ -20,10 +20,8 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
@@ -44,1069 +42,9 @@ from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    logging,
 )
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
-
-
-logger = logging.get_logger(__name__)
-
-
-class Sam2VideoLayerNorm(nn.Module):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
-
-# TODO refactor or remove?
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class Sam2VideoDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
-class Sam2VideoPositionEmbeddingSine(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
-    """
-
-    def __init__(
-        self,
-        num_pos_feats,
-        temperature: int = 10000,
-        normalize: bool = True,
-        scale: Optional[float] = None,
-    ):
-        super().__init__()
-        self.num_pos_feats = num_pos_feats // 2
-        self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
-
-        self.cache = {}
-
-    def _encode_xy(self, x, y):
-        # The positions are expected to be normalized
-        x_embed = x * self.scale
-        y_embed = y * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, None] / dim_t
-        pos_y = y_embed[:, None] / dim_t
-        pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
-        pos_y = torch.stack((pos_y[:, 0::2].sin(), pos_y[:, 1::2].cos()), dim=2).flatten(1)
-        return pos_x, pos_y
-
-    @torch.no_grad()
-    def encode_boxes(self, x, y, w, h):
-        pos_x, pos_y = self._encode_xy(x, y)
-        pos = torch.cat((pos_y, pos_x, h[:, None], w[:, None]), dim=1)
-        return pos
-
-    @torch.no_grad()
-    def encode_points(self, x, y, labels):
-        (bx, nx), (by, ny) = x.shape, y.shape
-        pos_x, pos_y = self._encode_xy(x.flatten(), y.flatten())
-        pos_x, pos_y = pos_x.reshape(bx, nx, -1), pos_y.reshape(by, ny, -1)
-        pos = torch.cat((pos_y, pos_x, labels[:, :, None]), dim=2)
-        return pos
-
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor):
-        cache_key = (x.shape[-2], x.shape[-1])
-        if cache_key in self.cache:
-            return self.cache[cache_key][None].repeat(x.shape[0], 1, 1, 1)
-        y_embed = (
-            torch.arange(1, x.shape[-2] + 1, dtype=torch.float32, device=x.device)
-            .view(1, -1, 1)
-            .repeat(x.shape[0], 1, x.shape[-1])
-        )
-        x_embed = (
-            torch.arange(1, x.shape[-1] + 1, dtype=torch.float32, device=x.device)
-            .view(1, 1, -1)
-            .repeat(x.shape[0], x.shape[-2], 1)
-        )
-
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        self.cache[cache_key] = pos[0]
-        return pos
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class Sam2VideoAttention(nn.Module):
-    """
-    SAM2_VIDEO's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
-    """
-
-    def __init__(
-        self,
-        config: Union[Sam2VideoConfig, Sam2VideoMaskDecoderConfig],
-        hidden_size: Optional[int] = None,
-        num_attention_heads: Optional[int] = None,
-        downsample_rate: Optional[int] = None,
-        kv_in_dim: Optional[int] = None,
-    ):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
-
-        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
-
-        self.internal_dim = self.hidden_size // downsample_rate
-        self.num_attention_heads = (
-            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
-        )
-        if self.internal_dim % self.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
-
-        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
-
-    def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Sam2VideoAttention
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class Sam2VideoTwoWayAttentionBlock(nn.Module):
-    def __init__(self, config: Sam2VideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
-        """
-        A transformer block with four layers:
-            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
-            sparse inputs (4) cross attention of dense inputs -> sparse inputs
-
-        Arguments:
-            config (`Sam2VideoMaskDecoderConfig`):
-                The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, defaults to `False`):
-                Whether or not to skip the addition of the query_point_embedding on the first layer.
-        """
-        super().__init__()
-        self.self_attn = Sam2VideoAttention(config, downsample_rate=1)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-
-        self.cross_attn_token_to_image = Sam2VideoAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-
-        self.mlp = Sam2VideoFeedForward(
-            config.hidden_size,
-            config.mlp_dim,
-            config.hidden_size,
-            num_layers=config.num_hidden_layers,
-            activation=config.two_way_transformer_activation,
-        )
-        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
-
-        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
-        self.cross_attn_image_to_token = Sam2VideoAttention(config)
-
-        self.skip_first_layer_pe = skip_first_layer_pe
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Tensor,
-        key_point_embedding: Tensor,
-        attention_similarity: Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # Self attention block
-        if self.skip_first_layer_pe:
-            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
-        else:
-            query = queries + query_point_embedding
-            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
-            queries = queries + attn_out
-        queries = self.layer_norm1(queries)
-
-        # Cross attention block, tokens attending to image embedding
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_token_to_image(
-            query=query, key=key, value=keys, attention_similarity=attention_similarity
-        )
-        queries = queries + attn_out
-
-        queries = self.layer_norm2(queries)
-
-        # MLP block
-        mlp_out = self.mlp(queries)
-        queries = queries + mlp_out
-        queries = self.layer_norm3(queries)
-
-        # Cross attention block, image embedding attending to tokens
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
-        keys = keys + attn_out
-
-        keys = self.layer_norm4(keys)
-        return queries, keys, attn_out
-
-
-class Sam2VideoFeedForward(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        output_dim: int,
-        num_layers: int,
-        activation: str = "relu",
-        sigmoid_output: bool = False,
-    ):
-        super().__init__()
-        self.num_layers = num_layers
-        self.activation = ACT2FN[activation]
-        self.proj_in = nn.Linear(input_dim, hidden_dim)
-        self.proj_out = nn.Linear(hidden_dim, output_dim)
-        self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
-        self.sigmoid_output = sigmoid_output
-
-    def forward(self, hidden_states):
-        hidden_states = self.proj_in(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        for layer in self.layers:
-            hidden_states = self.activation(layer(hidden_states))
-
-        hidden_states = self.proj_out(hidden_states)
-        if self.sigmoid_output:
-            hidden_states = F.sigmoid(hidden_states)
-        return hidden_states
-
-
-@dataclass
-@auto_docstring(custom_intro="Base class for the Sam2Video model's output.")
-class Sam2VideoImageSegmentationOutput(ModelOutput):
-    r"""
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
-        The Intersection over Union (IoU) scores of the predicted masks.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
-        by the processor to be brought to the original image size.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
-        original image size.
-    high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
-        The predicted masks, upscaled to the original image size. Only used for Sam2VideoVideoModel.
-    object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
-        A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoVideoModel.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
-        Logits for the object score, indicating if an object is present.
-    image_embeddings (`tuple(torch.FloatTensor)`):
-        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
-        tensor has shape `(batch_size, channels, height, width)`.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
-        Hidden-states of the vision model at the output of each stage.
-    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-        Attentions weights of the vision model.
-    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
-        Attentions weights of the mask decoder.
-    """
-
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    low_res_masks: torch.FloatTensor = None
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
-    image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
-@dataclass
-@auto_docstring(custom_intro="Base class for the Sam2 model's output.")
-class Sam2VideoSegmentationOutput(ModelOutput):
-    r"""
-    video_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-        The predicted masks, upscaled to the original video resolution.
-    consolidated_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-        The predicted masks stored as consolidated masks.
-        These masks will be at the model's resolution if `consolidate_at_video_res=False` when calling
-        `Sam2VideoModel.forward`. Otherwise, they will be at the video resolution.
-    frame_idx (`int`):
-        The frame index of the video.
-    """
-
-    video_res_masks: torch.FloatTensor = None
-    consolidated_res_masks: torch.FloatTensor = None
-    frame_idx: int = None
-
-
-@auto_docstring
-class Sam2VideoPreTrainedModel(PreTrainedModel):
-    config_class = Sam2VideoConfig
-    base_model_prefix = "sam2_video"
-    main_input_name = "pixel_values"
-    _supports_sdpa = True
-    _supports_flash_attn_2 = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, Sam2VideoModel):
-            if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
-            if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
-            if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
-            if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
-        if isinstance(module, Sam2VideoMemoryFuserCXBlock):
-            if module.scale is not None:
-                module.scale.data.zero_()
-
-
-def init_2d_position_ids(end_x: int, end_y: int):
-    """Generate 2D position indices for axial rotary embedding."""
-    t = torch.arange(end_x * end_y, dtype=torch.long)
-    t_x = t % end_x
-    t_y = torch.div(t, end_x, rounding_mode="floor")
-    return t_x, t_y
-
-
-class Sam2VideoVisionRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for SAM2, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
-
-    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
-        super().__init__()
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-
-        self.dim = dim
-        self.theta = theta
-        self.max_end_x = end_x
-
-        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-        t_x, t_y = init_2d_position_ids(end_x, end_y)
-        freqs_x = torch.outer(t_x, freqs).float()
-        freqs_y = torch.outer(t_y, freqs).float()
-        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
-
-    @torch.no_grad()
-    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Generate cosine and sine position embeddings for 2D spatial dimensions.
-
-        Args:
-            feat_sizes (`tuple[int, int]`):
-                Tuple of (width, height) for the feature map
-
-        Returns:
-            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
-        """
-        end_x, end_y = feat_sizes
-        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
-        cos = freqs.cos()
-        sin = freqs.sin()
-        return cos, sin
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
-    x_rotated[..., ::2] = -x[..., 1::2]
-    x_rotated[..., 1::2] = x[..., ::2]
-    return x_rotated
-
-
-# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
-def apply_rotary_pos_emb_2d(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    repeat_freqs_k: bool = False,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embedding to query and key tensors for vision models.
-    Follows the standard transformers library pattern.
-
-    Args:
-        q: Query tensor of shape (..., seq_len, head_dim)
-        k: Key tensor of shape (..., seq_len, head_dim)
-        cos: Cosine position embedding of shape (seq_len, head_dim)
-        sin: Sine position embedding of shape (seq_len, head_dim)
-        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
-
-    Returns:
-        Rotated (q, k) tensors
-    """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
-    q_embed = q.float()  # force upscale to float32 as in the original implementation
-    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
-    if k.shape[-2] == 0:
-        # Handle case where keys might be empty due to dropout
-        return q_embed.type_as(q), k
-
-    # Handle key tensor - may need to repeat frequencies if different sequence length
-    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
-        # Repeat cos/sin to match key sequence length
-        repeat_factor = k.shape[-2] // q.shape[-2]
-        cos_k = cos.repeat(1, 1, repeat_factor, 1)
-        sin_k = sin.repeat(1, 1, repeat_factor, 1)
-    else:
-        cos_k = cos
-        sin_k = sin
-
-    # Apply rotary embedding to keys
-    k_embed = k.float()  # force upscale to float32 as in the original implementation
-    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
-    return q_embed.type_as(q), k_embed.type_as(k)
-
-
-class Sam2VideoRoPEAttention(nn.Module):
-    """Attention with rotary position encoding."""
-
-    def __init__(
-        self,
-        config,
-        hidden_size: Optional[int] = None,
-        num_attention_heads: Optional[int] = None,
-        downsample_rate: Optional[int] = None,
-        kv_in_dim: Optional[int] = None,
-        dropout=0.0,
-        rope_theta=10000.0,
-        rope_k_repeat=False,
-        feat_sizes=(64, 64),
-    ):
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size if hidden_size is not None else config.hidden_size
-
-        downsample_rate = downsample_rate if downsample_rate is not None else config.attention_downsample_rate
-
-        self.internal_dim = self.hidden_size // downsample_rate
-        self.num_attention_heads = (
-            num_attention_heads if num_attention_heads is not None else config.num_attention_heads
-        )
-        if self.internal_dim % self.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
-
-        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-        self.is_causal = False
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(
-            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
-        )
-        self.rope_k_repeat = rope_k_repeat
-        self.feat_sizes = feat_sizes
-        self.dropout_p = dropout
-
-        # Cache for position embeddings
-        self._cached_cos = None
-        self._cached_sin = None
-        self._cached_feat_sizes = None
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        num_k_exclude_rope: int = 0,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len = query.shape[-2]
-        width = height = int(math.sqrt(seq_len))
-        current_feat_sizes = (width, height)
-
-        # Generate or use cached position embeddings
-        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
-            cos, sin = self.rotary_emb(current_feat_sizes)
-            self._cached_cos = cos
-            self._cached_sin = sin
-            self._cached_feat_sizes = current_feat_sizes
-        else:
-            cos = self._cached_cos
-            sin = self._cached_sin
-
-        # Apply rotary position encoding, excluding some keys if specified
-        if num_k_exclude_rope > 0:
-            # Split keys into rope and non-rope parts
-            k_rope = key[:, :, :-num_k_exclude_rope]
-            k_no_rope = key[:, :, -num_k_exclude_rope:]
-
-            # Apply rope only to the rope part
-            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-            # Concatenate back
-            key = torch.cat([k_rope, k_no_rope], dim=-2)
-            query = q_rope
-        else:
-            # Apply rope to all queries and keys
-            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-        scale = query.shape[-1] ** -0.5
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=None,
-            dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
-
-
-class Sam2VideoMemoryAttentionLayer(nn.Module):
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-        hidden_size = config.memory_attention_hidden_size
-        self.self_attn = Sam2VideoRoPEAttention(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            feat_sizes=config.memory_attention_rope_feat_sizes,
-            dropout=config.memory_attention_rope_dropout,
-        )
-        self.cross_attn_image = Sam2VideoRoPEAttention(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=config.memory_attention_num_attention_heads,
-            downsample_rate=config.memory_attention_downsample_rate,
-            rope_theta=config.memory_attention_rope_theta,
-            feat_sizes=config.memory_attention_rope_feat_sizes,
-            dropout=config.memory_attention_rope_dropout,
-            rope_k_repeat=True,
-            kv_in_dim=64,
-        )
-
-        # Implementation of Feedforward model
-        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
-        self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
-
-        self.layer_norm1 = nn.LayerNorm(hidden_size)
-        self.layer_norm2 = nn.LayerNorm(hidden_size)
-        self.layer_norm3 = nn.LayerNorm(hidden_size)
-        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
-        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
-
-        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
-
-        # Where to add pos enc
-        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
-        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Optional[Tensor] = None,
-        key_point_embedding: Optional[Tensor] = None,
-        num_k_exclude_rope: int = 0,
-    ) -> torch.Tensor:
-        # Self-Attention
-        query = self.layer_norm1(queries)
-        if self.apply_pe_at_self_attn:
-            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
-        else:
-            query = self.self_attn(query=query, key=query, value=query)
-        queries = queries + self.dropout1(query)
-
-        # Cross-Attention
-        query = self.layer_norm2(queries)
-        query = self.cross_attn_image(
-            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
-            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
-            value=keys,
-            num_k_exclude_rope=num_k_exclude_rope,
-        )
-        queries = queries + self.dropout2(query)
-        # MLP
-        query = self.layer_norm3(queries)
-        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
-        queries = queries + self.dropout3(query)
-        return queries
-
-
-class Sam2VideoMemoryAttention(nn.Module):
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-        self.layers = nn.ModuleList(
-            [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
-        )
-        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
-
-    def forward(
-        self,
-        current_vision_features: torch.Tensor,
-        memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
-        num_object_pointer_tokens: int = 0,
-    ):
-        """
-        Args:
-            current_vision_features (`torch.FloatTensor`):
-                The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
-                The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
-                The position embeddings for the memory features.
-            num_object_pointer_tokens (`int`, *optional*, defaults to 0):
-                The number of object pointer tokens.
-        """
-        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
-            current_vision_features, current_vision_position_embeddings = (
-                current_vision_features[0],
-                current_vision_position_embeddings[0],
-            )
-
-        output = current_vision_features
-        if current_vision_position_embeddings is not None:
-            output = output + 0.1 * current_vision_position_embeddings
-
-        # Convert to batch first
-        output = output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-        memory = memory.transpose(0, 1)
-        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
-
-        for layer in self.layers:
-            output = layer(
-                queries=output.unsqueeze(1) if output.ndim == 3 else output,
-                keys=memory.unsqueeze(1),
-                query_point_embedding=current_vision_position_embeddings.unsqueeze(1),
-                key_point_embedding=memory_posision_embeddings.unsqueeze(1),
-                num_k_exclude_rope=num_object_pointer_tokens,
-            )
-
-        normed_output = self.layer_norm(output)
-
-        # Convert back to seq first
-        normed_output = normed_output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-
-        return normed_output
-
-
-# Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
-class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Sam2VideoConfig, drop_path: float = 0.0):
-        super().__init__()
-        memory_fuser_embed_dim = config.memory_fuser_embed_dim
-        memory_fuser_layer_scale_init_value = config.memory_fuser_layer_scale_init_value
-        self.depthwise_conv = nn.Conv2d(
-            memory_fuser_embed_dim,
-            memory_fuser_embed_dim,
-            kernel_size=config.memory_fuser_kernel_size,
-            padding=config.memory_fuser_padding,
-            groups=memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
-        )  # depthwise conv
-        self.layer_norm = Sam2VideoLayerNorm(memory_fuser_embed_dim, eps=1e-6)
-        self.activation = ACT2FN[config.memory_fuser_hidden_act]
-        self.pointwise_conv1 = nn.Linear(
-            memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
-        )  # pointwise/1x1 convs, implemented with linear layers
-        self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
-        self.scale = nn.Parameter(
-            memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
-        )
-        self.drop_path = Sam2VideoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-
-    def forward(self, hidden_states):
-        input = hidden_states
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-        hidden_states = self.scale * hidden_states
-        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        hidden_states = input + self.drop_path(hidden_states)
-        return hidden_states
-
-
-class Sam2VideoMemoryFuser(nn.Module):
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-        self.layers = nn.ModuleList(
-            [Sam2VideoMemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)]
-        )
-
-    def forward(self, hidden_states):
-        # normally hidden_states: (N, C, H, W)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
-class Sam2VideoMaskDownSampler(nn.Module):
-    """
-    Progressively downsample a mask by total_stride, each time by stride.
-    Note that LayerNorm is applied per *token*, like in ViT.
-
-    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
-    In the end, we linearly project to embed_dim channels.
-    """
-
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-
-        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
-
-        self.encoder = nn.Sequential()
-        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
-        mask_in_chans, mask_out_chans = 1, 1
-        for _ in range(num_layers):
-            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
-            self.encoder.append(
-                nn.Conv2d(
-                    mask_in_chans,
-                    mask_out_chans,
-                    kernel_size=config.mask_downsampler_kernel_size,
-                    stride=config.mask_downsampler_stride,
-                    padding=config.mask_downsampler_padding,
-                )
-            )
-            self.encoder.append(Sam2VideoLayerNorm(mask_out_chans))
-            self.encoder.append(self.activation)
-            mask_in_chans = mask_out_chans
-
-        self.encoder.append(nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1))
-
-    def forward(self, x):
-        return self.encoder(x)
-
-
-class Sam2VideoMemoryEncoder(nn.Module):
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-
-        hidden_size = config.memory_encoder_hidden_size
-        output_channels = config.memory_encoder_output_channels
-        self.mask_downsampler = Sam2VideoMaskDownSampler(config)
-        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
-        self.memory_fuser = Sam2VideoMemoryFuser(config)
-        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels)
-        self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
-
-    def forward(
-        self,
-        vision_features: torch.Tensor,
-        masks: torch.Tensor,
-        skip_mask_sigmoid: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ## Process masks
-        # sigmoid, so that less domain shift from gt masks which are bool
-        if not skip_mask_sigmoid:
-            masks = F.sigmoid(masks)
-        masks = self.mask_downsampler(masks)
-        ## Fuse pixel_features and downsampled masks
-
-        vision_features = self.feature_projection(vision_features)
-        vision_features = vision_features + masks
-        vision_features = self.memory_fuser(vision_features)
-        vision_features = self.projection(vision_features)
-
-        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
-
-        return vision_features, [vision_pos_enc]
-
-
-class Sam2VideoInferenceCache:
-    """Cache for vision features and model constants."""
-
-    def __init__(
-        self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        max_vision_features_cache_size: int = 1,
-    ):
-        self.inference_device = inference_device
-        self.inference_state_device = inference_state_device
-        self.max_vision_features_cache_size = max_vision_features_cache_size
-
-        self._vision_features = {}
-        self._model_constants = {}
-
-    def cache_vision_features(self, frame_idx: int, features: dict):
-        """Cache vision features with automatic device management."""
-        cached = {}
-        if len(self._vision_features) >= self.max_vision_features_cache_size:
-            # remove the oldest frame
-            self._vision_features.pop(min(self._vision_features.keys()))
-
-        for key, value in features.items():
-            if isinstance(value, torch.Tensor):
-                cached[key] = value.to(self.inference_state_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-            else:
-                cached[key] = value
-        self._vision_features[frame_idx] = cached
-
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
-        """Get cached vision features, automatically moved to inference device."""
-        if frame_idx not in self._vision_features:
-            return None
-
-        cached = self._vision_features[frame_idx]
-        moved = {}
-        for key, value in cached.items():
-            if isinstance(value, torch.Tensor):
-                moved[key] = value.to(self.inference_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
-            else:
-                moved[key] = value
-        return moved
-
-    def cache_model_constant(self, key: str, value):
-        """Cache model constants that are reused across frames."""
-        if isinstance(value, torch.Tensor):
-            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-        else:
-            self._model_constants[key] = value
-
-    def get_model_constant(self, key: str):
-        """Get cached model constant, automatically moved to inference device if needed."""
-        if key not in self._model_constants:
-            return None
-
-        value = self._model_constants[key]
-        if isinstance(value, torch.Tensor):
-            return value.to(self.inference_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            return [v.to(self.inference_device, non_blocking=True) for v in value]
-        return value
-
-    def clear_vision_cache(self):
-        """Clear vision feature cache (but keep model constants)."""
-        self._vision_features.clear()
-
-    def clear_all(self):
-        """Clear all cached data."""
-        self._vision_features.clear()
-        self._model_constants.clear()
 
 
 class Sam2VideoInferenceSession:
@@ -1337,6 +275,918 @@ class Sam2VideoInferenceSession:
         self.cache.clear_all()
 
 
+class Sam2VideoLayerNorm(nn.Module):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.data_format = data_format
+        if self.data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.data_format == "channels_last":
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        elif self.data_format == "channels_first":
+            input_dtype = x.dtype
+            x = x.float()
+            u = x.mean(1, keepdim=True)
+            s = (x - u).pow(2).mean(1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.eps)
+            x = x.to(dtype=input_dtype)
+            x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
+# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
+class Sam2VideoPositionEmbeddingSine(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
+    """
+
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+    ):
+        super().__init__()
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        self.num_pos_feats = num_pos_feats
+        self.temperature = temperature
+        self.normalize = normalize
+        self.scale = 2 * math.pi if scale is None else scale
+
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+        if mask is None:
+            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
+        not_mask = (~mask).to(x.dtype)
+        y_embed = not_mask.cumsum(1)
+        x_embed = not_mask.cumsum(2)
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Sam2VideoAttention(nn.Module):
+    """
+    SAM2_VIDEO's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
+
+    def __init__(self, config, downsample_rate=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
+
+        self.internal_dim = config.hidden_size // downsample_rate
+        self.num_attention_heads = config.num_attention_heads
+        if self.internal_dim % config.num_attention_heads != 0:
+            raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+        self.is_causal = False
+
+    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
+        batch, point_batch_size, n_tokens, channel = hidden_states.shape
+        c_per_head = channel // num_attention_heads
+        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
+        return hidden_states.transpose(1, 2)
+
+    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_similarity: Optional[Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        point_batch_size = query.shape[1]
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # Sam2VideoAttention
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class Sam2VideoTwoWayAttentionBlock(nn.Module):
+    def __init__(self, config: Sam2VideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
+        """
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
+
+        Arguments:
+            config (`Sam2VideoMaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            attention_downsample_rate (*optionalk*, int, defaults to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
+        """
+        super().__init__()
+        self.self_attn = Sam2VideoAttention(config, downsample_rate=1)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+
+        self.cross_attn_token_to_image = Sam2VideoAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+
+        self.mlp = Sam2VideoFeedForward(
+            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
+        )
+        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
+
+        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
+        self.cross_attn_image_to_token = Sam2VideoAttention(config)
+
+        self.skip_first_layer_pe = skip_first_layer_pe
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Tensor,
+        key_point_embedding: Tensor,
+        attention_similarity: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Self attention block
+        if self.skip_first_layer_pe:
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
+        else:
+            query = queries + query_point_embedding
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
+            queries = queries + attn_out
+        queries = self.layer_norm1(queries)
+
+        # Cross attention block, tokens attending to image embedding
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attention_similarity=attention_similarity
+        )
+        queries = queries + attn_out
+
+        queries = self.layer_norm2(queries)
+
+        # MLP block
+        mlp_out = self.mlp(queries)
+        queries = queries + mlp_out
+        queries = self.layer_norm3(queries)
+
+        # Cross attention block, image embedding attending to tokens
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        keys = keys + attn_out
+
+        keys = self.layer_norm4(keys)
+        return queries, keys, attn_out
+
+
+class Sam2VideoFeedForward(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        num_layers: int,
+        activation: str = "relu",
+        sigmoid_output: bool = False,
+    ):
+        super().__init__()
+        self.num_layers = num_layers
+        self.activation = ACT2FN[activation]
+        self.proj_in = nn.Linear(input_dim, hidden_dim)
+        self.proj_out = nn.Linear(hidden_dim, output_dim)
+        self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
+        self.sigmoid_output = sigmoid_output
+
+    def forward(self, hidden_states):
+        hidden_states = self.proj_in(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        for layer in self.layers:
+            hidden_states = self.activation(layer(hidden_states))
+
+        hidden_states = self.proj_out(hidden_states)
+        if self.sigmoid_output:
+            hidden_states = F.sigmoid(hidden_states)
+        return hidden_states
+
+
+@dataclass
+@auto_docstring(custom_intro="Base class for the Sam2Video model's output.")
+class Sam2VideoImageSegmentationOutput(ModelOutput):
+    r"""
+    high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
+        The predicted masks, upscaled to the original image size. Only used for Sam2VideoModel.
+    object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
+        A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
+    """
+
+    iou_scores: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    low_res_masks: torch.FloatTensor = None
+    object_score_logits: torch.FloatTensor = None
+    image_embeddings: tuple[torch.FloatTensor, ...] = None
+    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+
+    high_res_masks: torch.FloatTensor = None
+    object_pointer: torch.FloatTensor = None
+
+
+@dataclass
+@auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+class Sam2VideoSegmentationOutput(ModelOutput):
+    r"""
+    video_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+        The predicted masks, upscaled to the original video resolution.
+    consolidated_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+        The predicted masks stored as consolidated masks.
+        These masks will be at the model's resolution if `consolidate_at_video_res=False` when calling
+        `Sam2VideoModel.forward`. Otherwise, they will be at the video resolution.
+    frame_idx (`int`):
+        The frame index of the video.
+    """
+
+    video_res_masks: torch.FloatTensor = None
+    consolidated_res_masks: torch.FloatTensor = None
+    frame_idx: int = None
+
+
+@auto_docstring
+class Sam2VideoPreTrainedModel(PreTrainedModel):
+    config_class = Sam2VideoConfig
+    base_model_prefix = "sam2_video"
+    main_input_name = "pixel_values"
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+        elif isinstance(module, Sam2VideoModel):
+            if module.no_memory_positional_encoding is not None:
+                module.no_memory_positional_encoding.data.zero_()
+            if module.memory_temporal_positional_encoding is not None:
+                module.memory_temporal_positional_encoding.data.zero_()
+            if module.no_object_pointer is not None:
+                module.no_object_pointer.data.zero_()
+            if module.occlusion_spatial_embedding_parameter is not None:
+                module.occlusion_spatial_embedding_parameter.data.zero_()
+        if isinstance(module, Sam2VideoMemoryFuserCXBlock):
+            if module.scale is not None:
+                module.scale.data.zero_()
+
+
+class Sam2VideoVisionRotaryEmbedding(nn.Module):
+    """
+    Vision Rotary Position Embedding for SAM2, following transformers library standards.
+    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    """
+
+    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
+        super().__init__()
+        # Ensure even dimension for proper axial splitting
+        if dim % 4 != 0:
+            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
+
+        self.dim = dim
+        self.theta = theta
+        self.max_end_x = end_x
+
+        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+
+        # Generate 2D position indices for axial rotary embedding
+        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+        x_positions = flattened_indices % end_x
+        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
+        freqs_x = torch.outer(x_positions, freqs).float()
+        freqs_y = torch.outer(y_positions, freqs).float()
+        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
+
+    @torch.no_grad()
+    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Generate cosine and sine position embeddings for 2D spatial dimensions.
+
+        Args:
+            feat_sizes (`tuple[int, int]`):
+                Tuple of (width, height) for the feature map
+
+        Returns:
+            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
+        """
+        end_x, end_y = feat_sizes
+        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
+        cos = freqs.cos()
+        sin = freqs.sin()
+        return cos, sin
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
+    x_rotated[..., ::2] = -x[..., 1::2]
+    x_rotated[..., 1::2] = x[..., ::2]
+    return x_rotated
+
+
+# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
+def apply_rotary_pos_emb_2d(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    repeat_freqs_k: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary position embedding to query and key tensors for vision models.
+    Follows the standard transformers library pattern.
+
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
+    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
+    q_embed = q.float()  # force upscale to float32 as in the original implementation
+    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
+    if k.shape[-2] == 0:
+        # Handle case where keys might be empty due to dropout
+        return q_embed.type_as(q), k
+
+    # Handle key tensor - may need to repeat frequencies if different sequence length
+    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
+        # Repeat cos/sin to match key sequence length
+        repeat_factor = k.shape[-2] // q.shape[-2]
+        cos_k = cos.repeat(1, 1, repeat_factor, 1)
+        sin_k = sin.repeat(1, 1, repeat_factor, 1)
+    else:
+        cos_k = cos
+        sin_k = sin
+
+    # Apply rotary embedding to keys
+    k_embed = k.float()  # force upscale to float32 as in the original implementation
+    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
+    return q_embed.type_as(q), k_embed.type_as(k)
+
+
+class Sam2VideoRoPEAttention(nn.Module):
+    """Attention with rotary position encoding."""
+
+    def __init__(
+        self,
+        config,
+        kv_in_dim: Optional[int] = None,
+        rope_k_repeat=False,
+    ):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.memory_attention_hidden_size
+        self.internal_dim = self.hidden_size // config.memory_attention_downsample_rate
+        self.num_attention_heads = config.memory_attention_num_attention_heads
+        if self.internal_dim % self.num_attention_heads != 0:
+            raise ValueError("num_attention_heads must divide hidden_size.")
+        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
+
+        self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
+        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+        self.is_causal = False
+
+        head_dim = self.internal_dim // self.num_attention_heads
+        feat_sizes = config.memory_attention_rope_feat_sizes
+        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(
+            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=config.memory_attention_rope_theta
+        )
+        self.rope_k_repeat = rope_k_repeat
+        self.feat_sizes = feat_sizes
+        self.dropout_p = config.memory_attention_rope_dropout
+
+        # Cache for position embeddings
+        self._cached_cos = None
+        self._cached_sin = None
+        self._cached_feat_sizes = None
+
+    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
+        batch, point_batch_size, n_tokens, channel = hidden_states.shape
+        c_per_head = channel // num_attention_heads
+        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
+        return hidden_states.transpose(1, 2)
+
+    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
+        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        num_k_exclude_rope: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tensor:
+        # Input projections
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        point_batch_size = query.shape[1]
+        # Separate into heads
+        query = self._separate_heads(query, self.num_attention_heads)
+        key = self._separate_heads(key, self.num_attention_heads)
+        value = self._separate_heads(value, self.num_attention_heads)
+
+        # Determine feature map size - assume square for simplicity and infer from sequence length
+        seq_len = query.shape[-2]
+        width = height = int(math.sqrt(seq_len))
+        current_feat_sizes = (width, height)
+
+        # Generate or use cached position embeddings
+        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
+            cos, sin = self.rotary_emb(current_feat_sizes)
+            self._cached_cos = cos
+            self._cached_sin = sin
+            self._cached_feat_sizes = current_feat_sizes
+        else:
+            cos = self._cached_cos
+            sin = self._cached_sin
+
+        # Apply rotary position encoding, excluding some keys if specified
+        if num_k_exclude_rope > 0:
+            # Split keys into rope and non-rope parts
+            k_rope = key[:, :, :-num_k_exclude_rope]
+            k_no_rope = key[:, :, -num_k_exclude_rope:]
+
+            # Apply rope only to the rope part
+            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
+
+            # Concatenate back
+            key = torch.cat([k_rope, k_no_rope], dim=-2)
+            query = q_rope
+        else:
+            # Apply rope to all queries and keys
+            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
+
+        scale = query.shape[-1] ** -0.5
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, _ = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+        return attn_output
+
+
+class Sam2VideoMemoryAttentionLayer(nn.Module):
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+        hidden_size = config.memory_attention_hidden_size
+        self.self_attn = Sam2VideoRoPEAttention(config)
+        self.cross_attn_image = Sam2VideoRoPEAttention(config, kv_in_dim=64, rope_k_repeat=True)
+
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(hidden_size, config.memory_attention_feed_forward_hidden_size)
+        self.dropout = nn.Dropout(config.memory_attention_dropout)
+        self.linear2 = nn.Linear(config.memory_attention_feed_forward_hidden_size, hidden_size)
+
+        self.layer_norm1 = nn.LayerNorm(hidden_size)
+        self.layer_norm2 = nn.LayerNorm(hidden_size)
+        self.layer_norm3 = nn.LayerNorm(hidden_size)
+        self.dropout1 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout2 = nn.Dropout(config.memory_attention_dropout)
+        self.dropout3 = nn.Dropout(config.memory_attention_dropout)
+
+        self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
+
+        # Where to add pos enc
+        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
+        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
+        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Optional[Tensor] = None,
+        key_point_embedding: Optional[Tensor] = None,
+        num_k_exclude_rope: int = 0,
+    ) -> torch.Tensor:
+        # Self-Attention
+        query = self.layer_norm1(queries)
+        if self.apply_pe_at_self_attn:
+            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
+        else:
+            query = self.self_attn(query=query, key=query, value=query)
+        queries = queries + self.dropout1(query)
+
+        # Cross-Attention
+        query = self.layer_norm2(queries)
+        query = self.cross_attn_image(
+            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
+            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
+            value=keys,
+            num_k_exclude_rope=num_k_exclude_rope,
+        )
+        queries = queries + self.dropout2(query)
+        # MLP
+        query = self.layer_norm3(queries)
+        query = self.linear2(self.dropout(self.activation(self.linear1(query))))
+        queries = queries + self.dropout3(query)
+        return queries
+
+
+class Sam2VideoMemoryAttention(nn.Module):
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
+        )
+        self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
+
+    def forward(
+        self,
+        current_vision_features: torch.Tensor,
+        memory: torch.Tensor,
+        current_vision_position_embeddings: Optional[Tensor] = None,
+        memory_posision_embeddings: Optional[Tensor] = None,
+        num_object_pointer_tokens: int = 0,
+    ):
+        """
+        Args:
+            current_vision_features (`torch.FloatTensor`):
+                The current vision features used for self-attention.
+            memory (`torch.FloatTensor`):
+                The memory features used for cross-attention.
+            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the current vision features.
+            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+                The position embeddings for the memory features.
+            num_object_pointer_tokens (`int`, *optional*, defaults to 0):
+                The number of object pointer tokens.
+        """
+        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
+            current_vision_features, current_vision_position_embeddings = (
+                current_vision_features[0],
+                current_vision_position_embeddings[0],
+            )
+
+        output = current_vision_features
+        if current_vision_position_embeddings is not None:
+            output = output + 0.1 * current_vision_position_embeddings
+
+        # Convert to batch first
+        output = output.transpose(0, 1)
+        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1).unsqueeze(1)
+        memory = memory.transpose(0, 1).unsqueeze(1)
+        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
+
+        for layer in self.layers:
+            output = layer(
+                queries=output.unsqueeze(1) if output.ndim == 3 else output,
+                keys=memory,
+                query_point_embedding=current_vision_position_embeddings,
+                key_point_embedding=memory_posision_embeddings,
+                num_k_exclude_rope=num_object_pointer_tokens,
+            )
+
+        normed_output = self.layer_norm(output)
+
+        # Convert back to seq first
+        normed_output = normed_output.transpose(0, 1)
+
+        return normed_output
+
+
+# Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
+class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+        self.depthwise_conv = nn.Conv2d(
+            config.memory_fuser_embed_dim,
+            config.memory_fuser_embed_dim,
+            kernel_size=config.memory_fuser_kernel_size,
+            padding=config.memory_fuser_padding,
+            groups=config.memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
+        )  # depthwise conv
+        self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
+        self.activation = ACT2FN[config.memory_fuser_hidden_act]
+        self.pointwise_conv1 = nn.Linear(
+            config.memory_fuser_embed_dim, config.memory_fuser_intermediate_dim
+        )  # pointwise/1x1 convs, implemented with linear layers
+        self.pointwise_conv2 = nn.Linear(config.memory_fuser_intermediate_dim, config.memory_fuser_embed_dim)
+        self.scale = nn.Parameter(
+            config.memory_fuser_layer_scale_init_value * torch.ones((config.memory_fuser_embed_dim)),
+            requires_grad=True,
+        )
+
+    def forward(self, hidden_states):
+        input = hidden_states
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
+        hidden_states = self.scale * hidden_states
+        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+
+        hidden_states = input + hidden_states
+        return hidden_states
+
+
+class Sam2VideoMemoryFuser(nn.Module):
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [Sam2VideoMemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)]
+        )
+
+    def forward(self, hidden_states):
+        # normally hidden_states: (N, C, H, W)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
+class Sam2VideoMaskDownSamplerLayer(nn.Module):
+    def __init__(self, config: Sam2VideoConfig, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=config.mask_downsampler_kernel_size,
+            stride=config.mask_downsampler_stride,
+            padding=config.mask_downsampler_padding,
+        )
+        self.layer_norm = Sam2VideoLayerNorm(out_channels, eps=1e-6)
+        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
+
+    def forward(self, x):
+        return self.activation(self.layer_norm(self.conv(x)))
+
+
+class Sam2VideoMaskDownSampler(nn.Module):
+    """
+    Progressively downsample a mask by total_stride, each time by stride.
+    Note that LayerNorm is applied per *token*, like in ViT.
+
+    With each downsample (by a factor stride**2), channel capacity increases by the same factor.
+    In the end, we linearly project to embed_dim channels.
+    """
+
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+
+        num_layers = int(math.log2(config.mask_downsampler_total_stride) // math.log2(config.mask_downsampler_stride))
+
+        self.layers = nn.ModuleList()
+        self.activation = ACT2FN[config.mask_downsampler_hidden_act]
+        mask_in_chans, mask_out_chans = 1, 1
+        for _ in range(num_layers):
+            mask_out_chans = mask_in_chans * (config.mask_downsampler_stride**2)
+            self.layers.append(Sam2VideoMaskDownSamplerLayer(config, mask_in_chans, mask_out_chans))
+            mask_in_chans = mask_out_chans
+
+        self.final_conv = nn.Conv2d(mask_out_chans, config.mask_downsampler_embed_dim, kernel_size=1)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        x = self.final_conv(x)
+        return x
+
+
+class Sam2VideoMemoryEncoder(nn.Module):
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__()
+
+        hidden_size = config.memory_encoder_hidden_size
+        output_channels = config.memory_encoder_output_channels
+        self.mask_downsampler = Sam2VideoMaskDownSampler(config)
+        self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+        self.memory_fuser = Sam2VideoMemoryFuser(config)
+        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels // 2, normalize=True)
+        self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
+
+    def forward(
+        self,
+        vision_features: torch.Tensor,
+        masks: torch.Tensor,
+        skip_mask_sigmoid: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        ## Process masks
+        # sigmoid, so that less domain shift from gt masks which are bool
+        if not skip_mask_sigmoid:
+            masks = F.sigmoid(masks)
+        masks = self.mask_downsampler(masks)
+        ## Fuse pixel_features and downsampled masks
+
+        vision_features = self.feature_projection(vision_features)
+        vision_features = vision_features + masks
+        vision_features = self.memory_fuser(vision_features)
+        vision_features = self.projection(vision_features)
+
+        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
+
+        return vision_features, [vision_pos_enc]
+
+
+class Sam2VideoInferenceCache:
+    """Cache for vision features and model constants."""
+
+    def __init__(
+        self,
+        inference_device: Union[torch.device, str] = "cpu",
+        inference_state_device: Union[torch.device, str] = "cpu",
+        max_vision_features_cache_size: int = 1,
+    ):
+        self.inference_device = inference_device
+        self.inference_state_device = inference_state_device
+        self.max_vision_features_cache_size = max_vision_features_cache_size
+
+        self._vision_features = {}
+        self._model_constants = {}
+
+    def cache_vision_features(self, frame_idx: int, features: dict):
+        """Cache vision features with automatic device management."""
+        cached = {}
+        if len(self._vision_features) >= self.max_vision_features_cache_size:
+            # remove the oldest frame
+            self._vision_features.pop(min(self._vision_features.keys()))
+
+        for key, value in features.items():
+            if isinstance(value, torch.Tensor):
+                cached[key] = value.to(self.inference_state_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
+            else:
+                cached[key] = value
+        self._vision_features[frame_idx] = cached
+
+    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+        """Get cached vision features, automatically moved to inference device."""
+        if frame_idx not in self._vision_features:
+            return None
+
+        cached = self._vision_features[frame_idx]
+        moved = {}
+        for key, value in cached.items():
+            if isinstance(value, torch.Tensor):
+                moved[key] = value.to(self.inference_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
+            else:
+                moved[key] = value
+        return moved
+
+    def cache_model_constant(self, key: str, value):
+        """Cache model constants that are reused across frames."""
+        if isinstance(value, torch.Tensor):
+            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
+        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
+        else:
+            self._model_constants[key] = value
+
+    def get_model_constant(self, key: str):
+        """Get cached model constant, automatically moved to inference device if needed."""
+        if key not in self._model_constants:
+            return None
+
+        value = self._model_constants[key]
+        if isinstance(value, torch.Tensor):
+            return value.to(self.inference_device, non_blocking=True)
+        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+            return [v.to(self.inference_device, non_blocking=True) for v in value]
+        return value
+
+    def clear_vision_cache(self):
+        """Clear vision feature cache (but keep model constants)."""
+        self._vision_features.clear()
+
+    def clear_all(self):
+        """Clear all cached data."""
+        self._vision_features.clear()
+        self._model_constants.clear()
+
+
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
 class Sam2VideoVisionEncoderOutput(ModelOutput):
@@ -1430,7 +1280,7 @@ class Sam2VideoPromptEncoder(nn.Module):
         self.input_image_size = config.image_size
 
         self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
+            [nn.Embedding(1, config.hidden_size) for _ in range(config.num_point_embeddings)]
         )
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
@@ -1439,12 +1289,8 @@ class Sam2VideoPromptEncoder(nn.Module):
         """Embeds point prompts."""
         points = points + 0.5  # Shift to center of pixel
         if pad:
-            target_point_shape = (points.shape[0], points.shape[1], 1, points.shape[-1])
-            target_labels_shape = (points.shape[0], points.shape[1], 1)
-            padding_point = torch.zeros(target_point_shape, device=points.device)
-            padding_label = -torch.ones(target_labels_shape, device=labels.device)
-            points = torch.cat([points, padding_point], dim=2)
-            labels = torch.cat([labels, padding_label], dim=2)
+            points = torch.nn.functional.pad(points, (0, 0, 0, 1), mode="constant", value=0)
+            labels = torch.nn.functional.pad(labels, (0, 1), mode="constant", value=-1)
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
@@ -1459,29 +1305,13 @@ class Sam2VideoPromptEncoder(nn.Module):
             torch.zeros_like(point_embedding),
         )
 
-        point_embedding = torch.where(
-            (labels == 0)[:, :, :, None],
-            point_embedding + self.point_embed[0].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 1)[:, :, :, None],
-            point_embedding + self.point_embed[1].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 2)[:, :, :, None],
-            point_embedding + self.point_embed[2].weight[None, None, :, :],
-            point_embedding,
-        )
-
-        point_embedding = torch.where(
-            (labels == 3)[:, :, :, None],
-            point_embedding + self.point_embed[3].weight[None, None, :, :],
-            point_embedding,
-        )
+        # Add point embeddings for labels 0, 1, 2, 3
+        for label_val in range(len(self.point_embed)):
+            point_embedding = torch.where(
+                (labels == label_val)[:, :, :, None],
+                point_embedding + self.point_embed[label_val].weight[None, None, :, :],
+                point_embedding,
+            )
 
         return point_embedding
 
@@ -1604,96 +1434,39 @@ class Sam2VideoMaskDecoder(nn.Module):
 
         self.num_multimask_outputs = config.num_multimask_outputs
         self.num_mask_tokens = config.num_multimask_outputs + 1
-        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
-        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
-        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
 
         self.iou_token = nn.Embedding(1, self.hidden_size)
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.hidden_size)
 
         self.transformer = Sam2VideoTwoWayTransformer(config)
 
+        # should we create a new class for this?
         self.upscale_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
         self.upscale_conv2 = nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upscale_layer_norm = Sam2VideoLayerNorm(config.hidden_size // 4, data_format="channels_first")
+        self.upscale_layer_norm = Sam2VideoLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.activation = nn.GELU()
-
-        self.conv_s0 = nn.Conv2d(config.hidden_size, config.hidden_size // 8, kernel_size=1, stride=1)
-        self.conv_s1 = nn.Conv2d(config.hidden_size, config.hidden_size // 4, kernel_size=1, stride=1)
 
         mlps_list = []
         for _ in range(self.num_mask_tokens):
-            mlps_list += [
-                Sam2VideoFeedForward(
-                    self.hidden_size,
-                    self.hidden_size,
-                    self.hidden_size // 8,
-                    3,
-                    activation=config.feed_forward_hidden_act,
-                )
-            ]
+            mlps_list += [Sam2VideoFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)]
         self.output_hypernetworks_mlps = nn.ModuleList(mlps_list)
-
         self.iou_prediction_head = Sam2VideoFeedForward(
             self.hidden_size,
             config.iou_head_hidden_dim,
             self.num_mask_tokens,
             config.iou_head_depth,
-            activation=config.feed_forward_hidden_act,
             sigmoid_output=True,
         )
 
+        self.conv_s0 = nn.Conv2d(config.hidden_size, config.hidden_size // 8, kernel_size=1, stride=1)
+        self.conv_s1 = nn.Conv2d(config.hidden_size, config.hidden_size // 4, kernel_size=1, stride=1)
+
         self.obj_score_token = nn.Embedding(1, self.hidden_size)
-        self.pred_obj_score_head = Sam2VideoFeedForward(self.hidden_size, self.hidden_size, 1, 3, activation="relu")
+        self.pred_obj_score_head = Sam2VideoFeedForward(self.hidden_size, self.hidden_size, 1, 3)
 
-    def _get_stability_scores(self, mask_logits):
-        """
-        Compute stability scores of the mask logits based on the IoU between upper and
-        lower thresholds.
-        """
-        mask_logits = mask_logits.flatten(-2)
-        stability_delta = self.dynamic_multimask_stability_delta
-        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
-        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
-        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
-        return stability_scores
-
-    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
-        """
-        When outputting a single mask, if the stability score from the current single-mask
-        output (based on output token 0) falls below a threshold, we instead select from
-        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
-        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
-        """
-        # The best mask from multimask output tokens (1~3)
-        multimask_logits = all_mask_logits[:, :, 1:, :, :]
-        multimask_iou_scores = all_iou_scores[:, :, 1:]
-        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)  # [B, P]
-        best_scores_inds_expanded = best_scores_inds.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        best_scores_inds_expanded = best_scores_inds_expanded.expand(
-            -1, -1, 1, multimask_logits.size(-2), multimask_logits.size(-1)
-        )
-        best_multimask_logits = torch.gather(multimask_logits, 2, best_scores_inds_expanded)  # [B, P, 1, H, W]
-        best_multimask_iou_scores = torch.gather(multimask_iou_scores, 2, best_scores_inds.unsqueeze(-1))  # [B, P, 1]
-
-        # The mask from singlemask output token 0 and its stability score
-        singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
-        singlemask_iou_scores = all_iou_scores[:, :, 0:1]
-        stability_scores = self._get_stability_scores(singlemask_logits)
-        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
-
-        # Dynamically fall back to best multimask output upon low stability scores.
-        mask_logits_out = torch.where(
-            is_stable[..., None, None].expand_as(singlemask_logits),
-            singlemask_logits,
-            best_multimask_logits,
-        )
-        iou_scores_out = torch.where(
-            is_stable.expand_as(singlemask_iou_scores),
-            singlemask_iou_scores,
-            best_multimask_iou_scores,
-        )
-        return mask_logits_out, iou_scores_out
+        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
+        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
+        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
 
     def forward(
         self,
@@ -1806,47 +1579,58 @@ class Sam2VideoMaskDecoder(nn.Module):
 
         return masks, iou_pred, sam_tokens_out, object_score_logits
 
+    def _get_stability_scores(self, mask_logits):
+        """
+        Compute stability scores of the mask logits based on the IoU between upper and
+        lower thresholds.
+        """
+        mask_logits = mask_logits.flatten(-2)
+        stability_delta = self.dynamic_multimask_stability_delta
+        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
+        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
+        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
+        return stability_scores
 
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
+    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
+        """
+        When outputting a single mask, if the stability score from the current single-mask
+        output (based on output token 0) falls below a threshold, we instead select from
+        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
+        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
+        """
+        # The best mask from multimask output tokens (1~3)
+        multimask_logits = all_mask_logits[:, :, 1:, :, :]
+        multimask_iou_scores = all_iou_scores[:, :, 1:]
+        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)  # [B, P]
+        best_scores_inds_expanded = best_scores_inds.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+        best_scores_inds_expanded = best_scores_inds_expanded.expand(
+            -1, -1, 1, multimask_logits.size(-2), multimask_logits.size(-1)
+        )
+        best_multimask_logits = torch.gather(multimask_logits, 2, best_scores_inds_expanded)  # [B, P, 1, H, W]
+        best_multimask_iou_scores = torch.gather(multimask_iou_scores, 2, best_scores_inds.unsqueeze(-1))  # [B, P, 1]
 
-    global CONNECTED_COMPONENTS_CUDA_KERNEL
+        # The mask from singlemask output token 0 and its stability score
+        singlemask_logits = all_mask_logits[:, :, 0:1, :, :]
+        singlemask_iou_scores = all_iou_scores[:, :, 0:1]
+        stability_scores = self._get_stability_scores(singlemask_logits)
+        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2_video"
-    src_files = [root / "connected_components.cu"]
-    CONNECTED_COMPONENTS_CUDA_KERNEL = load(
-        "CONNECTED_COMPONENTS_CUDA_KERNEL",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=0",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
+        # Dynamically fall back to best multimask output upon low stability scores.
+        mask_logits_out = torch.where(
+            is_stable[..., None, None].expand_as(singlemask_logits),
+            singlemask_logits,
+            best_multimask_logits,
+        )
+        iou_scores_out = torch.where(
+            is_stable.expand_as(singlemask_iou_scores),
+            singlemask_iou_scores,
+            best_multimask_iou_scores,
+        )
+        return mask_logits_out, iou_scores_out
 
-
-CONNECTED_COMPONENTS_CUDA_KERNEL = None
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
-
-
-def get_connected_components(mask):
-    """
-    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
-    Inputs:
-    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
-            background.
-    Outputs:
-    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
-              for foreground pixels and 0 for background pixels.
-    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
-              components for foreground pixels and 0 for background pixels.
-    """
-    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
 
 
 def get_1d_sine_pe(pos_inds, dim, temperature=10000):
@@ -1860,35 +1644,6 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
     pos_embed = pos_inds.unsqueeze(-1) / dim_t
     pos_embed = torch.cat([pos_embed.sin(), pos_embed.cos()], dim=-1)
     return pos_embed
-
-
-def fill_holes_in_mask_scores(mask, max_area):
-    """
-    A post processor to fill small holes in mask scores with area under `max_area`.
-    """
-    # Holes are those connected components in background with area <= self.max_area
-    # (background regions are those with mask scores <= 0)
-    if max_area <= 0:
-        raise ValueError("max_area must be positive")
-    input_mask = mask
-    try:
-        labels, areas = get_connected_components(mask <= 0)
-        is_hole = (labels > 0) & (areas <= max_area)
-        # We fill holes with a small positive mask score (0.1) to change them to foreground.
-        mask = torch.where(is_hole, 0.1, mask)
-    except Exception as e:
-        # Skip the post-processing step on removing small holes if the CUDA kernel fails
-        warnings.warn(
-            f"{e}\n\nSkipping the post-processing step due to the error above. You can "
-            "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
-            "functionality may be limited (which doesn't affect the results in most cases; see "
-            "https://github.com/facebookresearch/sam2/blob/main/INSTALL.md).",
-            category=UserWarning,
-            stacklevel=2,
-        )
-        mask = input_mask
-
-    return mask
 
 
 @auto_docstring
@@ -1911,19 +1666,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         self.num_feature_levels = config.vision_config.num_feature_levels
         self.backbone_feature_sizes = config.vision_config.backbone_feature_sizes
         # a single token to indicate no memory embedding from previous frames
-        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.vision_config.fpn_hidden_size))
-
         self.hidden_dim = config.vision_config.fpn_hidden_size
-        # prompt encoder part
-        self.image_size = config.image_size
-
-        if torch.cuda.is_available():
-            try:
-                logger.info("Building CUDA kernel, this might take some time...")
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning(f"Could not load custom CUDA kernels for postprocessing: {e}")
+        self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
         # For video sequence inference
+        self.image_size = config.image_size
         self.memory_attention = Sam2VideoMemoryAttention(config)
         self.memory_encoder = Sam2VideoMemoryEncoder(config)
         self.no_memory_positional_encoding = torch.nn.Parameter(
@@ -2900,9 +2646,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             # save in bfloat16 to save memory, and for consistency with the original implementation
             maskmem_features = maskmem_features.to(torch.bfloat16)
         pred_masks = current_out["pred_masks"]
+        # TODO: add kernel for fill_holes_in_mask_scores
         # potentially fill holes in the predicted masks
-        if self.fill_hole_area > 0:
-            pred_masks = fill_holes_in_mask_scores(pred_masks, self.fill_hole_area)
+        # if self.fill_hole_area > 0:
+        #     pred_masks = fill_holes_in_mask_scores(pred_masks, self.fill_hole_area)
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
         maskmem_pos_enc = self._get_maskmem_pos_enc(inference_session, current_out)
         # object pointer is a small tensor, so we always keep it on GPU memory for fast access

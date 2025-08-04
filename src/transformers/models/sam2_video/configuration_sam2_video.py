@@ -107,10 +107,6 @@ class Sam2VideoMaskDecoderConfig(PretrainedConfig):
             The stability delta for the dynamic multimask.
         dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
             The stability threshold for the dynamic multimask.
-        feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feed-forward network.
-        two_way_transformer_activation (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the two-way transformer.
 
     """
 
@@ -130,8 +126,6 @@ class Sam2VideoMaskDecoderConfig(PretrainedConfig):
         dynamic_multimask_via_stability=True,
         dynamic_multimask_stability_delta=0.05,
         dynamic_multimask_stability_thresh=0.98,
-        feed_forward_hidden_act="relu",
-        two_way_transformer_activation="relu",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -141,7 +135,6 @@ class Sam2VideoMaskDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.iou_head_depth = iou_head_depth
         self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.feed_forward_hidden_act = feed_forward_hidden_act
         self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
         self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
         self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
@@ -151,7 +144,6 @@ class Sam2VideoMaskDecoderConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.mlp_dim = mlp_dim
-        self.two_way_transformer_activation = two_way_transformer_activation
         self.attention_downsample_rate = attention_downsample_rate
 
 
@@ -220,7 +212,7 @@ class Sam2VideoConfig(PretrainedConfig):
             The dropout rate for the memory attention module.
         memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
             The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
+        memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
             The feature sizes for the Rope positional encoding.
         memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
             The dropout rate for the Rope positional encoding.
@@ -248,8 +240,8 @@ class Sam2VideoConfig(PretrainedConfig):
             The non-linear activation function in the mask downsampler.
         memory_fuser_num_layers (`int`, *optional*, defaults to 2):
             The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the memory fuser embedding.
+        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+            The dimension of the intermediate layer in the memory fuser.
         memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
             The kernel size for the memory fuser.
         memory_fuser_padding (`int`, *optional*, defaults to 3):
@@ -349,6 +341,7 @@ class Sam2VideoConfig(PretrainedConfig):
         mask_downsampler_hidden_act="gelu",
         memory_fuser_num_layers=2,
         memory_fuser_embed_dim=256,
+        memory_fuser_intermediate_dim=1024,
         memory_fuser_kernel_size=7,
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
@@ -423,6 +416,7 @@ class Sam2VideoConfig(PretrainedConfig):
         self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
         self.memory_fuser_num_layers = memory_fuser_num_layers
         self.memory_fuser_embed_dim = memory_fuser_embed_dim
+        self.memory_fuser_intermediate_dim = memory_fuser_intermediate_dim
         self.memory_fuser_kernel_size = memory_fuser_kernel_size
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value

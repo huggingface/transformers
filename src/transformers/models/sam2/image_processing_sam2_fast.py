@@ -18,12 +18,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
-import warnings
 from copy import deepcopy
 from itertools import product
-from pathlib import Path
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -47,7 +44,6 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    logging,
 )
 
 
@@ -58,9 +54,6 @@ if is_torchvision_available() and is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
 elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
-
-
-logger = logging.get_logger(__name__)
 
 
 class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -386,65 +379,6 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     return masks, iou_scores, rle_masks, mask_boxes
 
 
-def get_connected_components(mask):
-    """
-    Get the connected components (8-connectivity) of binary masks of shape (N, 1, H, W).
-    Inputs:
-    - mask: A binary mask tensor of shape (N, 1, H, W), where 1 is foreground and 0 is
-            background.
-    Outputs:
-    - labels: A tensor of shape (N, 1, H, W) containing the connected component labels
-              for foreground pixels and 0 for background pixels.
-    - counts: A tensor of shape (N, 1, H, W) containing the area of the connected
-              components for foreground pixels and 0 for background pixels.
-    """
-    return CONNECTED_COMPONENTS_CUDA_KERNEL.get_connected_components(mask.to(torch.uint8).contiguous())
-
-
-def _fill_holes(mask_flat, mask, max_hole_area, mask_threshold):
-    # Holes are those connected components in background with area <= self.fill_hole_area
-    # (background regions are those with mask scores <= self.mask_threshold)
-    labels, areas = get_connected_components(mask_flat <= mask_threshold)
-    is_hole = (labels > 0) & (areas <= max_hole_area)
-    is_hole = is_hole.reshape_as(mask)
-    # We fill holes with a small positive mask score (10.0) to change them to foreground.
-    mask = torch.where(is_hole, mask_threshold + 10.0, mask)
-    return mask
-
-
-def _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold):
-    labels, areas = get_connected_components(mask_flat > mask_threshold)
-    is_hole = (labels > 0) & (areas <= max_sprinkle_area)
-    is_hole = is_hole.reshape_as(mask)
-    # We fill holes with negative mask score (-10.0) to change them to background.
-    mask = torch.where(is_hole, mask_threshold - 10.0, mask)
-    return mask
-
-
-CONNECTED_COMPONENTS_CUDA_KERNEL = None
-
-
-def load_cuda_kernels():
-    from torch.utils.cpp_extension import load
-
-    global CONNECTED_COMPONENTS_CUDA_KERNEL
-
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
-    src_files = [root / "connected_components.cu"]
-    CONNECTED_COMPONENTS_CUDA_KERNEL = load(
-        "CONNECTED_COMPONENTS_CUDA_KERNEL",
-        src_files,
-        with_cuda=True,
-        extra_include_paths=[str(root)],
-        extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=0",
-            "-D__CUDA_NO_HALF_OPERATORS__",
-            "-D__CUDA_NO_HALF_CONVERSIONS__",
-            "-D__CUDA_NO_HALF2_OPERATORS__",
-        ],
-    )
-
-
 @auto_docstring
 class Sam2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -466,11 +400,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if torch.cuda.is_available():
-            try:
-                load_cuda_kernels()
-            except Exception as e:
-                logger.warning_once(f"Could not load custom CUDA kernels for postprocessing: {e}")
 
     def _further_process_kwargs(
         self,
@@ -759,22 +688,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                     mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
                 else:
                     raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-                try:
-                    if max_hole_area > 0:
-                        mask = _fill_holes(mask_flat, mask, max_hole_area, mask_threshold)
-                    if max_sprinkle_area > 0:
-                        mask = _fill_sprinkles(mask_flat, mask, max_sprinkle_area, mask_threshold)
-                    processed_masks.append(mask)
-                except Exception as e:
-                    # Skip the post-processing step if the CUDA kernel fails
-                    warnings.warn(
-                        f"{e}\n\nSkipping the post-processing step due to the error above. You can "
-                        "still use SAM 2 and it's OK to ignore the error above, although some post-processing "
-                        "functionality may be limited (which doesn't affect the results in most cases; see "
-                        "https://github.com/facebookresearch/sam2/blob/main/INSTALL.md).",
-                        category=UserWarning,
-                        stacklevel=2,
-                    )
+                # TODO: add connected components kernel for postprocessing
             else:
                 processed_masks = masks
             masks = processed_masks
