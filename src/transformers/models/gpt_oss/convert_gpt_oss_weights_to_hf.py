@@ -623,7 +623,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     {%- if reasoning_effort is not defined %}
         {%- set reasoning_effort = "medium" %}
     {%- endif %}
-    {{- "reasoning: " + reasoning_effort + "\n\n" }}
+    {{- "Reasoning: " + reasoning_effort + "\n\n" }}
     {%- if builtin_tools %}
         {{- "# Tools\n\n" }}
         {%- set available_builtin_tools = namespace(browser=false, python=false) %}
