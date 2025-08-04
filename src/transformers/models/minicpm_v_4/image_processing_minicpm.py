@@ -388,12 +388,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         image_sizes_list = []
         tgt_sizes_list = []
         
-        for _images in images_list:
-            if _images is None or len(_images) == 0:
-                new_images_list.append([])
-                image_sizes_list.append([])
-                tgt_sizes_list.append([])
-                continue             
+        for _images in images_list:          
             if not valid_images(_images):
                 raise ValueError(
                     "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
