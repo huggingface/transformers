@@ -1037,7 +1037,7 @@ class AriaModel(AriaPreTrainedModel):
                 vision_feature_layer=self.config.vision_feature_layer,
             )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self._get_image_mask(
+            special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
