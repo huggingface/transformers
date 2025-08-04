@@ -396,6 +396,8 @@ class GptOssPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -409,6 +411,9 @@ class GptOssPreTrainedModel(PreTrainedModel):
             module.down_proj_bias.data.zero_()
         elif isinstance(module, GptOssAttention):
             module.sinks.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, GptOssTopKRouter):
+            module.weight.data.normal_(mean=0.0, std=std)
+            module.bias.data.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
