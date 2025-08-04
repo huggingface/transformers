@@ -14,169 +14,58 @@
 # limitations under the License.
 
 
-import collections.abc
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ..convnextv2.modeling_convnextv2 import ConvNextV2DropPath
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
-    logging,
-    torch_int,
+    logging
 )
 from ..auto import AutoModel
-from ..clip.modeling_clip import CLIPMLP
-from ..janus.modeling_janus import JanusVisionAttention
-from ..llama.modeling_llama import LlamaRMSNorm
-from ..llava.modeling_llava import (
-    LlavaForConditionalGeneration,
-    LlavaModel,
-    LlavaPreTrainedModel,
-)
+from ...modeling_outputs import BaseModelOutput
+from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
+from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
+                                          InternVLVisionRMSNorm,
+                                          InternVLVisionAttention,
+                                          InternVLVisionModelOutputWithPooling,
+                                          InternVLVisionPatchEmbeddings,
+                                          InternVLVisionMLP,
+                                          InternVLVisionPreTrainedModel,
+                                          InternVLMultiModalProjector,
+                                          InternVLModelOutputWithPast,
+                                          InternVLVisionEmbeddings,
+                                          InternVLCausalLMOutputWithPast,
+                                          InternVLForConditionalGeneration,
+                                          InternVLModel)
 from .configuration_interns1 import InternS1Config, InternS1VisionConfig
-
 
 logger = logging.get_logger(__name__)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = key
-    value_states = value
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    # No upcasting of the attention weights to float32 in this implementation
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class InternS1VisionRMSNorm(LlamaRMSNorm):
+class InternS1VisionRMSNorm(InternVLVisionRMSNorm):
     pass
 
 
-class InternS1VisionAttention(JanusVisionAttention):
-    def __init__(self, config: InternS1VisionConfig):
-        super().__init__()
-        del self.num_key_value_groups
-
-        # Needed for flash attention
-        self.is_causal = False
-        qk_norm = config.use_qk_norm
-
-        self.q_norm = InternS1VisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-        self.k_norm = InternS1VisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ):
-        batch_size, seq_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scale,
-            is_causal=False,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
-
-        output = self.projection_layer(attn_output)
-        output = self.projection_dropout(output)
-
-        outputs = (output, attn_weights) if output_attentions else (output, None)
-        return outputs
+class InternS1VisionAttention(InternVLVisionAttention):
+    pass
 
 
 @auto_docstring
-class InternS1VisionPreTrainedModel(PreTrainedModel):
+class InternS1VisionPreTrainedModel(InternVLVisionPreTrainedModel):
     config: InternS1VisionConfig
-    base_model_prefix = "interns1_vision"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["InternS1VisionLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InternS1VisionEmbeddings):
-            module.cls_token.data.zero_()
-            if module.mask_token is not None:
-                module.mask_token.data.zero_()
-            if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
-        elif isinstance(module, InternS1VisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
 
 
 @dataclass
@@ -185,44 +74,19 @@ class InternS1VisionPreTrainedModel(PreTrainedModel):
     Class for outputs of [`InternS1VisionModel`].
     """
 )
-class InternS1VisionModelOutputWithPooling(BaseModelOutputWithPooling):
-    r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-        Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
-        *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
-        will be returned.
-    """
+class InternS1VisionModelOutputWithPooling(InternVLVisionModelOutputWithPooling):
+    pass
 
 
-class InternS1VisionPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
+class InternS1VisionPatchEmbeddings(InternVLVisionPatchEmbeddings):
 
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-        self.patch_shape = patch_shape
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-
+        # Note: more robust
         embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
         patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
         embeddings = embeddings.flatten(2).transpose(1, 2)
@@ -230,103 +94,15 @@ class InternS1VisionPatchEmbeddings(nn.Module):
         return embeddings, (patch_height, patch_width)
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class InternS1VisionEmbeddings(nn.Module):
-    """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-
-    """
-
-    def __init__(self, config: InternS1VisionConfig) -> None:
-        super().__init__()
-
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        else:
-            self.mask_token = None
-        self.patch_embeddings = InternS1VisionPatchEmbeddings(config)
-        self.patch_size = config.patch_size
-        self.image_size = (
-            config.image_size
-            if isinstance(config.image_size, collections.abc.Iterable)
-            else (config.image_size, config.image_size)
-        )
-        num_patches = self.patch_embeddings.num_patches
-        if config.use_absolute_position_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        else:
-            self.position_embeddings = None
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size[0]
-        new_width = width // self.patch_size[1]
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bicubic",
-            align_corners=False,
-        )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-    ) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
-        batch_size, seq_len, _ = embeddings.size()
-
-        if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
-            # replace the masked visual tokens by mask_tokens
-            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1 - w) + mask_tokens * w
-
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        if self.position_embeddings is not None:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-
-        embeddings = self.dropout(embeddings)
-
-        return embeddings, (patch_height, patch_width)
+class InternS1VisionEmbeddings(InternVLVisionEmbeddings):
+    pass
 
 
-class InternS1VisionMLP(CLIPMLP):
+class InternS1VisionMLP(InternVLVisionMLP):
+    pass
+
+
+class InternS1DropPath(ConvNextV2DropPath):
     pass
 
 
@@ -336,7 +112,7 @@ NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternS1VisionRMSNorm}
 class InternS1VisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: InternS1VisionConfig, drop_path_rate=0.0) -> None:
+    def __init__(self, config: InternS1VisionConfig, drop_path_rate: float = 0.0) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -351,17 +127,9 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        if drop_path_rate > 0.:
-            try:
-                from timm.layers import DropPath
-            except ImportError:
-                raise ImportError("timm is not installed, please install it to use DropPath "
-                                  "by 'pip install timm'. ")
-            self.drop_path1 = DropPath(drop_path_rate)
-            self.drop_path2 = DropPath(drop_path_rate)
-        else:
-            self.drop_path1 = nn.Identity()
-            self.drop_path2 = nn.Identity()
+        # Note: Compared to InternVL, we have added support for drop_path to facilitate user fine-tuning.
+        self.drop_path1 = InternS1DropPath(drop_path_rate)
+        self.drop_path2 = InternS1DropPath(drop_path_rate)
 
     def forward(
         self,
@@ -487,35 +255,12 @@ class InternS1VisionModel(InternS1VisionPreTrainedModel):
         )
 
 
-class InternS1PreTrainedModel(LlavaPreTrainedModel):
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+class InternS1PreTrainedModel(InternVLPreTrainedModel):
+    pass
 
 
-class InternS1MultiModalProjector(nn.Module):
-    def __init__(self, config: InternS1Config):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2, config.text_config.hidden_size
-        )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
-
-    def forward(self, image_features):
-        hidden_states = self.layer_norm(image_features)
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+class InternS1MultiModalProjector(InternVLMultiModalProjector):
+    pass
 
 
 @dataclass
@@ -524,44 +269,18 @@ class InternS1MultiModalProjector(nn.Module):
     Base class for InternS1 outputs, with hidden states and attentions.
     """
 )
-class InternS1ModelOutputWithPast(ModelOutput):
+class InternS1ModelOutputWithPast(InternVLModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-        input) to speed up sequential decoding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-
-        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-        heads.
     router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
         Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
         loss for Mixture of Experts models.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
-
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     router_logits: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class InternS1Model(LlavaModel):
+class InternS1Model(InternVLModel):
     _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: InternS1Config):
@@ -571,99 +290,12 @@ class InternS1Model(LlavaModel):
         self.multi_modal_projector = InternS1MultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
+        # Note: We aim for InternS1 to support both dense and MoE configurations in its LLM component.
         self.is_moe_model = False
         if hasattr(config.text_config, 'output_router_logits'):
             self.is_moe_model = True
 
         self.post_init()
-
-    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
-        """Perform pixel shuffle downsampling on vision features.
-
-        Args:
-            vision_features (`torch.Tensor`):
-                Input tensor of shape (batch_size, width, height, channels).
-            scale_factor (`float`, *optional*, defaults to `0.5`):
-                Factor by which to downsample. Default is 0.5, which halves the dimensions.
-
-        Returns:
-            vision_features (`torch.Tensor`):
-                Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
-        """
-        batch_size, width, height, channels = vision_features.size()
-
-        if height % scale_factor != 0 or width % scale_factor != 0:
-            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
-
-        # Reshape to allow downsampling
-        vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
-        )
-        # Permute dimensions to align downsampled axis correctly
-        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        # Reshape to achieve final downsampled dimensions
-        vision_features = vision_features.view(
-            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
-        )
-
-        # Swap height and width back for proper orientation
-        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        return vision_features
-
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_layer (`int` or `list[int]`):
-                Layer index or list of layer indices to extract features from.
-        Returns:
-            vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
-        """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
-        downsample_ratio = self.config.downsample_ratio
-        if vision_feature_layer == -1:
-            vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        else:
-            vision_features = self.vision_model(pixel_values=pixel_values).hidden_states[vision_feature_layer]
-        if vision_feature_select_strategy == "default":
-            vision_features = vision_features[:, 1:, :]
-
-        # Calculate dimensions based on vision features
-        channels = vision_features.shape[1]
-        feature_size = int(channels**0.5)
-        batch_size = vision_features.shape[0]
-
-        # Reshape tensor to spatial dimensions
-        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
-
-        # Apply downsampling using pixel shuffle
-        vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
-
-        # Reshape tensor to prepare for projection
-        vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
-
-        # Project features through multi-modal projector
-        vision_features = self.multi_modal_projector(vision_features)
-        return vision_features
 
     @can_return_tuple
     @auto_docstring
@@ -745,7 +377,6 @@ class InternS1Model(LlavaModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
@@ -766,133 +397,22 @@ class InternS1Model(LlavaModel):
     Base class for InternS1 causal language model (or autoregressive) outputs.
     """
 )
-class InternS1CausalLMOutputWithPast(ModelOutput):
+class InternS1CausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
     aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
         aux_loss for the sparse modules.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-
-        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-        heads.
     router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
         Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
         loss for Mixture of Experts models.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
     aux_loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     router_logits: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
-    num_experts: Optional[int] = None,
-    top_k=2,
-    attention_mask: Optional[torch.Tensor] = None,
-) -> Union[torch.Tensor, int]:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        gate_logits:
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
-            shape [batch_size X sequence_length, num_experts].
-        num_experts:
-            Number of experts
-        top_k:
-            The number of experts to route per-token, can be also interpreted as the `top-k` routing
-            parameter.
-        attention_mask (`torch.Tensor`, *optional*):
-            The attention_mask used in forward function
-            shape [batch_size X sequence_length] if not None.
-
-    Returns:
-        The auxiliary loss.
-    """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
-        return 0
-
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
-
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
-
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
-
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
-
-
-class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
+class InternS1ForConditionalGeneration(InternVLForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: InternS1Config):
@@ -900,6 +420,7 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
         self.model = InternS1Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
+        # Note: We aim for InternS1 to support both dense and MoE configurations in its LLM component.
         self.is_moe_model = False
         if hasattr(config.text_config, 'output_router_logits'):
             self.is_moe_model = True
@@ -993,7 +514,6 @@ class InternS1ForConditionalGeneration(LlavaForConditionalGeneration):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,
