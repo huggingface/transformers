@@ -57,7 +57,6 @@ from .utils import (
     LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE,
     PROCESSOR_NAME,
     PushToHubMixin,
-    is_torch_available,
     TensorType,
     cached_file,
     copy_func,
@@ -65,6 +64,7 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_torch_available,
     list_repo_templates,
     logging,
 )
