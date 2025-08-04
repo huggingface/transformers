@@ -28,8 +28,8 @@ class DecoderConfig(PretrainedConfig):
 
     model_type = "fsmt_decoder"
 
-    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True):
-        super().__init__()
+    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True, **common_kwargs):
+        super().__init__(**common_kwargs)
         self.vocab_size = vocab_size
         self.bos_token_id = bos_token_id
         self.is_encoder_decoder = is_encoder_decoder
