@@ -14,12 +14,20 @@
 # limitations under the License.
 """Fast Image processor class for TextNet."""
 
-from typing import Optional
 import enum
-from ...image_processing_utils import get_size_dict, BatchFeature
+from typing import Optional
+
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict, ChannelDimension, ImageInput
-from ...image_transforms import group_images_by_shape, reorder_images, get_resize_output_image_size
+from ...image_transforms import get_resize_output_image_size, group_images_by_shape, reorder_images
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+)
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 
@@ -28,7 +36,8 @@ class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     size_divisor (`int`, *optional*, defaults to 32):
         Ensures height and width are rounded to a multiple of this value after resizing.
-    """ 
+    """
+
     size_divisor: Optional[int]
 
 
@@ -60,7 +69,7 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
-        
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -79,15 +88,12 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
                 if size.shortest_edge:
                     new_size = get_resize_output_image_size(
                         stacked_images[0],
-                        size=size.shortest_edge,    
+                        size=size.shortest_edge,
                         default_to_square=False,
                         input_data_format=ChannelDimension.FIRST,
                     )
                 else:
-                    raise ValueError(
-                        "Size must contain 'shortest_edge' key. Got"
-                        f" {size}."
-                    )    
+                    raise ValueError(f"Size must contain 'shortest_edge' key. Got {size}.")
                 # ensure height and width are divisible by size_divisor
                 height, width = new_size
                 if height % size_divisor != 0:
@@ -104,11 +110,18 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
 
                 stacked_images = self.resize(image=stacked_images, size=new_size_dict, interpolation=interpolation)
                 resized_images_grouped[shape] = stacked_images
-            
+
             images = reorder_images(resized_images_grouped, grouped_images_index)
-        
+
         # set do_resize to False since we have already resized the images
-        return super()._preprocess(images=images, do_resize=False, size=size, interpolation=interpolation, disable_grouping=disable_grouping, **kwargs)
+        return super()._preprocess(
+            images=images,
+            do_resize=False,
+            size=size,
+            interpolation=interpolation,
+            disable_grouping=disable_grouping,
+            **kwargs,
+        )
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
@@ -117,20 +130,21 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     def to_dict(self) -> dict:
         """
         Return a dict that will yield the same config as the slow processor.
-        
+
         This ensures serialization compatibility between slow and fast versions by:
         1. Using the slow processor name in image_processor_type
         2. Converting resample from enum to int value
         """
         config = super().to_dict()
-        
+
         # Use slow processor name for compatibility
         config["image_processor_type"] = "TextNetImageProcessor"
-        
+
         # Convert enum to int for resample
         if isinstance(config.get("resample"), enum.Enum):
             config["resample"] = config["resample"].value
-            
+
         return config
+
 
 __all__ = ["TextNetImageProcessorFast"]
