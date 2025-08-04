@@ -72,7 +72,7 @@ model(torch.ones(1, 5, dtype=int))
 
 ## 멀티모달 모델의 백본별 다른 어텐션[[different-attention-per-backbone-in-multimodal-models]]
 
-멀티모달 모델에서는 각 백본 모듈에 따라 가장 효율적인 어텐션 함수가 다를 수 있습니다. --예를 들어, 일부 비전 백본은 fp32에서 더 잘 작동하지만 FlashAttention과 호환되지 않습니다.-- 비전 인코더를 fp32로 유지하면서 FlashAttention을 계속 사용하려면 아래와 같이 딕셔너리를 생성하고 각 config를 어텐션 구현에 매핑하세요.
+멀티모달 모델에서는 각 백본 모듈에 따라 가장 효율적인 어텐션 함수가 다를 수 있습니다. 예를 들어, 일부 비전 백본은 fp32에서 더 잘 작동하지만 FlashAttention과 호환되지 않습니다. 비전 인코더를 fp32로 유지하면서 FlashAttention을 계속 사용하려면 아래와 같이 딕셔너리를 생성하고 각 config를 어텐션 구현에 매핑하세요.
 
 ```python
 from transformers import AutoModelForImageTextToText
@@ -100,7 +100,7 @@ model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementatio
 
 ## 사용자 지정 어텐션 함수에 필요한 새 인수는 어떻게 처리하나요?[[what-about-new-args-needed-in-my-custom-attention-function]]
 
-새 함수가 올바르게 사용되기 위해 새 인수를 필요로 한다면 어떻게 될까요? 문제 없습니다\! `AttentionInterface`를 지원하는 모델은 kwargs를 어텐션 레이어 및 사용되는 어텐션 함수로 모두 전달합니다. 그렇게 하면 모델의 포워드(forward)에서 인수를 (kwargs, 즉 인수의 이름을 명시해야 함) 전달하기만 하면 어텐션에서 올바르게 사용될 것입니다. 그러나 사용자 지정 어텐션 함수에는 몇 가지 제한 사항이 있습니다. 특히 다른 어텐션 함수의 시그니처와 반환 형식을 따라야 합니다. 즉,
+만일 새 함수가 새로운 인수가 있어야 올바르게 작동한다면 어떻게 해야 할까요? 문제 없습니다\! `AttentionInterface`를 지원하는 모델은 어텐션 레이어 및 사용되는 어텐션 함수로 kwargs를 전달합니다. kwargs(인수의 이름을 명시해야 함)를 전달함으로써 어텐션 함수에서 올바르게 사용할 수 있습니다. 그러나 사용자 지정 어텐션 함수에는 몇 가지 제한 사항이 있습니다. 그 중 하나는 다른 어텐션 함수의 시그니처와 반환 형식을 따라야 한다는 것입니다.
 
 ```python
 from transformers import AutoModelForCausalLM, AttentionInterface
@@ -127,7 +127,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="cust
 model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
 ```
 
-주어진 모델이 어텐션 함수로 어떤 args/kwargs를 보내는지 확실하지 않다면 [GitHub](https://github.com/huggingface/transformers/tree/main/src/transformers/models)에서 해당 모델의 모델링 코드를 확인하십시오\!
+주어진 모델이 어텐션 함수로 어떤 args/kwargs를 보내는지 확실하지 않다면 [GitHub](https://github.com/huggingface/transformers/tree/main/src/transformers/models)에서 해당 모델의 모델링 코드를 확인하세요\!
 
 ## 현재 사용 가능한 구현에 접근[[accessing-current-available-implementations]]
 
@@ -151,7 +151,9 @@ model(torch.ones(1, 5, dtype=int), a_new_kwargs=..., another_new_kwargs=...)
 
 ## 어텐션 마스크 인터페이스[[attention-mask-interface]]
 
-새로운 어텐션 함수를 사용하면 쿼리 토큰이 어떤 키 및 값 토큰에 어텐션해야 하는지 결정하기 위해 새로운 형식의 어텐션 마스크가 필요할 수 있습니다. 이제 `AttentionMaskInterface`를 통해 이것이 가능합니다\! 이는 `AttentionInterface`와 동일한 방식으로 작동합니다.
+새로운 어텐션 함수를 사용할 때, 쿼리 토큰이 어떤 키 및 토큰에 어텐션해야하는지 결정하기 위해 새로운 형식의 어텐션 마스크가 필요할 수 있습니다. `AttentionMaskInterface`를 통해 이것이 가능합니다\! 이는 `AttentionInterface`와 동일한 방식으로 작동합니다.
+
+
 
 ```python
 from transformers import AttentionMaskInterface
@@ -165,8 +167,8 @@ def my_new_sdpa_mask(*args, **kwargs):
 AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
 ```
 
-이를 등록해야 하는 이유는 어텐션 구현에 따라 마스크 형식을 자동으로 수정해야 하기 때문입니다(예를 들어, flex attention은 BlockMask 형식을 사용하는 반면 sdpa는 4D 텐서를 사용합니다).
-기본적으로 어텐션 함수와 함께 어텐션 마스크 함수를 등록하지 않으면 마스크 생성이 건너뛰어지고 `attention_mask=None`이 어텐션 레이어로 전달됩니다.
+AttentionMask를 등록해야 하는 이유는 어텐션 구현에 따라 마스크 형식을 자동으로 수정해야 하기 때문입니다(예를 들어, flex attention은 BlockMask 형식을 사용하는 반면 sdpa는 4D 텐서를 사용합니다).
+어텐션 함수와 함께 어텐션 마스크 함수를 등록하지 않으면 마스크 생성이 건너뛰어지고 `attention_mask=None`이 어텐션 레이어로 전달됩니다.
 
 어텐션 마스크 함수의 기본 시그니처는 다음과 같습니다.
 
@@ -182,6 +184,6 @@ def custom_attention_mask(
 ) -> Optional[torch.Tensor]:
 ```
 
-이는 주로 `mask_function` 덕분에 작동하며, 이 함수는 [torch의 mask\_mod 함수](https://pytorch.org/blog/flexattention/) 형태의 `Callable`로, 4개의 인덱스를 입력으로 받아 해당 위치가 어텐션 계산에 참여해야 하는지 여부를 나타내는 부울 값을 반환합니다.
+이는 주로 `mask_function` 덕분에 작동하며, 이 함수는 [torch의 mask\_mod 함수](https://pytorch.org/blog/flexattention/) 형태의 `Callable`로, 4개의 인덱스를 입력으로 받아 해당 위치가 어텐션 계산에 참여해야 하는지 여부를 나타내는 boolean 값을 반환합니다.
 
 어떤 이유로든 `mask_function`을 사용하여 마스크를 생성할 수 없는 경우, [torch export workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py)와 유사한 방식으로 문제를 해결할 수 있습니다.
