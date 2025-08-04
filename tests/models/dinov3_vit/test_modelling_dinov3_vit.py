@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Dinov3Config
+from transformers import Dinov3VitConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -24,7 +24,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -40,8 +39,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        Dinov3ForImageClassification,
-        Dinov3Model,
+        Dinov3VitModel,
     )
 
 
@@ -51,7 +49,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class Dinov3ModelTester:
+class Dinov3VitModelTester:
     def __init__(
         self,
         parent,
@@ -113,7 +111,7 @@ class Dinov3ModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return Dinov3Config(
+        return Dinov3VitConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -130,37 +128,13 @@ class Dinov3ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = Dinov3Model(config=config)
+        model = Dinov3VitModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.seq_length, self.hidden_size),
-        )
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = Dinov3ForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = Dinov3ForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor(
-            [self.batch_size, 1, self.image_size, self.image_size]
-        )
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -181,18 +155,10 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            Dinov3Model,
-            Dinov3ForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (Dinov3VitModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": Dinov3Model,
-            "image-classification": Dinov3ForImageClassification,
+            "image-feature-extraction": Dinov3VitModel,
         }
         if is_torch_available()
         else {}
@@ -205,9 +171,9 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = Dinov3ModelTester(self)
+        self.model_tester = Dinov3VitModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Dinov3Config, has_text_modality=False, hidden_size=37
+            self, config_class=Dinov3VitConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_initialization(self):
@@ -273,10 +239,6 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @unittest.skip(reason="Dinov3 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
@@ -284,7 +246,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/dinov3-base"
-        model = Dinov3Model.from_pretrained(model_name)
+        model = Dinov3VitModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -296,7 +258,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class Dinov3ModelIntegrationTest(unittest.TestCase):
+class Dinov3VitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -307,7 +269,7 @@ class Dinov3ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = Dinov3Model.from_pretrained("facebook/dinov3-base").to(torch_device)
+        model = Dinov3VitModel.from_pretrained("facebook/dinov3-base").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dinov3 import *
-    from .modeling_dinov3 import *
+    from .configuration_dinov3_vit import *
+    from .modeling_dinov3_vit import *
 else:
     import sys
 

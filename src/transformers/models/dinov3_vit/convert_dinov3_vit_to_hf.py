@@ -3,7 +3,7 @@
 URL: https://github.com/facebookresearch/dinov3/tree/main
 """
 
-from .configuration_dinov3 import Dinov3Config
+from .configuration_dinov3_vit import Dinov3Config
 
 
 def convert_dinov3_to_hf(original_dinov3_state_dict, config: Dinov3Config):

@@ -26,10 +26,14 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    ImageClassifierOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
-from .configuration_dinov3 import Dinov3Config
+from .configuration_dinov3_vit import Dinov3VitConfig
 
 
 logger = logging.get_logger(__name__)
@@ -41,7 +45,7 @@ dtype_dict = {
 }
 
 
-class Dinov3PatchEmbeddings(nn.Module):
+class Dinov3VitPatchEmbeddings(nn.Module):
     """
     2D image to patch embedding: (B,C,H,W) -> (B,N,D)
     """
@@ -95,12 +99,12 @@ class Dinov3PatchEmbeddings(nn.Module):
             nn.init.uniform_(self.proj.bias, -math.sqrt(k), math.sqrt(k))
 
 
-class Dinov3Embeddings(nn.Module):
+class Dinov3VitEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: Dinov3Config) -> None:
+    def __init__(self, config: Dinov3VitConfig) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.num_register_tokens = config.num_register_tokens
@@ -113,7 +117,7 @@ class Dinov3Embeddings(nn.Module):
                 )
             )
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.patch_embeddings = Dinov3PatchEmbeddings(config)
+        self.patch_embeddings = Dinov3VitPatchEmbeddings(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
@@ -155,7 +159,7 @@ class Dinov3Embeddings(nn.Module):
         return embeddings, (H, W)
 
 
-class Dinov3RopePositionEmbedding(nn.Module):
+class Dinov3VitRopePositionEmbedding(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -325,8 +329,8 @@ def eager_attention_forward(
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov3
-class Dinov3SelfAttention(nn.Module):
-    def __init__(self, config: Dinov3Config) -> None:
+class Dinov3VitSelfAttention(nn.Module):
+    def __init__(self, config: Dinov3VitConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
             config, "embedding_size"
@@ -441,7 +445,7 @@ class Dinov3SelfAttention(nn.Module):
         return outputs
 
 
-class Dinov3LayerScale(nn.Module):
+class Dinov3VitLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.gamma = nn.Parameter(torch.empty(config.hidden_size))
@@ -482,7 +486,7 @@ def drop_path(
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov3DropPath(nn.Module):
+class Dinov3VitDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -496,8 +500,8 @@ class Dinov3DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class Dinov3MLP(nn.Module):
-    def __init__(self, config) -> None:
+class Dinov3VitMLP(nn.Module):
+    def __init__(self, config: Dinov3VitConfig) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
@@ -515,7 +519,7 @@ class Dinov3MLP(nn.Module):
         return hidden_state
 
 
-class Dinov3SwiGLUFFN(nn.Module):
+class Dinov3VitSwiGLUFFN(nn.Module):
     def __init__(
         self,
         config,
@@ -543,17 +547,17 @@ class Dinov3SwiGLUFFN(nn.Module):
         return self.w3(hidden)
 
 
-class Dinov3Layer(GradientCheckpointingLayer):
+class Dinov3VitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: Dinov3Config) -> None:
+    def __init__(self, config: Dinov3VitConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov3SelfAttention(config)
-        self.layer_scale1 = Dinov3LayerScale(config)
+        self.attention = Dinov3VitSelfAttention(config)
+        self.layer_scale1 = Dinov3VitLayerScale(config)
         self.drop_path = (
-            Dinov3DropPath(config.drop_path_rate)
+            Dinov3VitDropPath(config.drop_path_rate)
             if config.drop_path_rate > 0.0
             else nn.Identity()
         )
@@ -561,10 +565,10 @@ class Dinov3Layer(GradientCheckpointingLayer):
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_swiglu_ffn:
-            self.mlp = Dinov3SwiGLUFFN(config)
+            self.mlp = Dinov3VitSwiGLUFFN(config)
         else:
-            self.mlp = Dinov3MLP(config)
-        self.layer_scale2 = Dinov3LayerScale(config)
+            self.mlp = Dinov3VitMLP(config)
+        self.layer_scale2 = Dinov3VitLayerScale(config)
 
     def forward(
         self,
@@ -601,12 +605,12 @@ class Dinov3Layer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Dinov3PreTrainedModel(PreTrainedModel):
-    config: Dinov3Config
-    base_model_prefix = "Dinov3"
+class Dinov3VitPreTrainedModel(PreTrainedModel):
+    config: Dinov3VitConfig
+    base_model_prefix = "Dinov3Vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dinov3Layer"]
+    _no_split_modules = ["Dinov3VitLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -625,7 +629,7 @@ class Dinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, Dinov3Embeddings):
+        elif isinstance(module, Dinov3VitEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32),
                 mean=0.0,
@@ -638,7 +642,7 @@ class Dinov3PreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-        elif isinstance(module, Dinov3RopePositionEmbedding):
+        elif isinstance(module, Dinov3VitRopePositionEmbedding):
             device = module.periods.device
             dtype = module.dtype
             if module.base is not None:
@@ -656,17 +660,17 @@ class Dinov3PreTrainedModel(PreTrainedModel):
                 periods = periods / base  # range [min_period / max_period, 1]
                 periods = periods * module.max_period  # range [min_period, max_period]
             module.periods.data = periods
-        elif isinstance(module, Dinov3LayerScale):
+        elif isinstance(module, Dinov3VitLayerScale):
             module.gamma.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
-class Dinov3Model(Dinov3PreTrainedModel):
-    def __init__(self, config: Dinov3Config):
+class Dinov3VitModel(Dinov3VitPreTrainedModel):
+    def __init__(self, config: Dinov3VitConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = Dinov3Embeddings(config)
-        self.rope_embeddings = Dinov3RopePositionEmbedding(
+        self.embeddings = Dinov3VitEmbeddings(config)
+        self.rope_embeddings = Dinov3VitRopePositionEmbedding(
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             base=config.pos_embed_rope_base,
@@ -680,14 +684,14 @@ class Dinov3Model(Dinov3PreTrainedModel):
             device=config.device,
         )
         self.layer = nn.ModuleList(
-            [Dinov3Layer(config) for _ in range(config.num_hidden_layers)]
+            [Dinov3VitLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> Dinov3PatchEmbeddings:
+    def get_input_embeddings(self) -> Dinov3VitPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     @auto_docstring
@@ -767,104 +771,4 @@ class Dinov3Model(Dinov3PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Dinov3 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
-    of the [CLS] token) e.g. for ImageNet.
-    """
-)
-class Dinov3ForImageClassification(Dinov3PreTrainedModel):
-    def __init__(self, config: Dinov3Config) -> None:
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.Dinov3 = Dinov3Model(config)
-
-        # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_size * 2, config.num_labels)
-            if config.num_labels > 0
-            else nn.Identity()
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        outputs = self.Dinov3(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]  # batch_size, sequence_length, hidden_size
-
-        cls_token = sequence_output[:, 0]
-        patch_tokens = sequence_output[:, 1:]
-
-        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
-
-        logits = self.classifier(linear_input)
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-__all__ = ["Dinov3ForImageClassification", "Dinov3Model", "Dinov3PreTrainedModel"]
+__all__ = ["Dinov3VitModel", "Dinov3VitPreTrainedModel"]

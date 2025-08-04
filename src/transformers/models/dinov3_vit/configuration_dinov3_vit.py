@@ -27,7 +27,7 @@ from ...utils.backbone_utils import get_aligned_output_features_output_indices
 logger = logging.get_logger(__name__)
 
 
-class Dinov3Config(PretrainedConfig):
+class Dinov3VitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov3Model`]. It is used to instantiate an
     Dinov3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -105,7 +105,7 @@ class Dinov3Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Dinov3"
+    model_type = "Dinov3Vit"
 
     def __init__(
         self,
@@ -189,4 +189,4 @@ class Dinov3Config(PretrainedConfig):
         self.device = device
 
 
-__all__ = ["Dinov3Config"]
+__all__ = ["Dinov3VitConfig"]
