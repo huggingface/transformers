@@ -22,18 +22,18 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
-# 잠바\[\[jamba]]
+# Jamba[[jamba]]
 
-[Jamba](https://huggingface.co/papers/2403.19887)는 Transformer와 Mamba 기반의 상태 공간 모델(SSM)을 결합한 하이브리드 혼합 전문가(MoE) 언어 모델로, 총 매개변수 수는 52B에서 398B까지 다양합니다. 이 모델은 Transformer 모델의 성능과 Mamba와 같은 상태 공간 모델의 효율성과 긴 컨텍스트 처리 능력(256K 토큰)을 모두 활용하는 것을 목표로 합니다.
+[Jamba](https://huggingface.co/papers/2403.19887)는 Transformer와 Mamba 기반의 하이브리드 전문가 혼합(MoE) 언어 모델로, 총 매개변수 수는 52B에서 398B까지 다양합니다. 이 모델은 Transformer 모델의 성능과 Mamba와 같은 상태 공간 모델의 효율성 및 긴 컨텍스트 처리 능력(256K 토큰)을 모두 활용하는 것을 목표로 합니다.
 
-Jamba의 아키텍처는 블록과 레이어 기반 구조를 사용하여 Transformer와 Mamba 아키텍처를 효과적으로 통합할 수 있도록 설계되었습니다. 각 Jamba 블록은 Attention 레이어 또는 Mamba 레이어 중 하나와 다층 퍼셉트론(MLP)을 포함하며, 전체적으로 8개의 레이어 중 1개가 Transformer 레이어가 되도록 구성되어 있습니다. 또한 모델 용량을 확장하기 위해 MoE 레이어가 혼합되어 있습니다.
+Jamba의 아키텍처는 블록과 레이어 기반 구조를 사용하여 Transformer와 Mamba 아키텍처를 통합할 수 있도록 설계되었습니다. 각 Jamba 블록은 어텐션 레이어 또는 Mamba 레이어 중 하나와 그 뒤를 잇는 다층 퍼셉트론(MLP)으로 구성되어 있습니다. Transformer 레이어는 8개의 레이어 중 하나의 비율로 주기적으로 배치됩니다. 또한 모델 용량을 확장하기 위해 MoE 레이어가 혼합되어 있습니다.
 
 모든 원본 Jamba 체크포인트는 [AI21](https://huggingface.co/ai21labs) 조직에서 확인할 수 있습니다.
 
-> \[!TIP]
-> 오른쪽 사이드바에 있는 Jamba 모델을 클릭하면 다양한 언어 작업에 Jamba를 적용하는 예제를 더 확인할 수 있습니다.
+> [!TIP]
+> 오른쪽 사이드바에 있는 Jamba 모델을 누르면 다양한 언어 작업에 Jamba를 적용하는 예제를 더 확인할 수 있습니다.
 
-아래 예제는 \[`Pipeline`]과 \[`AutoModel`], 그리고 커맨드라인을 통해 텍스트를 생성하는 방법을 보여줍니다.
+아래 예제는 [`Pipeline`]과 [`AutoModel`], 그리고 커맨드라인을 통해 텍스트를 생성하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -74,7 +74,6 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
-
 </hfoption>
 <hfoption id="transformers CLI">
 
@@ -85,7 +84,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 </hfoption>
 </hfoptions>
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄여줍니다. 사용 가능한 다양한 양자화 백엔드에 대해서는 [양자화 개요](../quantization/overview)를 참고하세요.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대규모 모델의 메모리 부담을 줄여줍니다. 사용할 수 있는 다양한 양자화 백엔드에 대해서는 [Quantization](../quantization/overview)를 참고하세요.
 
 아래 예제는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 가중치만 8비트로 양자화하는 방법을 보여줍니다.
 
@@ -124,10 +123,10 @@ print(assistant_response)
 # 출력: Seek and you shall find. The path is winding, but the journey is enlightening. What wisdom do you seek from the ancient echoes?
 ```
 
-## 참고사항\[\[notes]]
+## 참고[[notes]]
 
-* 모델 성능 저하를 방지하기 위해 Mamba 블록은 양자화하지 마세요.
-* 최적화된 Mamba 커널 없이 Mamba를 사용하면 지연 시간이 크게 증가하므로 권장되지 않습니다. 그래도 커널 없이 Mamba를 사용하고자 한다면 \[`~AutoModel.from_pretrained`]에서 `use_mamba_kernels=False`로 설정하세요.
+- 모델 성능 저하를 방지하기 위해 Mamba 블록은 양자화하지 마세요.
+- 최적화된 Mamba 커널 없이 Mamba를 사용하면 지연 시간이 크게 증가하므로 권장되지 않습니다. 그래도 커널 없이 Mamba를 사용하고자 한다면 [`~AutoModel.from_pretrained`]에서 `use_mamba_kernels=False`로 설정하세요.
 
   ```py
   import torch
@@ -136,25 +135,24 @@ print(assistant_response)
                                                use_mamba_kernels=False)
   ```
 
-## 잠바 구성 설정\[\[jambaconfig]]
+## JambaConfig[[transformers.JambaConfig]]
 
-\[\[autodoc]] JambaConfig
+[[autodoc]] JambaConfig
 
-## 잠바 모델\[\[jambamodel]]
 
-\[\[autodoc]] JambaModel
+## JambaModel[[transformers.JambaModel]]
 
-* forward
+[[autodoc]] JambaModel
+    - forward
 
-## 잠바 텍스트 생성용 모델\[\[jambaforcausallm]]
 
-\[\[autodoc]] JambaForCausalLM
+## JambaForCasualLM[[transformers.JambaForCausalLM]]
 
-* forward
+[[autodoc]] JambaForCausalLM
+    - forward
 
-## 잠바 시퀀스 분류용 모델\[\[jambaforsequenceclassification]]
 
-\[\[autodoc]] transformers.JambaForSequenceClassification
+## JambaForSequenceClassification[[transformers.JambaForSequenceClassification]]
 
-* forward
-
+[[autodoc]] transformers.JambaForSequenceClassification
+    - forward
