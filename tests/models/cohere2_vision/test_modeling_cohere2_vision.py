@@ -348,7 +348,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
+                ("cuda", 8): 'Dock stretches to calm',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -364,7 +364,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("cuda", 8): '<|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|><|CHATBOT_TOKEN|>',
+                ("cuda", 8): 'The image depicts a',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
