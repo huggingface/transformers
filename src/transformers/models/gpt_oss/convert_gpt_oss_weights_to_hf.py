@@ -687,26 +687,19 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {{- tool_call.arguments|tojson }}
             {{- "<|end|>" }}
             {%- set last_tool_call.name = tool_call.name %}
-        {%- elif "thinking" in message and loop.last and not add_generation_prompt %}
+        {%- elif loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
             {#- This is a situation that should only occur in training, never in inference. #}
-            {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- if "thinking" in message %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- endif %}
             {#- <|return|> indicates the end of generation, but <|end|> does not #}
             {#- <|return|> should never be an input to the model, but we include it as the final token #}
             {#- when training, so the model learns to emit it. #}
             {{- "<|start|>assistant<|channel|>final<|message|>" + message.content + "<|return|>" }}
-            {%- set last_tool_call.name = none %}
-        {%- elif "thinking" in message %}
+        {%- else %}
             {#- CoT is dropped during all previous turns, so we never render it for inference #}
             {{- "<|start|>assistant<|channel|>final<|message|>" + message.content + "<|end|>" }}
-            {%- set last_tool_call.name = none %}
-        {%- elif loop.last and not add_generation_prompt %}
-            {#- <|return|> indicates the end of generation, but <|end|> does not #}
-            {#- <|return|> should never be an input to the model, but we include it as the final token #}
-            {#- when training, so the model learns to emit it. #}
-            {{- "<|start|>assistant<|message|>" + message.content + "<|return|>" }}
-        {%- else %}
-            {{- "<|start|>assistant<|message|>" + message.content + "<|end|>" }}
             {%- set last_tool_call.name = none %}
         {%- endif %}
     {%- elif message.role == 'tool' -%}
