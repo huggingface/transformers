@@ -187,14 +187,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def get_model(self):
+    def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
         torch_dtype = torch.float16
 
         # too large to fit into A10
         config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
-        config.text_config.num_hidden_layers = 4
-        config.text_config.layer_types = config.text_config.layer_types[:4]
+        if dummy:
+            config.text_config.num_hidden_layers = 4
+            config.text_config.layer_types = config.text_config.layer_types[:4]
 
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
@@ -208,7 +209,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = self.get_model()
+        model = self.get_model(dummy=False)
         messages = [
             {
                 "role": "user",
