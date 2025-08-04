@@ -445,8 +445,8 @@ if __name__ == "__main__":
     def test_model_matches_original_120b(self):
         input_text = "Roses are red, violets"
 
-        original_output = """Roses are red, violets are blue
-    I am a language model, not a human being"""
+        original_output = """Roses are red, violets are blue,
+I am a language model, not a human being"""
         original_logprobs = [
             -0.90234375,
             -0.66015625,
