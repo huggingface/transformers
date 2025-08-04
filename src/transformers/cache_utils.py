@@ -351,9 +351,6 @@ class SlidingWindowLayer(StaticLayer):
             self.lazy_initializion(key_states)
 
         cache_position = cache_kwargs.get("cache_position")
-
-        is_full = self.cumulative_length >= self.max_cache_len
-        # Update it now that we saved the value above
         self.cumulative_length += key_states.shape[-2]
 
         # Handle prefill phase when prompt length > sliding_window_size.
@@ -364,17 +361,30 @@ class SlidingWindowLayer(StaticLayer):
             # Return the full states here
             return key_states, value_states
 
-        # Here we only assume decoding stage, i.e. 1 token at a time
-        if is_full:
-            self.keys.copy_(torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2))
-            self.values.copy_(torch.cat((self.values[:, :, 1:, :], value_states), dim=-2))
-        else:
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
+        # Sliding window logic for generation phase or prefill < window
+        slicing = torch.arange(self.max_cache_len, device=self.device)
+        current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
+        to_shift = current_seq_len > self.max_cache_len
+        indices = (slicing + to_shift.sum()) % self.max_cache_len
+
+        k_out_shifted = self.keys[:, :, indices]
+        v_out_shifted = self.values[:, :, indices]
+
+        # Clamp cache_position to determine the *target index* within the shifted cache view
+        update_position = cache_position.clamp(min=0, max=self.max_cache_len - 1)
+
+        try:
+            k_out_updated = k_out_shifted.index_copy(2, update_position, key_states)
+            v_out_updated = v_out_shifted.index_copy(2, update_position, value_states)
+        except NotImplementedError:
+            # Fallback for MPS: clone and modify the clone
+            k_out_updated = k_out_shifted.clone()
+            v_out_updated = v_out_shifted.clone()
+            k_out_updated[:, :, update_position] = key_states
+            v_out_updated[:, :, update_position] = value_states
+
+        self.keys.copy_(k_out_updated)
+        self.values.copy_(v_out_updated)
 
         return self.keys, self.values
 
