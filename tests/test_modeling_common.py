@@ -489,7 +489,7 @@ def _test_eager_matches_sdpa_inference(
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -949,7 +949,7 @@ class ModelTesterMixin:
             state_dict = model.state_dict()
 
             def check_equal(loaded):
-                for key in state_dict.keys():
+                for key in state_dict:
                     max_diff = torch.max(
                         state_dict()[key] ^ loaded[key]
                         if isinstance(state_dict[key], torch.BoolTensor)
@@ -1482,8 +1482,8 @@ class ModelTesterMixin:
                 loaded_model_state_dict = loaded_model.state_dict()
 
                 non_persistent_buffers = {}
-                for key in loaded_model_state_dict.keys():
-                    if key not in model_state_dict.keys():
+                for key in loaded_model_state_dict:
+                    if key not in model_state_dict:
                         non_persistent_buffers[key] = loaded_model_state_dict[key]
 
                 loaded_model_state_dict = {
@@ -1775,6 +1775,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
                 -1: [0],
@@ -1808,6 +1809,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
                 -1: [0],
@@ -1816,7 +1818,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -1852,6 +1854,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -1884,6 +1887,7 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
+            model.set_attn_implementation("eager")
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -1894,7 +1898,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name)
+                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
                 model.to(torch_device)
 
             with torch.no_grad():
@@ -2465,9 +2469,7 @@ class ModelTesterMixin:
                         extra_params.pop(key, None)
 
                 if not extra_params:
-                    # In that case, we *are* on a head model, but every
-                    # single key is not actual parameters and this is
-                    # tested in `test_tied_model_weights_key_ignore` test.
+                    # In that case, we *are* on a head model, but every single key is not actual parameters
                     continue
 
                 with tempfile.TemporaryDirectory() as temp_dir_name:
@@ -2564,10 +2566,17 @@ class ModelTesterMixin:
                 self.assertEqual(infos["missing_keys"], [])
 
     def test_tied_weights_keys(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.get_text_config().tie_word_embeddings = True
+        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model_tied = model_class(copy.deepcopy(config))
+            copied_config = copy.deepcopy(original_config)
+            copied_config.get_text_config().tie_word_embeddings = True
+            model_tied = model_class(copied_config)
+
+            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
+            # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
+            # does not tie them
+            if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
+                continue
 
             ptrs = collections.defaultdict(list)
             for name, tensor in model_tied.state_dict().items():
@@ -2576,7 +2585,6 @@ class ModelTesterMixin:
             # These are all the pointers of shared tensors.
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
@@ -3427,7 +3435,7 @@ class ModelTesterMixin:
             set_seed(0)
             new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
 
-            for key in new_model.state_dict().keys():
+            for key in new_model.state_dict():
                 # check weight values for weights with matched shapes are identical
                 # (i.e. correctly loaded from the checkpoint)
                 if key not in ["linear.weight", "linear.bias"]:
@@ -3480,6 +3488,7 @@ class ModelTesterMixin:
             model = model_class(config)
 
             model.to(torch_device)
+            model.to(torch.bfloat16)
             dummy_input = inputs_dict[model.main_input_name][:1]
             if dummy_input.dtype in [torch.float32, torch.float16]:
                 dummy_input = dummy_input.to(torch.bfloat16)
@@ -3627,12 +3636,12 @@ class ModelTesterMixin:
             # set eager as it will be the one supported in all models
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {"": "eager"}
-            for key in config.sub_configs.keys():
+            for key in config.sub_configs:
                 attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
-            for key in config.sub_configs.keys():
+            for key in config.sub_configs:
                 sub_config = getattr(model.config, key)
                 self.assertTrue(sub_config._attn_implementation == "eager")
 
@@ -4472,7 +4481,7 @@ class ModelTesterMixin:
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        if not hasattr(self, "_torch_compile_train_cls"):
+        if getattr(self, "_torch_compile_train_cls", None) is None:
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4668,9 +4677,13 @@ class ModelTesterMixin:
                 sub_config = getattr(config, key)
                 update_config_for_flex(sub_config)
 
-            model = model_class(config).to(device=torch_device)
-            model.set_attn_implementation("flex_attention")
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
+            if model_class._can_set_attn_implementation():
+                model = model_class(config).to(device=torch_device)
+                model.set_attn_implementation("flex_attention")
+                self.assertTrue(model.config._attn_implementation == "flex_attention")
+            else:
+                config._attn_implementation = "flex_attention"
+                model = model_class(config).to(device=torch_device)
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
@@ -4798,6 +4811,25 @@ class ModelTesterMixin:
                 {torch.device("meta")},
                 f"All parameters should be on meta device, but found {unique_devices}.",
             )
+
+    def test_config_attn_implementation_setter(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+            if not config._attn_implementation == attn_implementation:
+                raise ValueError(
+                    f"Unexpected attn_implementation for config {config.__class__.__name__}: "
+                    f"{config._attn_implementation} != {attn_implementation}"
+                )
+            for attribute_value in config.__dict__.values():
+                if isinstance(attribute_value, PretrainedConfig):
+                    check_attn_implementation_setter(attribute_value, attn_implementation)
+
+        config._attn_implementation = "eager"
+        check_attn_implementation_setter(config, "eager")
+
+        config._attn_implementation = "sdpa"
+        check_attn_implementation_setter(config, "sdpa")
 
     def test_internal_model_config_and_subconfig_are_same(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

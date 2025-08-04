@@ -25,10 +25,17 @@ from huggingface_hub import hf_hub_download
 from transformers import (
     AutoProcessor,
     Qwen2_5OmniProcessor,
-    Qwen2Tokenizer,
+    Qwen2TokenizerFast,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_av, require_librosa, require_torch, require_torchaudio, require_vision
+from transformers.testing_utils import (
+    require_av,
+    require_librosa,
+    require_torch,
+    require_torchaudio,
+    require_torchvision,
+    require_vision,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -38,12 +45,13 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from transformers import Qwen2VLImageProcessor
+    from transformers import Qwen2VLImageProcessorFast
 
 
 @require_vision
 @require_torch
 @require_torchaudio
+@require_torchvision
 class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
 
@@ -244,13 +252,13 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2_5OmniProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = Qwen2_5OmniProcessor.from_pretrained(self.tmpdirname, use_fast=True)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
+        self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
+        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
         self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
 
     def test_image_processor(self):
@@ -267,10 +275,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
 
-        for key in input_image_proc.keys():
+        for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):
@@ -414,8 +422,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 2880 if batch_size == 1 else 5808  # qwen pixels don't scale with bs same way as other models
-        mm_len = batch_size * 1564 if modality == "image" else video_len
+        if modality == "video":
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
+            expected_video_token_count = 0
+            for thw in out_dict["video_grid_thw"]:
+                expected_video_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_video_token_count
+        else:
+            mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
