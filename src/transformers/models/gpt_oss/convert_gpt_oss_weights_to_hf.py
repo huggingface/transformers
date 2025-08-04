@@ -672,6 +672,17 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 {%- for message in loop_messages -%}
     {#- At this point only assistant/user/tool messages should remain #}
     {%- if message.role == 'assistant' -%}
+        {#- Checks to ensure the messages are being passed in the format we expect #}
+        {%- if "content" in message %}
+            {%- if "<|channel|>analysis<|message|>" in message.content or "<|channel|>final<|message|>" in message.content %}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the content field. Instead of doing this, you should pass analysis messages (the string between '<|message|> and <|end|>') in the 'thinking' field, and final messages (the string between '<|message|> and <|end|>') in the 'content' field.") }}
+            {%- endif %}
+        {%- endif %}
+        {%- if "thinking" in message %}
+            {%- if "<|channel|>analysis<|message|>" in message.thinking or "<|channel|>final<|message|>" in message.thinking %}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the trhinking field. Instead of doing this, you should pass analysis messages (the string between '<|message|> and <|end|>') in the 'thinking' field, and final messages (the string between '<|message|> and <|end|>') in the 'content' field.") }}
+            {%- endif %}
+        {%- endif %}
         {%- if "tool_calls" in message %}
             {#- We assume max 1 tool call per message, and so we infer the tool call name #}
             {#- in "tool" messages from the most recent assistant tool call name #}
@@ -679,8 +690,12 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {%- if tool_call.function %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
-            {%- if message.content %}
+            {%- if message.content and message.thinking %}
+                {{- raise_exception("Cannot pass both content and thinking in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
+            {%- elif message.content %}
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content + "<|end|>" }}
+            {%- elif message.thinking %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
             {{- "functions." + tool_call.name + "<|channel|>commentary json<|message|>" }}
