@@ -111,7 +111,14 @@ def is_wandb_available():
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
-    return importlib.util.find_spec("wandb") is not None
+    if importlib.util.find_spec("wandb") is not None:
+        import wandb
+
+        # wandb might still be detected by find_spec after an uninstall (leftover files or metadata), but not actually
+        # import correctly. To confirm it's fully installed and usable, we check for a key attribute like "run".
+        return hasattr(wandb, "run")
+    else:
+        return False
 
 
 def is_trackio_available():

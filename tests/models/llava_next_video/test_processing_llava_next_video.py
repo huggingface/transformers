@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,11 +19,9 @@ import unittest
 
 import torch
 
-from transformers import LlamaTokenizerFast, LlavaNextProcessor
-from transformers.testing_utils import (
-    require_vision,
-)
-from transformers.utils import is_vision_available
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
+from transformers.testing_utils import require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -31,42 +29,53 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import LlavaNextImageProcessor
 
+    if is_torchvision_available():
+        from transformers import LlavaNextVideoVideoProcessor
+
 
 @require_vision
-class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = LlavaNextProcessor
+class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = LlavaNextVideoProcessor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-
         image_processor = LlavaNextImageProcessor()
-        tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        video_processor = LlavaNextVideoVideoProcessor()
+        tokenizer = LlamaTokenizerFast.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
         processor_kwargs = cls.prepare_processor_dict()
-        processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
+
+        processor = LlavaNextVideoProcessor(
+            video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
+        )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def get_tokenizer(self, **kwargs):
-        return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_image_processor(self, **kwargs):
-        return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    @staticmethod
-    def prepare_processor_dict():
+    @classmethod
+    def prepare_processor_dict(cls):
         return {
-            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + ' '}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all video then #}{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}{{ '<video>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ '\n' + content['text'] }}{% endgeneration %}{% endfor %}{% endif %}{{'<|im_end|>'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
+            "num_additional_image_tokens": 0,
             "patch_size": 128,
-            "vision_feature_select_strategy": "default"
-        }  # fmt: skip
+            "vision_feature_select_strategy": "default",
+        }
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -79,7 +88,7 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
         processor_dict_loaded = json.loads(processor_loaded.to_json_string())
