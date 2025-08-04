@@ -87,7 +87,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=[Building doc for all language ...](${{ env.GITHUB_RUN_URL }})"
+            -f "body=[Building docs for all languages...](${{ env.GITHUB_RUN_URL }})"
 
   build-doc:
     name: Build doc
