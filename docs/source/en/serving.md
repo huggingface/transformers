@@ -354,7 +354,9 @@ ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.
 </hfoptions>
 
 
-The server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
+## MCP integration
+
+The `transformers serve` server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
 
 > [!TIP]
 > At the moment, MCP tool usage in `transformers` is limited to the `qwen` family of models.
