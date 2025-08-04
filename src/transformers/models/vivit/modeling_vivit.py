@@ -502,7 +502,7 @@ class VivitModel(VivitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> VivitTubeletEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
