@@ -14,13 +14,16 @@
 # limitations under the License.
 """Auto Model class."""
 
+import os
 import warnings
 from collections import OrderedDict
+from typing import Union
 
 from ...utils import logging
 from .auto_factory import (
     _BaseAutoBackboneClass,
     _BaseAutoModelClass,
+    _BaseModelWithGenerate,
     _LazyAutoMapping,
     auto_class_update,
 )
@@ -1863,6 +1866,16 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
 
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForCausalLM"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> _BaseModelWithGenerate:
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
 
@@ -2056,6 +2069,16 @@ _AutoModelForVision2Seq = auto_class_update(_AutoModelForVision2Seq, head_doc="v
 
 class AutoModelForImageTextToText(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
+
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForImageTextToText"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> _BaseModelWithGenerate:
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")
