@@ -22,7 +22,7 @@ from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeAttention,
@@ -35,22 +35,8 @@ from ..glm4_moe.modeling_glm4_moe import (
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
-    Glm4vCausalLMOutputWithPast,
     Glm4vForConditionalGeneration,
-    Glm4VisionMlp,
-    Glm4vModel,
-    Glm4vModelOutputWithPast,
-    Glm4vPreTrainedModel,
-    Glm4vTextModel,
-    Glm4vTextRotaryEmbedding,
-    Glm4vVisionAttention,
-    Glm4vVisionBlock,
-    Glm4vVisionEmbeddings,
-    Glm4vVisionModel,
-    Glm4vVisionPatchEmbed,
-    Glm4vVisionPatchMerger,
-    Glm4vVisionRotaryEmbedding,
-    rotate_half,
+    apply_multimodal_rotary_pos_emb,
 )
 
 
@@ -260,103 +246,6 @@ class Glm4v_moeRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
-class Glm4_moeVisionMlp(Glm4VisionMlp):
-    pass
-
-
-class Glm4v_moeVisionPatchEmbed(Glm4vVisionPatchEmbed):
-    pass
-
-
-class Glm4v_moeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
-    pass
-
-
-class Glm4v_moeVisionPatchMerger(Glm4vVisionPatchMerger):
-    pass
-
-
-class Glm4v_moeVisionEmbeddings(Glm4vVisionEmbeddings):
-    pass
-
-
-class Glm4v_moeVisionAttention(Glm4vVisionAttention):
-    pass
-
-
-class Glm4v_moeVisionBlock(Glm4vVisionBlock):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.norm1 = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.norm2 = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn = Glm4v_moeVisionAttention(config)
-        self.mlp = Glm4_moeVisionMlp(config, bias=False)
-
-
-class Glm4v_moePreTrainedModel(Glm4vPreTrainedModel):
-    pass
-
-
-class Glm4v_moeVisionModel(Glm4vVisionModel):
-    pass
-
-
-class Glm4v_moeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
-    pass
-
-
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
-
-
 class Glm4v_moeTextAttention(Glm4MoeAttention):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
@@ -412,7 +301,7 @@ class Glm4v_moeTextAttention(Glm4MoeAttention):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class Glm4v_moeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
@@ -444,66 +333,6 @@ class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer):
     def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-
-class Glm4v_moeModelOutputWithPast(Glm4vModelOutputWithPast):
-    pass
-
-
-class Glm4v_moeTextModel(Glm4vTextModel):
-    pass
-
-
-class Glm4v_moeModel(Glm4vModel):
-    pass
-
-
-class Glm4v_moeCausalLMOutputWithPast(Glm4vCausalLMOutputWithPast):
-    pass
-
 
 class Glm4v_moeForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
@@ -513,7 +342,7 @@ __all__ = [
     "Glm4v_moeConfig",
     "Glm4v_moeTextConfig",
     "Glm4v_moeForConditionalGeneration",
-    "Glm4v_moeModel",
-    "Glm4v_moePreTrainedModel",
-    "Glm4v_moeTextModel",
+    "Glm4v_moeModel",  # noqa: F822
+    "Glm4v_moePreTrainedModel",  # noqa: F822
+    "Glm4v_moeTextModel",  # noqa: F822
 ]
