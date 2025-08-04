@@ -1141,7 +1141,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -1288,14 +1288,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if self.task in SUPPORTED_PEFT_TASKS:
                 supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
 
-            for _, model_name in supported_models.items():
+            for model_name in supported_models.values():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):
                     supported_models_names.extend(list(model_name))
                 else:
                     supported_models_names.append(model_name)
             if hasattr(supported_models, "_model_mapping"):
-                for _, model in supported_models._model_mapping._extra_content.items():
+                for model in supported_models._model_mapping._extra_content.values():
                     if isinstance(model_name, tuple):
                         supported_models_names.extend([m.__name__ for m in model])
                     else:

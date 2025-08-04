@@ -52,8 +52,12 @@ class AwqQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
-        if self.quantization_config.version == AWQLinearVersion.GEMM and not torch.cuda.is_available():
-            logger.warning_once("No CUDA found, replace GEMM with IPEX version to support non-cuda AWQ model.")
+        if (
+            self.quantization_config.version == AWQLinearVersion.GEMM
+            and not torch.cuda.is_available()
+            and not torch.xpu.is_available()
+        ):
+            logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
             self.quantization_config.version = AWQLinearVersion.IPEX
 
         if self.quantization_config.version == AWQLinearVersion.IPEX:
@@ -71,14 +75,14 @@ class AwqQuantizer(HfQuantizer):
                     " This is not supported. Please make sure only cpu and xpu in the device_map."
                 )
         else:
-            if not torch.cuda.is_available():
+            if not torch.cuda.is_available() and not torch.xpu.is_available():
                 raise RuntimeError(
                     "GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU"
                 )
 
             if device_map is None:
                 logger.warning_once(
-                    "You have loaded an AWQ model on CPU and have a CUDA device available, make sure to set "
+                    "You have loaded an AWQ model on CPU and have a CUDA/XPU device available, make sure to set "
                     "your model on a GPU device in order to run your model."
                 )
             elif device_map is not None:
@@ -94,11 +98,15 @@ class AwqQuantizer(HfQuantizer):
         if torch_dtype is None:
             torch_dtype = torch.float16
             logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
-        elif torch_dtype == torch.bfloat16 and torch.cuda.is_available():
-            logger.warning("`torch.bfloat16` is not supported for AWQ CUDA kernels yet. Casting to `torch.float16`.")
+        elif torch_dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+            logger.warning(
+                "`torch.bfloat16` is not supported for AWQ CUDA/XPU kernels yet. Casting to `torch.float16`."
+            )
             torch_dtype = torch.float16
-        elif torch_dtype != torch.float16 and torch.cuda.is_available():
-            logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA with AWQ.")
+        elif torch_dtype != torch.float16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+            logger.warning(
+                "We suggest you to set `torch_dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ."
+            )
         return torch_dtype
 
     def _process_model_before_weight_loading(

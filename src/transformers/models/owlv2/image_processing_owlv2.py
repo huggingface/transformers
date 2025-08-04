@@ -86,7 +86,7 @@ def _scale_boxes(boxes, target_sizes):
     elif isinstance(target_sizes, torch.Tensor):
         image_height, image_width = target_sizes.unbind(1)
     else:
-        raise ValueError("`target_sizes` must be a list, tuple or torch.Tensor")
+        raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
 
     # for owlv2 image is padded to max size unlike owlvit, that's why we have to scale boxes to max size
     max_size = torch.max(image_height, image_width)

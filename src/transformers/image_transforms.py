@@ -416,7 +416,7 @@ def normalize(
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError("image must be a numpy array")
+        raise TypeError("image must be a numpy array")
 
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
@@ -860,14 +860,14 @@ def _group_images_by_shape(nested_images, is_nested: bool = False):
 def _reconstruct_nested_structure(indices, processed_images):
     """Helper function to reconstruct a single level nested structure."""
     # Find the maximum outer index
-    max_outer_idx = max(idx[0] for idx in indices.keys())
+    max_outer_idx = max(idx[0] for idx in indices)
 
     # Create the outer list
     result = [None] * (max_outer_idx + 1)
 
     # Group indices by outer index
     nested_indices = defaultdict(list)
-    for i, j in indices.keys():
+    for i, j in indices:
         nested_indices[i].append(j)
 
     for i in range(max_outer_idx + 1):
