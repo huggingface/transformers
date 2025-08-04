@@ -149,6 +149,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
     eos_token_id = 199999 if not instruct else 200002
+    pad_token_id = 199999
 
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
@@ -163,7 +164,11 @@ def write_model(
     }
 
     config = GptOssConfig(
-        num_local_experts=num_local_experts, rope_scaling=rope_scaling, eos_token_id=eos_token_id, **original_config
+        num_local_experts=num_local_experts,
+        rope_scaling=rope_scaling,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
+        **original_config,
     )
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
