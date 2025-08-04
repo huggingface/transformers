@@ -604,7 +604,7 @@ class Resampler(nn.Module):
             self.max_size = [max(max_h, self.max_size[0]), max(max_w, self.max_size[1])]
             self._set_2d_pos_cache(self.max_size, device)
 
-    def _init_weights(self, m):
+    def _initialize_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
