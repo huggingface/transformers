@@ -680,7 +680,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         {%- endif %}
         {%- if "thinking" in message %}
             {%- if "<|channel|>analysis<|message|>" in message.thinking or "<|channel|>final<|message|>" in message.thinking %}
-                {{- raise_exception("You have passed a message containing <|channel|> tags in the trhinking field. Instead of doing this, you should pass analysis messages (the string between '<|message|> and <|end|>') in the 'thinking' field, and final messages (the string between '<|message|> and <|end|>') in the 'content' field.") }}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the thinking field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'thinking' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
             {%- endif %}
         {%- endif %}
         {%- if "tool_calls" in message %}
