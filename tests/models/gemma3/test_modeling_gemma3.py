@@ -808,9 +808,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         # Export + HybridCache
         model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, config=model.config, generation_config=model.generation_config
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
             cache_position=torch.tensor([0], dtype=torch.long, device=model.device),

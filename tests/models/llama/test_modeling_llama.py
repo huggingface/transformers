@@ -352,9 +352,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             # Static Cache + export
             from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-            exportable_module = TorchExportableModuleForDecoderOnlyLM(
-                model, config=model.config, generation_config=model.generation_config
-            )
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
             exported_program = exportable_module.export(
                 input_ids=prompt_token_ids,
                 cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),

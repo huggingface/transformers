@@ -56,7 +56,9 @@ class ExecutorchTest(unittest.TestCase):
             cache_config={"batch_size": 1, "max_cache_len": 32, "device": "cpu"},
         )
 
-        module = TorchExportableModuleWithStaticCache(self.model, self.model.config, generation_config)
+        # Set generation config on model
+        self.model.generation_config = generation_config
+        module = TorchExportableModuleWithStaticCache(self.model)
 
         # Test with input_ids
         eager_output_ids = self.model(input_ids=self.input_ids, use_cache=False).logits
@@ -80,7 +82,9 @@ class ExecutorchTest(unittest.TestCase):
             cache_config={"batch_size": 1, "max_cache_len": 32, "device": "cpu"},
         )
 
-        module = TorchExportableModuleWithHybridCache(self.model, config, generation_config)
+        # Set generation config on model
+        self.model.generation_config = generation_config
+        module = TorchExportableModuleWithHybridCache(self.model)
 
         # Test with input_ids
         eager_output_ids = self.model(input_ids=self.input_ids, use_cache=False).logits

@@ -364,9 +364,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         # Static Cache + export
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, config=model.config, generation_config=model.generation_config
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
             input_ids=prompt_token_ids,
             cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
@@ -393,9 +391,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         # Export + HybridCache
         model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, config=model.config, generation_config=model.generation_config
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
             input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
             cache_position=torch.tensor([0], dtype=torch.long, device=model.device),

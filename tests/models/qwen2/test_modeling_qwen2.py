@@ -299,9 +299,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         # Static Cache + export
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, config=model.config, generation_config=model.generation_config
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         strict = version.parse(torch.__version__) != version.parse(
             "2.7.0"
         )  # Due to https://github.com/pytorch/pytorch/issues/150994
