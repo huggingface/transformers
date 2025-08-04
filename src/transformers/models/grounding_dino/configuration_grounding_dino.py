@@ -297,9 +297,11 @@ class GroundingDinoConfig(PretrainedConfig):
     @property
     def sub_configs(self):
         sub_configs = {}
-        if self.backbone_config is not None and self.backbone_config != {}:
-            sub_configs["backbone_config"] = type(self.backbone_config)
-        if self.text_config is not None and self.text_config != {}:
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PretrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PretrainedConfig):
             sub_configs["text_config"] = type(self.text_config)
         return sub_configs
 

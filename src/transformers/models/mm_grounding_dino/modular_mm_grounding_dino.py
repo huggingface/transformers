@@ -288,14 +288,6 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
     def __init__(self, config):
