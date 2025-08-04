@@ -120,6 +120,7 @@ _vptq_available, _vptq_version = _is_package_available("vptq", return_version=Tr
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -377,6 +378,10 @@ def is_yt_dlp_available():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_libcst_available():
+    return _libcst_available
 
 
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
