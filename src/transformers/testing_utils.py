@@ -100,6 +100,7 @@ from .utils import (
     is_gptqmodel_available,
     is_grokadamw_available,
     is_hadamard_available,
+    is_harmony_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,

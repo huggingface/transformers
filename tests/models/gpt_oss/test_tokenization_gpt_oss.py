@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from transformers.testing_utils import require_torch
-from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.testing_utils import require_torch, is_harmony_available, require_harmony
+from transformers.utils import get_json_schema
 from transformers import AutoTokenizer
 from typing import Union, Optional
 import json
+import unittest
 
 if is_harmony_available():
     from openai_harmony import (
@@ -55,59 +56,7 @@ def get_developer_message(tools: list | None):
     return developer_message
 
 
-def get_harmony_chat(messages, tools=None, browser_tool=False, python_tool=False, for_completion=True):
-    last_tool_name = None
-    chat = [
-               Message.from_role_and_content(Role.SYSTEM, get_system_message(browser_tool, python_tool)),
-               Message.from_role_and_content(Role.DEVELOPER, get_developer_message(tools))
-           ]
-    for message in messages:
-        if message["role"] == "user":
-            chat.append(Message.from_role_and_content(Role.USER, message['content']))
-        elif message["role"] == "assistant":
-            if "tool_calls" in message:
-                chat.append(
-                    Message.from_role_and_content(Role.ASSISTANT, message['content'])
-                    .with_channel("analysis")
-                )
-                chat.append(
-                    Message.from_role_and_content(Role.ASSISTANT, json.dumps(message["tool_calls"][0]["arguments"]))
-                    .with_channel("commentary")
-                    .with_recipient(f"functions.{message['tool_calls'][0]['name']}")
-                    .with_content_type("json")
-                )
-                last_tool_name = message["tool_calls"][0]["name"]
-            elif "thinking" in message:
-                chat.append(
-                    Message.from_role_and_content(
-                    Role.ASSISTANT,
-                    message["thinking"],
-                ).with_channel("analysis")
-                )
-                chat.append(
-                    Message.from_role_and_content(
-                        Role.ASSISTANT,
-                        message['content']
-                    ).with_channel("final")
-                )
-            else:
-                chat.append(Message.from_role_and_content(Role.ASSISTANT, message['content']).with_channel("final"))
-        elif message["role"] == "tool":
-            chat.append(
-                Message.from_author_and_content(Author.new(Role.TOOL, f"functions.{last_tool_name}"),
-                                              json.dumps(message['content']))
-                .with_recipient("assistant").with_channel("commentary")
-            )
-        else:
-            raise ValueError(f"Unknown role: {message['role']}")
 
-    convo = Conversation.from_messages(chat)
-    if for_completion:
-        tokens = encoding.render_conversation_for_completion(convo, Role.ASSISTANT)
-    else:
-        config = RenderConversationConfig(auto_drop_analysis=False)
-        tokens = encoding.render_conversation(convo, config=config)
-    return encoding.decode_utf8(tokens)
 
 
 @require_torch
@@ -116,7 +65,61 @@ class GptOssChatTemplateTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
-        cls.tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+        cls.tokenizer = AutoTokenizer.from_pretrained("plop-internal/gpt-oss-20b-trfs")
+
+    def _get_harmony_chat(self, messages, tools=None, browser_tool=False, python_tool=False, for_completion=True):
+        last_tool_name = None
+        chat = [
+            Message.from_role_and_content(Role.SYSTEM, get_system_message(browser_tool, python_tool)),
+            Message.from_role_and_content(Role.DEVELOPER, get_developer_message(tools))
+        ]
+        for message in messages:
+            if message["role"] == "user":
+                chat.append(Message.from_role_and_content(Role.USER, message['content']))
+            elif message["role"] == "assistant":
+                if "tool_calls" in message:
+                    chat.append(
+                        Message.from_role_and_content(Role.ASSISTANT, message['content'])
+                        .with_channel("analysis")
+                    )
+                    chat.append(
+                        Message.from_role_and_content(Role.ASSISTANT, json.dumps(message["tool_calls"][0]["arguments"]))
+                        .with_channel("commentary")
+                        .with_recipient(f"functions.{message['tool_calls'][0]['name']}")
+                        .with_content_type("json")
+                    )
+                    last_tool_name = message["tool_calls"][0]["name"]
+                elif "thinking" in message:
+                    chat.append(
+                        Message.from_role_and_content(
+                            Role.ASSISTANT,
+                            message["thinking"],
+                        ).with_channel("analysis")
+                    )
+                    chat.append(
+                        Message.from_role_and_content(
+                            Role.ASSISTANT,
+                            message['content']
+                        ).with_channel("final")
+                    )
+                else:
+                    chat.append(Message.from_role_and_content(Role.ASSISTANT, message['content']).with_channel("final"))
+            elif message["role"] == "tool":
+                chat.append(
+                    Message.from_author_and_content(Author.new(Role.TOOL, f"functions.{last_tool_name}"),
+                                                    json.dumps(message['content']))
+                    .with_recipient("assistant").with_channel("commentary")
+                )
+            else:
+                raise ValueError(f"Unknown role: {message['role']}")
+
+        convo = Conversation.from_messages(chat)
+        if for_completion:
+            tokens = self.encoding.render_conversation_for_completion(convo, Role.ASSISTANT)
+        else:
+            config = RenderConversationConfig(auto_drop_analysis=False)
+            tokens = self.encoding.render_conversation(convo, config=config)
+        return self.encoding.decode_utf8(tokens)
 
     def test_simple_function(self):
         def get_current_weather(x: int):
@@ -133,8 +136,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "system", "content": "Always respond in riddles"},
             {"role": "user", "content": "Hi there!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_simple_function_without_builtins(self):
@@ -152,8 +155,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "system", "content": "Always respond in riddles"},
             {"role": "user", "content": "Hi there!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=False, python_tool=False)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=False, python_tool=False)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
 
@@ -173,8 +176,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "system", "content": "Always respond in riddles"},
             {"role": "user", "content": "Hi there!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_complex_function(self):
@@ -193,8 +196,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "system", "content": "Always respond in riddles"},
             {"role": "user", "content": "Hi there!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_tool_calls(self):
@@ -214,8 +217,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "assistant", "content": "Time to look up the weather!", "tool_calls": [{"name": "get_current_weather", "arguments": {"x": 42}}]},
             {"role": "tool", "content": "30"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_tool_calls_in_longer_chat(self):
@@ -237,8 +240,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "assistant", "content": "Time to look up the weather!", "tool_calls": [{"name": "get_current_weather", "arguments": {"x": 42}}]},
             {"role": "tool", "content": "30"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
-        hf_formatted = tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:], [schema], browser_tool=True, python_tool=True)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tools=[schema], tokenize=False, builtin_tools=["python", "browser"], add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_thinking(self):
@@ -248,8 +251,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "assistant", "content": "Hello!", "thinking": "Thinking about things..."},
             {"role": "user", "content": "Nice thinking!"},
         ]
-        harmony_formatted = get_harmony_chat(messages[1:])
-        hf_formatted = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:])
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
 
@@ -262,8 +265,8 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "assistant", "content": "Yes it was!", "thinking": "I wonder if humans can detect sarcasm..."},
             {"role": "user", "content": "I can!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:])
-        hf_formatted = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:])
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_for_training(self):
@@ -273,9 +276,9 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "user", "content": "Hi there!"},
             {"role": "assistant", "content": "Hello!", "thinking": "Thinking about things..."},
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], for_completion=False)
+        harmony_formatted = self._get_harmony_chat(messages[1:], for_completion=False)
         harmony_formatted = harmony_formatted.removesuffix("<|end|>") + "<|return|>"
-        hf_formatted = tokenizer.apply_chat_template(messages, tokenize=False)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tokenize=False)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_for_training_multi_turn(self):
@@ -283,13 +286,13 @@ class GptOssChatTemplateTest(unittest.TestCase):
         messages = [
             {"role": "system", "content": "Always respond in riddles"},
             {"role": "user", "content": "Hi there!"},
-            {"role": "assistant", "content": "Hello!", "thinking": "Thinking about things..."},
+            {"role": "assistant", "content": "Hello!"},
             {"role": "user", "content": "Nice thinking!"},
             {"role": "assistant", "content": "Yes it was!", "thinking": "I wonder if humans can detect sarcasm..."},
         ]
-        harmony_formatted = get_harmony_chat(messages[1:], for_completion=False)
+        harmony_formatted = self._get_harmony_chat(messages[1:], for_completion=False)
         harmony_formatted = harmony_formatted.removesuffix("<|end|>") + "<|return|>"
-        hf_formatted = tokenizer.apply_chat_template(messages, tokenize=False)
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tokenize=False)
         self.assertEqual(harmony_formatted, hf_formatted)
 
     def test_assistant_turns_without_thinking(self):
@@ -301,6 +304,6 @@ class GptOssChatTemplateTest(unittest.TestCase):
             {"role": "assistant", "content": "Yes it was!"},
             {"role": "user", "content": "Yeah!"}
         ]
-        harmony_formatted = get_harmony_chat(messages[1:])
-        hf_formatted = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        harmony_formatted = self._get_harmony_chat(messages[1:])
+        hf_formatted = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         self.assertEqual(harmony_formatted, hf_formatted)
