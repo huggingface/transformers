@@ -29,11 +29,11 @@ rendered properly in your Markdown viewer.
 You can find the original Mimi checkpoints under the [Kyutai](https://huggingface.co/kyutai/models?search=mimi) organization.
 
 >[!TIP]
-> This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe).
+> This model was contributed by [ylacombe](https://huggingface.co/ylacombe).
 >
-> Click on the Mimi models in the right sidebar for more examples of how to apply Mimi to encode and decode an audio using this model.
+> Click on the Mimi models in the right sidebar for more examples of how to apply Mimi.
 
-The example below demonstrates how to encode and decode an audio with the [`AutoModel`] class.
+The example below demonstrates how to encode and decode audio with the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
