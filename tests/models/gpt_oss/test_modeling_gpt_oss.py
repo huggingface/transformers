@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -228,7 +227,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
 
 @slow
-@require_torch_accelerator
+# @require_torch_accelerator
 class GptOssIntegrationTest(unittest.TestCase):
     input_text = [
         "Roses are red, violets",
@@ -382,3 +381,122 @@ if __name__ == "__main__":
     @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
+
+    def test_model_matches_original_20b(self):
+        input_text = "Roses are red, violets"
+
+        original_output = "Roses are red, violets are blue, I love you, and I love you too."
+        original_logprobs = [
+            -0.037353515625,
+            -0.08154296875,
+            -1.21875,
+            -1.953125,
+            -2.234375,
+            -0.96875,
+            -1.546875,
+            -1.640625,
+            -0.93359375,
+            -1.609375,
+            -1.625,
+            -0.85546875,
+            -1.7265625,
+            -0.7421875,
+            -2.078125,
+            -0.006561279296875,
+            -0.10498046875,
+            -0.1767578125,
+            -0.1240234375,
+            -0.099609375,
+        ]
+
+        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation="eager",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokens = tokenizer(input_text)["input_ids"]
+
+        num_generated_tokens = 0
+        with torch.no_grad():
+            for i in range(12):
+                tensors = torch.as_tensor(tokens, dtype=torch.int32, device=model.device).unsqueeze(0)
+                logits = model(tensors).logits[0]
+
+                predicted_token = torch.argmax(logits[-1, :], dim=-1).item()
+                logprobs = torch.log_softmax(logits[-1, :], dim=-1)
+                selected_logprobs = logprobs[predicted_token]
+
+                tokens.append(predicted_token)
+                num_generated_tokens += 1
+                decoded_token = tokenizer.decode([predicted_token])
+                print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}")
+
+                # Logprob differences are not enforced as of now due to slightly different implementations
+                logprob_differences = selected_logprobs - original_logprobs[i]
+
+        decoded_string = tokenizer.decode(tokens)
+        self.assertTrue(original_output.startswith(decoded_string))
+
+    def test_model_matches_original_120b(self):
+        input_text = "Roses are red, violets"
+
+        original_output = """Roses are red, violets are blue
+    I am a language model, not a human being"""
+        original_logprobs = [
+            -0.90234375,
+            -0.66015625,
+            -1.546875,
+            -2.703125,
+            -2.078125,
+            -1.21875,
+            -2.484375,
+            -0.031982421875,
+            -0.84765625,
+            -1.890625,
+            -0.1923828125,
+            -2.046875,
+            -1.65625,
+            -1.3515625,
+            -1.1640625,
+            -0.3671875,
+            -1.9921875,
+            -1.5390625,
+            -1.46875,
+            -0.85546875,
+        ]
+
+        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation="eager",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokens = tokenizer(input_text)["input_ids"]
+
+        num_generated_tokens = 0
+        with torch.no_grad():
+            for i in range(12):
+                tensors = torch.as_tensor(tokens, dtype=torch.int32, device=model.device).unsqueeze(0)
+                logits = model(tensors).logits[0]
+
+                predicted_token = torch.argmax(logits[-1, :], dim=-1).item()
+                logprobs = torch.log_softmax(logits[-1, :], dim=-1)
+                selected_logprobs = logprobs[predicted_token]
+
+                tokens.append(predicted_token)
+                num_generated_tokens += 1
+                decoded_token = tokenizer.decode([predicted_token])
+                print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}")
+
+                # Logprob differences are not enforced as of now due to slightly different implementations
+                logprob_differences = selected_logprobs - original_logprobs[i]
+
+        decoded_string = tokenizer.decode(tokens)
+        self.assertTrue(original_output.startswith(decoded_string))
