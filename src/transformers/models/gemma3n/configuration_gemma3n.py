@@ -159,7 +159,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             value should be a multiple of the attention pattern size (see `layer_types` parameter).
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95,)`):
+        activation_sparsity_pattern (Sequence[float], *optional*):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
             sparse with a sparsity factor of 0.95 and the rest are dense.
@@ -228,7 +228,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,),
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -290,11 +290,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.laurel_rank = laurel_rank
 
         if activation_sparsity_pattern is None:
-            activation_sparsity_pattern = [0.0] * num_hidden_layers
-
-        # Default value for activation sparsity pattern
-        if activation_sparsity_pattern == (0.95,):
-            num_sparse_layers = 10 if num_hidden_layers > 10 else num_hidden_layers
+            num_sparse_layers = 10 if num_hidden_layers > 10 else 0
             activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
                 num_hidden_layers - num_sparse_layers
             )

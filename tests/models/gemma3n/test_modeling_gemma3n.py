@@ -34,7 +34,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -42,6 +41,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_flash_attn_2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -677,7 +677,9 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset("etechgrid/28.5k_wavfiles_dataset")
+        audio_ds = load_dataset(
+            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        )
         self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
@@ -855,38 +857,16 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    # TODO: raushan FA2 generates gibberish for no reason, check later
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @unittest.skip("Timm models do not support Flash Attention 2 yet")
-    def test_model_4b_flash_attn(self):
-        model_id = "Google/gemma-3n-E4B-it"
-
-        model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map=torch_device
-        )
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_TEXTS)
-
-    @parameterized.expand([("sdpa",), ("eager",)])
+    @parameterized.expand([("sdpa",), ("eager",), ("flash_attention_2",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
+
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("Test requires Flash Attention")
+
         model_id = "google/gemma-3n-E2B-it"
 
         input_text = [
@@ -898,37 +878,6 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16, device_map=torch_device
-        )
-
-        # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
-
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
-        output_text = tokenizer.batch_decode(out)
-
-        EXPECTED_COMPLETIONS = [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    def test_generation_beyond_sliding_window_flash_attn(self):
-        """Test that we can correctly generate beyond the sliding window with flash attention 2.
-        This is non trivial as we need to correctly slice the attention mask in all cases (because we use a HybridCache).
-        Outputs for every attention functions should be coherent and identical.
-        """
-        model_id = "google/gemma-3n-E2B-it"
-
-        input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
-            "A list of colors: red, blue",  # This will almost all be padding tokens
-        ]
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16, device_map=torch_device
         )
 
         # Make sure prefill is larger than sliding window
