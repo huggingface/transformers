@@ -438,8 +438,8 @@ class InternS1Tokenizer(Qwen2Tokenizer):
             {
                 "tokenizer_name": "tokenizer_FASTA",
                 "tokenizer_path": os.path.join(os.path.dirname(vocab_file), "tokenizer_FASTA.model"),
-                "begin_sp_tokens": [],
-                "end_sp_tokens": [],
+                "begin_sp_tokens": ["<FASTA>"],
+                "end_sp_tokens": ["</FASTA>"],
                 "auto_begin_sp_tokens": ["<FASTA_AUTO_DETECT>"],
                 "auto_end_sp_tokens": ["</FASTA_AUTO_DETECT>"],
             },
