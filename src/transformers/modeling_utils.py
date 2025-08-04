@@ -2705,9 +2705,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     kernel_function = partial(attention_wrapper, implementation=kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
-                ALL_ATTENTION_FUNCTIONS.register(applicable_attn_implementation, kernel_function)
+                ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
                 ALL_MASK_ATTENTION_FUNCTIONS.register(
-                    applicable_attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
+                    attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"]
                 )
             except Exception as e:
                 logger.warning_once(
@@ -2715,8 +2715,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
 
-                applicable_attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            return applicable_attn_implementation
+                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
+            return attn_implementation
         else:
             return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
 
@@ -4087,9 +4087,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
-                    full_tensor = state_dict[tensor].full_tensor()
-                    # to get the correctly ordered tensor we need to repack if packed
+                if _is_dtensor_available and getattr(self, "_device_mesh", None) is not None:
+                    plan = _get_parameter_tp_plan(tensor, self._tp_plan)
+                    full_tensor = state_dict[tensor]
+                    if isinstance(state_dict[tensor], DTensor):
+                        full_tensor = full_tensor.full_tensor()
+                    elif plan is not None:
+                        shard_dim = -1 if "rowwise" in plan else 0
+                        gather_list = [torch.empty_like(full_tensor) for _ in range(self._device_mesh.size())]
+                        torch.distributed.all_gather(gather_list, full_tensor)
+                        full_tensor = torch.cat(gather_list, dim=shard_dim)
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly

@@ -4,8 +4,11 @@ from ..generation.continuous_batching import PagedAttentionCache
 from ..utils import is_flash_attn_2_available
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func  # noqa: F401
+try:
+    if is_flash_attn_2_available():
+        from flash_attn import flash_attn_varlen_func  # noqa: F401
+except Exception:
+    pass
 
 
 def paged_attention_forward(

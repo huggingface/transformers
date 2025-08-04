@@ -68,7 +68,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -239,9 +239,14 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-
-        video_len = 180 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
-        mm_len = batch_size * 192 if modality == "image" else video_len
+        if modality == "video":
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
+            expected_video_token_count = 0
+            for thw in out_dict["video_grid_thw"]:
+                expected_video_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_video_token_count
+        else:
+            mm_len = batch_size * 192
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
