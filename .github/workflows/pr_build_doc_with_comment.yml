@@ -72,7 +72,7 @@ jobs:
   reply_to_comment:
     name: Reply to the comment
     if: ${{ needs.create_run.result == 'success' }}
-    needs: [create_run]
+    needs: [get-pr-number, create_run]
     permissions:
       pull-requests: write
     runs-on: ubuntu-22.04
