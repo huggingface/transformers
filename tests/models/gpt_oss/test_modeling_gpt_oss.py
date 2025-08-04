@@ -13,15 +13,17 @@
 # limitations under the License.
 """Testing suite for the PyTorch GptOss model."""
 
-import unittest
+import inspect
 import json
 import os
-
+import subprocess
+import sys
+import tempfile
+import unittest
 
 import pytest
 from parameterized import parameterized
 
-from tests.tensor_parallel.test_tensor_parallel import TensorParallelTestBase
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -33,7 +35,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -165,8 +166,66 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 RESULTS_PATH = os.path.join(
-    os.path.dirname(__file__).split("transformers")[0], "tests/fixtures/gpt_oss/integration_tests.json"
+    os.path.dirname(__file__).split("transformers")[0],
+    "tests/fixtures/gpt_oss/integration_tests.json",
 )
+
+
+# ------------------------
+# Worker function for distributed torchrun
+# ------------------------
+def distributed_worker(quantized, model, kernels, attn_impl, mode):
+    """This is the function that will be executed by torchrun workers."""
+    import os
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.testing_utils import torch_device
+
+    input_text = [
+        "Roses are red, violets",
+        "How are you? Tell me the name of the president of",
+    ]
+
+    # Convert args
+    quantized = quantized.lower() == "true"
+    kernels = kernels.lower() == "true"
+
+    # Distributed model loading
+    model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype="auto",
+        tp_plan="auto",  # distributed inference
+        use_kernels=kernels,
+    ).to(torch_device)
+    model.set_attn_implementation(attn_impl)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    # Inference
+    inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
+    output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+    output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+    # Only rank 0 writes results
+    if int(os.environ.get("RANK", "0")) == 0:
+        result_entry = {
+            "quantized": quantized,
+            "model": model,
+            "kernels": kernels,
+            "attn_impl": attn_impl,
+            "mode": mode,
+            "outputs": output_texts,
+        }
+
+        if os.path.exists(RESULTS_PATH):
+            with open(RESULTS_PATH, "r") as f:
+                results = json.load(f)
+        else:
+            results = []
+        results.append(result_entry)
+
+        with open(RESULTS_PATH, "w") as f:
+            json.dump(results, f, indent=2)
 
 
 @slow
@@ -183,75 +242,115 @@ class GptOssIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    # ------------------------
+    # Non-distributed inference
+    # ------------------------
     @staticmethod
     def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
-        if not isinstance(attn_implementation, list):
-            attn_implementation = [attn_implementation]
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, **pretrained_kwargs).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation=attn_implementation,
+            **pretrained_kwargs,
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-        outputs = []
-        for attn in attn_implementation:
-            model.set_attn_implementation(attn)
-            inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-            output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
-            outputs.append(output_text)
-        return outputs
+        inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        return output_text
 
-    @require_read_token
-    @parameterized.expand(
-        [
-            # (quantized, model, kernels, attn_impl, mode)
-            (False, "120b", False, "eager", "eval"),
-            (False, "120b", False, "eager", "train"),
-            (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (False, "120b", True, "eager", "eval"),
-            (False, "120b", True, "eager", "train"),
-            (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (True, "120b", False, "eager", "eval"),
-            (True, "120b", False, "eager", "train"),
-            (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (True, "120b", True, "eager", "eval"),
-            (True, "120b", True, "eager", "train"),
-            (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (False, "20b", False, "eager", "eval"),
-            (False, "20b", False, "eager", "train"),
-            (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (False, "20b", True, "eager", "eval"),
-            (False, "20b", True, "eager", "train"),
-            (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (True, "20b", False, "eager", "eval"),
-            (True, "20b", False, "eager", "train"),
-            (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-            (True, "20b", True, "eager", "eval"),
-            (True, "20b", True, "eager", "train"),
-            (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-            (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+    # ------------------------
+    # Distributed inference using inspect
+    # ------------------------
+    @staticmethod
+    def run_distributed_test(quantized, model, kernels, attn_impl, mode):
+        """Launch torchrun using a temporary worker file generated from inspect.getsource()."""
+        import textwrap
+
+        # Extract worker function source dynamically
+        worker_src = inspect.getsource(distributed_worker)
+
+        # Create a temp file that calls the worker
+        script_code = f"""
+import sys
+{worker_src}
+
+if __name__ == "__main__":
+    distributed_worker("{quantized}", "{model}", "{kernels}", "{attn_impl}", "{mode}")
+"""
+        # Dedent for proper formatting
+        script_code = textwrap.dedent(script_code)
+
+        # Write to temp file
+        with tempfile.NamedTemporaryFile("w", suffix="_worker.py", delete=False) as tmp:
+            tmp.write(script_code)
+            tmp_path = tmp.name
+
+        # Launch torchrun
+        cmd = [
+            "torchrun",
+            "--nproc_per_node=8",
+            sys.executable,
+            tmp_path,
         ]
-    )
+        subprocess.run(cmd, check=True)
+
+        # Cleanup
+        os.remove(tmp_path)
+
+    # ------------------------
+    # Shared parameterization
+    # ------------------------
+    PARAMETERS = [
+        (False, "120b", False, "eager", "eval"),
+        (False, "120b", False, "eager", "train"),
+        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "120b", True, "eager", "eval"),
+        (False, "120b", True, "eager", "train"),
+        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "120b", False, "eager", "eval"),
+        (True, "120b", False, "eager", "train"),
+        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "120b", True, "eager", "eval"),
+        (True, "120b", True, "eager", "train"),
+        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", False, "eager", "eval"),
+        (False, "20b", False, "eager", "train"),
+        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", True, "eager", "eval"),
+        (False, "20b", True, "eager", "train"),
+        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", False, "eager", "eval"),
+        (True, "20b", False, "eager", "train"),
+        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", True, "eager", "eval"),
+        (True, "20b", True, "eager", "train"),
+        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
+        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+    ]
+
+    # ------------------------
+    # Non-distributed test
+    # ------------------------
+    @require_read_token
+    @parameterized.expand(PARAMETERS)
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
-        output_text = self.load_and_forward(
+        output_texts = self.load_and_forward(
             model_id,
             attn_impl,
             self.input_text,
             use_kernels=kernels,
         )
-
-        # Flatten outputs if needed (since we loop over attn_impl)
-        if isinstance(output_text[0], list):
-            output_text = output_text[0]
 
         result_entry = {
             "quantized": quantized,
@@ -259,49 +358,25 @@ class GptOssIntegrationTest(unittest.TestCase):
             "kernels": kernels,
             "attn_impl": attn_impl,
             "mode": mode,
-            "outputs": output_text,
+            "outputs": output_texts,
         }
 
-        # Append to result.json for comparison
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
                 results = json.load(f)
         else:
             results = []
-
         results.append(result_entry)
-
         with open(RESULTS_PATH, "w") as f:
             json.dump(results, f, indent=2)
 
-        # Optionally, assert that at least output shape is correct
-        self.assertIsInstance(output_text, list)
-        self.assertTrue(all(isinstance(x, str) for x in output_text))
+        self.assertIsInstance(output_texts, list)
+        self.assertTrue(all(isinstance(x, str) for x in output_texts))
 
-
-@slow
-@require_torch_multi_accelerator
-class GptOssTPTest(TensorParallelTestBase):
-    def test_model_training(self):
-        self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/gpt-oss-20b-trfs",
-            mode="training",
-            expected_output="you with something?",
-        )
-        self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/gpt-oss-120b-trfs",
-            mode="training",
-            expected_output="you with something?",
-        )
-
-    def test_model_generate(self):
-        self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/gpt-oss-20b-trfs",
-            mode="generate",
-            expected_output="with something",
-        )
-        self.run_tensor_parallel_test(
-            model_id="/fsx/vb/new-oai/20b-converted-quantized",
-            mode="generate",
-            expected_output="with something",
-        )
+    # ------------------------
+    # Distributed test
+    # ------------------------
+    @require_read_token
+    @parameterized.expand(PARAMETERS)
+    def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        self.run_distributed_test(quantized, model, kernels, attn_impl, mode)

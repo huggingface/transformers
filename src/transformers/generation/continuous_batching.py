@@ -30,9 +30,9 @@ from tqdm import tqdm
 
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils.logging import logging
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 class RequestStatus(Enum):

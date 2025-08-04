@@ -333,9 +333,7 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, scales_attr)
 
 
-def load_and_swizzle_mxfp4(
-    module, param_name, param_value, target_device, **kwargs
-):
+def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
     from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
     from ..integrations.tensor_parallel import shard_and_distribute_module
