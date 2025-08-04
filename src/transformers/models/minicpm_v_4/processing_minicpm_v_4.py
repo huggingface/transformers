@@ -23,7 +23,7 @@ import torch
 
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
+from transformers.processing_utils import ProcessorMixin, ProcessingKwargs, Unpack, ImagesKwargs
 from transformers.tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -38,6 +38,23 @@ from transformers.utils import (
 )
 
 from .image_processing_minicpm import MiniCPMVBatchFeature
+
+
+class MiniCPMVImageKwargs(ImagesKwargs, total=False):
+    max_slice_nums: Optional[int]
+    use_image_id: bool
+
+
+class MiniCPM_V_4ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MiniCPMVImageKwargs
+    _defaults = {
+        "images_kwargs": {
+            "do_pad": True,
+            "max_slice_nums": None,
+            "use_image_id": None,
+        },
+        "return_tensors": TensorType.PYTORCH,
+    }
 
 
 class MiniCPM_V_4Processor(ProcessorMixin):
@@ -65,17 +82,16 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        max_length: Optional[int] = None,
-        do_pad: Optional[bool] = True,
-        max_slice_nums: int = None,
-        use_image_id: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        **kwargs
+        **kwargs: Unpack[MiniCPM_V_4ProcessorKwargs],
     ) -> MiniCPMVBatchFeature:
+        output_kwargs = self._merge_kwargs(
+            MiniCPM_V_4ProcessorKwargs, self.tokenizer.init_kwargs, **kwargs
+        )
+        image_kwargs = output_kwargs["images_kwargs"]
 
         if images is not None:
-            image_inputs = self.image_processor(images, do_pad=do_pad, max_slice_nums=max_slice_nums, return_tensors=return_tensors)
-        return self._convert_images_texts_to_inputs(image_inputs, text, max_slice_nums=max_slice_nums, use_image_id=use_image_id, max_length=max_length, **kwargs)
+            image_inputs = self.image_processor(images, **image_kwargs)
+        return self._convert_images_texts_to_inputs(image_inputs, text, **kwargs)
     
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
