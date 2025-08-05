@@ -18,11 +18,11 @@ from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
+    require_kernels,
     require_torch,
     require_torch_gpu,
     require_torch_large_gpu,
     require_triton,
-    require_kernels,
     slow,
 )
 from transformers.utils import (
