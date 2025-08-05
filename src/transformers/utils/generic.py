@@ -41,7 +41,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     requires,
 )
-
+from ..model_debugging_utils import model_addition_debugger_context
 
 _CAN_RECORD_REGISTRY = {}
 
@@ -1032,7 +1032,13 @@ def check_model_inputs(func):
             def wrapped_forward(*args, **kwargs):
                 if key == "hidden_states" and len(collected_outputs[key]) == 0:
                     collected_outputs[key] += (args[0],)
-                output = orig_forward(*args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prun_layers")
+                    ):
+                        output = orig_forward(*args, **kwargs)
+                else:
+                    output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
