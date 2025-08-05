@@ -23,7 +23,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
@@ -35,14 +34,13 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torch_available,
-    is_torchdynamo_compiling,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward
 from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
-from ..llava.modeling_llava import LlavaPreTrainedModel
+from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
 
 
@@ -1134,10 +1132,10 @@ class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, config: Florence2VisionConfig):
+    def __init__(self, config: Florence2Config):
         super().__init__()
-        num_pos = config.max_position_embeddings
-        embedding_dim = config.embed_dim[-1]
+        num_pos = config.vision_config.max_position_embeddings
+        embedding_dim = config.vision_config.embed_dim[-1]
         self.row_embeddings = nn.Embedding(num_pos, embedding_dim // 2)
         self.column_embeddings = nn.Embedding(num_pos, embedding_dim - (embedding_dim // 2))
 
@@ -1159,10 +1157,10 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
     This module generates 1D cosine positional embeddings using precomputed sinusoidal functions.
     """
 
-    def __init__(self, config: Florence2VisionConfig):
+    def __init__(self, config: Florence2Config):
         super().__init__()
-        self.embed_dim = config.embed_dim[-1]
-        self.max_seq_len = config.max_temporal_embeddings
+        self.embed_dim = config.vision_config.embed_dim[-1]
+        self.max_seq_len = config.vision_config.max_temporal_embeddings
         pos_idx_to_embed = torch.empty((self.max_seq_len, self.embed_dim))
         sine, cosine = self.get_sinusoid_embeddings(
             max_positions=self.max_seq_len,
@@ -1570,10 +1568,10 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
 
 
 class Florence2MultiModalProjector(nn.Module):
-    def __init__(self, config: Florence2VisionConfig):
+    def __init__(self, config: Florence2Config):
         super().__init__()
-        self.vision_embedding_dim = config.embed_dim[-1]
-        self.vision_projection_dim = config.projection_dim
+        self.vision_embedding_dim = config.vision_config.embed_dim[-1]
+        self.vision_projection_dim = config.vision_config.projection_dim
         self.image_projection = nn.Linear(self.vision_embedding_dim, self.vision_projection_dim, bias=False)
         self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
         self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(config=config)
@@ -1642,7 +1640,7 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
     Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation.
     """
 )
-class Florence2Model(Florence2PreTrainedModel):
+class Florence2Model(LlavaModel):
     _tied_weights_keys = [
         "language_model.encoder.embed_tokens.weight",
         "language_model.decoder.embed_tokens.weight",
@@ -1650,15 +1648,7 @@ class Florence2Model(Florence2PreTrainedModel):
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        self.config = config
-        self.vocab_size = config.text_config.vocab_size
-
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
-        self.multi_modal_projector = Florence2MultiModalProjector(config=config.vision_config)
-        self.language_model = AutoModel.from_config(config=config.text_config)
-
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
-        self.post_init()
 
     def get_encoder(self):
         return self.language_model.get_encoder()
@@ -1666,14 +1656,16 @@ class Florence2Model(Florence2PreTrainedModel):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.language_model.set_input_embeddings(value)
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.language_model.get_input_embeddings()
-
-    @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+               The tensors corresponding to the input images.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
         image_features = self.vision_tower(pixel_values, **kwargs)
         image_embeds = self.multi_modal_projector(image_features)
         return image_embeds
@@ -1716,28 +1708,10 @@ class Florence2Model(Florence2PreTrainedModel):
 
             if pixel_values is not None:
                 image_features = self.get_image_features(pixel_values)
-
-                if input_ids is None:
-                    special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                        torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                    )
-                    special_image_mask = special_image_mask.all(-1)
-                else:
-                    special_image_mask = input_ids == self.config.image_token_id
-
-                n_image_tokens = (special_image_mask).sum()
-                special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-                if (
-                    not is_torchdynamo_compiling()
-                    and inputs_embeds[special_image_mask].numel() != image_features.numel()
-                ):
-                    n_image_features = image_features.shape[0] * image_features.shape[1]
-                    raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                    )
-
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                special_image_mask = self.get_placeholder_mask(
+                    input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+                )
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             encoder_outputs = self.language_model.encoder(
@@ -1789,54 +1763,18 @@ class Florence2Model(Florence2PreTrainedModel):
     Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation.
     """
 )
-class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
-    base_model_prefix = "model"
-
+class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = [
         "model.language_model.encoder.embed_tokens.weight",
         "model.language_model.decoder.embed_tokens.weight",
         "lm_head.weight",
     ]
 
-    def __init__(self, config: Florence2Config):
-        super().__init__(config)
-        self.model = Florence2Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
     def get_encoder(self):
         return self.model.get_encoder()
 
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring
@@ -1944,26 +1882,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
-        """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
-        return special_image_mask
+        return self.model.get_placeholder_mask(
+            input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+        )
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self,
