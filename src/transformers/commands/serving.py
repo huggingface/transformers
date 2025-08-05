@@ -828,7 +828,9 @@ class ServeCommand(BaseTransformersCLICommand):
                 if isinstance(message["content"], str):
                     content = message["content"]
                 elif isinstance(message["content"], list):
-                    content = message["content"][0]["text"]
+                    content = " ".join(
+                        [content["text"] for content in message["content"] if content["type"] == "text"]
+                    )
                 else:
                     content = message["content"]["text"]
 

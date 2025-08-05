@@ -270,6 +270,14 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                         "role": "assistant",
                         "content": "I'm doing great, thank you for asking! How can I assist you today?",
                     },
+                    {"role": "user", "content": {"text": "Can you help me write tests?"}},
+                ],
+                [
+                    {"role": "user", "content": "How are you doing?"},
+                    {
+                        "role": "assistant",
+                        "content": "I'm doing great, thank you for asking! How can I assist you today?",
+                    },
                     {"role": "user", "content": "Can you help me write tests?"},
                 ],
             ),
@@ -281,7 +289,13 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                         "role": "assistant",
                         "content": "I'm doing great, thank you for asking! How can I assist you today?",
                     },
-                    {"role": "user", "content": [{"text": "Can you help me write tests?", "type": "text"}]},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"text": "Can you help me write tests?", "type": "text"},
+                            {"text": "Please", "type": "text"},
+                        ],
+                    },
                 ],
                 [
                     {"role": "user", "content": "How are you doing?"},
@@ -289,7 +303,7 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
                         "role": "assistant",
                         "content": "I'm doing great, thank you for asking! How can I assist you today?",
                     },
-                    {"role": "user", "content": "Can you help me write tests?"},
+                    {"role": "user", "content": "Can you help me write tests? Please"},
                 ],
             ),
         ]
