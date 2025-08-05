@@ -29,21 +29,17 @@ from transformers import (
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_av, require_librosa, require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_av, require_librosa, require_vision
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
     from transformers import AutoImageProcessor
 
 
 @require_vision
-@require_torch
 class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPM_V_4Processor
 

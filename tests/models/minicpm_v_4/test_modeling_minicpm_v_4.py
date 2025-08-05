@@ -21,7 +21,6 @@ import tempfile
 import numpy as np
 import librosa
 import soundfile as sf
-from moviepy.editor import VideoFileClip
 from PIL import Image
 import requests
 from io import BytesIO
