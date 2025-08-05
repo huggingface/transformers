@@ -50,7 +50,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         super().__init__()
 
         config = model.config.get_text_config()
-        generation_config = model.generation_config
+        _generation_config = model.generation_config
 
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
