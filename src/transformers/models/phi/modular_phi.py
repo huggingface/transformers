@@ -22,7 +22,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
 )
-from ..utils.deprecation import deprecate_kwarg
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_phi import PhiConfig
 
 

@@ -39,7 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from .configuration_deepseek_v2 import DeepseekV2Config, DeepseekV2TextConfig
+from .configuration_deepseek_v2 import DeepseekV2Config
 
 
 logger = logging.get_logger(__name__)
@@ -198,7 +198,7 @@ class DeepseekV2RMSNorm(nn.Module):
 
 
 class DeepseekV2RotaryEmbedding(nn.Module):
-    def __init__(self, config: DeepseekV2TextConfig, device=None, layer_type=None):
+    def __init__(self, config: DeepseekV2Config, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -216,7 +216,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 
     def compute_default_rope_parameters(
         self,
-        config: Optional[DeepseekV2TextConfig] = None,
+        config: Optional[DeepseekV2Config] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
         layer_type: Optional[str] = None,

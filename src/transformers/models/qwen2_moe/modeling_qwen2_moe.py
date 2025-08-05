@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attn_utils import FlashAttentionKwargs
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
