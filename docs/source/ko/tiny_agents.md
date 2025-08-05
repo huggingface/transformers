@@ -20,13 +20,13 @@ MCP 도구를 사용하는 첫 번째 단계는 모델에게 어떤 도구들이
 }
 ```
 
-그런 다음 다음 명령으로 `tiny-agents` 채팅 인터페이스를 실행할 수 있습니다.
+그런 다음 아래 명령으로 `tiny-agents` 채팅 인터페이스를 실행할 수 있습니다.
 
 ```bash
 tiny-agents run path/to/your/config.json
 ```
 
-백그라운드에서 `transformers serve`가 실행 중이라면, 로컬 모델에서 MCP 도구를 사용할 준비가 완료됩니다! 예를 들어, 다음은 `tiny-agents`와의 채팅 세션 예시입니다:
+백그라운드에서 `transformers serve`가 실행 중이라면, 로컬 모델에서 MCP 도구를 사용할 준비가 완료되었습니다! 아래는 `tiny-agents`와의 채팅 세션 예시입니다:
 
 ```bash
 Agent loaded with 1 tools:
@@ -40,5 +40,5 @@ The task is complete and the content accessible to the User
 Image URL: https://evalstate-flux1-schnell.hf.space/gradio_api/file=/tmp/gradio/3dbddc0e53b5a865ed56a4e3dbdd30f3f61cf3b8aabf1b456f43e5241bd968b8/image.webp
 380576952
 
-Flux 1 Schnell 이미지 생성기를 사용하여 달 위의 고양이 이미지를 생성했습니다. 이미지는 1024x1024 픽셀이며 4번의 추론 단계로 생성되었습니다. 변경 사항이 필요하거나 추가 도움이 필요하시면 알려주세요!
+Flux 1 Schnell 이미지 생성기를 사용하여 달 위의 고양이 이미지를 생성했습니다. 이미지는 1024x1024 픽셀이며 4번의 추론 단계를 거쳐 생성되었습니다. 변경 사항이 필요하거나 추가 도움이 필요하시면 알려주세요!
 ```
