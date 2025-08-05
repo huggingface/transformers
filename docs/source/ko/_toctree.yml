@@ -92,6 +92,10 @@
       title: (번역중) Tools and RAG
     title: 모델을 사용해 대화하기
   - sections:
+    - local: tiny_agents
+      title: Tiny-Agents CLI 및 MCP 도구
+    title: 서빙(Serving)
+  - sections:
     - local: in_translation
       title: (번역중) torch.compile
     - local: perf_infer_gpu_one
