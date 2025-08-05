@@ -395,28 +395,30 @@ if __name__ == "__main__":
         input_text = "Roses are red, violets"
 
         original_output = "Roses are red, violets are blue, I love you, and I love you too."
-        original_logprobs = torch.tensor([
-            -0.037353515625,
-            -0.08154296875,
-            -1.21875,
-            -1.953125,
-            -2.234375,
-            -0.96875,
-            -1.546875,
-            -1.640625,
-            -0.93359375,
-            -1.609375,
-            -1.625,
-            -0.85546875,
-            -1.7265625,
-            -0.7421875,
-            -2.078125,
-            -0.006561279296875,
-            -0.10498046875,
-            -0.1767578125,
-            -0.1240234375,
-            -0.099609375,
-        ])
+        original_logprobs = torch.tensor(
+            [
+                -0.037353515625,
+                -0.08154296875,
+                -1.21875,
+                -1.953125,
+                -2.234375,
+                -0.96875,
+                -1.546875,
+                -1.640625,
+                -0.93359375,
+                -1.609375,
+                -1.625,
+                -0.85546875,
+                -1.7265625,
+                -0.7421875,
+                -2.078125,
+                -0.006561279296875,
+                -0.10498046875,
+                -0.1767578125,
+                -0.1240234375,
+                -0.099609375,
+            ]
+        )
 
         model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
 
@@ -444,8 +446,12 @@ if __name__ == "__main__":
                 decoded_token = tokenizer.decode([predicted_token])
                 logprob_differences = selected_logprobs - original_logprobs[i]
 
-                print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}")
-                torch.testing.assert_close(selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1)
+                print(
+                    f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}"
+                )
+                torch.testing.assert_close(
+                    selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1
+                )
 
         decoded_string = tokenizer.decode(tokens)
         self.assertTrue(original_output.startswith(decoded_string))
@@ -455,28 +461,30 @@ if __name__ == "__main__":
 
         original_output = """Roses are red, violets are blue,
 I am a language model, not a human being"""
-        original_logprobs = torch.tensor([
-            -0.90234375,
-            -0.66015625,
-            -1.546875,
-            -2.703125,
-            -2.078125,
-            -1.21875,
-            -2.484375,
-            -0.031982421875,
-            -0.84765625,
-            -1.890625,
-            -0.1923828125,
-            -2.046875,
-            -1.65625,
-            -1.3515625,
-            -1.1640625,
-            -0.3671875,
-            -1.9921875,
-            -1.5390625,
-            -1.46875,
-            -0.85546875,
-        ])
+        original_logprobs = torch.tensor(
+            [
+                -0.90234375,
+                -0.66015625,
+                -1.546875,
+                -2.703125,
+                -2.078125,
+                -1.21875,
+                -2.484375,
+                -0.031982421875,
+                -0.84765625,
+                -1.890625,
+                -0.1923828125,
+                -2.046875,
+                -1.65625,
+                -1.3515625,
+                -1.1640625,
+                -0.3671875,
+                -1.9921875,
+                -1.5390625,
+                -1.46875,
+                -0.85546875,
+            ]
+        )
 
         model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
 
@@ -504,8 +512,12 @@ I am a language model, not a human being"""
                 decoded_token = tokenizer.decode([predicted_token])
                 logprob_differences = selected_logprobs - original_logprobs[i]
 
-                print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}")
-                torch.testing.assert_close(selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1)
+                print(
+                    f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}"
+                )
+                torch.testing.assert_close(
+                    selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1
+                )
 
         decoded_string = tokenizer.decode(tokens)
         self.assertTrue(original_output.startswith(decoded_string))
