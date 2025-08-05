@@ -1,4 +1,4 @@
-# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,13 +22,16 @@ import pytest
 
 from transformers import AutoProcessor, Qwen2TokenizerFast
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessorFast
+    from transformers import Qwen2VLProcessor
+
+    if is_torchvision_available():
+        from transformers import Qwen2VLImageProcessorFast, Qwen2VLVideoProcessor
 
 if is_torch_available():
     import torch
@@ -37,13 +40,13 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Qwen2_5_VLProcessor
+class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Qwen2VLProcessor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2_5_VLProcessor.from_pretrained(
+        processor = Qwen2VLProcessor.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
         )
         processor.save_pretrained(cls.tmpdirname)
@@ -65,7 +68,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -83,23 +86,24 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(
+        processor = Qwen2VLProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=True)
+        processor = Qwen2VLProcessor.from_pretrained(self.tmpdirname, use_fast=True)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
+        self.assertIsInstance(processor.video_processor, Qwen2VLVideoProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(
+        processor = Qwen2VLProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -116,7 +120,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(
+        processor = Qwen2VLProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -124,10 +128,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(
-            list(inputs.keys()),
-            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"],
-        )
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -142,7 +143,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(
+        processor = Qwen2VLProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -238,9 +239,14 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-
-        video_len = 180 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
-        mm_len = batch_size * 192 if modality == "image" else video_len
+        if modality == "video":
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
+            expected_video_token_count = 0
+            for thw in out_dict["video_grid_thw"]:
+                expected_video_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_video_token_count
+        else:
+            mm_len = batch_size * 192
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
@@ -298,26 +304,26 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
 
-        # Load with `video_fps` arg
-        video_fps = 1
+        # Load with `fps` arg
+        fps = 1
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 900)
 
-        # Load with `video_fps` and `num_frames` args, should raise an error
+        # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                video_fps=video_fps,
+                fps=fps,
                 num_frames=num_frames,
             )
 
@@ -355,7 +361,33 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
-        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
+        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+        self.assertEqual(inputs[self.images_input_name].shape[0], 612)
+
+    def test_special_mm_token_truncation(self):
+        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
+
+        processor = self.get_processor()
+
+        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        image_input = self.prepare_image_inputs(batch_size=2)
+
+        _ = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            truncation=None,
+            padding=True,
+        )
+
+        with self.assertRaises(ValueError):
+            _ = processor(
+                text=input_str,
+                images=image_input,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=20,
+            )

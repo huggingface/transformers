@@ -4812,6 +4812,25 @@ class ModelTesterMixin:
                 f"All parameters should be on meta device, but found {unique_devices}.",
             )
 
+    def test_config_attn_implementation_setter(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+            if not config._attn_implementation == attn_implementation:
+                raise ValueError(
+                    f"Unexpected attn_implementation for config {config.__class__.__name__}: "
+                    f"{config._attn_implementation} != {attn_implementation}"
+                )
+            for attribute_value in config.__dict__.values():
+                if isinstance(attribute_value, PretrainedConfig):
+                    check_attn_implementation_setter(attribute_value, attn_implementation)
+
+        config._attn_implementation = "eager"
+        check_attn_implementation_setter(config, "eager")
+
+        config._attn_implementation = "sdpa"
+        check_attn_implementation_setter(config, "sdpa")
+
     def test_internal_model_config_and_subconfig_are_same(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         subconfig_keys = list(config.sub_configs.keys())
