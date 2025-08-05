@@ -561,7 +561,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
                 {%- if not loop.last %}
                     {{- ",\n" }}
                 {%- else %}
-                    {{- "\n" }}
+                    {{- ",\n" }}
                 {%- endif -%}
             {%- endfor %}
             {{- "}) => any;\n\n" }}
@@ -696,6 +696,15 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {%- endif %}
         {%- endif %}
         {%- if "tool_calls" in message %}
+            {#- We need very careful handling here - we want to drop the tool call analysis message if the model #}
+            {#- has output a later <|final|> message, but otherwise we want to retain it. This is the only case #}
+            {#- when we render CoT/analysis messages in inference. #}
+            {%- set future_final_message = namespace(found=false) %}
+            {%- for future_message in loop_messages[loop.index:] %}
+                {%- if future_message.role == 'assistant' and "tool_calls" not in future_message %}
+                    {%- set future_final_message.found = true %}
+                {%- endif %}
+            {%- endfor %}
             {#- We assume max 1 tool call per message, and so we infer the tool call name #}
             {#- in "tool" messages from the most recent assistant tool call name #}
             {%- set tool_call = message.tool_calls[0] %}
@@ -704,9 +713,9 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {%- endif %}
             {%- if message.content and message.thinking %}
                 {{- raise_exception("Cannot pass both content and thinking in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
-            {%- elif message.content %}
+            {%- elif message.content and not future_final_message.found %}
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content + "<|end|>" }}
-            {%- elif message.thinking %}
+            {%- elif message.thinking and not future_final_message.found %}
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
