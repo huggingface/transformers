@@ -35,11 +35,14 @@ from ...image_utils import (
 from ...utils import (
     auto_docstring,
     is_torch_available,
+    is_torchvision_available,
     TensorType
 )
 
 if is_torch_available():
     import torch
+    if is_torchvision_available():
+        from torchvision.transforms import functional as F
 
 def squared_euclidean_distance_fast(a, b):
     b = b.T
@@ -52,7 +55,7 @@ def squared_euclidean_distance_fast(a, b):
 def color_quantize_fast(x, clusters):
     x = x.reshape(-1, 3)
     d = squared_euclidean_distance_fast(x, clusters)
-    return np.argmin(d, axis=1)
+    return torch.argmin(d, dim=1)
 
 class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     # TODO: Add documentation for each argument
@@ -86,8 +89,8 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
 
     # not in base ##########
-    image_mean = None # not in base, normalize uses a constant factor to divide pixel values
-    image_std = None # not in base, normalize uses a constant factor to divide pixel values
+    image_mean = [0.5, 0.5, 0.5] # not in base, normalize uses a constant factor to divide pixel values
+    image_std = [0.5, 0.5, 0.5] # not in base, normalize uses a constant factor to divide pixel values
     default_to_square = None # not in base
     crop_size = None # not in base
     do_center_crop = None # not in base
@@ -113,16 +116,20 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        resample: PILImageResampling,
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
         do_normalize: bool,
-        do_color_quantize: Optional[bool],
-        clusters: Optional[Union[list[list[int]], np.ndarray]],
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
-        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
+        disable_grouping: Optional[bool] = False,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_color_quantize: Optional[bool] = None,
+        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -131,6 +138,8 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
 
         # 1. Setup. Validate ImageGPT-specific requirements
         # Check for do_color_quantize and clusters.
@@ -138,16 +147,16 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
         # Clusters come in np arrays. Convert to torch tensors.
+        cluster_tensors = None
         if clusters is not None:
             cluster_tensors = torch.tensor(clusters, dtype=torch.float32)
-        if images[0].is_cuda:
-            # if image is stored on a CUDA GPA, convert tensors to CUDA
-            cluster_tensors = cluster_tensors.cuda()
+            if len(images) > 0 and images[0].is_cuda:
+                # if image is stored on a CUDA GPA, convert tensors to CUDA
+                cluster_tensors = cluster_tensors.cuda()
 
         # 2. Group images into batches of the same shape for more efficient processing.
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        unordered_processed_images = {}
-
+        resized_images_grouped = {}
         # Loop through shapes and stacked images
         for shape, stacked_images in grouped_images.items():
             # Resize to specific sizes (if do_resize is specified)
@@ -157,16 +166,33 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                     size=size,
                     interpolation=interpolation
                 )
-
             # Normalize pixel values (if do_normalize is specified)
             if do_normalize:
-                stacked_images = stacked_images.float()
-                stacked_images = (stacked_images / 127.5) - 1.0
-
-            unordered_processed_images[shape] = stacked_images
+                stacked_images = self.normalize(
+                    image=stacked_images,
+                    mean=image_mean,
+                    std=image_std
+                )
+            resized_images_grouped[shape] = stacked_images
 
         # 3. Reorder and maintain original image order after processing into batches
-        processed_images = reorder_images(unordered_processed_images, grouped_images_index)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         # 4. Color quantize if specified
         if do_color_quantize:
@@ -180,7 +206,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 image_hwc = torch.clamp(image_hwc, 0, 255)
 
                 # Fast torch-based color quantization
-                quantized = self._color_quantize_torch(image_hwc, cluster_tensors)
+                quantized = color_quantize_fast(image_hwc, cluster_tensors)
 
                 # Flatten to sequence (H*W,)
                 quantized_flat = quantized.view(-1)
