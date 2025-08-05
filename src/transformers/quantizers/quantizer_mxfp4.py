@@ -267,10 +267,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         use_kernels = kwargs.get("use_kernels", False)
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         if use_kernels:
-            logger.warning_once(
-                "You are using full precision kernels, we will dequantize the model to bf16. "
-                "To use the quantized model with quantization kernels, please set use_kernels=False"
-            )
+            logger.warning_once("You are using full precision kernels, we will dequantize the model to bf16. "
+                                "To use the quantized model with quantization kernels, please set use_kernels=False")
             self.quantization_config.dequantize = True
 
         config = model.config
