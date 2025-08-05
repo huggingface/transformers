@@ -67,7 +67,7 @@ is_fast_path_available = all(
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func with gate->router
+# Copied from transformers.models.qwen2_moe.modeling_qwen2_moe.load_balancing_loss_func with gate->router
 def load_balancing_loss_func(
     router_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
