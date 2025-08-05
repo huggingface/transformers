@@ -112,8 +112,6 @@ class Florence2VisionConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.in_channels = in_channels
         self.depths = list(depths)
         self.patch_size = list(patch_size)
@@ -132,6 +130,8 @@ class Florence2VisionConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.activation_function = activation_function
+
+        super().__init__(**kwargs)
 
 
 class Florence2Config(PretrainedConfig):
@@ -152,6 +152,8 @@ class Florence2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
         image_token_id (`int`, *optional*, defaults to 51289):
             The image token index to encode the image prompt.
+        is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
 
     Example:
 
@@ -185,10 +187,9 @@ class Florence2Config(PretrainedConfig):
         text_config=None,
         vision_config=None,
         image_token_id=51289,
+        is_encoder_decoder=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bart"
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
@@ -201,10 +202,14 @@ class Florence2Config(PretrainedConfig):
             logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
             vision_config = Florence2VisionConfig()
 
-        self.is_encoder_decoder = True
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
+
+        super().__init__(
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]

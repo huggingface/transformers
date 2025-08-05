@@ -85,13 +85,12 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_quantizer_quantize_dequantize(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
-        quantizer = processor.post_processor.box_quantizer
 
         # Test bounding box quantization and dequantization
         boxes = torch.tensor([[0, 0, 30, 40], [500, 550, 600, 690], [750, 1121, 851, 1239]], dtype=torch.int32)
         size = (800, 1200)
-        quantized_boxes = quantizer.quantize(boxes, size)
-        dequantized_boxes = quantizer.dequantize(quantized_boxes, size)
+        quantized_boxes = processor.post_processor.quantize(boxes, size)
+        dequantized_boxes = processor.post_processor.dequantize(quantized_boxes, size)
         EXPECTED_DEQUANTIZED_BBOX = torch.tensor(
             [[0, 0, 30, 40], [500, 550, 600, 690], [750, 1121, 799, 1199]], dtype=torch.int32
         )
@@ -99,14 +98,14 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test points quantization and dequantization
         points = torch.tensor([[0, 0], [300, 400], [850, 1250]], dtype=torch.int32)
-        quantized_points = quantizer.quantize(points, size)
-        dequantized_points = quantizer.dequantize(quantized_points, size)
+        quantized_points = processor.post_processor.quantize(points, size)
+        dequantized_points = processor.post_processor.dequantize(quantized_points, size)
         EXPECTED_DEQUANTIZED_POINTS = torch.tensor([[0, 0], [300, 400], [799, 1199]], dtype=torch.int32)
         self.assertTrue(torch.allclose(dequantized_points, EXPECTED_DEQUANTIZED_POINTS))
 
         # Test invalid shape
         with self.assertRaises(ValueError):
-            quantizer.quantize(torch.tensor([[1, 2, 3]]), size)
+            processor.post_processor.quantize(torch.tensor([[1, 2, 3]]), size)
 
     def test_post_process_parse_description_with_bboxes_from_text_and_spans(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

@@ -26,8 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.activations import ACT2FN
-
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -83,11 +82,12 @@ class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, embedding_dim: int = 256, num_pos: int = 50):
+    def __init__(self, config: Florence2VisionConfig):
         super().__init__()
+        num_pos = config.max_position_embeddings
+        embedding_dim = config.embed_dim[-1]
         self.row_embeddings = nn.Embedding(num_pos, embedding_dim // 2)
         self.column_embeddings = nn.Embedding(num_pos, embedding_dim - (embedding_dim // 2))
-        embedding_dim = embedding_dim
 
     def forward(self, pixel_values, pixel_mask=None):
         height, width = pixel_values.shape[-2:]
@@ -107,10 +107,10 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
     This module generates 1D cosine positional embeddings using precomputed sinusoidal functions.
     """
 
-    def __init__(self, embed_dim: int = 512, max_seq_len: int = 1024) -> None:
+    def __init__(self, config: Florence2VisionConfig):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.max_seq_len = max_seq_len
+        self.embed_dim = config.embed_dim[-1]
+        self.max_seq_len = config.max_temporal_embeddings
         pos_idx_to_embed = torch.empty((self.max_seq_len, self.embed_dim))
         sine, cosine = self.get_sinusoid_embeddings(
             max_positions=self.max_seq_len,
@@ -138,21 +138,14 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
 
 
 class Florence2VisionMLP(nn.Module):
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: Optional[int] = None,
-        out_features: Optional[int] = None,
-        activation_function: str = "gelu",
-    ):
+    def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.activation_fn = ACT2FN[activation_function]
-        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.config = config
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.fc1 = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
+        self.fc2 = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
@@ -230,12 +223,13 @@ def eager_attention_forward(
 
 
 class Florence2VisionChannelAttention(nn.Module):
-    def __init__(self, config: Florence2VisionConfig, dim: int, groups: int = 8, qkv_bias: bool = True):
+    def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
         self.config = config
-        self.groups = groups
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
+        self.dim = config.embed_dim[stage_idx]
+        self.groups = config.num_groups[stage_idx]
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.is_causal = False
 
     def forward(self, hidden_states: torch.Tensor):
@@ -288,12 +282,7 @@ class Florence2VisionChannelBlock(nn.Module):
             groups=dim_in,
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
-        self.channel_attn = Florence2VisionChannelAttention(
-            config=config,
-            dim=config.embed_dim[stage_idx],
-            groups=config.num_groups[stage_idx],
-            qkv_bias=config.qkv_bias,
-        )
+        self.channel_attn = Florence2VisionChannelAttention(config=config, stage_idx=stage_idx)
         self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
@@ -304,11 +293,7 @@ class Florence2VisionChannelBlock(nn.Module):
             groups=dim_in,
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
-        self.ffn = Florence2VisionMLP(
-            in_features=config.embed_dim[stage_idx],
-            hidden_features=int(config.embed_dim[stage_idx] * config.mlp_ratio),
-            activation_function=config.activation_function,
-        )
+        self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
         self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
@@ -358,24 +343,17 @@ def window_reverse(windows: torch.Tensor, window_size: int, height: int, width: 
 
 
 class Florence2VisionWindowAttention(nn.Module):
-    def __init__(
-        self,
-        config: Florence2VisionConfig,
-        dim: int,
-        num_heads: int,
-        window_size: int,
-        qkv_bias: bool = True,
-    ):
+    def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
         self.config = config
-        self.dim = dim
-        self.window_size = window_size
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.dim = config.embed_dim[stage_idx]
+        self.window_size = config.window_size
+        self.num_heads = config.num_heads[stage_idx]
+        head_dim = self.dim // self.num_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(self.dim, self.dim)
         self.is_causal = False
 
     def forward(self, hidden_states: torch.Tensor):
@@ -443,13 +421,7 @@ class Florence2VisionSpatialBlock(nn.Module):
             groups=config.embed_dim[stage_idx],
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
-        self.window_attn = Florence2VisionWindowAttention(
-            config,
-            config.embed_dim[stage_idx],
-            config.num_heads[stage_idx],
-            config.window_size,
-            config.qkv_bias,
-        )
+        self.window_attn = Florence2VisionWindowAttention(config=config, stage_idx=stage_idx)
         self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
@@ -460,11 +432,7 @@ class Florence2VisionSpatialBlock(nn.Module):
             groups=config.embed_dim[stage_idx],
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
-        self.ffn = Florence2VisionMLP(
-            in_features=config.embed_dim[stage_idx],
-            hidden_features=int(config.embed_dim[stage_idx] * config.mlp_ratio),
-            activation_function=config.activation_function,
-        )
+        self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
         self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
@@ -529,16 +497,6 @@ class Florence2VisionPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.BatchNorm2d]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            nn.init.constant_(module.weight, 1.0)
-            nn.init.constant_(module.bias, 0)
-
 
 @auto_docstring
 class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
@@ -588,10 +546,6 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @property
-    def dim_out(self):
-        return self.embed_dim[-1]
-
     def forward(self, hidden_states: torch.Tensor):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
@@ -600,19 +554,15 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         return hidden_states
 
 
-class Florence2VisionProjector(nn.Module):
+class Florence2MultiModalProjector(nn.Module):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__()
         self.vision_embedding_dim = config.embed_dim[-1]
         self.vision_projection_dim = config.projection_dim
         self.image_projection = nn.Linear(self.vision_embedding_dim, self.vision_projection_dim, bias=False)
         self.image_proj_norm = nn.LayerNorm(self.vision_projection_dim)
-        self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(
-            embedding_dim=self.vision_embedding_dim, num_pos=config.max_position_embeddings
-        )
-        self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(
-            embed_dim=self.vision_embedding_dim, max_seq_len=config.max_temporal_embeddings
-        )
+        self.image_position_embed = Florence2VisionLearnedAbsolutePositionEmbedding2D(config=config)
+        self.visual_temporal_embed = Florence2VisionPositionalEmbeddingCosine1D(config=config)
 
     def forward(self, image_features):
         position_features = image_features + self.image_position_embed(image_features)
@@ -682,20 +632,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     config_class = Florence2Config
 
-    def _init_weights(self, module):
-        std = self.config.vision_config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-
 
 @auto_docstring(
     custom_intro="""
@@ -714,7 +650,7 @@ class Florence2Model(Florence2PreTrainedModel):
         self.vocab_size = config.text_config.vocab_size
 
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
-        self.vision_projector = Florence2VisionProjector(config=config.vision_config)
+        self.multi_modal_projector = Florence2MultiModalProjector(config=config.vision_config)
         self.language_model = AutoModel.from_config(config=config.text_config)
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
@@ -735,7 +671,7 @@ class Florence2Model(Florence2PreTrainedModel):
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.vision_projector(image_features)
+        image_embeds = self.multi_modal_projector(image_features)
         return image_embeds
 
     @can_return_tuple
@@ -895,8 +831,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         return self.model.vision_tower
 
     @property
-    def vision_projector(self):
-        return self.model.vision_projector
+    def multi_modal_projector(self):
+        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,8 +40,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -162,7 +160,10 @@ class Florence2VisionText2TextModelTester:
         }
 
         return Florence2Config(
-            text_config=text_config, vision_config=vision_config, image_token_id=self.image_token_id
+            text_config=text_config,
+            vision_config=vision_config,
+            image_token_id=self.image_token_id,
+            initializer_range=0.02,
         )
 
     def prepare_config_and_inputs(self):
@@ -241,30 +242,6 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
-    )
-    def test_load_save_without_tied_weights(self):
-        pass
 
 
 def prepare_img():

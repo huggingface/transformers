@@ -15,6 +15,8 @@
 import argparse
 from collections import OrderedDict
 
+import torch
+
 from transformers import (
     AddedToken,
     AutoConfig,
@@ -289,25 +291,31 @@ def vision_channel_block(stage_idx, block_idx):
     return channel_block
 
 
-def vision_projector():
+def multi_modal_projector():
     """
     Function helps in renaming final classification layer
     """
     projector = []
-    projector.append(("image_projection", "model.vision_projector.image_projection.weight"))
-    projector.append(("image_proj_norm.weight", "model.vision_projector.image_proj_norm.weight"))
-    projector.append(("image_proj_norm.bias", "model.vision_projector.image_proj_norm.bias"))
+    projector.append(("image_projection", "model.multi_modal_projector.image_projection.weight"))
+    projector.append(("image_proj_norm.weight", "model.multi_modal_projector.image_proj_norm.weight"))
+    projector.append(("image_proj_norm.bias", "model.multi_modal_projector.image_proj_norm.bias"))
     projector.append(
-        ("image_pos_embed.row_embeddings.weight", "model.vision_projector.image_position_embed.row_embeddings.weight")
+        (
+            "image_pos_embed.row_embeddings.weight",
+            "model.multi_modal_projector.image_position_embed.row_embeddings.weight",
+        )
     )
     projector.append(
         (
             "image_pos_embed.column_embeddings.weight",
-            "model.vision_projector.image_position_embed.column_embeddings.weight",
+            "model.multi_modal_projector.image_position_embed.column_embeddings.weight",
         )
     )
     projector.append(
-        ("visual_temporal_embed.pos_idx_to_embed", "model.vision_projector.visual_temporal_embed.pos_idx_to_embed")
+        (
+            "visual_temporal_embed.pos_idx_to_embed",
+            "model.multi_modal_projector.visual_temporal_embed.pos_idx_to_embed",
+        )
     )
     return projector
 
@@ -328,7 +336,9 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
     """
 
     hf_config = AutoConfig.from_pretrained(hf_model_id, trust_remote_code=True)
-    hf_model = AutoModelForCausalLM.from_pretrained(hf_model_id, trust_remote_code=True, attn_implementation="eager")
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        hf_model_id, trust_remote_code=True, torch_dtype=torch.float16, attn_implementation="eager"
+    )
     hf_processor = AutoProcessor.from_pretrained(hf_model_id, trust_remote_code=True)
     huggingface_weights = OrderedDict()
     list_of_state_dict = []
@@ -345,7 +355,10 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
     vision_config = convert_config(hf_config.vision_config.__dict__)
     text_config = hf_config.text_config.__dict__
     config = Florence2Config(
-        text_config=text_config, vision_config=vision_config, image_token_id=tokenizer.image_token_id
+        text_config=text_config,
+        vision_config=vision_config,
+        image_token_id=tokenizer.image_token_id,
+        torch_dtype=torch.float16,
     )
 
     for stage_idx in range(len(config.vision_config.embed_dim)):
@@ -355,7 +368,7 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
             list_of_state_dict = list_of_state_dict + vision_channel_block(stage_idx, block_idx)
 
     original_weights = hf_model.state_dict()
-    list_of_state_dict = list_of_state_dict + vision_projector()
+    list_of_state_dict = list_of_state_dict + multi_modal_projector()
     list_of_state_dict = list_of_state_dict + language_model(original_weights)
     for i in range(len(list_of_state_dict)):
         if list_of_state_dict[i][0] == "image_projection":
