@@ -234,7 +234,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), num_frames)
 
-        # Load with `video_fps` arg is not possible with InternVL (skip)
+        # Load with `fps` arg is not possible with InternVL (skip)
 
         # Load without any arg should use the default loading method
         out_dict_with_video = processor.apply_chat_template(
