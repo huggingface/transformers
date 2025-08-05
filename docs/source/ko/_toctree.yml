@@ -169,8 +169,8 @@
     title: (번역중) BitNet
   - local: quantization/bitsandbytes
     title: bitsandbytes
-  - local: in_translation
-    title: (번역중) compressed-tensors
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
   - local: quantization/eetq
     title: EETQ
   - local: in_translation
