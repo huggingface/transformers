@@ -7,7 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import torch
 from packaging import version
@@ -1389,7 +1389,6 @@ if is_torch_greater_or_equal("2.3"):
             cache.update(key, value, idx)
         return cache
 
-
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
         lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache, DynamicLayer)),
@@ -1401,7 +1400,8 @@ if is_torch_greater_or_equal("2.3"):
     )
     # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
     torch.fx._pytree.register_pytree_flatten_spec(
-        DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache, DynamicLayer), spec)
+        DynamicCache,
+        lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache, DynamicLayer), spec),
     )
 
 
@@ -1452,9 +1452,10 @@ class StaticCache(Cache):
     def __init__(self, *args, **kwargs):
         super().__init__(layer_classes=StaticLayer, *args, **kwargs)
 
+
 if is_torch_greater_or_equal("2.3"):
 
-    def make_static_cache(dictionary: Dict[str, List[torch.Tensor]]) -> StaticCache:
+    def make_static_cache(dictionary: dict[str, list[torch.Tensor]]) -> StaticCache:
         keys = dictionary["key_cache"]
         values = dictionary["value_cache"]
 
@@ -1464,14 +1465,10 @@ if is_torch_greater_or_equal("2.3"):
                 self.num_attention_heads = keys[0].shape[1]
                 self.num_hidden_layers = len(keys)
 
-        max_cache_len=values[0].shape[2]
+        max_cache_len = values[0].shape[2]
         torch._check(
             max_cache_len >= keys[0].shape[2],
-            (
-                f"max_cache_len={max_cache_len} cannot be smaller "
-                f"shape[2]={keys[0].shape[2]} in shape "
-                f"{keys[0].shape}"
-            ),
+            (f"max_cache_len={max_cache_len} cannot be smaller shape[2]={keys[0].shape[2]} in shape {keys[0].shape}"),
         )
         return StaticCache(
             config=_config(),
