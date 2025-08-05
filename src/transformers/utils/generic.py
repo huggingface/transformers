@@ -31,7 +31,6 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
-from ..model_debugging_utils import model_addition_debugger_context
 from ..utils import logging
 from .import_utils import (
     get_torch_version,
@@ -52,6 +51,8 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
+
+    from ..model_debugging_utils import model_addition_debugger_context
 
 
 class cached_property(property):
