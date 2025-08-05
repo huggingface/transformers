@@ -118,25 +118,22 @@ jobs:
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
+      - name: checkout to start_commit
+        working-directory: /transformers
+        run: git checkout 8c4ea670dceace8d9b1bac8310bc62146b7134cd
+
+      - name: copy the fixed script
+        working-directory: /transformers
+        run: rm -rf utils/check_bad_commit.py && cp check_bad_commit.py utils/check_bad_commit.py
+
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports -m torch_compile_test tests/models/
+        # run: python3 utils/check_bad_commit.py --start_commit 8c4ea670dceace8d9b1bac8310bc62146b7134cd --end_commit 6dfd561d9cd722dfc09f702355518c6d09b9b4e3 --file new_failures.json --output_file new_failures_with_bad_commit.json
+        run: python3 utils/check_bad_commit.py --start_commit 8c4ea670dceace8d9b1bac8310bc62146b7134cd --end_commit 6dfd561d9cd722dfc09f702355518c6d09b9b4e3 --file new_failures_2.json --output_file new_failures_with_bad_commit.json
 
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/failures_short.txt
-
-      - name: Run test
-        shell: bash
-        run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports"
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
+      - name: "Upload new_failures_with_bad_commit.json"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+          name: new_failures_with_bad_commit
+          path: /transformers/new_failures_with_bad_commit.json

@@ -1,0 +1,21 @@
+{
+    "beit": {
+        "single-gpu": [
+            "tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation"
+        ],
+        "multi-gpu": [
+            "tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation"
+        ]
+    },
+
+    "encodec": {
+        "single-gpu": [
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_0_encodec_24khz_1p5",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0"
+        ],
+        "multi-gpu": [
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_0_encodec_24khz_1p5",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0"
+        ]
+    }
+}
