@@ -23,7 +23,7 @@ from ..utils import (
     is_accelerate_available,
     is_torch_available,
     is_triton_available,
-    is_triton_kernels_availalble,
+    is_kernels_available,
     logging,
 )
 from .quantizers_utils import get_module_from_name
@@ -33,7 +33,6 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
-
 
 class Mxfp4HfQuantizer(HfQuantizer):
     """
@@ -68,17 +67,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
 
-        if not is_triton_available("3.4.0") or not is_triton_kernels_availalble():
+        if not is_triton_available("3.4.0") or not is_kernels_available():
             if self.pre_quantized and not self.quantization_config.dequantize:
                 logger.warning_once(
-                    "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16"
+                    "MXFP4 quantization requires triton >= 3.4.0 and kernels installed, we will default to dequantizing the model to bf16"
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
                 # we can't quantize the model in this case so we raise an error
-                raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
-
+                raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and kernels installed")
         if major < 9:
             raise ValueError(
                 "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
@@ -149,13 +147,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        if is_triton_kernels_availalble() and is_triton_available("3.4.0"):
-            from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
 
         from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
+            if is_kernels_available() and is_triton_available("3.4.0"):
+                from kernels import get_kernel
+                triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+                PrecisionConfig, FlexCtx, InFlexData = triton_kernels_hub.matmul_ogs.PrecisionConfig, triton_kernels_hub.matmul_ogs.FlexCtx, triton_kernels_hub.matmul_ogs.InFlexData
             module, _ = get_module_from_name(model, param_name)
             with torch.cuda.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
@@ -267,10 +267,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         use_kernels = kwargs.get("use_kernels", False)
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         if use_kernels:
-            logger.warning_once(
-                "You are using full precision kernels, we will dequantize the model to bf16. "
-                "To use the quantized model with quantization kernels, please set use_kernels=False"
-            )
+            logger.warning_once("You are using full precision kernels, we will dequantize the model to bf16. "
+                                "To use the quantized model with quantization kernels, please set use_kernels=False")
             self.quantization_config.dequantize = True
 
         config = model.config
