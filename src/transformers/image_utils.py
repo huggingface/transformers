@@ -31,7 +31,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_torchvision_available,
-    is_torchvision_greater_or_equal,
+    is_torchvision_v2_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -61,7 +61,7 @@ if is_vision_available():
 
         pil_torch_interpolation_mapping = {
             PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT
-            if is_torchvision_greater_or_equal("0.19.0")
+            if is_torchvision_v2_available()
             else InterpolationMode.NEAREST,
             PILImageResampling.BOX: InterpolationMode.BOX,
             PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
