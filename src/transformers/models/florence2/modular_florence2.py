@@ -18,9 +18,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -37,6 +34,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     is_torchdynamo_compiling,
     logging,
 )
@@ -46,6 +44,12 @@ from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
