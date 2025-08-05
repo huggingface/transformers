@@ -919,7 +919,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 answer = res[0]
 
                 if use_tts_template and generate_audio:
-                    mel_spec = self._generate_mel_spec(inputs, outputs, answer)
+                    mel_spec = self._generate_mel_spec(inputs, outputs, answer, tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0})
                     wav_numpy, sr = self.decode_mel_to_audio(mel_spec, output_audio_path)
 
             if return_spk_embed:
@@ -1111,7 +1111,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         if generate_audio:
             result = self._generate_mel_spec_audio_streaming(
-                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate
+                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate, tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
             )
             return result
         else:
@@ -1223,7 +1223,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         spk_embeds = last_hidden_states[spk_bound[0] : spk_bound[1]]
         return spk_embeds
 
-    def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048):
+    def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048, tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}):
         spk_embeds = self._get_last_spk_embeds(inputs, outputs)
 
         text = text.split("<|tts_bos|>")[-1]
@@ -1234,7 +1234,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
 
         logits_warpers, logits_processors = gen_logits(
-            num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
+            num_code=626, top_P=tts_config['top_p'], top_K=tts_config['top_k'], repetition_penalty=tts_config['repetition_penalty']
         )
 
         condition_length = (
@@ -1393,6 +1393,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         prev_seg_text_left="",
         prev_seg_audio_ids=None,
         enable_regenerate=False,
+        tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0},
     ):
         # get spk_embedding
         gen_text = ""
@@ -1409,7 +1410,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         # init past_key_values
         logits_warpers, logits_processors = gen_logits(
-            num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
+            num_code=626, top_P=tts_config['top_p'], top_K=tts_config['top_k'], repetition_penalty=tts_config['repetition_penalty']
         )
         condition_length = (
             1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs + self.tts.streaming_text_reserved_len + 1
@@ -1759,6 +1760,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 text_left,
                 prev_seg_audio_ids,
                 enable_regenerate=enable_regenerate,
+                tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
             )
             for res in result:
                 yield res
@@ -2306,7 +2308,6 @@ class DVAE(nn.Module):
 
         return torch.mul(dec_out, self.coef, out=dec_out)
 
-
 def apply_spk_emb(
     input_ids: torch.Tensor = None,
     spk_emb: torch.Tensor = None,
@@ -2527,8 +2528,6 @@ class PatchLlamaModel(LlamaModel):
     This is a patch for LlamaModel to support our audio
     Mainly modifies by changing create_causal_mask to _update_causal_mask
     """
-    def __init__(self, config: LlamaConfig):
-        super().__init__(config)
     
     @can_return_tuple
     def forward(
@@ -2811,10 +2810,6 @@ class ConditionalChatTTS(PreTrainedModel):
         self.num_mel_bins = config.num_mel_bins
         self.num_vq = config.num_vq
         self.num_audio_tokens = config.num_audio_tokens
-
-        self.top_p = config.top_p
-        self.top_k = config.top_k
-        self.repetition_penalty = config.repetition_penalty
 
         if self.config.use_mlp:
             self.projector = MultiModalProjector(config.llm_dim, config.hidden_size)
@@ -3465,7 +3460,6 @@ class Resampler(nn.Module):
         embed_dim,
         num_heads,
         kv_dim=None,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
         adaptive=False,
         max_size=(70, 70),
     ):
@@ -3483,7 +3477,7 @@ class Resampler(nn.Module):
         else:
             self.kv_proj = nn.Identity()
 
-        # norm_layer=partial(nn.LayerNorm, eps=1e-6)
+        norm_layer=partial(nn.LayerNorm, eps=1e-6)
         self.attn = MultiheadAttention(embed_dim, num_heads)
         self.ln_q = norm_layer(embed_dim)
         self.ln_kv = norm_layer(embed_dim)

@@ -156,6 +156,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None):
         super().__init__(image_processor, feature_extractor, tokenizer)
         self.version = image_processor.version
+        self.image_tag = "(<image>./</image>)"
+        self.image_pattern = "\(<image>./</image>\)"
+        self.audio_tag = "(<audio>./</audio>)"
+        self.audio_pattern = "\(<audio>./</audio>\)"
+        self.split_pattern = f"({self.image_pattern}|{self.audio_pattern})"
 
     def __call__(
         self,
@@ -498,12 +503,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             )
             return MiniCPMOBatchFeature(data={**model_inputs})
 
-        image_tag = "(<image>./</image>)"
-        image_pattern = "\(<image>./</image>\)"
-        audio_tag = "(<audio>./</audio>)"
-        audio_pattern = "\(<audio>./</audio>\)"
-        split_pattern = f"({image_pattern}|{audio_pattern})"
-
         if isinstance(texts, str):
             texts = [texts]
 
@@ -520,10 +519,10 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         spk_bounds_list = []
 
         for index, text in enumerate(texts):
-            text_chunks = re.split(split_pattern, text)
+            text_chunks = re.split(self.split_pattern, text)
 
-            image_tags = re.findall(image_pattern, text)
-            audio_tags = re.findall(audio_pattern, text)
+            image_tags = re.findall(self.image_pattern, text)
+            audio_tags = re.findall(self.audio_pattern, text)
 
             if image_tags:
                 assert images is not None
@@ -535,13 +534,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             image_id = 0
             audio_id = 0
             for i, chunk in enumerate(text_chunks):
-                if chunk == image_tag:
+                if chunk == self.image_tag:
                     image_placeholder = self.image_processor.get_slice_image_placeholder(
                         image_sizes[index][image_id], image_id, max_slice_nums, use_image_id
                     )
                     image_id += 1
                     text_chunks[i] = image_placeholder
-                elif chunk == audio_tag:
+                elif chunk == self.audio_tag:
                     audio_placeholder = audio_phs[index][audio_id]
                     audio_id += 1
                     text_chunks[i] = audio_placeholder

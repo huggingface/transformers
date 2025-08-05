@@ -16,12 +16,15 @@
 import os
 from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import rope_config_validation
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers import Qwen2Config, WhisperConfig
 from ...utils import logging
 
 logger = logging.get_logger(__name__)
+
+
 class MiniCPMVSliceConfig(PretrainedConfig):
     model_type = "minicpmv"
 
@@ -39,7 +42,8 @@ class MiniCPMVSliceConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(
+            pretrained_model_name_or_path, **kwargs)
 
         if config_dict.get("model_type") == "minicpmv":
             config_dict = config_dict["slice_config"]
@@ -82,10 +86,6 @@ class MiniCPMConditionalTTSConfig(PretrainedConfig):
         attn_implementation: str = "sdpa",
         use_mlp: bool = True,
         aug_loss_weight: bool = True,
-        do_sample: bool = True,
-        top_p: float = 0.7,
-        top_k: int = 20,
-        repetition_penalty: float = 1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -114,13 +114,9 @@ class MiniCPMConditionalTTSConfig(PretrainedConfig):
         self.attn_implementation = attn_implementation
         self.use_mlp = use_mlp
         self.aug_loss_weight = aug_loss_weight
-        self.do_sample = do_sample
-        self.top_p = top_p
-        self.top_k = top_k
-        self.repetition_penalty = repetition_penalty
 
 
-class MiniCPM_o_2_6Config(Qwen2Config):
+class MiniCPM_o_2_6Config(PretrainedConfig):
     model_type = "minicpmo"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -132,6 +128,21 @@ class MiniCPM_o_2_6Config(Qwen2Config):
         "num_attention_heads": 16,
         "num_hidden_layers": 27,
         "patch_size": 14,
+    }
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -153,6 +164,24 @@ class MiniCPM_o_2_6Config(Qwen2Config):
         init_vision=True,
         init_audio=True,
         init_tts=True,
+        vocab_size=151936,
+        hidden_size=4096,
+        intermediate_size=22016,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=32,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        use_sliding_window=False,
+        sliding_window=4096,
+        max_window_layers=28,
+        layer_types=None,
+        attention_dropout=0.0,
         **kwargs,
     ):
         self.use_cache = use_cache
@@ -177,7 +206,8 @@ class MiniCPM_o_2_6Config(Qwen2Config):
 
         # same as HuggingFaceM4/siglip-so400m-14-980-flash-attn2-navit add tgt_sizes
         if vision_config is None:
-            self.vision_config = SiglipVisionConfig(**self.default_vision_config)
+            self.vision_config = SiglipVisionConfig(
+                **self.default_vision_config)
             logger.info("vision_config is None, using default vision config")
         elif isinstance(vision_config, dict):
             self.vision_config = SiglipVisionConfig(**vision_config)
@@ -201,7 +231,47 @@ class MiniCPM_o_2_6Config(Qwen2Config):
 
         self.patch_size = self.vision_config.patch_size
 
-        super().__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.use_sliding_window = use_sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
+        self.max_window_layers = max_window_layers
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.attention_dropout = attention_dropout
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
+
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["MiniCPM_o_2_6Config"]

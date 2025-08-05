@@ -304,8 +304,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                             (slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size))
                     )
 
-            if tgt_sizes:
-                tgt_sizes = np.vstack(tgt_sizes)
+            tgt_sizes = np.vstack(tgt_sizes)
 
             new_images_list.append(new_images)
             image_sizes_list.append(image_sizes)
