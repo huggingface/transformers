@@ -1,32 +1,32 @@
-### `tiny-agents` CLI and MCP Tools
+### `tiny-agents` CLI 및 MCP 도구[[tiny-agents-cli-and-mcp-tools]]
 
-To showcase the use of MCP tools, let's see how to integrate the `transformers serve` server with the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI.
+MCP 도구의 사용을 보여주기 위해 [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI와 `transformers serve` 서버를 통합하는 방법을 살펴보겠습니다.
 
 > [!TIP]
-> Many Hugging Face Spaces can be used as MCP servers, as in this example. You can find all compatible Spaces [here](https://huggingface.co/spaces?filter=mcp-server).
+> 이 예시처럼 많은 Hugging Face Spaces를 MCP 서버로 사용할 수 있습니다. 호환되는 모든 Spaces는 [여기](https://huggingface.co/spaces?filter=mcp-server)에서 찾을 수 있습니다.
 
-The first step to use MCP tools is to let the model know which tools are available. As an example, let's consider a `tiny-agents` configuration file with a reference to an [image generation MCP server](https://evalstate-flux1-schnell.hf.space/).
+MCP 도구를 사용하는 첫 번째 단계는 모델에게 어떤 도구들이 사용 가능한지 알려주는 것입니다. 예시로, [이미지 생성 MCP 서버](https://evalstate-flux1-schnell.hf.space/)에 대한 참조가 포함된 `tiny-agents` 설정 파일을 살펴보겠습니다.
 
 ```json
 {
-    "model": "Menlo/Jan-nano",
-    "endpointUrl": "http://localhost:8000",
-    "servers": [
-        {
-            "type": "sse",
-            "url": "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse"
-        }
-    ]
+  "model": "Menlo/Jan-nano",
+  "endpointUrl": "http://localhost:8000",
+  "servers": [
+    {
+      "type": "sse",
+      "url": "https://evalstate-flux1-schnell.hf.space/gradio_api/mcp/sse"
+    }
+  ]
 }
 ```
 
-You can then launch your `tiny-agents` chat interface with the following command.
+그런 다음 다음 명령으로 `tiny-agents` 채팅 인터페이스를 실행할 수 있습니다.
 
 ```bash
 tiny-agents run path/to/your/config.json
 ```
 
-If you have `transformers serve` running in the background, you're ready to use MCP tools from a local model! For instance, here's the example of a chat session with `tiny-agents`:
+백그라운드에서 `transformers serve`가 실행 중이라면, 로컬 모델에서 MCP 도구를 사용할 준비가 완료됩니다! 예를 들어, 다음은 `tiny-agents`와의 채팅 세션 예시입니다:
 
 ```bash
 Agent loaded with 1 tools:
@@ -40,6 +40,5 @@ The task is complete and the content accessible to the User
 Image URL: https://evalstate-flux1-schnell.hf.space/gradio_api/file=/tmp/gradio/3dbddc0e53b5a865ed56a4e3dbdd30f3f61cf3b8aabf1b456f43e5241bd968b8/image.webp
 380576952
 
-I have generated an image of a cat on the moon using the Flux 1 Schnell Image Generator. The image is 1024x1024 pixels and was created with 4 inference steps. Let me know if you would like to make any changes or need further assistance!
+Flux 1 Schnell 이미지 생성기를 사용하여 달 위의 고양이 이미지를 생성했습니다. 이미지는 1024x1024 픽셀이며 4번의 추론 단계로 생성되었습니다. 변경 사항이 필요하거나 추가 도움이 필요하시면 알려주세요!
 ```
-
