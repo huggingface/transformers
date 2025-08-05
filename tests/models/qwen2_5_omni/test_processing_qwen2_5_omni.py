@@ -422,8 +422,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 2880 if batch_size == 1 else 5808  # qwen pixels don't scale with bs same way as other models
-        mm_len = batch_size * 1564 if modality == "image" else video_len
+        if modality == "video":
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
+            expected_video_token_count = 0
+            for thw in out_dict["video_grid_thw"]:
+                expected_video_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_video_token_count
+        else:
+            mm_len = batch_size * 1564
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
@@ -482,26 +488,26 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
-        # Load with `video_fps` arg
-        video_fps = 1
+        # Load with `fps` arg
+        fps = 1
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
 
-        # Load with `video_fps` and `num_frames` args, should raise an error
+        # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                video_fps=video_fps,
+                fps=fps,
                 num_frames=num_frames,
             )
 
