@@ -1051,8 +1051,10 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 use_cache = False
 
         # initialize `past_key_values`
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache()
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and isinstance(past_key_values, tuple):
             return_legacy_cache = True
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
