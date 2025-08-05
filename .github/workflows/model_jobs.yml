@@ -122,9 +122,9 @@ jobs:
         working-directory: /transformers
         run: git checkout 8c4ea670dceace8d9b1bac8310bc62146b7134cd
 
-      - name: copy the fixed script
+      - name: download and copy the fixed script
         working-directory: /transformers
-        run: rm -rf utils/check_bad_commit.py && cp check_bad_commit.py utils/check_bad_commit.py
+        run: rm -rf utils/check_bad_commit.py && wget https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/check_bad_commit.py && cp check_bad_commit.py utils/check_bad_commit.py
 
       - name: Run all tests on GPU
         working-directory: /transformers
