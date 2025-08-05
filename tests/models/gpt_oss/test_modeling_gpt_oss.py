@@ -206,7 +206,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
         use_kernels=kernels,
     ).to(torch_device)
     model.set_attn_implementation(attn_impl)
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     # Inference
     inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -261,7 +261,7 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
