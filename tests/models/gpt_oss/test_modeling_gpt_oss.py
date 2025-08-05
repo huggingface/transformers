@@ -387,7 +387,7 @@ if __name__ == "__main__":
         input_text = "Roses are red, violets"
 
         original_output = "Roses are red, violets are blue, I love you, and I love you too."
-        original_logprobs = [
+        original_logprobs = torch.tensor([
             -0.037353515625,
             -0.08154296875,
             -1.21875,
@@ -408,7 +408,7 @@ if __name__ == "__main__":
             -0.1767578125,
             -0.1240234375,
             -0.099609375,
-        ]
+        ])
 
         model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
 
@@ -447,7 +447,7 @@ if __name__ == "__main__":
 
         original_output = """Roses are red, violets are blue,
 I am a language model, not a human being"""
-        original_logprobs = [
+        original_logprobs = torch.tensor([
             -0.90234375,
             -0.66015625,
             -1.546875,
@@ -468,7 +468,7 @@ I am a language model, not a human being"""
             -1.5390625,
             -1.46875,
             -0.85546875,
-        ]
+        ])
 
         model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
 
