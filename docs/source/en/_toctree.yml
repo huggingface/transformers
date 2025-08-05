@@ -511,6 +511,8 @@
         title: GPT2
       - local: model_doc/gpt_bigcode
         title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -617,8 +619,6 @@
         title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
-      - local: model_doc/openai_moe
-        title: OpenAIMoe
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
