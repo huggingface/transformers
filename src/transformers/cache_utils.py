@@ -375,6 +375,7 @@ class SlidingWindowLayer(StaticLayer):
             new_keys[:, :, index] = key_states
             new_values[:, :, index] = value_states
 
+            # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
             self.keys.copy_(new_keys)
             self.values.copy_(new_values)
         else:
