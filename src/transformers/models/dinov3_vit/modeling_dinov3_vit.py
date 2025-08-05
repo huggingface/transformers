@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Dinov3 model."""
+"""PyTorch DINOv3 model."""
 
 import collections.abc
 from typing import Callable, Optional, Union, Tuple, Literal
@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
-from .configuration_dinov3_vit import Dinov3VitConfig
+from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -45,7 +45,7 @@ dtype_dict = {
 }
 
 
-class Dinov3VitPatchEmbeddings(nn.Module):
+class DINOv3ViTPatchEmbeddings(nn.Module):
     """
     2D image to patch embedding: (B,C,H,W) -> (B,N,D)
     """
@@ -99,12 +99,12 @@ class Dinov3VitPatchEmbeddings(nn.Module):
             nn.init.uniform_(self.proj.bias, -math.sqrt(k), math.sqrt(k))
 
 
-class Dinov3VitEmbeddings(nn.Module):
+class DINOv3ViTEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: Dinov3VitConfig) -> None:
+    def __init__(self, config: DINOv3ViTConfig) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.num_register_tokens = config.num_register_tokens
@@ -117,7 +117,7 @@ class Dinov3VitEmbeddings(nn.Module):
                 )
             )
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.patch_embeddings = Dinov3VitPatchEmbeddings(config)
+        self.patch_embeddings = DINOv3ViTPatchEmbeddings(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
@@ -159,7 +159,7 @@ class Dinov3VitEmbeddings(nn.Module):
         return embeddings, (H, W)
 
 
-class Dinov3VitRopePositionEmbedding(nn.Module):
+class DINOv3ViTRopePositionEmbedding(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -328,9 +328,9 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov3
-class Dinov3VitSelfAttention(nn.Module):
-    def __init__(self, config: Dinov3VitConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DINOv3
+class DINOv3ViTSelfAttention(nn.Module):
+    def __init__(self, config: DINOv3ViTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
             config, "embedding_size"
@@ -445,7 +445,7 @@ class Dinov3VitSelfAttention(nn.Module):
         return outputs
 
 
-class Dinov3VitLayerScale(nn.Module):
+class DINOv3ViTLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.gamma = nn.Parameter(torch.empty(config.hidden_size))
@@ -485,8 +485,7 @@ def drop_path(
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov3VitDropPath(nn.Module):
+class DINOv3ViTDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -500,8 +499,8 @@ class Dinov3VitDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class Dinov3VitMLP(nn.Module):
-    def __init__(self, config: Dinov3VitConfig) -> None:
+class DINOv3ViTMLP(nn.Module):
+    def __init__(self, config: DINOv3ViTConfig) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
@@ -519,7 +518,7 @@ class Dinov3VitMLP(nn.Module):
         return hidden_state
 
 
-class Dinov3VitSwiGLUFFN(nn.Module):
+class DINOv3ViTSwiGLUFFN(nn.Module):
     def __init__(
         self,
         config,
@@ -547,17 +546,17 @@ class Dinov3VitSwiGLUFFN(nn.Module):
         return self.w3(hidden)
 
 
-class Dinov3VitLayer(GradientCheckpointingLayer):
+class DINOv3ViTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
-    def __init__(self, config: Dinov3VitConfig) -> None:
+    def __init__(self, config: DINOv3ViTConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = Dinov3VitSelfAttention(config)
-        self.layer_scale1 = Dinov3VitLayerScale(config)
+        self.attention = DINOv3ViTSelfAttention(config)
+        self.layer_scale1 = DINOv3ViTLayerScale(config)
         self.drop_path = (
-            Dinov3VitDropPath(config.drop_path_rate)
+            DINOv3ViTDropPath(config.drop_path_rate)
             if config.drop_path_rate > 0.0
             else nn.Identity()
         )
@@ -565,10 +564,10 @@ class Dinov3VitLayer(GradientCheckpointingLayer):
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_swiglu_ffn:
-            self.mlp = Dinov3VitSwiGLUFFN(config)
+            self.mlp = DINOv3ViTSwiGLUFFN(config)
         else:
-            self.mlp = Dinov3VitMLP(config)
-        self.layer_scale2 = Dinov3VitLayerScale(config)
+            self.mlp = DINOv3ViTMLP(config)
+        self.layer_scale2 = DINOv3ViTLayerScale(config)
 
     def forward(
         self,
@@ -580,7 +579,7 @@ class Dinov3VitLayer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             self.norm1(
                 hidden_states
-            ),  # in Dinov3, layernorm is applied before self-attention
+            ),  # in DINOv3, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
             rope=rope,
@@ -593,7 +592,7 @@ class Dinov3VitLayer(GradientCheckpointingLayer):
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
-        # in Dinov3, layernorm is also applied after self-attention
+        # in DINOv3, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
@@ -605,12 +604,12 @@ class Dinov3VitLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Dinov3VitPreTrainedModel(PreTrainedModel):
-    config: Dinov3VitConfig
-    base_model_prefix = "Dinov3Vit"
+class DINOv3ViTPreTrainedModel(PreTrainedModel):
+    config: DINOv3ViTConfig
+    base_model_prefix = "DINOv3ViT"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dinov3VitLayer"]
+    _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
@@ -629,7 +628,7 @@ class Dinov3VitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, Dinov3VitEmbeddings):
+        elif isinstance(module, DINOv3ViTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32),
                 mean=0.0,
@@ -642,7 +641,7 @@ class Dinov3VitPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-        elif isinstance(module, Dinov3VitRopePositionEmbedding):
+        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
             device = module.periods.device
             dtype = module.dtype
             if module.base is not None:
@@ -660,17 +659,17 @@ class Dinov3VitPreTrainedModel(PreTrainedModel):
                 periods = periods / base  # range [min_period / max_period, 1]
                 periods = periods * module.max_period  # range [min_period, max_period]
             module.periods.data = periods
-        elif isinstance(module, Dinov3VitLayerScale):
+        elif isinstance(module, DINOv3ViTLayerScale):
             module.gamma.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
-class Dinov3VitModel(Dinov3VitPreTrainedModel):
-    def __init__(self, config: Dinov3VitConfig):
+class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
+    def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = Dinov3VitEmbeddings(config)
-        self.rope_embeddings = Dinov3VitRopePositionEmbedding(
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             base=config.pos_embed_rope_base,
@@ -684,14 +683,14 @@ class Dinov3VitModel(Dinov3VitPreTrainedModel):
             device=config.device,
         )
         self.layer = nn.ModuleList(
-            [Dinov3VitLayer(config) for _ in range(config.num_hidden_layers)]
+            [DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> Dinov3VitPatchEmbeddings:
+    def get_input_embeddings(self) -> DINOv3ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     @auto_docstring
@@ -771,4 +770,4 @@ class Dinov3VitModel(Dinov3VitPreTrainedModel):
         )
 
 
-__all__ = ["Dinov3VitModel", "Dinov3VitPreTrainedModel"]
+__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]

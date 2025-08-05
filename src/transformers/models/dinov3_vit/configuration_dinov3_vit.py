@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Dinov3 model configuration"""
+"""DINOv3 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,12 +22,12 @@ from ...utils.backbone_utils import get_aligned_output_features_output_indices
 logger = logging.get_logger(__name__)
 
 
-class Dinov3VitConfig(PretrainedConfig):
+class DINOv3ViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dinov3Model`]. It is used to instantiate an
-    Dinov3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Dinov3
-    [google/Dinov3-base-patch16-224](https://huggingface.co/google/Dinov3-base-patch16-224) architecture.
+    This is the configuration class to store the configuration of a [`DINOv3Model`]. It is used to instantiate an
+    DINOv3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINOv3
+    [google/DINOv3-base-patch16-224](https://huggingface.co/google/DINOv3-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -88,19 +88,19 @@ class Dinov3VitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Dinov3Config, Dinov3Model
+    >>> from transformers import DINOv3Config, DINOv3Model
 
-    >>> # Initializing a Dinov3 Dinov3-base-patch16-224 style configuration
-    >>> configuration = Dinov3Config()
+    >>> # Initializing a DINOv3 DINOv3-base-patch16-224 style configuration
+    >>> configuration = DINOv3Config()
 
-    >>> # Initializing a model (with random weights) from the Dinov3-base-patch16-224 style configuration
-    >>> model = Dinov3Model(configuration)
+    >>> # Initializing a model (with random weights) from the DINOv3-base-patch16-224 style configuration
+    >>> model = DINOv3Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "Dinov3Vit"
+    model_type = "DINOv3ViT"
 
     def __init__(
         self,
@@ -184,4 +184,4 @@ class Dinov3VitConfig(PretrainedConfig):
         self.device = device
 
 
-__all__ = ["Dinov3VitConfig"]
+__all__ = ["DINOv3ViTConfig"]

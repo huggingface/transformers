@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@ from ...utils.backbone_utils import get_aligned_output_features_output_indices
 logger = logging.get_logger(__name__)
 
 
-class Dinov3ConvNextConfig(PretrainedConfig):
+class DINOv3ConvNextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dinov3ConvNextModel`]. It is used to instantiate an
-    Dinov3ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Dinov3ConvNeXT
+    This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
+    DINOv3ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINOv3ConvNeXT
     [facebook/convnext-tiny-224](https://huggingface.co/facebook/convnext-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -66,19 +66,19 @@ class Dinov3ConvNextConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import Dinov3ConvNextConfig, Dinov3ConvNextModel
+    >>> from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel
 
-    >>> # Initializing a Dinov3ConvNext convnext-tiny-224 style configuration
-    >>> configuration = Dinov3ConvNextConfig()
+    >>> # Initializing a DINOv3ConvNext convnext-tiny-224 style configuration
+    >>> configuration = DINOv3ConvNextConfig()
 
     >>> # Initializing a model (with random weights) from the convnext-tiny-224 style configuration
-    >>> model = Dinov3ConvNextModel(configuration)
+    >>> model = DINOv3ConvNextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "Dinov3ConvNext"
+    model_type = "DINOv3ConvNext"
 
     def __init__(
         self,
@@ -124,4 +124,4 @@ class Dinov3ConvNextConfig(PretrainedConfig):
         )
 
 
-__all__ = ["Dinov3ConvNextConfig"]
+__all__ = ["DINOv3ConvNextConfig"]

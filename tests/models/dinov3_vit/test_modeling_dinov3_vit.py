@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Dinov3 model."""
+"""Testing suite for the PyTorch DINOv3 model."""
 
 import unittest
 
-from transformers import Dinov3VitConfig
+from transformers import DINOv3ViTConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -39,7 +39,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        Dinov3VitModel,
+        DINOv3ViTModel,
     )
 
 
@@ -49,7 +49,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class Dinov3VitModelTester:
+class DINOv3ViTModelTester:
     def __init__(
         self,
         parent,
@@ -111,7 +111,7 @@ class Dinov3VitModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return Dinov3VitConfig(
+        return DINOv3ViTConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -128,7 +128,7 @@ class Dinov3VitModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = Dinov3VitModel(config=config)
+        model = DINOv3ViTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -155,10 +155,10 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Dinov3VitModel,) if is_torch_available() else ()
+    all_model_classes = (DINOv3ViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": Dinov3VitModel,
+            "image-feature-extraction": DINOv3ViTModel,
         }
         if is_torch_available()
         else {}
@@ -171,9 +171,9 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = Dinov3VitModelTester(self)
+        self.model_tester = DINOv3ViTModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Dinov3VitConfig, has_text_modality=False, hidden_size=37
+            self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_initialization(self):
@@ -246,7 +246,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/dinov3-base"
-        model = Dinov3VitModel.from_pretrained(model_name)
+        model = DINOv3ViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -258,7 +258,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class Dinov3VitModelIntegrationTest(unittest.TestCase):
+class DINOv3ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -269,7 +269,7 @@ class Dinov3VitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = Dinov3VitModel.from_pretrained("facebook/dinov3-base").to(torch_device)
+        model = DINOv3ViTModel.from_pretrained("facebook/dinov3-base").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
