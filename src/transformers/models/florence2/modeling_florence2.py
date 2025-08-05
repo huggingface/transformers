@@ -631,7 +631,8 @@ class Florence2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_flex_attn = True
-    _supports_attention_backend = True
+
+    _supports_attention_backend = False
     config_class = Florence2Config
 
 
