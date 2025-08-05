@@ -125,7 +125,7 @@ jobs:
       - name: download and copy the fixed script
         working-directory: /transformers
         shell: bash
-        run: apt-get update && apt-get install -y wget curl && rm -rf utils/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/check_bad_commit.py && cp check_bad_commit.py utils/check_bad_commit.py
+        run: apt-get update && apt-get install -y wget curl && rm -rf utils/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/new_failures_2.json && cp check_bad_commit.py utils/check_bad_commit.py && cp check_bad_commit.py utils/new_failures_2.json
 
       - name: Run all tests on GPU
         working-directory: /transformers
