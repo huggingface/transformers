@@ -56,8 +56,12 @@ def quantize_to_mxfp4(w):
     return w, w_scale
 
 
-def swizzle_mxfp4(w, w_scale):    
-    FP4, convert_layout, wrap_torch_tensor = triton_kernels_hub.tensor.FP4, triton_kernels_hub.tensor.convert_layout, triton_kernels_hub.tensor.wrap_torch_tensor
+def swizzle_mxfp4(w, w_scale):
+    FP4, convert_layout, wrap_torch_tensor = (
+        triton_kernels_hub.tensor.FP4,
+        triton_kernels_hub.tensor.convert_layout,
+        triton_kernels_hub.tensor.wrap_torch_tensor,
+    )
     layout = triton_kernels_hub.tensor_details.layout
     StridedLayout = triton_kernels_hub.tensor_details.layout.StridedLayout
 
@@ -173,7 +177,11 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
-        FnSpecs, FusedActivation, matmul_ogs = triton_kernels_hub.matmul_ogs.FnSpecs, triton_kernels_hub.matmul_ogs.FusedActivation, triton_kernels_hub.matmul_ogs.matmul_ogs
+        FnSpecs, FusedActivation, matmul_ogs = (
+            triton_kernels_hub.matmul_ogs.FnSpecs,
+            triton_kernels_hub.matmul_ogs.FusedActivation,
+            triton_kernels_hub.matmul_ogs.matmul_ogs,
+        )
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
@@ -210,8 +218,14 @@ def routing_torch_dist(
     n_expts_act,
 ):
     import os
-    GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch = triton_kernels_hub.routing.GatherIndx, triton_kernels_hub.routing.RoutingData, triton_kernels_hub.routing.ScatterIndx, triton_kernels_hub.routing.compute_expt_data_torch
-    
+
+    GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch = (
+        triton_kernels_hub.routing.GatherIndx,
+        triton_kernels_hub.routing.RoutingData,
+        triton_kernels_hub.routing.ScatterIndx,
+        triton_kernels_hub.routing.compute_expt_data_torch,
+    )
+
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
         rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -333,7 +347,11 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
-    PrecisionConfig, FlexCtx, InFlexData = triton_kernels_hub.matmul_ogs.PrecisionConfig, triton_kernels_hub.matmul_ogs.FlexCtx, triton_kernels_hub.matmul_ogs.InFlexData
+    PrecisionConfig, FlexCtx, InFlexData = (
+        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+        triton_kernels_hub.matmul_ogs.FlexCtx,
+        triton_kernels_hub.matmul_ogs.InFlexData,
+    )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
     model = kwargs.get("model", None)
@@ -447,6 +465,7 @@ def replace_with_mxfp4_linear(
         return model
     else:
         from kernels import get_kernel
+
         global triton_kernels_hub
         triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
 

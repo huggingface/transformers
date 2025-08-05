@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 
 from ..utils import (
     is_accelerate_available,
+    is_kernels_available,
     is_torch_available,
     is_triton_available,
-    is_kernels_available,
     logging,
 )
 from .quantizers_utils import get_module_from_name
@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
 
 class Mxfp4HfQuantizer(HfQuantizer):
     """
@@ -147,15 +148,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-
         from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
             if is_kernels_available() and is_triton_available("3.4.0"):
                 from kernels import get_kernel
+
                 triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-                PrecisionConfig, FlexCtx, InFlexData = triton_kernels_hub.matmul_ogs.PrecisionConfig, triton_kernels_hub.matmul_ogs.FlexCtx, triton_kernels_hub.matmul_ogs.InFlexData
+                PrecisionConfig, FlexCtx, InFlexData = (
+                    triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                    triton_kernels_hub.matmul_ogs.FlexCtx,
+                    triton_kernels_hub.matmul_ogs.InFlexData,
+                )
             module, _ = get_module_from_name(model, param_name)
             with torch.cuda.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
@@ -267,8 +272,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
         use_kernels = kwargs.get("use_kernels", False)
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         if use_kernels:
-            logger.warning_once("You are using full precision kernels, we will dequantize the model to bf16. "
-                                "To use the quantized model with quantization kernels, please set use_kernels=False")
+            logger.warning_once(
+                "You are using full precision kernels, we will dequantize the model to bf16. "
+                "To use the quantized model with quantization kernels, please set use_kernels=False"
+            )
             self.quantization_config.dequantize = True
 
         config = model.config
