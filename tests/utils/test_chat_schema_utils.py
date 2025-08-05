@@ -127,7 +127,7 @@ cohere_schema = {
                 },
                 "required": ["role", "content"]
             },
-            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|>(?P<role><\(?SYSTEM|USER|CHATBOT)_TOKEN\|>)(?P<content>.*?)(?<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
+            "x-regex-iterator": "<\|START_OF_TURN_TOKEN\|>(?P<role><\(?SYSTEM|USER|CHATBOT)_TOKEN\|>(?P<content>.*?)(?:<\|END_OF_TURN_TOKEN\|>|\n\n## Available Tools)",
         }
     }
 }
@@ -234,7 +234,6 @@ class ChatSchemaParserTest(unittest.TestCase):
             {"role": "assistant", "content": "Hi there! How can I help you today?"},
         ]
         formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use")
-        breakpoint()
-        parsed_chat = recursive_parse(formatted_chat, tools_schema_with_named_groups)
+        parsed_chat = recursive_parse(formatted_chat, cohere_schema)
         self.assertEqual(parsed_chat['messages'], chat)
         self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), tool_with_everything_all_at_once])
