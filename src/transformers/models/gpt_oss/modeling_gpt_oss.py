@@ -244,7 +244,11 @@ def eager_attention_forward(
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
 
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
+    # when training with bsz>1 we clamp max values.
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     scores = probs[..., :-1]  # we drop the sink here
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
