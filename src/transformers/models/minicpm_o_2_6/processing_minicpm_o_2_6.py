@@ -176,14 +176,14 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         audio_kwargs = output_kwargs["audio_kwargs"]
         text_kwargs = output_kwargs["text_kwargs"]
 
-        if images is not None:
+        if images:
             image_inputs = self.image_processor(
                 images, **image_kwargs
             )
         else:
             image_inputs = None
 
-        if audios is not None:
+        if audios:
             audio_features, audio_feature_lens, audio_phs = self.audio_feature_extract(
                 audios,
                 audio_parts=audio_kwargs["audio_parts"],
@@ -266,35 +266,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 audio_ph_list.append([])
 
         for idx, audios in enumerate(audios_list):
-            if audio_parts is not None:
-                # same audio part merge
-                audio_part = audio_parts[idx]
-                merge_audio = []
-                cur_audio = []
-                for aid, (part, audio) in enumerate(zip(audio_part, audios)):
-                    if aid == 0 or audio_part[aid] == audio_part[aid - 1]:
-                        cur_audio.append(audio)
-                    else:
-                        merge_audio.append(np.hstack(cur_audio))
-                        cur_audio = [audio]
-                if cur_audio:
-                    merge_audio.append(np.hstack(cur_audio))
-
-            else:
-                merge_audio = audios
+            final_merge_audio = self.feature_extractor.merge_audios(
+                audio_part = audio_parts[idx] if audio_parts is not None else None,
+                audios = audios,
+                sampling_rate=sampling_rate,
+            )
 
             audio_feature_lens = []
-
-            # If the audio exceeds 30 seconds, split it into chunks every 30 seconds.
-            final_merge_audio = []
-            max_audio_inp_len = 30 * sampling_rate
-            for audio in merge_audio:
-                if len(audio) <= max_audio_inp_len:
-                    final_merge_audio.append(audio)
-                else:
-                    for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
-
             if audios:
                 audio_inputs = self.feature_extractor(
                     final_merge_audio,

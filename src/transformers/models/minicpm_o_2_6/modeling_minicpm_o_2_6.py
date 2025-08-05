@@ -852,12 +852,13 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             )
             if images:
                 input_images_list.append(images)
-            input_audios_list.append(audios)
-            audio_parts_list.append(audio_parts)
+            if audios:
+                input_audios_list.append(audios)
+                audio_parts_list.append(audio_parts)
 
         inputs = processor(
             prompts_lists,
-            input_images_list if input_images_list else None,
+            input_images_list,
             input_audios_list,
             audio_parts=audio_parts_list,
             max_slice_nums=max_slice_nums,
@@ -1014,7 +1015,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         model_inputs = self.processor(
             [prompt],
             [images] if images else None,
-            [audios],
+            [audios] if audios else None,
             max_slice_nums=1 if max_slice_nums is None else max_slice_nums,
             use_image_id=False,
             chunk_input=True,
