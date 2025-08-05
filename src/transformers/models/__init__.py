@@ -320,6 +320,7 @@ if TYPE_CHECKING:
     from .switch_transformers import *
     from .t5 import *
     from .t5gemma import *
+    from .t5la import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
