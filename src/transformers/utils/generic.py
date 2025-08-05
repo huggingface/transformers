@@ -1035,7 +1035,7 @@ def check_model_inputs(func):
                     collected_outputs[key] += (args[0],)
                 if kwargs.get("debug_io", False):
                     with model_addition_debugger_context(
-                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prun_layers")
+                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
                     ):
                         output = orig_forward(*args, **kwargs)
                 else:
