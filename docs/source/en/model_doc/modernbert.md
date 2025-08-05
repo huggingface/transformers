@@ -115,6 +115,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 [[autodoc]] ModernBertForTokenClassification
     - forward
 
+## ModernBertForMultipleChoice
+
+[[autodoc]] ModernBertForMultipleChoice
+    - forward
+
 ## ModernBertForQuestionAnswering
 
 [[autodoc]] ModernBertForQuestionAnswering

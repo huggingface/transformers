@@ -31,6 +31,8 @@ import numpy as np
 import typing_extensions
 from huggingface_hub.errors import EntryNotFoundError
 
+from transformers.utils import is_torch_available
+
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
@@ -41,6 +43,7 @@ from .video_utils import VideoMetadata, load_video
 
 if is_vision_available():
     from .image_utils import PILImageResampling
+
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -63,7 +66,6 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
-    is_torch_available,
     list_repo_templates,
     logging,
 )
@@ -1559,8 +1561,8 @@ class ProcessorMixin(PushToHubMixin):
 
                     for fname in video_fnames:
                         if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            # Case a: Video is provided as a list of image file names
                             video = [np.array(load_image(image_fname)) for image_fname in fname]
-                            # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                             metadata = None
                             logger.warning(
@@ -1568,6 +1570,7 @@ class ProcessorMixin(PushToHubMixin):
                                 "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
                             )
                         else:
+                            # Case b: Video is provided as a single file path or URL or decoded frames in a np.ndarray or torch.tensor
                             video, metadata = load_video(
                                 fname,
                                 backend=mm_load_kwargs["video_load_backend"],
