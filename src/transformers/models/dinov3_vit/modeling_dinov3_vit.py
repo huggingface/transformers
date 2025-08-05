@@ -15,26 +15,22 @@
 """PyTorch DINOv3 model."""
 
 import collections.abc
-from typing import Callable, Optional, Union, Tuple, Literal
+from typing import Callable, Optional, Union, Tuple
 
 import torch
 import math
 import numpy as np
 import torch.utils.checkpoint
 from torch import nn, Tensor
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
-    ImageClassifierOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_dinov3_vit import DINOv3ViTConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -91,12 +87,6 @@ class DINOv3ViTPatchEmbeddings(nn.Module):
         x = self.norm(x)
         x = x.reshape(-1, H, W, self.hidden_size)  # B H W C
         return x
-
-    def init_weights(self):
-        k = 1 / (self.in_chans * (self.patch_size[0] ** 2))
-        nn.init.uniform_(self.proj.weight, -math.sqrt(k), math.sqrt(k))
-        if self.proj.bias is not None:
-            nn.init.uniform_(self.proj.bias, -math.sqrt(k), math.sqrt(k))
 
 
 class DINOv3ViTEmbeddings(nn.Module):
@@ -162,83 +152,47 @@ class DINOv3ViTEmbeddings(nn.Module):
 class DINOv3ViTRopePositionEmbedding(nn.Module):
     def __init__(
         self,
-        hidden_size: int,
-        *,
-        num_heads: int,
-        base: float = 100.0,
-        min_period: float | None = None,
-        max_period: float | None = None,
-        normalize_coords: Literal["min", "max", "separate"] = "separate",
-        shift_coords: float | None = None,
-        jitter_coords: float | None = None,
-        rescale_coords: float | None = None,
-        dtype: torch.dtype | None = None,
-        device: torch.device | None = None,
+        config: DINOv3ViTConfig,
     ):
         super().__init__()
-        assert hidden_size % (4 * num_heads) == 0
-        both_periods = min_period is not None and max_period is not None
-        if (base is None and not both_periods) or (base is not None and both_periods):
+        assert config.hidden_size % (4 * config.num_attention_heads) == 0
+        both_periods = (
+            config.pos_embed_rope_min_period is not None
+            and config.pos_embed_rope_max_period is not None
+        )
+        if (config.pos_embed_rope_base is None and not both_periods) or (
+            config.pos_embed_rope_base is not None and both_periods
+        ):
             raise ValueError(
                 "Either `base` or `min_period`+`max_period` must be provided."
             )
 
-        D_head = hidden_size // num_heads
-        self.base = base
-        self.min_period = min_period
-        self.max_period = max_period
+        D_head = config.hidden_size // config.num_attention_heads
+        self.base = config.pos_embed_rope_base
+        self.min_period = config.pos_embed_rope_min_period
+        self.max_period = config.pos_embed_rope_max_period
         self.D_head = D_head
-        self.normalize_coords = normalize_coords
-        self.shift_coords = shift_coords
-        self.jitter_coords = jitter_coords
-        self.rescale_coords = rescale_coords
+        self.normalize_coords = config.pos_embed_rope_normalize_coords
+        self.shift_coords = config.pos_embed_rope_shift_coords
+        self.jitter_coords = config.pos_embed_rope_jitter_coords
+        self.rescale_coords = config.pos_embed_rope_rescale_coords
 
         # Needs persistent=True because we do teacher.load_state_dict(student.state_dict()) to initialize the teacher
-        self.dtype = dtype  # Don't rely on self.periods.dtype
+        self.dtype = dtype_dict[
+            config.pos_embed_rope_dtype
+        ]  # Don't rely on self.periods.dtype
         self.register_buffer(
             "periods",
-            torch.empty(D_head // 4, device=device, dtype=dtype),
+            torch.empty(D_head // 4, device=config.device, dtype=self.dtype),
             persistent=True,
         )
-
-    def init_weights(self):
-        device = self.periods.device
-        dtype = self.dtype
-        if self.base is not None:
-            periods = self.base ** (
-                2
-                * torch.arange(self.D_head // 4, device=device, dtype=dtype)
-                / (self.D_head // 2)
-            )  # [D//4]
-        else:
-            base = self.max_period / self.min_period
-            exponents = torch.linspace(
-                0, 1, self.D_head // 4, device=device, dtype=dtype
-            )  # [D//4] range [0, 1]
-            periods = base**exponents  # range [1, max_period / min_period]
-            periods = periods / base  # range [min_period / max_period, 1]
-            periods = periods * self.max_period  # range [min_period, max_period]
-        self.periods.data = periods
 
     def forward(self, *, H: int, W: int) -> tuple[Tensor, Tensor]:
         device = self.periods.device
         dtype = self.dtype
         dd = {"device": device, "dtype": dtype}
-
-        # Prepare coords in range [-1, +1]
-        if self.normalize_coords == "max":
-            max_HW = max(H, W)
-            coords_h = torch.arange(0.5, H, **dd) / max_HW  # [H]
-            coords_w = torch.arange(0.5, W, **dd) / max_HW  # [W]
-        elif self.normalize_coords == "min":
-            min_HW = min(H, W)
-            coords_h = torch.arange(0.5, H, **dd) / min_HW  # [H]
-            coords_w = torch.arange(0.5, W, **dd) / min_HW  # [W]
-        elif self.normalize_coords == "separate":
-            coords_h = torch.arange(0.5, H, **dd) / H  # [H]
-            coords_w = torch.arange(0.5, W, **dd) / W  # [W]
-        else:
-            raise ValueError(f"Unknown normalize_coords: {self.normalize_coords}")
+        coords_h = torch.arange(0.5, H, **dd) / H  # [H]
+        coords_w = torch.arange(0.5, W, **dd) / W  # [W]
         coords = torch.stack(
             torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1
         )  # [H, W, 2]
@@ -669,19 +623,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.embeddings = DINOv3ViTEmbeddings(config)
-        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(
-            hidden_size=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            base=config.pos_embed_rope_base,
-            min_period=config.pos_embed_rope_min_period,
-            max_period=config.pos_embed_rope_max_period,
-            normalize_coords=config.pos_embed_rope_normalize_coords,
-            shift_coords=config.pos_embed_rope_shift_coords,
-            jitter_coords=config.pos_embed_rope_jitter_coords,
-            rescale_coords=config.pos_embed_rope_rescale_coords,
-            dtype=dtype_dict[config.pos_embed_rope_dtype],
-            device=config.device,
-        )
+        self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
         self.layer = nn.ModuleList(
             [DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)]
         )
