@@ -391,6 +391,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
+            cache_position=cache_position,
             **kwargs,
         )
 
