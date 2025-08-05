@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch GPTSANJapanese model."""
 
-import copy
 from typing import Optional, Union
 
 import torch
@@ -849,7 +848,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-        self.config = copy.deepcopy(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.last_project = nn.Linear(config.d_model, config.d_model, bias=True)
         self.act = ACT2FN["swish"]
@@ -872,9 +870,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             self.spout = nn.Sequential(*spouts)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
@@ -1316,12 +1311,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []
