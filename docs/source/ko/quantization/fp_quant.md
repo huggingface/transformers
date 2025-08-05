@@ -34,7 +34,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 [GPTQ](https://github.com/IST-DASLab/FP-Quant)를 통해 **사전 처리(Pre-processing)** 하여 더 높은 품질을 얻을 수도 있습니다.
 
-커널을 실행하려면 **Blackwell 세대 GPU가 필수**입니다. 런타임 지원은 [QuTLASS](https://github.com/IST-DASLab/qutlass) 라이브러리와 경량 PyTorch 인터페이스인 [`fp_quant`](https://github.com/IST-DASLab/FP-Quant/tree/master/inference_lib)로 구현되어 있습니다. 전자는 **소스에서 직접 설치**하시길 권장드리며, 후자는 `pip install fp_quant`로 설치하면 됩니다.
+커널을 실행하려면 **Blackwell 세대 GPU가 필수**입니다. 런타임 지원은 [QuTLASS](https://github.com/IST-DASLab/qutlass) 라이브러리와 경량 PyTorch 인터페이스인 [`fp_quant`](https://github.com/IST-DASLab/FP-Quant/tree/master/inference_lib)로 구현되어 있습니다. 전자는 **소스에서 직접 설치**하시길 권장하며, 후자는 `pip install fp_quant`로 설치하면 됩니다.
 
 Blackwell 세대 GPU가 **없으신** 경우에는 `quantization_config=FPQuantConfig(pseudoquant=True)` 옵션을 통해 QuTLASS 설치 없이도 양자화를 **완전히 에뮬레이션**할 수 있습니다. 속도 향상은 없지만, 양자화 효과를 동일하게 재현합니다.
 
