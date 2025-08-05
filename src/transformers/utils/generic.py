@@ -31,6 +31,7 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
+from ..model_debugging_utils import model_addition_debugger_context
 from ..utils import logging
 from .import_utils import (
     get_torch_version,
@@ -41,7 +42,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     requires,
 )
-from ..model_debugging_utils import model_addition_debugger_context
+
 
 _CAN_RECORD_REGISTRY = {}
 
