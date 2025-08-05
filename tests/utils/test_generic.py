@@ -261,6 +261,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
+    @mark.torch_compile_or_export_tests
     def test_decorator_compiled(self):
         """Test that the can_return_tuple decorator works with compiled mode."""
         config = PretrainedConfig()

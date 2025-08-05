@@ -84,7 +84,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
-    config.addinivalue_line("markers", "is_compile_or_export_test: mark the tests as torch compile/export related")
+    config.addinivalue_line("markers", "torch_compile_or_export_tests: mark test using torch compile/export")
 
 
 def pytest_collection_modifyitems(items):

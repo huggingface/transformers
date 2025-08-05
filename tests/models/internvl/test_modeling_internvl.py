@@ -216,6 +216,7 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     )
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

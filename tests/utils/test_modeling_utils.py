@@ -2541,6 +2541,7 @@ class AttentionMaskTester(unittest.TestCase):
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
 
+    @mark.torch_compile_or_export_tests
     def test_torch_compile_fullgraph(self):
         model = Prepare4dCausalAttentionMaskModel()
 

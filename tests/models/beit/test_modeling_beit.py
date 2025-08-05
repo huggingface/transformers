@@ -285,6 +285,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BEiT can't compile dynamic")
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

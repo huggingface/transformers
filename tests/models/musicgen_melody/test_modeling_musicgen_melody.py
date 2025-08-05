@@ -1236,6 +1236,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

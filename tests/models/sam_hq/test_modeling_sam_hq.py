@@ -265,6 +265,7 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @require_torch_sdpa
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 

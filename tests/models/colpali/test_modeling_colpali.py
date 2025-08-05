@@ -287,6 +287,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

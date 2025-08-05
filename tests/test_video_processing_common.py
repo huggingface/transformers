@@ -168,6 +168,7 @@ class VideoProcessingTestMixin:
     @slow
     @require_torch_accelerator
     @require_vision
+    @mark.torch_compile_or_export_tests
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")

@@ -446,6 +446,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 
