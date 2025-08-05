@@ -438,7 +438,7 @@ class AriaProjector(nn.Module):
         """
         batch_size, num_patches = key_value_states.shape[0], key_value_states.shape[1]
 
-        if num_patches not in self.patch_to_query_dict.keys():
+        if num_patches not in self.patch_to_query_dict:
             raise KeyError(
                 f"Number of patches {num_patches} not found in patch_to_query_dict amongst possible values {self.patch_to_query_dict.keys()}."
             )
@@ -901,8 +901,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        split_image = images_kwargs.get("split_image", None) or self.split_image
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+        split_image = images_kwargs.get("split_image", self.split_image)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
 
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
         num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
@@ -1431,29 +1431,15 @@ class AriaModel(LlavaModel):
 
         # 2. Merge text and images
         if pixel_values is not None and inputs_embeds.shape[1] != 1:
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
             )
-            n_images, n_features_per_image = image_features.shape[0], image_features.shape[1]
-            n_image_features = n_images * n_features_per_image
-            if n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self._get_image_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(

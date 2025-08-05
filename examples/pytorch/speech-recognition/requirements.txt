@@ -1,4 +1,4 @@
-datasets >= 1.18.0
+datasets[audio] >= 1.18.0
 torch >= 1.5
 torchaudio
 librosa

@@ -103,38 +103,11 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
             print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
     ```
 
-- The example below demonstrates how to visualize matches between two images.
+- Visualize the matches between the images using the built-in plotting functionality.
 
     ```py
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    # Create side by side image
-    merged_image = np.zeros((max(image1.height, image2.height), image1.width + image2.width, 3))
-    merged_image[: image1.height, : image1.width] = np.array(image1) / 255.0
-    merged_image[: image2.height, image1.width :] = np.array(image2) / 255.0
-    plt.imshow(merged_image)
-    plt.axis("off")
-
-    # Retrieve the keypoints and matches
-    output = processed_outputs[0]
-    keypoints0 = output["keypoints0"]
-    keypoints1 = output["keypoints1"]
-    matching_scores = output["matching_scores"]
-
-    # Plot the matches
-    for keypoint0, keypoint1, matching_score in zip(keypoints0, keypoints1, matching_scores):
-        plt.plot(
-            [keypoint0[0], keypoint1[0] + image1.width],
-            [keypoint0[1], keypoint1[1]],
-            color=plt.get_cmap("RdYlGn")(matching_score.item()),
-            alpha=0.9,
-            linewidth=0.5,
-        )
-        plt.scatter(keypoint0[0], keypoint0[1], c="black", s=2)
-        plt.scatter(keypoint1[0] + image1.width, keypoint1[1], c="black", s=2)
-
-    plt.savefig("matched_image.png", dpi=300, bbox_inches='tight')
+    # Easy visualization using the built-in plotting method
+    processor.visualize_keypoint_matching(images, processed_outputs)
     ```
 
 <div class="flex justify-center">
@@ -155,6 +128,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
 - preprocess
 - post_process_keypoint_matching
+- visualize_keypoint_matching
 
 <frameworkcontent>
 <pt>
