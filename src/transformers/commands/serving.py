@@ -396,6 +396,9 @@ class ServeArguments:
     log_level: str = field(
         default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
     )
+    default_seed: Optional[int] = field(
+        default=None, metadata={"help": "The default seed for torch, should be an integer."}
+    )
     enable_cors: bool = field(
         default=False,
         metadata={
@@ -450,6 +453,9 @@ class ServeCommand(BaseTransformersCLICommand):
         self.args = args
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
         self.enable_cors = self.args.enable_cors
+
+        if self.args.default_seed is not None:
+            torch.manual_seed(self.args.default_seed)
 
         # Set up logging
         transformers_logger = logging.get_logger("transformers")
@@ -690,7 +696,6 @@ class ServeCommand(BaseTransformersCLICommand):
             "HuggingFaceTB/SmolVLM-Instruct",
             "ibm-granite/granite-vision-3.2-2b",
             "Qwen/Qwen2.5-VL-7B-Instruct",
-            "OpenGVLab/InternVL3-1B",
         ]
 
         if HF_HUB_OFFLINE:
@@ -838,13 +843,18 @@ class ServeCommand(BaseTransformersCLICommand):
                         if content["type"] == "text":
                             parsed_message["content"].append(content)
                         elif content["type"] == "image_url":
-                            image_data = re.sub("^data:image/.+;base64,", "", content["image_url"]["url"])
-                            image = Image.open(BytesIO(base64.b64decode(image_data)))
+                            if "base64" in content["image_url"]["url"]:
+                                image_data = re.sub("^data:image/.+;base64,", "", content["image_url"]["url"])
+                                image = Image.open(BytesIO(base64.b64decode(image_data)))
 
-                            file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                            image.save(file.name)
+                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                url = file.name
 
-                            parsed_message["content"].append({"type": "image", "url": file.name})
+                                image.save(file.name)
+                            else:
+                                url = content["image_url"]["url"]
+
+                            parsed_message["content"].append({"type": "image", "url": url})
             processor_inputs.append(parsed_message)
         return processor_inputs
 
@@ -1032,7 +1042,26 @@ class ServeCommand(BaseTransformersCLICommand):
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        inputs = processor.apply_chat_template(req["input"], add_generation_prompt=True).to(model.device)
+        if isinstance(req["input"], str):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append({"role": "user", "content": req["input"]})
+        elif isinstance(req["input"], list):
+            if "instructions" in req:
+                if req["input"][0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+                else:
+                    inputs = req["input"]
+                    inputs[0]["content"] = req["instructions"]
+            else:
+                inputs = req["input"]
+        elif isinstance(req["input"], dict):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append(req["input"])
+        else:
+            raise ValueError("inputs should be a list, dict, or str")
+
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
         generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
