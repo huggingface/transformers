@@ -1003,6 +1003,7 @@ class AriaModel(AriaPreTrainedModel):
         return special_image_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -1404,7 +1404,6 @@ class AriaModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
