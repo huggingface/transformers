@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 파이프라인은 모델을 추론에 활용할 수 있는 훌륭하고 쉬운 방법입니다. 이 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화하여, 개체명 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 감정 분석(Sentiment Analysis), 특성 추출(Feature Extraction), 질의응답(Question Answering) 등의 여러 작업에 특화된 간단한 API를 제공합니다. 사용 예시는 [작업 요약](../task_summary)을 참고하세요.
 
-파이프라인 추상화는 다음 두 가지 범주로 나뉩니다:
+파이프라인 추상화는 다음 두 가지 범주로 나뉩니다.
 
 - \[`파이프라인`]은 다른 모든 파이프라인을 캡슐화하는 가장 강력한 객체입니다.
 - 작업별 파이프라인은 [오디오](#audio), [컴퓨터 비전](#computer-vision), [자연어 처리](#natural-language-processing), [멀티모달](#multimodal) 작업에 사용할 수 있습니다.
@@ -35,7 +35,7 @@ rendered properly in your Markdown viewer.
 [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 ```
 
-[hub](https://huggingface.co)에서 특정 모델을 사용하려는 경우, 해당 모델이 이미 허브에 작업을 정의하고 있다면 작업명을 생략할 수 있습니다:
+[hub](https://huggingface.co)에서 특정 모델을 사용하려는 경우, 해당 모델이 이미 허브에 작업을 정의하고 있다면 작업명을 생략할 수 있습니다.
 
 ```python
 >>> pipe = pipeline(model="FacebookAI/roberta-large-mnli")
@@ -74,7 +74,7 @@ for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     # ....
 ```
 
-더 편리하게 사용하려면 제너레이터도 가능합니다:
+더 편리하게 사용하려면 제너레이터도 가능합니다.
 
 ```python
 from transformers import pipeline
@@ -211,7 +211,7 @@ RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB 
 - **하드웨어와 실제 워크로드로 성능을 측정하세요. 측정이 답입니다.**
 - 실시간 추론(latency)이 중요하다면 배치 처리하지 마세요.
 - CPU 사용 시에도 배치 처리하지 않는 것이 좋습니다.
-- GPU에서 정적 데이터 처리(throughput)가 목적이라면:
+- GPU에서 정적 데이터 처리(throughput)가 목적이라면
 
   - 입력 시퀀스 길이("실제" 데이터)를 잘 모르는 경우, 기본적으로 배치 처리하지 말고 성능을 측정하면서 임시로 배치를 적용해 보고, 실패 시 이를 복구할 수 있도록 OOM 검사 로직을 추가하세요. (시퀀스 길이를 제어하지 않으면 언젠가는 실패하게 됩니다.)
   - 시퀀스 길이가 일정하다면 배치 처리가 유리할 수 있습니다. 측정하며 OOM까지 시도해 보세요.
@@ -222,7 +222,7 @@ RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB 
 
 `제로샷 분류` 및 `질의응답` 파이프라인은 단일 입력이 여러 포워드 패스를 유발할 수 있어 `배치 크기` 인자를 그대로 사용하면 문제가 발생할 수 있습니다.
 
-이를 해결하기 위해 두 파이프라인은 `청크 파이프라인` 형태로 동작합니다. 요약하면:
+이를 해결하기 위해 두 파이프라인은 `청크 파이프라인` 형태로 동작합니다. 요약하면
 
 ```python
 preprocessed = pipe.preprocess(inputs)
@@ -230,7 +230,7 @@ model_outputs = pipe.forward(preprocessed)
 outputs = pipe.postprocess(model_outputs)
 ```
 
-이제 내부적으로는:
+이제 내부적으로는
 
 ```python
 all_model_outputs = []
@@ -255,7 +255,7 @@ FP16 추론을 활성화하려면 파이프라인 생성자에 `torch_dtype=torc
 
 특정 파이프라인을 오버라이드하려면, 먼저 해당 작업에 대한 이슈를 등록해 주세요. 파이프라인의 목표는 대부분의 사용 사례를 지원하는 것이므로, `transformers` 팀이 추가 지원을 고려할 수 있습니다.
 
-간단히 시도하려면 파이프라인 클래스를 상속하세요:
+간단히 시도하려면 파이프라인 클래스를 상속하세요.
 
 ```python
 class MyPipeline(TextClassificationPipeline):
