@@ -611,6 +611,8 @@
         title: Vision Transformer (ViT)
       - local: model_doc/vit
         title: (번역중) ViT Hybrid
+      - local: model_doc/vitdet
+        title: ViTDet
       - local: in_translation
         title: (번역중) ViTMAE
       - local: in_translation
