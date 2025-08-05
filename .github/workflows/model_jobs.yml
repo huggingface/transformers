@@ -125,7 +125,7 @@ jobs:
       - name: download and copy the fixed script
         working-directory: /transformers
         shell: bash
-        run: apt-get update && apt-get install -y wget curl && rm -rf utils/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/new_failures_2.json && cp check_bad_commit.py utils/check_bad_commit.py && cp check_bad_commit.py utils/new_failures_2.json
+        run: apt-get update && apt-get install -y wget curl && rm -rf utils/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/check_bad_commit.py && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/new_failures_2.json && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/job_links.json && curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/temp_get_new_failed_info/process_bad_commit_report.py && cp check_bad_commit.py utils/check_bad_commit.py && cp process_bad_commit_report.py utils/process_bad_commit_report.py
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -138,3 +138,22 @@ jobs:
         with:
           name: new_failures_with_bad_commit
           path: /transformers/new_failures_with_bad_commit.json
+
+      - name: Show results
+        working-directory: /transformers
+        run: |
+          ls -la new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit.json
+
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        run: |
+          python3 utils/process_bad_commit_report.py
+
+      - name: "Upload new_failures_with_bad_commit_grouped_by_authors.json"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: new_failures_with_bad_commit_grouped_by_authors
+          path: /transformers/new_failures_with_bad_commit_grouped_by_authors.json

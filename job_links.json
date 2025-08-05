@@ -1,0 +1,1479 @@
+{
+    "bettertransformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784607",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784481"
+    },
+    "commands": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784489",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784594"
+    },
+    "deepspeed": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784525",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784602"
+    },
+    "extended": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784605",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784524"
+    },
+    "fixtures": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784533",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784608"
+    },
+    "fsdp": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784615",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784584"
+    },
+    "generation": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784580",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784612"
+    },
+    "aimv2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780978",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781017"
+    },
+    "albert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781028",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780975"
+    },
+    "align": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780972",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781021"
+    },
+    "altclip": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780977",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781023"
+    },
+    "arcee": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780979",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781031"
+    },
+    "aria": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780986",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781041"
+    },
+    "audio_spectrogram_transformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781026",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780996"
+    },
+    "auto": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781047",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780991"
+    },
+    "autoformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781036",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781006"
+    },
+    "aya_vision": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781053",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780994"
+    },
+    "bamba": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781040",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780997"
+    },
+    "bark": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781001",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781049"
+    },
+    "bart": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780999",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781061"
+    },
+    "barthez": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781003",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781086"
+    },
+    "bartpho": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781010",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781054"
+    },
+    "beit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781018",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781056"
+    },
+    "bert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781093",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781015"
+    },
+    "bert_generation": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781057",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781022"
+    },
+    "bert_japanese": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781250",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781195"
+    },
+    "bertweet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781197",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781261"
+    },
+    "big_bird": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781205",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781265"
+    },
+    "bigbird_pegasus": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781272",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781206"
+    },
+    "biogpt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781273",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781200"
+    },
+    "bit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781212",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781271"
+    },
+    "bitnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781213",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781281"
+    },
+    "blenderbot": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781399",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781295"
+    },
+    "blenderbot_small": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781382",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781296"
+    },
+    "blip": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781290",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781391"
+    },
+    "blip_2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781400",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781623"
+    },
+    "bloom": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781395",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781615"
+    },
+    "bridgetower": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781403",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781621"
+    },
+    "bros": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781626",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781404"
+    },
+    "byt5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781408",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781624"
+    },
+    "camembert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781625",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781402"
+    },
+    "canine": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781756",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781636"
+    },
+    "chameleon": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781630",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781582"
+    },
+    "chinese_clip": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781635",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781590"
+    },
+    "clap": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781593",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781631"
+    },
+    "clip": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781602",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781899"
+    },
+    "clipseg": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781898",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781601"
+    },
+    "clvp": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781618",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782089"
+    },
+    "code_llama": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781609",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781902"
+    },
+    "codegen": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781611",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781913"
+    },
+    "cohere": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781908",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781610"
+    },
+    "cohere2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781907",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781889"
+    },
+    "cohere2_vision": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781875",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781914"
+    },
+    "colpali": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781917",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781884"
+    },
+    "colqwen2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781878",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781911"
+    },
+    "conditional_detr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782086",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781896"
+    },
+    "convbert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781879",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782099"
+    },
+    "convnext": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782109",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781891"
+    },
+    "convnextv2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781892",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782112"
+    },
+    "cpm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781904",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782115"
+    },
+    "cpmant": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782028",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782113"
+    },
+    "csm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782117",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782092"
+    },
+    "ctrl": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782119",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782138"
+    },
+    "cvt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782120",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782097"
+    },
+    "d_fine": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782241",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782095"
+    },
+    "dab_detr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782240",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782104"
+    },
+    "dac": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782114",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782233"
+    },
+    "data2vec": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782100",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782232"
+    },
+    "dbrx": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782163",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782247"
+    },
+    "deberta": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782121",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782248"
+    },
+    "deberta_v2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782262",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782255"
+    },
+    "decision_transformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782222",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782263"
+    },
+    "deepseek_v2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782271",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782219"
+    },
+    "deepseek_v3": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782236",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782365"
+    },
+    "deepseek_vl": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782234",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782374"
+    },
+    "deepseek_vl_hybrid": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782266",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782392"
+    },
+    "deformable_detr": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782253",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782401"
+    },
+    "deit": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782400",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782264"
+    },
+    "depth_anything": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782315",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782445"
+    },
+    "depth_pro": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782375",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782421"
+    },
+    "detr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782438",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782355"
+    },
+    "dia": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782361",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782549"
+    },
+    "diffllama": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782378",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782617"
+    },
+    "dinat": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782614",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782377"
+    },
+    "dinov2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782405",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782620"
+    },
+    "dinov2_with_registers": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782404",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782625"
+    },
+    "distilbert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782628",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782477"
+    },
+    "dit": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782635",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782479"
+    },
+    "doge": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782600",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782650"
+    },
+    "donut": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782629",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782642"
+    },
+    "dots1": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782603",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782692"
+    },
+    "dpr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782792",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782605"
+    },
+    "dpt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782621",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782802"
+    },
+    "efficientloftr": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782602",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782794"
+    },
+    "efficientnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782608",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782795"
+    },
+    "electra": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782797",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782648"
+    },
+    "emu3": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782816",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782652"
+    },
+    "encodec": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782684",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782835"
+    },
+    "encoder_decoder": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782861",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782784"
+    },
+    "eomt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782775",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782933"
+    },
+    "ernie": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782935",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782781"
+    },
+    "ernie4_5": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782929",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782790"
+    },
+    "ernie4_5_moe": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782967",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782787"
+    },
+    "esm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782942",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783019"
+    },
+    "evolla": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783028",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782801"
+    },
+    "exaone4": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783044",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782818"
+    },
+    "falcon": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782830",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783070"
+    },
+    "falcon_h1": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783117",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782837"
+    },
+    "falcon_mamba": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782910",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783127"
+    },
+    "fastspeech2_conformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782916",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783121"
+    },
+    "flaubert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782917",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783163"
+    },
+    "flava": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782931",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783182"
+    },
+    "fnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782948",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783177"
+    },
+    "focalnet": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783175",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782950"
+    },
+    "fsmt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783179",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782990"
+    },
+    "funnel": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783324",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783014"
+    },
+    "fuyu": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783054",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783352"
+    },
+    "gemma": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783093",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783330"
+    },
+    "gemma2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783321",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783103"
+    },
+    "gemma3": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783327",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783116"
+    },
+    "gemma3n": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783142",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783339"
+    },
+    "git": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783143",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783342"
+    },
+    "glm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783165",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783541"
+    },
+    "glm4": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783157",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783552"
+    },
+    "glm4_moe": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783172",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783555"
+    },
+    "glm4v": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783562",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783188"
+    },
+    "glpn": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783262",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783559"
+    },
+    "got_ocr2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783268",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783593"
+    },
+    "gpt2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783279",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783547"
+    },
+    "gpt_bigcode": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783558",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783267"
+    },
+    "gpt_neo": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783272",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783557"
+    },
+    "gpt_neox": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783270",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783561"
+    },
+    "gpt_neox_japanese": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783459",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783870"
+    },
+    "gpt_sw3": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783876",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783465"
+    },
+    "gptj": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783873",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783470"
+    },
+    "granite": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783872",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783477"
+    },
+    "granite_speech": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783464",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783878"
+    },
+    "granitemoe": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783888",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783472"
+    },
+    "granitemoehybrid": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783894",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783478"
+    },
+    "granitemoeshared": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783701",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783884"
+    },
+    "grounding_dino": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783706",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783885"
+    },
+    "groupvit": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783891",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783704"
+    },
+    "helium": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784090",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783736"
+    },
+    "herbert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783721",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784092"
+    },
+    "hgnet_v2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784107",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783723"
+    },
+    "hiera": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783711",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784100"
+    },
+    "hubert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784097",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783716"
+    },
+    "ibert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783727",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784096"
+    },
+    "idefics": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783722",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784098"
+    },
+    "idefics2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783976",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784120"
+    },
+    "idefics3": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783970",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784108"
+    },
+    "ijepa": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784296",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783974"
+    },
+    "imagegpt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783979",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784278"
+    },
+    "informer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783980",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784287"
+    },
+    "instructblip": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783995",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784285"
+    },
+    "instructblipvideo": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784298",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783990"
+    },
+    "internvl": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784026",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784302"
+    },
+    "jamba": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784013",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784317"
+    },
+    "janus": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784024",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784306"
+    },
+    "jetmoe": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784155"
+    },
+    "kosmos2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784164",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784416"
+    },
+    "kyutai_speech_to_text": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784159",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784448"
+    },
+    "layoutlm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784189",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784463"
+    },
+    "layoutlmv2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784177",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784491"
+    },
+    "layoutlmv3": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784192",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784518"
+    },
+    "layoutxlm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784187",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784506"
+    },
+    "led": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784522",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784197"
+    },
+    "levit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784201",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784514"
+    },
+    "lfm2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784572",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784249"
+    },
+    "lightglue": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784367",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784583"
+    },
+    "lilt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784381",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784669"
+    },
+    "llama": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784408",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784697"
+    },
+    "llama4": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784705",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784391"
+    },
+    "llava": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784403",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784700"
+    },
+    "llava_next": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784393",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784726"
+    },
+    "llava_next_video": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784409",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784746"
+    },
+    "llava_onevision": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784413",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784754"
+    },
+    "longformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784761",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784423"
+    },
+    "longt5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784432",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784812"
+    },
+    "luke": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784827",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784564"
+    },
+    "lxmert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784559",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784896"
+    },
+    "m2m_100": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784892",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784568"
+    },
+    "mamba": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784617",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784898"
+    },
+    "mamba2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784639",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784936"
+    },
+    "marian": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784643",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384785388"
+    },
+    "markuplm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784647",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784949"
+    },
+    "mask2former": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784628",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784984"
+    },
+    "maskformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784649",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784961"
+    },
+    "mbart": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784988",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784667"
+    },
+    "mbart50": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384785005",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784778"
+    },
+    "megatron_bert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384785061",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784788"
+    },
+    "megatron_gpt2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784787",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384785082"
+    },
+    "mgp_str": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780881",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780931"
+    },
+    "mimi": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780945",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780875"
+    },
+    "minimax": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780940",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780880"
+    },
+    "mistral": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780936",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780883"
+    },
+    "mistral3": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780948",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780893"
+    },
+    "mixtral": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780892",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780942"
+    },
+    "mlcd": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780888",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780941"
+    },
+    "mllama": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780889",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780954"
+    },
+    "mluke": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780961",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780911"
+    },
+    "mm_grounding_dino": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780912",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780947"
+    },
+    "mobilebert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780895",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780956"
+    },
+    "mobilenet_v1": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780917",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780949"
+    },
+    "mobilenet_v2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780906",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780950"
+    },
+    "mobilevit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780908",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780951"
+    },
+    "mobilevitv2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780916",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780962"
+    },
+    "modernbert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780921",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780963"
+    },
+    "modernbert_decoder": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780920",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780970"
+    },
+    "moonshine": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780964",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384780923"
+    },
+    "moshi": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781179",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781104"
+    },
+    "mpnet": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781160",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781101"
+    },
+    "mpt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781166",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781177"
+    },
+    "mra": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781136",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781171"
+    },
+    "mt5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781140",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781169"
+    },
+    "musicgen": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781141",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781180"
+    },
+    "musicgen_melody": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781194",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781142"
+    },
+    "mvp": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781155",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781187"
+    },
+    "myt5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781150",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781238"
+    },
+    "nemotron": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781146",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781247"
+    },
+    "nllb": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781531",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781425"
+    },
+    "nllb_moe": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781532",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781421"
+    },
+    "nougat": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781525",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781438"
+    },
+    "nystromformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781526",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781431"
+    },
+    "olmo": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781549",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781437"
+    },
+    "olmo2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781429",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781534"
+    },
+    "olmoe": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781436",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781535"
+    },
+    "omdet_turbo": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781432",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781555"
+    },
+    "oneformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781434",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781546"
+    },
+    "openai": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781560",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781442"
+    },
+    "opt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781808",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781752"
+    },
+    "owlv2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781748",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781800"
+    },
+    "owlvit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781744",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781802"
+    },
+    "paligemma": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781750",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781806"
+    },
+    "paligemma2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781749",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781814"
+    },
+    "patchtsmixer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781762",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781807"
+    },
+    "patchtst": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781755",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781818"
+    },
+    "pegasus": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781836",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781753"
+    },
+    "pegasus_x": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781822",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781767"
+    },
+    "perceiver": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781817",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781751"
+    },
+    "perception_lm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782069",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782018"
+    },
+    "persimmon": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782068",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781995"
+    },
+    "phi": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384781999",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782072"
+    },
+    "phi3": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782008",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782081"
+    },
+    "phi4_multimodal": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782014",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782087"
+    },
+    "phimoe": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782013"
+    },
+    "phobert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782005",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782080"
+    },
+    "pix2struct": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782090",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782007"
+    },
+    "pixtral": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782084",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782020"
+    },
+    "plbart": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782011",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782093"
+    },
+    "poolformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782144",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782199"
+    },
+    "pop2piano": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782209",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782155"
+    },
+    "prompt_depth_anything": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782210",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782153"
+    },
+    "prophetnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782156",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782218"
+    },
+    "pvt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782179",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782213"
+    },
+    "pvt_v2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782167",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782217"
+    },
+    "qwen2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782169",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782221"
+    },
+    "qwen2_5_omni": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782171",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782224"
+    },
+    "qwen2_5_vl": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782173",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782226"
+    },
+    "qwen2_audio": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782298"
+    },
+    "qwen2_moe": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782305",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782312"
+    },
+    "qwen2_vl": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782307",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782331"
+    },
+    "qwen3": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782340",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782299"
+    },
+    "qwen3_moe": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782336",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782311"
+    },
+    "rag": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782304",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782362"
+    },
+    "recurrent_gemma": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782369",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782342"
+    },
+    "reformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782371",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782323"
+    },
+    "regnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782354",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782384"
+    },
+    "rembert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782493",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782385"
+    },
+    "resnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782497",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782584"
+    },
+    "roberta": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782504",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782557"
+    },
+    "roberta_prelayernorm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782554",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782524"
+    },
+    "roc_bert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782558",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782507"
+    },
+    "roformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782561",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782508"
+    },
+    "rt_detr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782574",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782589"
+    },
+    "rt_detr_v2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782598",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782560"
+    },
+    "rwkv": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782566",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782651"
+    },
+    "sam": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782639",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782644"
+    },
+    "sam_hq": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782633",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782653"
+    },
+    "seamless_m4t": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782730",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782661"
+    },
+    "seamless_m4t_v2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782664",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782728"
+    },
+    "segformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782663",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782752"
+    },
+    "seggpt": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782700",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782734"
+    },
+    "sew": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782755",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782704"
+    },
+    "sew_d": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782758",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782765"
+    },
+    "shieldgemma2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782773",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782760"
+    },
+    "siglip": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782763",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782820"
+    },
+    "siglip2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782805",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782817"
+    },
+    "smollm3": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782821",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782804"
+    },
+    "smolvlm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782877",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782831"
+    },
+    "speech_encoder_decoder": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782885",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782825"
+    },
+    "speech_to_text": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782827",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782905"
+    },
+    "speecht5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782852",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782896"
+    },
+    "splinter": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782900",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782872"
+    },
+    "squeezebert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782909",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782904"
+    },
+    "stablelm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782940",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782964"
+    },
+    "starcoder2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782957",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782945"
+    },
+    "superglue": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782988",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782941"
+    },
+    "superpoint": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783003",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384782970"
+    },
+    "swiftformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783048",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783062"
+    },
+    "swin": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783042",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783058"
+    },
+    "swin2sr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783075",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783046"
+    },
+    "swinv2": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783079",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783073"
+    },
+    "switch_transformers": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783108",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783087"
+    },
+    "t5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783158",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783106"
+    },
+    "t5gemma": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783114",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783150"
+    },
+    "table_transformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783160",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783130"
+    },
+    "tapas": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783159",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783133"
+    },
+    "textnet": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783164",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783190"
+    },
+    "time_series_transformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783206",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783191"
+    },
+    "timesfm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783200",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783212"
+    },
+    "timesformer": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783196",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783216"
+    },
+    "timm_backbone": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783199",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783288"
+    },
+    "timm_wrapper": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783293",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783361"
+    },
+    "trocr": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783294",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783372"
+    },
+    "tvp": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783292",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783362"
+    },
+    "udop": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783310",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783363"
+    },
+    "umt5": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783381",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783313"
+    },
+    "unispeech": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783308",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783396"
+    },
+    "unispeech_sat": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783601",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783569"
+    },
+    "univnet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783584",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783611"
+    },
+    "upernet": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783610",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783591"
+    },
+    "video_llava": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783577",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783616"
+    },
+    "videomae": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783613",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783576"
+    },
+    "vilt": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783614",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783603"
+    },
+    "vipllava": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783631",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783599"
+    },
+    "vision_encoder_decoder": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783621",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783582"
+    },
+    "vision_text_dual_encoder": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783627",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783581"
+    },
+    "visual_bert": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783592",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783641"
+    },
+    "vit": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783904",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783935"
+    },
+    "vit_mae": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783899",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783949"
+    },
+    "vit_msn": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783931",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783903"
+    },
+    "vitdet": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783909",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783932"
+    },
+    "vitmatte": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783946",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783921"
+    },
+    "vitpose": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783916",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783942"
+    },
+    "vitpose_backbone": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783943",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783911"
+    },
+    "vits": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783944",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783912"
+    },
+    "vivit": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783948",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783915"
+    },
+    "vjepa2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783917",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384783955"
+    },
+    "voxtral": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784102",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784140"
+    },
+    "wav2vec2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784121",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784145"
+    },
+    "wav2vec2_bert": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784132",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784109"
+    },
+    "wav2vec2_conformer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784137",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784122"
+    },
+    "wav2vec2_phoneme": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784117",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784149"
+    },
+    "wav2vec2_with_lm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784152",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784124"
+    },
+    "wavlm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784141",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784118"
+    },
+    "whisper": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784144",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784119"
+    },
+    "x_clip": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784128",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784142"
+    },
+    "xglm": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784172",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784125"
+    },
+    "xlm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784275",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784332"
+    },
+    "xlm_roberta": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784355",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784311"
+    },
+    "xlm_roberta_xl": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784358",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784294"
+    },
+    "xlnet": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784371",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784300"
+    },
+    "xlstm": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784305",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784362"
+    },
+    "xmod": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784387",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784340"
+    },
+    "yolos": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784338",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784369"
+    },
+    "yoso": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784377",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784361"
+    },
+    "zamba": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784341",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784394"
+    },
+    "zamba2": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784400",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784405"
+    },
+    "zoedepth": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784461",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784550"
+    },
+    "optimization": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784592",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784622"
+    },
+    "peft_integration": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784634",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784635"
+    },
+    "pipelines": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784772",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784701"
+    },
+    "quantization": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784715",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784819"
+    },
+    "repo_utils": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784830",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784727"
+    },
+    "sagemaker": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784758",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784863"
+    },
+    "tensor_parallel": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784832",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784743"
+    },
+    "tokenization": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784834",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784793"
+    },
+    "trainer": {
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784995",
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784791"
+    },
+    "utils": {
+        "multi": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784845",
+        "single": "https://github.com/huggingface/transformers/actions/runs/16739364088/job/47384784853"
+    }
+}
