@@ -193,6 +193,7 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @pytest.mark.torch_export_test
     def test_torch_export(self):
         # Dense architecture
         super().test_torch_export()

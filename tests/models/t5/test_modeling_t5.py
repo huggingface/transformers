@@ -1668,6 +1668,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         logits_compiled = model(**inputs)
         torch.testing.assert_close(logits[0][:, -3:, -3], logits_compiled[0][:, -3:, -3], rtol=1e-5, atol=1e-5)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_encoder(self):
         """Test exporting T5EncoderModel to torch export format."""
@@ -1704,6 +1705,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         # Verify outputs are close enough
         self.assertTrue(torch.allclose(original_output, exported_output, atol=1e-5))
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_decoder(self):
         """Test exporting T5 decoder with static cache to torch export format."""
@@ -1765,6 +1767,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             # Verify cache buffers are 3D
             self.assertEqual(buffer.shape[2], max_cache_len)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_t5_summarization(self):
         """Test composing exported T5 encoder and decoder for summarization."""

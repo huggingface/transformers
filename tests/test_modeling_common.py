@@ -4553,6 +4553,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.5")
+    @pytest.mark.torch_export_test
     def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
         """
         Test if model can be exported with torch.export.export()

@@ -576,6 +576,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

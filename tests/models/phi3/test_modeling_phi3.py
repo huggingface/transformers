@@ -348,6 +348,7 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4

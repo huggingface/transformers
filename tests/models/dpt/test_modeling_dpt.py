@@ -423,6 +423,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(output_enlarged.shape == expected_shape)
         torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         for strict in [True, False]:
             with self.subTest(strict=strict):
