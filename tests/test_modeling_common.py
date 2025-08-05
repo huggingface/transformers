@@ -4880,18 +4880,12 @@ class ModelTesterMixin:
             # Check everything was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
+                # print(subconfig_key, getattr(model.config, subconfig_key)._attn_implementation)
                 self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
-            # Check we cannot set it to random values, and it raises a warning (but no crash)
-            with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
+            # Check we cannot set it to random values, and it raises an error
+            with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
                 model.set_attn_implementation("foo")
-                self.assertTrue(
-                    any(
-                        "Impossible to set the requested `attn_implementation`. The following error was captured:"
-                        in warning
-                        for warning in cm.output
-                    )
-                )
 
             # Should still be sdpa everywhere
             self.assertTrue(model.config._attn_implementation == "sdpa")

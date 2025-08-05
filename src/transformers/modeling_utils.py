@@ -2804,16 +2804,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                 )
             else:
-                try:
-                    applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                        requested_implementation, is_init_check=False
-                    )
-                    # Apply the change (on the internal attr, to avoid setting it recursively)
-                    self.config._attn_implementation_internal = applicable_attn_implementation
-                except Exception as e:
-                    logger.warning(
-                        f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
-                    )
+                applicable_attn_implementation = self._check_and_adjust_attn_implementation(
+                    requested_implementation, is_init_check=False
+                )
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._attn_implementation_internal = applicable_attn_implementation
 
         subconfigs_changed = set()
         # Apply it to all submodels as well
@@ -2841,13 +2836,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 subconfig_key, submodule.config._attn_implementation
                             )
                             break
-                # check the module can use correctly, otherwise we silently set the config without the model using it
-                try:
-                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                    submodule.config._attn_implementation = sub_implementation
-                    subconfigs_changed.add(submodule.config.__class__)
-                except Exception:
-                    pass
+                # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
+                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                submodule.config._attn_implementation = sub_implementation
+                subconfigs_changed.add(submodule.config.__class__)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
@@ -2860,9 +2852,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
                 subconfig.__class__ not in subconfigs_changed
-                and requested_implementation != subconfig._attn_implementation
-                and requested_implementation in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
+                or requested_implementation != subconfig._attn_implementation
             ):
+                if requested_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                    raise ValueError(
+                        f'Specified `attn_implementation="{requested_implementation}"` is not supported for {subconfig_key}. '
+                        'The only possible arguments are "eager" (manual attention implementation)'
+                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                    )
                 subconfig._attn_implementation_internal = requested_implementation
                 logger.warning(
                     f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` "
