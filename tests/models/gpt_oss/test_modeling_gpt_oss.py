@@ -437,7 +437,7 @@ if __name__ == "__main__":
                 logprob_differences = selected_logprobs - original_logprobs[i]
 
                 print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}")
-                torch.testing.assert_close(selected_logprobs.cpu(), original_logprobs[i], atol=1e-1, rtol=1e-1)
+                torch.testing.assert_close(selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1)
 
         decoded_string = tokenizer.decode(tokens)
         self.assertTrue(original_output.startswith(decoded_string))
@@ -497,7 +497,7 @@ I am a language model, not a human being"""
                 logprob_differences = selected_logprobs - original_logprobs[i]
 
                 print(f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}")
-                torch.testing.assert_close(selected_logprobs.cpu(), original_logprobs[i], atol=1e-1, rtol=1e-1)
+                torch.testing.assert_close(selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1)
 
         decoded_string = tokenizer.decode(tokens)
         self.assertTrue(original_output.startswith(decoded_string))
