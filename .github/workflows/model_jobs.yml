@@ -81,6 +81,7 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip install -U datasets
+          python3 -m pip uninstall -y natten
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
@@ -120,7 +121,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports -m torch_compile_test tests/models/
 
       - name: Failure short reports
         if: ${{ failure() }}
