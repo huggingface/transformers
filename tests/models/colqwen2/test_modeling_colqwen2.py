@@ -17,6 +17,7 @@
 import unittest
 from typing import ClassVar
 
+import pytest
 import torch
 from datasets import load_dataset
 
@@ -277,7 +278,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Pass because ColQwen2 requires `attention_mask is not None`")
-    @mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

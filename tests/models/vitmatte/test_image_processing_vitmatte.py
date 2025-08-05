@@ -18,6 +18,7 @@ import unittest
 import warnings
 
 import numpy as np
+import pytest
 import requests
 from packaging import version
 
@@ -340,7 +341,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_vision
-    @mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_or_export_tests
     def test_can_compile_fast_image_processor(self):
         # override as trimaps are needed for the image processor
         if self.fast_image_processing_class is None:

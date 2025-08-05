@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from pytest import mark
 
 from transformers import (
@@ -1235,7 +1236,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
-    @mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

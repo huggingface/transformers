@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -255,7 +257,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Inductor error for dynamic shape")
-    @mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 

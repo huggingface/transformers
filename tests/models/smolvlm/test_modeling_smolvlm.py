@@ -186,7 +186,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
-    @mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_or_export_tests
     def test_sdpa_can_compile_dynamic(self):
         pass
 
