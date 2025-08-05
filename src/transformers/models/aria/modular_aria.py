@@ -38,7 +38,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
+from ...utils import TensorType, TransformersKwargs, auto_docstring, logging, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
@@ -1405,7 +1405,7 @@ class AriaModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1475,7 +1475,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
         )
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

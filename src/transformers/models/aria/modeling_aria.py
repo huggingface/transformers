@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_torch_available
 from ..auto import AutoModel
@@ -1002,7 +1002,7 @@ class AriaModel(AriaPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1130,7 +1130,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def multi_modal_projector(self):
         return self.model.multi_modal_projector
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
