@@ -277,6 +277,7 @@ _import_structure = {
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
+        "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
         "FPQuantConfig",
