@@ -675,10 +675,11 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        outpus = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
             outputs += mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
+        return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
