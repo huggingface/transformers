@@ -23,9 +23,7 @@ from typing import Optional
 
 from safetensors.torch import save_file
 
-from transformers.utils.import_utils import requires
-
-from .utils import is_torch_available
+from .utils.import_utils import is_torch_available, requires
 
 
 if is_torch_available():
