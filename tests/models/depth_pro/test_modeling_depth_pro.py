@@ -223,7 +223,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Inductor error: name 'OpaqueUnaryFn_log2' is not defined")
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

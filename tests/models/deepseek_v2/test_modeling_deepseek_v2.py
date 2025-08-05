@@ -175,7 +175,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(layer.values.shape, expected_value_shape)
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_generate_compilation_all_outputs(self):
         pass
 
@@ -188,7 +188,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_generate_with_static_cache(self):
         pass
 

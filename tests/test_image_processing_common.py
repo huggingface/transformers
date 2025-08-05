@@ -601,7 +601,7 @@ class ImageProcessingTestMixin:
     @slow
     @require_torch_accelerator
     @require_vision
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

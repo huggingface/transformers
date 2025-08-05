@@ -149,7 +149,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         self.config_tester = ConfigTester(self, config_class=Qwen2AudioConfig, has_text_modality=False)
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

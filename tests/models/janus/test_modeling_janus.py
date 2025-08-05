@@ -295,7 +295,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
     @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 

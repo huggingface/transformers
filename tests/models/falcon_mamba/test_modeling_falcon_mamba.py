@@ -489,7 +489,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_generation_torch_compile(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model = torch.compile(model)

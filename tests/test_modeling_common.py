@@ -3850,7 +3850,7 @@ class ModelTesterMixin:
 
     @require_torch_sdpa
     @require_torch_accelerator
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
@@ -4099,7 +4099,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     @slow
     def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
@@ -4480,7 +4480,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_accelerator
-    @pytest.mark.torch_compile_or_export_tests
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
