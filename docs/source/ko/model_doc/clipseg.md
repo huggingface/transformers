@@ -14,95 +14,79 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# CLIPSeg
+# CLIPSeg[[clipseg]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## 개요[[overview]]
 
-The CLIPSeg model was proposed in [Image Segmentation Using Text and Image Prompts](https://huggingface.co/papers/2112.10003) by Timo Lüddecke
-and Alexander Ecker. CLIPSeg adds a minimal decoder on top of a frozen [CLIP](clip) model for zero-shot and one-shot image segmentation.
+CLIPSeg 모델은 Timo Lüddecke와 Alexander Ecker가 [Image Segmentation Using Text and Image Prompts](https://huggingface.co/papers/2112.10003) 논문에서 제안했습니다. CLIPSeg는 가중치가 고정된 CLIP 모델에 최소한의 디코더를 결합하여 제로샷 및 원샷 이미지 분할을 수행합니다.
 
-The abstract from the paper is the following:
+논문 초록은 다음과 같습니다.
 
-*Image segmentation is usually addressed by training a
-model for a fixed set of object classes. Incorporating additional classes or more complex queries later is expensive
-as it requires re-training the model on a dataset that encompasses these expressions. Here we propose a system
-that can generate image segmentations based on arbitrary
-prompts at test time. A prompt can be either a text or an
-image. This approach enables us to create a unified model
-(trained once) for three common segmentation tasks, which
-come with distinct challenges: referring expression segmentation, zero-shot segmentation and one-shot segmentation.
-We build upon the CLIP model as a backbone which we extend with a transformer-based decoder that enables dense
-prediction. After training on an extended version of the
-PhraseCut dataset, our system generates a binary segmentation map for an image based on a free-text prompt or on
-an additional image expressing the query. We analyze different variants of the latter image-based prompts in detail.
-This novel hybrid input allows for dynamic adaptation not
-only to the three segmentation tasks mentioned above, but
-to any binary segmentation task where a text or image query
-can be formulated. Finally, we find our system to adapt well
-to generalized queries involving affordances or properties*
+*이미지 분할은 일반적으로 사전에 정의된 객체 클래스 집합에 대해 모델을 학습시키는 방식으로 접근합니다. 하지만 새로운 클래스를 추가하거나 보다 복잡한 질의를 처리하려면, 해당 내용을 포함한 데이터셋으로 모델을 다시 학습해야 하므로 비용이 많이 듭니다. 이에 본 논문에서는 테스트 시점에 텍스트나 이미지로 구성된 임의의 프롬프트만으로 이미지 분할을 수행할 수 있는 시스템을 제안합니다. 이 접근 방식을 통해 서로 다른 과제를 갖는 세 가지 주요 이미지 분할 태스크—지시 표현 분할(referring expression segmentation), 제로샷 분할(zero-shot segmentation), 원샷 분할(one-shot segmentation)—을 단일 통합 모델로 처리할 수 있습니다. 이를 위해 우리는 CLIP 모델을 백본으로 삼고, 고해상도 예측을 가능하게 하는 트랜스포머 기반 디코더를 추가해 이를 확장했습니다. 확장된 PhraseCut 데이터셋을 활용해 학습한 본 시스템은 자유 형식의 텍스트 프롬프트나 특정 목적을 표현하는 이미지를 입력으로 받아, 입력 이미지에 대한 이진 분할 맵을 생성합니다. 특히 이미지 기반 프롬프트의 다양한 구성 방식과 그 효과를 자세히 분석하였습니다. 이 새로운 하이브리드 입력 방식은 앞서 언급한 세 가지 태스크뿐만 아니라, 텍스트 또는 이미지로 질의할 수 있는 모든 이진 분할 문제에 유연하게 대응할 수 있습니다. 마지막으로, 본 시스템이 어포던스(affordance)나 객체 속성과 같은 일반화된 질의에도 높은 적응력을 보임을 확인하였습니다.*
+
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
 alt="drawing" width="600"/> 
 
-<small> CLIPSeg overview. Taken from the <a href="https://huggingface.co/papers/2112.10003">original paper.</a> </small>
+<small> CLIPSeg 개요. <a href="https://huggingface.co/papers/2112.10003">원본 논문</a>에서 발췌. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/timojl/clipseg).
+이 모델은 [nielsr](https://huggingface.co/nielsr)님이 기여했습니다.
+원본 코드는 [여기](https://github.com/timojl/clipseg)에서 찾을 수 있습니다.
 
-## Usage tips
+## 사용 팁[[usage-tips]]
 
-- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
-- [`CLIPSegForImageSegmentation`] can generate image segmentations based on arbitrary prompts at test time. A prompt can be either a text
-(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide custom
-conditional embeddings (provided to the model as `conditional_embeddings`).
+- [`CLIPSegForImageSegmentation`]은 [`CLIPSegModel`]과 동일한, [`CLIPSegModel`] 위에 디코더를 추가한 모델입니다.
+- [`CLIPSegForImageSegmentation`]은 테스트 시점에 임의의 프롬프트를 기반으로 이미지 분할을 생성합니다. 이떄 프롬프트는 텍스트(`input_ids`), 이미지(`conditional_pixel_values`), 또는 사용자 정의 조건부 임베딩(`conditional_embeddings`)을 사용할 수 있습니다.
 
-## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIPSeg. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+## 리소스[[resources]]
+
+CLIPSeg를 시작하는 데 도움이 될 Hugging Face 공식 자료와 커뮤니티(🌎 아이콘으로 표시)의 유용한 리소스 목록을 아래에 정리했습니다. 혹시 목록에 없는 새로운 자료나 튜토리얼을 공유하고 싶으시다면, 언제든지 Pull Request를 통해 제안해 주세요. 저희가 검토 후 소중히 반영하겠습니다! 기존 자료와 중복되지 않는 새로운 내용이라면 더욱 좋습니다.
+
 
 <PipelineTag pipeline="image-segmentation"/>
 
-- A notebook that illustrates [zero-shot image segmentation with CLIPSeg](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/CLIPSeg/Zero_shot_image_segmentation_with_CLIPSeg.ipynb).
+- [zero-shot image segmentation with CLIPSeg](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/CLIPSeg/Zero_shot_image_segmentation_with_CLIPSeg.ipynb)을 시연하는 노트북.
 
-## CLIPSegConfig
+## CLIPSegConfig[[transformers.CLIPSegConfig]]
 
 [[autodoc]] CLIPSegConfig
     - from_text_vision_configs
 
-## CLIPSegTextConfig
+## CLIPSegTextConfig[[transformers.CLIPSegTextConfig]]
 
 [[autodoc]] CLIPSegTextConfig
 
-## CLIPSegVisionConfig
+## CLIPSegVisionConfig[[transformers.CLIPSegVisionConfig]]
 
 [[autodoc]] CLIPSegVisionConfig
 
-## CLIPSegProcessor
+## CLIPSegProcessor[[transformers.CLIPSegProcessor]]
 
 [[autodoc]] CLIPSegProcessor
 
-## CLIPSegModel
+## CLIPSegModel[[transformers.CLIPSegModel]]
 
 [[autodoc]] CLIPSegModel
     - forward
     - get_text_features
     - get_image_features
 
-## CLIPSegTextModel
+## CLIPSegTextModel[[transformers.CLIPSegTextModel]]
 
 [[autodoc]] CLIPSegTextModel
     - forward
 
-## CLIPSegVisionModel
+## CLIPSegVisionModel[[transformers.CLIPSegVisionModel]]
 
 [[autodoc]] CLIPSegVisionModel
     - forward
 
-## CLIPSegForImageSegmentation
+## CLIPSegForImageSegmentation[[transformers.CLIPSegForImageSegmentation]]
 
 [[autodoc]] CLIPSegForImageSegmentation
     - forward
