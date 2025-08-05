@@ -421,7 +421,9 @@ class ModernBertUnpaddedRotaryEmbedding(RotaryEmbedding):
             up to max_seqlen. If the max_seqlen, device, or dtype during training/inference differ,
             the cos_sin_cache will be recomputed during the forward pass.
         """
-        super().__init__(dim=dim)
+        if type(super()) is object:
+            raise Exception("Package flash-attn is required for ModernBert. Have you installed it yet?")
+        super().__init__(dim=dim, base=base, device=device, interleaved=False)
         self.max_seqlen = max_seqlen
 
         if max_seqlen is not None and device is not None and dtype is not None:
