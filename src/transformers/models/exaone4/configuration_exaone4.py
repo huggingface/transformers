@@ -202,21 +202,46 @@ class Exaone4Config(PretrainedConfig):
         self.sliding_window_pattern = sliding_window_pattern
 
         self.layer_types = layer_types
-        if self.sliding_window is None:
-            sliding_window_pattern = 0
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        if "sliding_window" in self.layer_types:
-            self._attn_implementation = "hybrid"
+            # No sliding window -> all layers use full attention
+            if self.sliding_window in (None, 0):
+                self.layer_types = ["full_attention"] * self.num_hidden_layers
+            else:
+                # Sliding window enabled: interpret the pattern spec
+                pattern_spec = self.sliding_window_pattern
+
+                # String pattern, e.g. "LLLG"
+                if isinstance(pattern_spec, str) and pattern_spec:
+                    layer_pattern_template = [
+                        "sliding_attention" if ch.upper() == "L" else "full_attention" for ch in pattern_spec
+                    ]
+                    # Repeat the template to cover all layers; force the last layer to full_attention
+                    self.layer_types = [
+                        layer_pattern_template[i % len(layer_pattern_template)]
+                        for i in range(self.num_hidden_layers - 1)
+                    ] + ["full_attention"]
+
+                # Integer pattern (e.g., 4) or anything else -> use periodic rule
+                else:
+                    # Avoid modulo-by-zero and invalid types
+                    repeat_period = pattern_spec if isinstance(pattern_spec, int) and pattern_spec > 0 else 1
+                    # Every 'repeat_period'-th layer is full, others are sliding; last layer forced to full
+                    self.layer_types = [
+                        (
+                            "sliding_attention"
+                            if ((i + 1) % repeat_period) != 0 and i < self.num_hidden_layers - 1
+                            else "full_attention"
+                        )
+                        for i in range(self.num_hidden_layers)
+                    ]
+
         layer_type_validation(self.layer_types)
 
         super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
         )
 
 
