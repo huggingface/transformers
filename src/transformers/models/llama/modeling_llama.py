@@ -255,8 +255,7 @@ class LlamaAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.rotary_emb = LlamaRotaryEmbedding(config=config, layer_type=layer_type)
+        self.rotary_emb = LlamaRotaryEmbedding(config=config)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
@@ -335,7 +334,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states

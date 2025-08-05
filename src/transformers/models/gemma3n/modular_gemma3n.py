@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
 import math
 from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
@@ -32,12 +31,12 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2PreTrainedModel,
-    Gemma2RotaryEmbedding,
     eager_attention_forward,
     rotate_half,
 )
@@ -1698,10 +1697,6 @@ class Gemma3nTextAltUp(nn.Module):
         return self.forward(corrected)
 
 
-class Gemma3nTextRotaryEmbedding(Gemma2RotaryEmbedding):
-    pass
-
-
 def apply_rotary_pos_emb(
     x: torch.Tensor,
     cos: torch.Tensor,
@@ -1734,21 +1729,22 @@ def apply_rotary_pos_emb(
 
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
-        super().__init__()
-        del self.attn_logit_softcapping
-        del self.scaling
-        self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
+        layer_type = config.layer_types[layer_idx]
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
         self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         # Find the index of the last sliding or full layer before sharing starts (or None if no sharing)
-        layer_type = config.layer_types[layer_idx]
         self.kv_shared_layer_index = (
             first_kv_shared_layer_idx - 1 - config.layer_types[first_kv_shared_layer_idx - 1 :: -1].index(layer_type)
             if self.is_kv_shared_layer
             else None
         )
+        self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
+        super().__init__()
+        del self.attn_logit_softcapping
+        del self.scaling
+
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1756,12 +1752,22 @@ class Gemma3nTextAttention(Gemma3Attention):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.config.head_dim)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         query_states = self.q_norm(query_states)
@@ -1841,6 +1847,8 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("position_embeddings_global", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_local", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1861,15 +1869,8 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
         active_prediction_normed = self.input_layernorm(active_prediction)
         laurel_output = self.laurel(active_prediction_normed)
 
-        # apply global RoPE to non-sliding layer only
-        if self.self_attn.is_sliding:
-            position_embeddings = position_embeddings_local
-        else:
-            position_embeddings = position_embeddings_global
-
         attn, self_attn_weights = self.self_attn(
             hidden_states=active_prediction_normed,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
@@ -1966,15 +1967,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 
         self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
         self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)
-        self.rotary_emb = Gemma3nTextRotaryEmbedding(config=config)
-
-        # TODO (raushan): Fix this after RoPE refactor. For now we hack it by
-        # reassigning thetas when we want to create a local RoPE layer. Config
-        # defaults should hold values for global RoPE.
-        config = copy.deepcopy(config)
-        config.rope_theta = config.rope_local_base_freq
-        config.rope_scaling = {"rope_type": "default"}
-        self.rotary_emb_local = Gemma3nTextRotaryEmbedding(config=config)
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
         return self.embed_tokens_per_layer(input_ids).reshape(
@@ -2085,10 +2077,6 @@ class Gemma3nTextModel(Gemma3TextModel):
         # embed positions
         hidden_states_0 = inputs_embeds
 
-        # Initialize RoPE embeddings
-        position_embeddings_global = self.rotary_emb(hidden_states_0, position_ids)
-        position_embeddings_local = self.rotary_emb_local(hidden_states_0, position_ids)
-
         # Expand hidden_states to support per-layer inputs
         target_magnitude = torch.mean(hidden_states_0**2, dim=-1, keepdim=True) ** 0.5
         epsilon_tensor = torch.tensor(1e-5)
@@ -2118,8 +2106,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings_global,
-                position_embeddings_local,
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,

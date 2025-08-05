@@ -22,6 +22,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
@@ -90,6 +91,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

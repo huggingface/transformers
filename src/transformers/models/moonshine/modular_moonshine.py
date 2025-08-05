@@ -38,6 +38,7 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
@@ -282,6 +283,10 @@ class MoonshineDecoderMLP(nn.Module):
         return hidden_states
 
 
+class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+    pass
+
+
 class MoonshineAttention(GlmAttention):
     def __init__(
         self,
@@ -304,6 +309,7 @@ class MoonshineAttention(GlmAttention):
         else:
             self.head_dim_padding = 0
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -312,6 +318,7 @@ class MoonshineAttention(GlmAttention):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
@@ -352,7 +359,15 @@ class MoonshineAttention(GlmAttention):
                 )
 
         if not is_cross_attention:
-            cos, sin = position_embeddings
+            if position_embeddings is None:
+                cos, sin = self.rotary_emb(hidden_states, position_ids)
+            else:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                    "removed in v4.60.0. Make sure to pass `position_ids` instead."
+                )
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_value is not None:
@@ -381,6 +396,7 @@ class MoonshineAttention(GlmAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             is_causal=is_causal,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -390,10 +406,6 @@ class MoonshineAttention(GlmAttention):
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
-    pass
 
 
 class MoonshineEncoderLayer(LlamaDecoderLayer):
@@ -438,6 +450,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -534,7 +547,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
         self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
-        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList(
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
@@ -591,14 +603,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -678,7 +688,6 @@ class MoonshineDecoder(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
@@ -705,7 +714,6 @@ class MoonshineDecoder(LlamaModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

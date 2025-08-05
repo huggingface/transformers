@@ -811,7 +811,6 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
         self.post_init()
 
@@ -891,9 +890,6 @@ class EvollaModel(EvollaPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -902,7 +898,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 protein_kv_states=protein_feats,
                 structure_kv_states=structure_feats,
                 msa_kv_states=msa_feats,

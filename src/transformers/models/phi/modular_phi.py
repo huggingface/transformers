@@ -19,10 +19,10 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
 )
+from ..utils.deprecation import deprecate_kwarg
 from .configuration_phi import PhiConfig
 
 
@@ -50,6 +50,7 @@ class PhiAttention(LlamaAttention):
                 config.hidden_size // config.num_attention_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -57,6 +58,7 @@ class PhiAttention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -70,7 +72,16 @@ class PhiAttention(LlamaAttention):
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_ndims],
@@ -124,6 +135,7 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -133,7 +145,7 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -162,10 +174,6 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
             outputs += (self_attn_weights,)
 
         return outputs
-
-
-class PhiRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
 
 
 class PhiModel(LlamaModel):
@@ -233,9 +241,6 @@ class PhiModel(LlamaModel):
         inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -252,7 +257,6 @@ class PhiModel(LlamaModel):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

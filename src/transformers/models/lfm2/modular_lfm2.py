@@ -24,6 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..llama.modeling_llama import (
@@ -240,6 +241,7 @@ class Lfm2Attention(LlamaAttention):
         del self.o_proj
         del self.attention_dropout
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -247,6 +249,7 @@ class Lfm2Attention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -256,7 +259,17 @@ class Lfm2Attention(LlamaAttention):
         key_states = self.k_layernorm(self.k_proj(hidden_states).view(*hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -275,6 +288,7 @@ class Lfm2Attention(LlamaAttention):
             attention_mask,
             dropout=0.0,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -402,6 +416,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -443,10 +458,8 @@ class Lfm2PreTrainedModel(LlamaPreTrainedModel):
 class Lfm2Model(LlamaModel):
     def __init__(self, config: Lfm2Config):
         super().__init__(config)
-        self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
-        del self.rotary_emv
 
     def forward(
         self,
@@ -490,7 +503,6 @@ class Lfm2Model(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -500,7 +512,6 @@ class Lfm2Model(LlamaModel):
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

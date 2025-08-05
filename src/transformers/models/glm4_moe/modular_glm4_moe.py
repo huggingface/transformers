@@ -23,7 +23,7 @@ from torch import nn
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
-from ..cohere.modeling_cohere import CohereAttention
+from ..cohere.modeling_cohere import CohereAttention, CohereRotaryEmbedding
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
@@ -255,6 +255,10 @@ class Glm4MoeConfig(PretrainedConfig):
         )
 
 
+class Glm4MoeRotaryEmbedding(CohereRotaryEmbedding):
+    pass
+
+
 class Glm4MoeAttention(CohereAttention, nn.Module):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
         nn.Module.__init__()
@@ -280,6 +284,7 @@ class Glm4MoeAttention(CohereAttention, nn.Module):
         if self.use_qk_norm:
             self.q_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm4MoeRotaryEmbedding(config=config)
 
 
 class Glm4MoeMLP(DeepseekV3MLP):

@@ -43,6 +43,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -235,7 +236,7 @@ class T5GemmaMLP(Gemma2MLP):
 
 
 class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config, device=None):
+    def __init__(self, config, device=None, layer_type=None):
         super().__init__(config, device)
 
 
@@ -401,6 +402,7 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -716,7 +718,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
@@ -725,14 +726,13 @@ class T5GemmaDecoder(T5GemmaEncoder):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings,
-                self_attn_mask_mapping[layer_module.attention_type],
-                position_ids,
-                past_key_values,
-                use_cache,
-                cache_position,
-                encoder_hidden_states,
-                cross_attn_mask_mapping["full_attention"],
+                attention_mask=self_attn_mask_mapping[layer_module.attention_type],
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=cross_attn_mask_mapping["full_attention"],
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

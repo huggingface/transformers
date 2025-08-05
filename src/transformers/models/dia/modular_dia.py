@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaRMSNorm,
@@ -214,7 +215,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -333,15 +334,17 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         self.pre_mlp_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         self_attn_cache = past_key_values
@@ -358,6 +361,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             # on inplace operations to be carried (e.g. compile)
             self_attn_cache,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
         hidden_states = residual + self_attn_output
@@ -389,7 +393,6 @@ class DiaDecoder(DiaPreTrainedModel):
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbedding(config)
-        self.rotary_embeddings = DiaRotaryEmbedding(config)
         self.layers = nn.ModuleList(
             [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -428,7 +431,6 @@ class DiaDecoder(DiaPreTrainedModel):
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -460,12 +462,12 @@ class DiaDecoder(DiaPreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states,
-                position_embeddings,
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
+                position_ids=position_ids,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]

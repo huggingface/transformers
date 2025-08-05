@@ -42,7 +42,6 @@ from ..phi3.modeling_phi3 import (
     Phi3Model,
     Phi3PreTrainedModel,
     Phi3RMSNorm,
-    Phi3RotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -1441,10 +1440,6 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
             inputs_embeds = audio_embeds
 
         return inputs_embeds
-
-
-class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
-    pass
 
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):

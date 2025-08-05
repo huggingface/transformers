@@ -35,6 +35,7 @@ from ...utils import (
     TransformersKwargs,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -286,7 +287,9 @@ class Exaone4Attention(nn.Module):
 
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = Exaone4RotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -294,6 +297,7 @@ class Exaone4Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -307,7 +311,17 @@ class Exaone4Attention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         # We use global NoPE for hybrid attention model
         if self.sliding_window is None or self.is_sliding:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -413,13 +427,10 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
 
         hidden_states = inputs_embeds
 
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for i, decoder_layer in enumerate(self.layers):
             layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping[layer_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,

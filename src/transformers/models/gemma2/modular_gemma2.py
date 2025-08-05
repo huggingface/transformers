@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -37,6 +38,7 @@ from ..gemma.modeling_gemma import (
     GemmaMLP,
     GemmaModel,
     GemmaRMSNorm,
+    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -206,6 +208,10 @@ class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
+class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
+    pass
+
+
 class Gemma2MLP(GemmaMLP):
     def __init__(self, config):
         super().__init__()
@@ -249,13 +255,17 @@ def eager_attention_forward(
 
 class Gemma2Attention(GemmaAttention):
     def __init__(self, config: Gemma2Config, layer_idx: int):
+        layer_type = config.layer_types[layer_idx]
+
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.rotary_emb = Gemma2RotaryEmbedding(config=config, layer_type=layer_type)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -273,7 +283,17 @@ class Gemma2Attention(GemmaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(hidden_states, position_ids)
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -318,6 +338,7 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

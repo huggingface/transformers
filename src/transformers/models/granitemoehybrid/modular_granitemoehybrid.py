@@ -22,6 +22,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -76,6 +77,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -86,6 +88,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -135,6 +138,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                position_ids=position_ids,
                 **kwargs,
             )
 
@@ -246,12 +250,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        position_embeddings = None
-        # create position embeddings to be shared across the decoder layers
-        if self.rotary_emb is not None:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -272,7 +270,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
-                position_embeddings=position_embeddings,
+                position_ids=position_ids,
                 **kwargs,
             )
 

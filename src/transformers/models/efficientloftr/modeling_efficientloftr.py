@@ -20,7 +20,7 @@ from torch import nn
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -28,10 +28,15 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -69,11 +74,15 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, device=None):
+    def __init__(self, config: EfficientLoFTRConfig, device=None, layer_type=None):
         super().__init__()
         self.config = config
-        self.rope_type = config.rope_scaling["rope_type"]
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = rope_scaling_dict["rope_type"]
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, _ = self.rope_init_fn(self.config, device)
         inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
@@ -87,6 +96,45 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         emb[:, :, :, 1::2] = j_indices * inv_freq_expanded
 
         self.register_buffer("inv_freq", emb, persistent=False)
+
+    def compute_default_rope_parameters(
+        self,
+        config: Optional[EfficientLoFTRConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
+            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        else:
+            rope_scaling_dict = config.rope_scaling_dict
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(
@@ -343,7 +391,9 @@ class EfficientLoFTRAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -362,9 +412,19 @@ class EfficientLoFTRAttention(nn.Module):
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states)
+            cos = cos.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, dim)
+            sin = sin.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, dim)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0."
+            )
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
         key_states = key_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -416,6 +476,7 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         self.attention = EfficientLoFTRAttention(config, layer_idx)
         self.mlp = EfficientLoFTRMLP(config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -465,6 +526,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
         self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -496,6 +558,7 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
             ]
         )
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -661,7 +724,6 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         self.config = config
         self.backbone = EfficientLoFTRepVGG(config)
         self.local_feature_transformer = EfficientLoFTRLocalFeatureTransformer(config)
-        self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
         self.post_init()
 
@@ -714,15 +776,8 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         coarse_embed_dim, coarse_height, coarse_width = coarse_features.shape[-3:]
 
         # 2. Coarse-level LoFTR module
-        cos, sin = self.rotary_emb(coarse_features)
-        cos = cos.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
-        sin = sin.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, coarse_embed_dim)
-        position_embeddings = (cos, sin)
-
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_embed_dim, coarse_height, coarse_width)
-        coarse_features = self.local_feature_transformer(
-            coarse_features, position_embeddings=position_embeddings, **kwargs
-        )
+        coarse_features = self.local_feature_transformer(coarse_features, **kwargs)
 
         features = (coarse_features,) + tuple(residual_features)
 

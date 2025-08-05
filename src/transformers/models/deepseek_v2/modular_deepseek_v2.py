@@ -22,16 +22,14 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import (
-    logging,
-)
+from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     eager_attention_forward,
@@ -362,14 +360,7 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 
 
 class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
-    def __init__(self, config: DeepseekV2Config, device=None):
-        super().__init__(config=config, device=device)
-        # BC: "rope_type" was originally "type"
-        self.rope_type = (
-            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            if config.rope_scaling is not None
-            else "default"
-        )
+    pass
 
 
 class DeepseekV2Attention(nn.Module):
@@ -421,7 +412,9 @@ class DeepseekV2Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
+        self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -453,6 +446,17 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
+        if position_embeddings is None:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
@@ -508,10 +512,6 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
-class DeepseekV2Model(LlamaModel):
-    pass
-
-
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
     pass
 
@@ -522,7 +522,7 @@ class DeepseekV2ForSequenceClassification(LlamaForSequenceClassification):
 
 __all__ = [
     "DeepseekV2PreTrainedModel",
-    "DeepseekV2Model",
+    "DeepseekV2Model",  # noqa: F822
     "DeepseekV2ForCausalLM",
     "DeepseekV2ForSequenceClassification",
     "DeepseekV2Config",

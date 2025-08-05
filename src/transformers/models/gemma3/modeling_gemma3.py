@@ -315,6 +315,7 @@ class Gemma3Attention(nn.Module):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        layer_type = config.layer_types[layer_idx]
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -335,7 +336,6 @@ class Gemma3Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        layer_type = config.layer_types[layer_idx]
         self.rotary_emb = Gemma3RotaryEmbedding(config=config, layer_type=layer_type)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if self.is_sliding else None
@@ -418,6 +418,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

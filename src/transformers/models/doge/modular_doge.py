@@ -32,7 +32,8 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
@@ -46,6 +47,8 @@ from ..llama.modeling_llama import (
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -356,7 +359,9 @@ class DogeAttention(nn.Module):
         )
         self.q_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = DogeRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -364,6 +369,7 @@ class DogeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -373,7 +379,17 @@ class DogeAttention(nn.Module):
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -525,6 +541,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
         self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

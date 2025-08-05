@@ -2063,7 +2063,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
+    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None, layer_type=None):
         super().__init__(config, device)
 
 
