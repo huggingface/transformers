@@ -675,7 +675,7 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
-        outpus = outputs.to_local()  # otherwise the `+=` op will gather
+        outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
             outputs += mod._bias
         # back to local tensor if use_local_output is True
