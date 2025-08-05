@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# FP-Quant
+# FP-Quant[[fp-quant]]
 
 [FP-Quant](https://github.com/IST-DASLab/FP-Quant)는 **Nvidia Blackwell 세대 GPU**에 최적화된 양자화(Quantization) 알고리즘 모음입니다. 목적은 [MXFP4 및 NVFP4 데이터 타입](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf)에서 대규모 언어 모델(LLM)에 대해 효율적인 사후 학습 양자화(PTQ)와 양자화 인지 학습(QAT)을 제공하는 것입니다.
 
