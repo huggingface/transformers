@@ -7,15 +7,376 @@
             "tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation"
         ]
     },
-
+    "cohere2_vision": {
+        "single-gpu": [
+            "tests/models/cohere2_vision/test_modeling_cohere2_vision.py::Cohere2ModelTest::test_sdpa_can_dispatch_on_flash"
+        ],
+        "multi-gpu": []
+    },
+    "conditional_detr": {
+        "single-gpu": [
+            "tests/models/conditional_detr/test_modeling_conditional_detr.py::ConditionalDetrModelIntegrationTests::test_inference_object_detection_head"
+        ],
+        "multi-gpu": [
+            "tests/models/conditional_detr/test_modeling_conditional_detr.py::ConditionalDetrModelIntegrationTests::test_inference_object_detection_head"
+        ]
+    },
+    "d_fine": {
+        "single-gpu": [
+            "tests/models/d_fine/test_modeling_d_fine.py::DFineModelIntegrationTest::test_inference_object_detection_head"
+        ],
+        "multi-gpu": [
+            "tests/models/d_fine/test_modeling_d_fine.py::DFineModelIntegrationTest::test_inference_object_detection_head"
+        ]
+    },
+    "dab_detr": {
+        "single-gpu": [
+            "tests/models/dab_detr/test_modeling_dab_detr.py::DabDetrModelIntegrationTests::test_inference_no_head"
+        ],
+        "multi-gpu": [
+            "tests/models/dab_detr/test_modeling_dab_detr.py::DabDetrModelIntegrationTests::test_inference_no_head"
+        ]
+    },
+    "dac": {
+        "single-gpu": [
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_0_dac_16khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_1_dac_24khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_2_dac_44khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_0_dac_16khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_1_dac_24khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_2_dac_44khz"
+        ],
+        "multi-gpu": [
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_0_dac_16khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_1_dac_24khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_2_dac_44khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_0_dac_16khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_1_dac_24khz",
+            "tests/models/dac/test_modeling_dac.py::DacIntegrationTest::test_integration_batch_2_dac_44khz"
+        ]
+    },
+    "deformable_detr": {
+        "single-gpu": [
+            "tests/models/deformable_detr/test_modeling_deformable_detr.py::DeformableDetrModelIntegrationTests::test_inference_object_detection_head",
+            "tests/models/deformable_detr/test_modeling_deformable_detr.py::DeformableDetrModelIntegrationTests::test_inference_object_detection_head_with_box_refine_two_stage"
+        ],
+        "multi-gpu": [
+            "tests/models/deformable_detr/test_modeling_deformable_detr.py::DeformableDetrModelIntegrationTests::test_inference_object_detection_head",
+            "tests/models/deformable_detr/test_modeling_deformable_detr.py::DeformableDetrModelIntegrationTests::test_inference_object_detection_head_with_box_refine_two_stage"
+        ]
+    },
+    "detr": {
+        "single-gpu": [
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_no_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_object_detection_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_panoptic_segmentation_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTests::test_inference_no_head"
+        ],
+        "multi-gpu": [
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_no_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_object_detection_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTestsTimmBackbone::test_inference_panoptic_segmentation_head",
+            "tests/models/detr/test_modeling_detr.py::DetrModelIntegrationTests::test_inference_no_head"
+        ]
+    },
+    "dpt": {
+        "single-gpu": [
+            "tests/models/dpt/test_modeling_dpt.py::DPTModelIntegrationTest::test_inference_depth_estimation"
+        ],
+        "multi-gpu": [
+            "tests/models/dpt/test_modeling_dpt.py::DPTModelIntegrationTest::test_inference_depth_estimation"
+        ]
+    },
     "encodec": {
         "single-gpu": [
             "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_0_encodec_24khz_1p5",
-            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0"
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_2_encodec_24khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_3_encodec_24khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_4_encodec_24khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_5_encodec_48khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_6_encodec_48khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_7_encodec_48khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_8_encodec_48khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_0_encodec_24khz_1p5",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_1_encodec_24khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_2_encodec_24khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_3_encodec_24khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_4_encodec_24khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_5_encodec_48khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_6_encodec_48khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_7_encodec_48khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_8_encodec_48khz_24p0"
         ],
         "multi-gpu": [
             "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_0_encodec_24khz_1p5",
-            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0"
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_1_encodec_24khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_2_encodec_24khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_3_encodec_24khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_4_encodec_24khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_5_encodec_48khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_6_encodec_48khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_7_encodec_48khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_batch_8_encodec_48khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_0_encodec_24khz_1p5",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_1_encodec_24khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_2_encodec_24khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_3_encodec_24khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_4_encodec_24khz_24p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_5_encodec_48khz_3p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_6_encodec_48khz_6p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_7_encodec_48khz_12p0",
+            "tests/models/encodec/test_modeling_encodec.py::EncodecIntegrationTest::test_integration_8_encodec_48khz_24p0"
+        ]
+    },
+    "evolla": {
+        "single-gpu": [
+            "tests/models/evolla/test_modeling_evolla.py::EvollaModelTest::test_disk_offload_bin"
+        ],
+        "multi-gpu": []
+    },
+    "fastspeech2_conformer": {
+        "single-gpu": [
+            "tests/models/fastspeech2_conformer/test_modeling_fastspeech2_conformer.py::FastSpeech2ConformerModelIntegrationTest::test_inference_integration"
+        ],
+        "multi-gpu": [
+            "tests/models/fastspeech2_conformer/test_modeling_fastspeech2_conformer.py::FastSpeech2ConformerModelIntegrationTest::test_inference_integration"
+        ]
+    },
+    "gemma3n": {
+        "single-gpu": [],
+        "multi-gpu": [
+            "tests/models/gemma3n/test_modeling_gemma3n.py::Gemma3nTextModelTest::test_eager_padding_matches_padding_free_with_position_ids"
+        ]
+    },
+    "granite_speech": {
+        "single-gpu": [
+            "tests/models/granite_speech/test_processing_granite_speech.py::GraniteSpeechProcessorTest::test_device_override"
+        ],
+        "multi-gpu": [
+            "tests/models/granite_speech/test_processing_granite_speech.py::GraniteSpeechProcessorTest::test_device_override"
+        ]
+    },
+    "grounding_dino": {
+        "single-gpu": [
+            "tests/models/grounding_dino/test_modeling_grounding_dino.py::GroundingDinoModelIntegrationTests::test_inference_object_detection_head"
+        ],
+        "multi-gpu": [
+            "tests/models/grounding_dino/test_modeling_grounding_dino.py::GroundingDinoModelIntegrationTests::test_inference_object_detection_head"
+        ]
+    },
+    "layoutlmv2": {
+        "single-gpu": [
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorTest::test_overflowing_tokens",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_1",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_4",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_5"
+        ],
+        "multi-gpu": [
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorTest::test_overflowing_tokens",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_1",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_4",
+            "tests/models/layoutlmv2/test_processing_layoutlmv2.py::LayoutLMv2ProcessorIntegrationTests::test_processor_case_5"
+        ]
+    },
+    "layoutxlm": {
+        "single-gpu": [
+            "tests/models/layoutxlm/test_processing_layoutxlm.py::LayoutXLMProcessorTest::test_overflowing_tokens"
+        ],
+        "multi-gpu": [
+            "tests/models/layoutxlm/test_processing_layoutxlm.py::LayoutXLMProcessorTest::test_overflowing_tokens"
+        ]
+    },
+    "levit": {
+        "single-gpu": [
+            "tests/models/levit/test_modeling_levit.py::LevitModelIntegrationTest::test_inference_image_classification_head"
+        ],
+        "multi-gpu": [
+            "tests/models/levit/test_modeling_levit.py::LevitModelIntegrationTest::test_inference_image_classification_head"
+        ]
+    },
+    "mask2former": {
+        "single-gpu": [
+            "tests/models/mask2former/test_modeling_mask2former.py::Mask2FormerModelIntegrationTest::test_inference_universal_segmentation_head"
+        ],
+        "multi-gpu": [
+            "tests/models/mask2former/test_modeling_mask2former.py::Mask2FormerModelIntegrationTest::test_inference_universal_segmentation_head"
+        ]
+    },
+    "maskformer": {
+        "single-gpu": [
+            "tests/models/maskformer/test_modeling_maskformer.py::MaskFormerModelIntegrationTest::test_inference_instance_segmentation_head",
+            "tests/models/maskformer/test_modeling_maskformer.py::MaskFormerModelIntegrationTest::test_inference_instance_segmentation_head_resnet_backbone"
+        ],
+        "multi-gpu": [
+            "tests/models/maskformer/test_modeling_maskformer.py::MaskFormerModelIntegrationTest::test_inference_instance_segmentation_head",
+            "tests/models/maskformer/test_modeling_maskformer.py::MaskFormerModelIntegrationTest::test_inference_instance_segmentation_head_resnet_backbone"
+        ]
+    },
+    "mllama": {
+        "single-gpu": [
+            "tests/models/mllama/test_modeling_mllama.py::MllamaForConditionalGenerationModelTest::test_sdpa_padding_matches_padding_free_with_position_ids"
+        ],
+        "multi-gpu": []
+    },
+    "mobilenet_v1": {
+        "single-gpu": [
+            "tests/models/mobilenet_v1/test_modeling_mobilenet_v1.py::MobileNetV1ModelIntegrationTest::test_inference_image_classification_head"
+        ],
+        "multi-gpu": [
+            "tests/models/mobilenet_v1/test_modeling_mobilenet_v1.py::MobileNetV1ModelIntegrationTest::test_inference_image_classification_head"
+        ]
+    },
+    "mobilenet_v2": {
+        "single-gpu": [
+            "tests/models/mobilenet_v2/test_modeling_mobilenet_v2.py::MobileNetV2ModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilenet_v2/test_modeling_mobilenet_v2.py::MobileNetV2ModelIntegrationTest::test_inference_semantic_segmentation"
+        ],
+        "multi-gpu": [
+            "tests/models/mobilenet_v2/test_modeling_mobilenet_v2.py::MobileNetV2ModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilenet_v2/test_modeling_mobilenet_v2.py::MobileNetV2ModelIntegrationTest::test_inference_semantic_segmentation"
+        ]
+    },
+    "mobilevit": {
+        "single-gpu": [
+            "tests/models/mobilevit/test_modeling_mobilevit.py::MobileViTModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilevit/test_modeling_mobilevit.py::MobileViTModelIntegrationTest::test_inference_semantic_segmentation"
+        ],
+        "multi-gpu": [
+            "tests/models/mobilevit/test_modeling_mobilevit.py::MobileViTModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilevit/test_modeling_mobilevit.py::MobileViTModelIntegrationTest::test_inference_semantic_segmentation"
+        ]
+    },
+    "mobilevitv2": {
+        "single-gpu": [
+            "tests/models/mobilevitv2/test_modeling_mobilevitv2.py::MobileViTV2ModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilevitv2/test_modeling_mobilevitv2.py::MobileViTV2ModelIntegrationTest::test_inference_semantic_segmentation"
+        ],
+        "multi-gpu": [
+            "tests/models/mobilevitv2/test_modeling_mobilevitv2.py::MobileViTV2ModelIntegrationTest::test_inference_image_classification_head",
+            "tests/models/mobilevitv2/test_modeling_mobilevitv2.py::MobileViTV2ModelIntegrationTest::test_inference_semantic_segmentation"
+        ]
+    },
+    "moonshine": {
+        "single-gpu": [
+            "tests/models/moonshine/test_modeling_moonshine.py::MoonshineModelIntegrationTests::test_tiny_logits_batch"
+        ],
+        "multi-gpu": [
+            "tests/models/moonshine/test_modeling_moonshine.py::MoonshineModelIntegrationTests::test_tiny_logits_batch"
+        ]
+    },
+    "oneformer": {
+        "single-gpu": [
+            "tests/models/oneformer/test_modeling_oneformer.py::OneFormerModelIntegrationTest::test_inference_no_head",
+            "tests/models/oneformer/test_modeling_oneformer.py::OneFormerModelIntegrationTest::test_inference_universal_segmentation_head"
+        ],
+        "multi-gpu": [
+            "tests/models/oneformer/test_modeling_oneformer.py::OneFormerModelIntegrationTest::test_inference_no_head",
+            "tests/models/oneformer/test_modeling_oneformer.py::OneFormerModelIntegrationTest::test_inference_universal_segmentation_head"
+        ]
+    },
+    "poolformer": {
+        "single-gpu": [
+            "tests/models/poolformer/test_modeling_poolformer.py::PoolFormerModelIntegrationTest::test_inference_image_classification_head"
+        ],
+        "multi-gpu": [
+            "tests/models/poolformer/test_modeling_poolformer.py::PoolFormerModelIntegrationTest::test_inference_image_classification_head"
+        ]
+    },
+    "pvt": {
+        "single-gpu": [
+            "tests/models/pvt/test_modeling_pvt.py::PvtModelIntegrationTest::test_inference_model"
+        ],
+        "multi-gpu": [
+            "tests/models/pvt/test_modeling_pvt.py::PvtModelIntegrationTest::test_inference_model"
+        ]
+    },
+    "regnet": {
+        "single-gpu": [
+            "tests/models/regnet/test_modeling_regnet.py::RegNetModelIntegrationTest::test_inference_image_classification_head"
+        ],
+        "multi-gpu": [
+            "tests/models/regnet/test_modeling_regnet.py::RegNetModelIntegrationTest::test_inference_image_classification_head"
+        ]
+    },
+    "resnet": {
+        "single-gpu": [
+            "tests/models/resnet/test_modeling_resnet.py::ResNetModelIntegrationTest::test_inference_image_classification_head"
+        ],
+        "multi-gpu": [
+            "tests/models/resnet/test_modeling_resnet.py::ResNetModelIntegrationTest::test_inference_image_classification_head"
+        ]
+    },
+    "rt_detr": {
+        "single-gpu": [
+            "tests/models/rt_detr/test_modeling_rt_detr.py::RTDetrModelIntegrationTest::test_inference_object_detection_head"
+        ],
+        "multi-gpu": [
+            "tests/models/rt_detr/test_modeling_rt_detr.py::RTDetrModelIntegrationTest::test_inference_object_detection_head"
+        ]
+    },
+    "rt_detr_v2": {
+        "single-gpu": [
+            "tests/models/rt_detr_v2/test_modeling_rt_detr_v2.py::RTDetrV2ModelIntegrationTest::test_inference_object_detection_head"
+        ],
+        "multi-gpu": [
+            "tests/models/rt_detr_v2/test_modeling_rt_detr_v2.py::RTDetrV2ModelIntegrationTest::test_inference_object_detection_head"
+        ]
+    },
+    "sam": {
+        "single-gpu": [
+            "tests/models/sam/test_modeling_sam.py::SamModelIntegrationTest::test_inference_mask_generation_one_point_one_bb"
+        ],
+        "multi-gpu": [
+            "tests/models/sam/test_modeling_sam.py::SamModelIntegrationTest::test_inference_mask_generation_one_point_one_bb"
+        ]
+    },
+    "timesformer": {
+        "single-gpu": [
+            "tests/models/timesformer/test_modeling_timesformer.py::TimesformerModelIntegrationTest::test_inference_for_video_classification"
+        ],
+        "multi-gpu": [
+            "tests/models/timesformer/test_modeling_timesformer.py::TimesformerModelIntegrationTest::test_inference_for_video_classification"
+        ]
+    },
+    "udop": {
+        "single-gpu": [
+            "tests/models/udop/test_processing_udop.py::UdopProcessorTest::test_overflowing_tokens"
+        ],
+        "multi-gpu": [
+            "tests/models/udop/test_processing_udop.py::UdopProcessorTest::test_overflowing_tokens"
+        ]
+    },
+    "upernet": {
+        "single-gpu": [
+            "tests/models/upernet/test_modeling_upernet.py::UperNetModelIntegrationTest::test_inference_swin_backbone"
+        ],
+        "multi-gpu": [
+            "tests/models/upernet/test_modeling_upernet.py::UperNetModelIntegrationTest::test_inference_swin_backbone"
+        ]
+    },
+    "vivit": {
+        "single-gpu": [
+            "tests/models/vivit/test_modeling_vivit.py::VivitModelIntegrationTest::test_inference_for_video_classification"
+        ],
+        "multi-gpu": [
+            "tests/models/vivit/test_modeling_vivit.py::VivitModelIntegrationTest::test_inference_for_video_classification"
+        ]
+    },
+    "wav2vec2_with_lm": {
+        "single-gpu": [
+            "tests/models/wav2vec2_with_lm/test_processing_wav2vec2_with_lm.py::Wav2Vec2ProcessorWithLMTest::test_word_time_stamp_integration"
+        ],
+        "multi-gpu": [
+            "tests/models/wav2vec2_with_lm/test_processing_wav2vec2_with_lm.py::Wav2Vec2ProcessorWithLMTest::test_word_time_stamp_integration"
+        ]
+    },
+    "x_clip": {
+        "single-gpu": [
+            "tests/models/x_clip/test_modeling_x_clip.py::XCLIPModelIntegrationTest::test_inference_interpolate_pos_encoding"
+        ],
+        "multi-gpu": [
+            "tests/models/x_clip/test_modeling_x_clip.py::XCLIPModelIntegrationTest::test_inference_interpolate_pos_encoding"
         ]
     }
 }
