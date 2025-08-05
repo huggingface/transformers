@@ -16,6 +16,8 @@
 import inspect
 import unittest
 
+import pytest
+
 from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available

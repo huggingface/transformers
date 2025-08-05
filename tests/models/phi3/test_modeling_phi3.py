@@ -16,6 +16,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import Phi3Config, StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.testing_utils import (

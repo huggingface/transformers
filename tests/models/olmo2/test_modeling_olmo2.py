@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 

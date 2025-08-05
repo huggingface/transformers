@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available

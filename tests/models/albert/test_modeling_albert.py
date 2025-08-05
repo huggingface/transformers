@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available

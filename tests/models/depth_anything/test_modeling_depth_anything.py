@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4

@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available

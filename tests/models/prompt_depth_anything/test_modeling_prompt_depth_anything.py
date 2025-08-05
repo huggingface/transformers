@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import requests
 
 from transformers import Dinov2Config, PromptDepthAnythingConfig

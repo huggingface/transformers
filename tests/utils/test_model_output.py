@@ -17,6 +17,8 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+import pytest
+
 from transformers import AlbertForMaskedLM
 from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput, is_torch_available

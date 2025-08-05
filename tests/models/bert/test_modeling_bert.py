@@ -15,6 +15,7 @@ import os
 import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, BertConfig, is_torch_available
