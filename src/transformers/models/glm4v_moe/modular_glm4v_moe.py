@@ -20,6 +20,7 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -47,7 +48,7 @@ class Glm4v_moeVisionConfig(Glm4vVisionConfig):
     pass
 
 
-class Glm4v_moeTextConfig(Glm4MoeConfig):
+class Glm4v_moeTextConfig(Glm4MoeConfig, nn.Module):
     r"""
     This is the configuration class to store the configuration of a [`Glm4v_moeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -171,18 +172,72 @@ class Glm4v_moeTextConfig(Glm4MoeConfig):
     def __init__(
         self,
         vocab_size=151424,
+        hidden_size=4096,
+        intermediate_size=10944,
+        num_hidden_layers=46,
+        num_attention_heads=96,
+        partial_rotary_factor=0.5,
+        num_key_value_heads=8,
+        hidden_act="silu",
         max_position_embeddings=65536,
+        initializer_range=0.02,
+        rms_norm_eps=1e-5,
+        use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
         attention_bias=True,
-        **super_kwargs,
+        attention_dropout=0.0,
+        moe_intermediate_size=1408,
+        num_experts_per_tok=8,
+        n_shared_experts=1,
+        n_routed_experts=128,
+        routed_scaling_factor=1.0,
+        n_group=1,
+        topk_group=1,
+        first_k_dense_replace=1,
+        norm_topk_prob=True,
+        use_qk_norm=False,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        nn.Module().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.partial_rotary_factor = partial_rotary_factor
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self, ignore_keys={"mrope_section"})
+
+        # MoE arguments
+        self.moe_intermediate_size = moe_intermediate_size
+        self.num_experts_per_tok = num_experts_per_tok
+        self.n_group = n_group
+        self.topk_group = topk_group
+        self.n_shared_experts = n_shared_experts
+        self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
+        self.first_k_dense_replace = first_k_dense_replace
+        self.norm_topk_prob = norm_topk_prob
+        self.use_qk_norm = use_qk_norm
 
 
 class Glm4v_moeConfig(Glm4vConfig):
