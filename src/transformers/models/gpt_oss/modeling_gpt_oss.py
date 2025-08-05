@@ -242,13 +242,12 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
 
     # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
     # when training with bsz>1 we clamp max values.
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
 
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     scores = probs[..., :-1]  # we drop the sink here
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
@@ -392,6 +391,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _supports_flash_attention = False
     _supports_flex_attention = False
 
     def _init_weights(self, module):

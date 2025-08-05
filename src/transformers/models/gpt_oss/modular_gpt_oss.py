@@ -210,8 +210,11 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
+    # when training with bsz>1 we clamp max values.
+
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     scores = probs[..., :-1]  # we drop the sink here
@@ -330,6 +333,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _supports_sdpa = False
+    _supports_flash_attention = False
     _supports_flex_attention = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
@@ -343,6 +347,8 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.Parameter):
+            module.data.normal_(mean=0.0, std=std)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -356,6 +362,9 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
             module.down_proj_bias.data.zero_()
         elif isinstance(module, GptOssAttention):
             module.sinks.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, GptOssTopKRouter):
+            module.weight.data.normal_(mean=0.0, std=std)
+            module.bias.data.normal_(mean=0.0, std=std)
 
 
 class GptOssModel(MixtralModel):
