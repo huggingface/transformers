@@ -245,7 +245,7 @@ class Qwen2_5_VLVisionAttention(nn.Module):
 
         if self.config._attn_implementation == "flash_attention_2":
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1190,6 +1190,46 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor = None,
+        video_features: torch.FloatTensor = None,
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+            )
+
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
+            raise ValueError(
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+            )
+
+        return special_image_mask, special_video_mask
+
     @auto_docstring
     def forward(
         self,
@@ -1233,47 +1273,18 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = torch.cat(image_embeds, dim=0)
-
-            if input_ids is None:
-                image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_mask = image_mask.all(-1)
-            else:
-                image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (image_mask).sum()
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            n_image_features = image_embeds.shape[0]
-            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-            video_embeds = torch.cat(video_embeds, dim=0)
-
-            if input_ids is None:
-                video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                video_mask = video_mask.all(-1)
-            else:
-                video_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (video_mask).sum()
-            n_video_features = video_embeds.shape[0]
-            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:

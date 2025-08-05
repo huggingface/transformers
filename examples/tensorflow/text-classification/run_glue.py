@@ -46,7 +46,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.56.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -495,7 +495,7 @@ def main():
 
         # region Training and validation
         if training_args.do_train:
-            if training_args.do_eval and not data_args.task_name == "mnli":
+            if training_args.do_eval and data_args.task_name != "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
                 validation_data = tf_data["validation"]
