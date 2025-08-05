@@ -22,7 +22,8 @@ from transformers.image_transforms import to_channel_dimension_format
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    BatchFeature, logger
+    BatchFeature, logger,
+    group_images_by_shape, reorder_images
 )
 from ...processing_utils import Unpack
 from ...image_utils import (
@@ -111,92 +112,87 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
         resample: PILImageResampling,
         do_normalize: bool,
         do_color_quantize: Optional[bool],
         clusters: Optional[Union[list[list[int]], np.ndarray]],
         return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: Optional[bool],
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ) -> BatchFeature:
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
-        clusters = np.array(clusters)
 
-        images = make_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need iamge_mean and image_std.
-        validate_preprocess_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
+        # 1. Setup. Validate ImageGPT-specific requirements
+        # Check for do_color_quantize and clusters.
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
 
+        # Clusters come in np arrays. Convert to torch tensors.
+        if clusters is not None:
+            cluster_tensors = torch.tensor(clusters, dtype=torch.float32)
+        if images[0].is_cuda:
+            # if image is stored on a CUDA GPA, convert tensors to CUDA
+            cluster_tensors = cluster_tensors.cuda()
 
-        # TODO:
+        # 2. Group images into batches of the same shape for more efficient processing.
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        unordered_processed_images = {}
 
-        # Resize to specific size
+        # Loop through shapes and stacked images
+        for shape, stacked_images in grouped_images.items():
+            # Resize to specific sizes (if do_resize is specified)
+            if do_resize:
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=size,
+                    interpolation=interpolation
+                )
 
-        # Normalize pixel values
+            # Normalize pixel values (if do_normalize is specified)
+            if do_normalize:
+                stacked_images = stacked_images.float()
+                stacked_images = (stacked_images / 127.5) - 1.0
 
-        # Optionally color quantize into clusters
+            unordered_processed_images[shape] = stacked_images
 
-        # Return processed images in a specified tensor format
+        # 3. Reorder and maintain original image order after processing into batches
+        processed_images = reorder_images(unordered_processed_images, grouped_images_index)
 
-        if do_normalize and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
-                "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_normalize:
-            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
-
+        # 4. Color quantize if specified
         if do_color_quantize:
-            images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
-            # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
-            images = np.array(images)
-            images = color_quantize_fast(images, clusters).reshape(images.shape[:-1])
+            quantized_images = []
+            for image in processed_images:
+                # Convert CHW to HWC for quantization
+                image_hwc = image.permute(1, 2, 0)  # (H, W, C)
 
-            # flatten to (batch_size, height*width)
-            batch_size = images.shape[0]
-            images = images.reshape(batch_size, -1)
+                # Denormalize back to [0, 255] for quantization
+                image_hwc = (image_hwc + 1.0) * 127.5
+                image_hwc = torch.clamp(image_hwc, 0, 255)
 
-            # We need to convert back to a list of images to keep consistent behaviour across processors.
-            images = list(images)
+                # Fast torch-based color quantization
+                quantized = self._color_quantize_torch(image_hwc, cluster_tensors)
+
+                # Flatten to sequence (H*W,)
+                quantized_flat = quantized.view(-1)
+                quantized_images.append(quantized_flat)
+
+            # Stack all quantized sequences
+            input_ids = torch.stack(quantized_images, dim=0)
+
+            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors)
         else:
-            images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                for image in images
-            ]
-
-        data = {"input_ids": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        # 5. Standard output without quantizing
+            pixel_values = torch.stack(processed_images, dim=0)
+            return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 __all__ = ["ImageGPTImageProcessorFast"]
