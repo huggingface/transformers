@@ -59,7 +59,7 @@ model = AutoModelForCausalLM.from_pretrained(
 model.forward = torch.compile(model.forward, mode="max-autotune", fullgraph=True)
 ```
 
-## 속도 향상(Speedups)
+## 속도 향상(Speedups)[[speedups]]
 
 FP-Quant는 **매우 큰 배치(batch) 크기**에서 최고의 성능을 발휘합니다.
 
