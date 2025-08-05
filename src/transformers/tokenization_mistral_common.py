@@ -332,7 +332,38 @@ class MistralCommonTokenizer(PushToHubMixin):
         String associated to the padding token in the vocabulary.
         """
         return self.convert_ids_to_tokens(self.pad_token_id)
+    
+    @property
+    def pad_token(self) -> str:
+        """
+        String associated to the padding token in the vocabulary.
+        """
+        return self.convert_ids_to_tokens(self.pad_token_id)
 
+    @property
+    def all_special_ids(self) -> list[int]:
+        """
+        List of all special token ids.
+        For compatibility with vLLM and other frameworks.
+        """
+        return list(self._all_special_ids())
+
+    @property  
+    def all_special_tokens(self) -> list[str]:
+        """
+        List of all special tokens as strings.
+        For compatibility with vLLM and other frameworks.
+        """
+        return self.convert_ids_to_tokens(self.all_special_ids, skip_special_tokens=False)
+
+    @property
+    def all_special_tokens_extended(self) -> list[str]:
+        """  
+        List of all special tokens including user-defined ones.
+        For compatibility with vLLM and other frameworks.
+        """
+        return self.all_special_tokens.copy()
+    
     @property
     def vocab_size(self) -> int:
         """
