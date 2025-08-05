@@ -202,8 +202,8 @@ class ProcessorTesterMixin:
         processor_first = self.get_processor()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            # Save with `save_attributes=True` so that all attrbiutes are saved in one json file
-            saved_files = processor_first.save_pretrained(tmpdirname, save_attributes=True)
+            # Save with `legacy_serialization=True` so that all attrbiutes are saved in one json file
+            saved_files = processor_first.save_pretrained(tmpdirname, legacy_serialization=True)
             check_json_file_has_correct_format(saved_files[0])
 
             # Load it back and check if loaded correctly

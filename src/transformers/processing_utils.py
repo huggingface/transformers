@@ -576,7 +576,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return proper_class
 
-    def to_dict(self, save_attributes=False) -> dict[str, Any]:
+    def to_dict(self, legacy_serialization=False) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -592,7 +592,7 @@ class ProcessorMixin(PushToHubMixin):
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if not save_attributes:
+        if not legacy_serialization:
             # Don't save attributes like `tokenizer`, `image processor` etc.
             attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
 
@@ -603,10 +603,12 @@ class ProcessorMixin(PushToHubMixin):
             del output["tokenizer"]
         if "qformer_tokenizer" in output:
             del output["qformer_tokenizer"]
+        if "protein_tokenizer" in output:
+            del output["protein_tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
 
-        if save_attributes and "audio_tokenizer" in output:
+        if legacy_serialization and "audio_tokenizer" in output:
             audio_tokenizer_dict = {
                 "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
                 "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
@@ -616,25 +618,25 @@ class ProcessorMixin(PushToHubMixin):
 
         # Some attributes have different names but containing objects that are not simple strings
         output = {k: v for k, v in output.items() if not v.__class__.__name__ == "BeamSearchDecoderCTC"}
-        if not save_attributes:
+        if not legacy_serialization:
             output = {k: v for k, v in output.items() if not isinstance(v, PushToHubMixin)}
 
         # Serialize attributes as a dict
         output = {k: v.to_dict() if isinstance(v, PushToHubMixin) else v for k, v in output.items()}
         return output
 
-    def to_json_string(self, save_attributes=False) -> str:
+    def to_json_string(self, legacy_serialization=False) -> str:
         """
         Serializes this instance to a JSON string.
 
         Returns:
             `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
         """
-        dictionary = self.to_dict(save_attributes=save_attributes)
+        dictionary = self.to_dict(legacy_serialization=legacy_serialization)
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], save_attributes=False):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=False):
         """
         Save this instance to a JSON file.
 
@@ -643,14 +645,14 @@ class ProcessorMixin(PushToHubMixin):
                 Path to the JSON file in which this processor instance's parameters will be saved.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string(save_attributes=save_attributes))
+            writer.write(self.to_json_string(legacy_serialization=legacy_serialization))
 
     def __repr__(self):
         attributes_repr = [f"- {name}: {repr(getattr(self, name))}" for name in self.attributes]
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, save_attributes: bool = False, **kwargs):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -671,7 +673,7 @@ class ProcessorMixin(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            save_attributes (`bool`, *optional*, defaults to `False`):
+            legacy_serialization (`bool`, *optional*, defaults to `False`):
                 Whether or not to save processor attributes in processor's config files as a nested dict. Saving all attributes
                 in a single dict will become the default in future versions, set to `False` until then.
             kwargs (`dict[str, Any]`, *optional*):
@@ -716,7 +718,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            elif not save_attributes:
+            elif not legacy_serialization:
                 attribute = getattr(self, attribute_name)
                 # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
                 if hasattr(attribute, "_set_processor_class"):
@@ -779,7 +781,7 @@ class ProcessorMixin(PushToHubMixin):
                     "separate files using the `save_jinja_files` argument."
                 )
 
-        if not save_attributes:
+        if not legacy_serialization:
             output_audio_tokenizer_file = os.path.join(save_directory, AUDIO_TOKENIZER_NAME)
             processor_dict = self.to_dict()
 
@@ -809,7 +811,7 @@ class ProcessorMixin(PushToHubMixin):
         # NOTE: this will become the default way to save all processor attrbiutes in future versions. Toggled off for now to give
         # us time for smoother transition
         else:
-            self.to_json_file(output_processor_file, save_attributes=True)
+            self.to_json_file(output_processor_file, legacy_serialization=True)
             logger.info(f"processor saved in {output_processor_file}")
             return_files = [output_processor_file]
 
