@@ -7,7 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 from packaging import version
@@ -1359,8 +1359,8 @@ class DynamicCache(Cache):
 
 if is_torch_greater_or_equal("2.3"):
 
-    def _get_cache_dict(cache: DynamicCache):
-        if any(not isinstance(layer, DynamicLayer) for layer in cache.layers):
+    def _get_cache_dict(cache: DynamicCache, layer_cls: Callable):
+        if any(not isinstance(layer, layer_cls) for layer in cache.layers):
             raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
         if not is_torch_greater_or_equal_than_2_6:
@@ -1373,12 +1373,13 @@ if is_torch_greater_or_equal("2.3"):
             "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
         }
 
-    def _unflatten_dynamic_cache(
+    def _unflatten_cache(
         values,
         context: torch.utils._pytree.Context,
+        cls: type[Cache],
     ):
         dictionary = torch.utils._pytree._dict_unflatten(values, context)
-        cache = DynamicCache()
+        cache = cls(dictionary)
         # Reconstruct layers from keys and values lists
         key_list = dictionary.get("key_cache", [])
         value_list = dictionary.get("value_cache", [])
@@ -1388,18 +1389,19 @@ if is_torch_greater_or_equal("2.3"):
             cache.update(key, value, idx)
         return cache
 
+
     torch.utils._pytree.register_pytree_node(
         DynamicCache,
-        lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache)),
-        _unflatten_dynamic_cache,
+        lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache, DynamicLayer)),
+        lambda values, context: _unflatten_cache(values, context, lambda values: DynamicCache()),
         serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
         flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-            _get_cache_dict(dynamic_cache)
+            _get_cache_dict(dynamic_cache, DynamicLayer)
         ),
     )
     # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
     torch.fx._pytree.register_pytree_flatten_spec(
-        DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec)
+        DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache, DynamicLayer), spec)
     )
 
 
@@ -1449,6 +1451,49 @@ class StaticCache(Cache):
 
     def __init__(self, *args, **kwargs):
         super().__init__(layer_classes=StaticLayer, *args, **kwargs)
+
+if is_torch_greater_or_equal("2.3"):
+
+    def make_static_cache(dictionary: Dict[str, List[torch.Tensor]]) -> StaticCache:
+        keys = dictionary["key_cache"]
+        values = dictionary["value_cache"]
+
+        class _config:
+            def __init__(self):
+                self.head_dim = keys[0].shape[-1]
+                self.num_attention_heads = keys[0].shape[1]
+                self.num_hidden_layers = len(keys)
+
+        max_cache_len=values[0].shape[2]
+        torch._check(
+            max_cache_len >= keys[0].shape[2],
+            (
+                f"max_cache_len={max_cache_len} cannot be smaller "
+                f"shape[2]={keys[0].shape[2]} in shape "
+                f"{keys[0].shape}"
+            ),
+        )
+        return StaticCache(
+            config=_config(),
+            max_batch_size=keys[0].shape[0],
+            device=keys[0].device,
+            dtype=keys[0].dtype,
+            max_cache_len=max_cache_len,
+        )
+
+    torch.utils._pytree.register_pytree_node(
+        StaticCache,
+        lambda cache: torch.utils._pytree._dict_flatten(_get_cache_dict(cache, StaticLayer)),
+        lambda values, context: _unflatten_cache(values, context, make_static_cache),
+        serialized_type_name=f"{StaticCache.__module__}.{StaticCache.__name__}",
+        flatten_with_keys_fn=lambda cache: torch.utils._pytree._dict_flatten_with_keys(
+            _get_cache_dict(cache, StaticLayer)
+        ),
+    )
+    # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+    torch.fx._pytree.register_pytree_flatten_spec(
+        StaticCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache, StaticLayer), spec)
+    )
 
 
 class OffloadedStaticCache(StaticCache):

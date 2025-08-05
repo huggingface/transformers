@@ -60,7 +60,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.integrations.executorch import export_with_cache
 
 
 TEST_CACHE_IMPLEMENTATIONS = [
@@ -616,7 +616,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
+        ep = export_with_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -663,7 +663,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
+        ep = export_with_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -742,8 +742,142 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
+    def test_static_cache_exportability_multiple_run(self):
+        set_seed(0)
+        device = torch_device
+        dtype = "bfloat16"
+        cache_implementation = "static"
+        attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
+        batch_size = 1
+        max_cache_len = 1234
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            device_map=device,
+            torch_dtype=dtype,
+            attn_implementation=attn_implementation,
+            generation_config=GenerationConfig(
+                use_cache=True,
+                cache_implementation=cache_implementation,
+                max_length=max_cache_len,
+                cache_config={
+                    "batch_size": batch_size,
+                    "max_cache_len": max_cache_len,
+                    "device": device,
+                },
+            ),
+        )
+        # Check if cache config is passed through correctly
+        self.assertEqual(model.generation_config.use_cache, True)
+        self.assertEqual(model.generation_config.cache_implementation, cache_implementation)
+        self.assertEqual(model.generation_config.max_length, max_cache_len)
+        self.assertTrue(model.generation_config.cache_config is not None)
+        self.assertEqual(model.generation_config.cache_config.get("batch_size"), batch_size)
+        self.assertEqual(model.generation_config.cache_config.get("max_cache_len"), max_cache_len)
+
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        prompt = "What is the best way to debug python script?"
+        inputs = tokenizer(prompt, return_tensors="pt")
+        attention_mask = inputs.attention_mask.to(device)
+        input_ids = inputs.input_ids.to(device)
+        seq_length = 3
+
+        def make_static_cache():
+            return StaticCache(
+                config=model.config,
+                max_batch_size=2,
+                device=input_ids.device,
+                dtype=torch.bfloat16,
+                max_cache_len=seq_length + 1,
+            )
+
+        ep = export_with_cache(
+            model,
+            input_ids,
+            attention_mask,
+            cache_cls=make_static_cache,
+        )
+        res = ep.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=make_static_cache(),
+            use_cache=True,
+        )
+        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
+        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        self.assertEqual(
+            3,
+            len(
+                [
+                    x
+                    for x in ep.graph_signature.input_specs
+                    if x.kind == torch.export.graph_signature.InputKind.USER_INPUT
+                ]
+            ),
+        )
+
+        res_eager = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=make_static_cache(),
+            use_cache=True,
+        )
+        past_key_values_eager = res_eager.past_key_values
+        past_key_values = res.past_key_values
+
+        shapes = torch.export.ShapesCollection()
+        dyn = torch.export.Dim("seq", max=512)
+
+        for ix in range(len(past_key_values)):
+            shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
+            shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
+
+        ep_second = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": True,
+            },
+            strict=False,
+            dynamic_shapes=shapes,
+        )
+        res_export = ep_second.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            use_cache=True,
+        )
+        # It should work with variable len
+        res_export_2 = ep_second.module()(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=res_export.past_key_values,
+            use_cache=True,
+        )
+
+        res_eager = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values_eager,
+            use_cache=True,
+        )
+        res_eager_2 = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=res_eager.past_key_values,
+            use_cache=True,
+        )
+
+        for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
+            self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
+            self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
+
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
-    def test_static_cache_exportability(self):
+    def test_static_cache_exportability_for_executorch(self):
         """
         Tests that static cache works with `torch.export()`
         """
@@ -933,6 +1067,16 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
+
+    def test_static_cache_unflatten_flatten(self):
+        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        flat, _spec = torch.utils._pytree.tree_flatten(static_cache)
+        self.assertIsInstance(flat, list)
+        restored_cache = torch.utils._pytree.tree_unflatten(flat, _spec)
+        self.assertEqual(len(static_cache.layers), len(restored_cache.layers))
+        for i in range(len(static_cache.layers)):
+            self.assertEqual(static_cache.layers[i].keys.tolist(), restored_cache.layers[i].keys.tolist())
+            self.assertEqual(static_cache.layers[i].values.tolist(), restored_cache.layers[i].values.tolist())
 
     def test_sliding_window_cache(self):
         """Test SlidingWindowCache with manually prefilled states and hardcoded assertions.

@@ -905,13 +905,15 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             return generated_ids
 
 
-def export_with_dynamic_cache(
+def export_with_cache(
     model: PreTrainedModel,
     example_input_ids: Optional[torch.Tensor] = None,
     example_attention_mask: Optional[torch.Tensor] = None,
+    cache_cls: Callable = DynamicCache,
 ):
     """
-    Export a model with DynamicCache using `torch.export`, ensuring the exported model is compatible with `ExecuTorch`.
+    Export a model with cache_cls (DynamicCache by default) using `torch.export`,
+    ensuring the exported model is compatible with `ExecuTorch`.
 
     Args:
         model (`PreTrainedModel`): The pretrained model to be exported.
@@ -936,7 +938,7 @@ def export_with_dynamic_cache(
             {
                 "input_ids": example_input_ids,
                 "attention_mask": example_attention_mask,
-                "past_key_values": DynamicCache(),
+                "past_key_values": cache_cls(),
                 "use_cache": True,
             },
             strict=False,
