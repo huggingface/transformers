@@ -1162,9 +1162,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if keep_special_tokens == -1:
             keep_special_tokens = start_idx
-        
+
         if isinstance(seek_outputs, torch.Tensor):
-            return seek_outputs[:, start_idx-keep_special_tokens:], seek_outputs
+            return seek_outputs[:, start_idx - keep_special_tokens :], seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames")
@@ -1213,7 +1213,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
             return values[batch_idx].cpu()
 
-        sequence_tokens = seek_outputs["sequences"][:, start_idx-keep_special_tokens:]
+        sequence_tokens = seek_outputs["sequences"][:, start_idx - keep_special_tokens :]
         seek_outputs = [
             {
                 k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
@@ -2035,7 +2035,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if num_special_tokens == -1:
             num_special_tokens = idx_offset
-        
+
         # If whisper predicted a "end of segment" via a timestep token, let's go ever each
         # "end of segment" prediction and slice the decoding into segments accordingly
         if len(timestamp_segment_indices) > 0:
@@ -2048,12 +2048,22 @@ class WhisperGenerationMixin(GenerationMixin):
                 # we want to include the last timestamp token in the last segment to know it was no single ending
                 slices[-1] += 1
 
-            last_slice = num_special_tokens
+            last_slice = 0
             # Add each segment to list of all segments
             for i, current_slice in enumerate(slices):
                 is_last_slice = i == len(slices) - 1
                 sliced_tokens = seek_sequence[last_slice:current_slice]
-                start_timestamp_pos = sliced_tokens[0] - timestamp_begin
+
+                start_timestamp_pos = None
+                for token in sliced_tokens:
+                    if token >= timestamp_begin:
+                        start_timestamp_pos = token - timestamp_begin
+                        break
+
+                if start_timestamp_pos is None:
+                    # This should not be possible. Fallback to previous logic.
+                    start_timestamp_pos = sliced_tokens[0] - timestamp_begin
+
                 idx_sliced_tokens = -1 if not is_last_slice or single_timestamp_ending else -2
                 end_timestamp_pos = sliced_tokens[idx_sliced_tokens] - timestamp_begin
                 segments.append(
@@ -2071,7 +2081,12 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
                 if return_token_timestamps:
                     segments[-1]["token_timestamps"] = (
-                        token_timestamps[idx_offset + last_slice - num_special_tokens : idx_offset + current_slice - num_special_tokens] + time_offset[prev_idx]
+                        token_timestamps[
+                            idx_offset + last_slice - num_special_tokens : idx_offset
+                            + current_slice
+                            - num_special_tokens
+                        ]
+                        + time_offset[prev_idx]
                     )
                 last_slice = current_slice
 

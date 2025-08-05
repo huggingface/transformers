@@ -500,13 +500,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(
-        self,
-        model_inputs, 
-        return_timestamps=False, 
-        return_language=False,
-        **generate_kwargs
-    ):
+    def _forward(self, model_inputs, return_timestamps=False, return_language=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         num_frames = model_inputs.pop("num_frames", None)
@@ -537,7 +531,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     generate_kwargs["return_segments"] = True
                     if return_language:
                         generate_kwargs["keep_special_tokens"] = 2
-            
+
             # User-defined `generation_config` passed to the pipeline call take precedence
             if "generation_config" not in generate_kwargs:
                 generate_kwargs["generation_config"] = self.generation_config
