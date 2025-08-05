@@ -5013,7 +5013,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules, config=config, use_kernels=use_kernels
+                model=model,
+                device_map=device_map,
+                keep_in_fp32_modules=model._keep_in_fp32_modules,
+                config=config,
+                use_kernels=use_kernels,
             )
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
@@ -5079,9 +5083,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # check if using kernels
         if use_kernels:
-
             if not is_kernels_available():
-                raise ValueError("Kernels are not available. To use kernels, please install kernels using `pip install kernels`")
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
 
             from kernels import Device, kernelize
 
