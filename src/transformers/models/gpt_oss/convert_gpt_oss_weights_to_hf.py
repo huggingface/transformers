@@ -536,12 +536,13 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     {%- for tool in tools %}
         {%- set tool = tool.function %}
         {{- "// " + tool.description + "\n" }}
-        {{- "type "+ tool.name + " = (" }}
-        {%- if tool.parameters and tool.parameters.properties -%}
-            {{- "_: " }}
-            {{- "{\n" }}
+        {{- "type "+ tool.name + " = " }}
+        {%- if tool.parameters and tool.parameters.properties %}
+            {{- "(_: {\n" }}
             {%- for param_name, param_spec in tool.parameters.properties.items() %}
-                {{- "// " + param_spec.description + "\n" }}
+                {%- if param_spec.description %}
+                    {{- "// " + param_spec.description + "\n" }}
+                {%- endif %}
                 {{- param_name }}
                 {%- if param_name not in (tool.parameters.required or []) -%}
                     {{- "?" }}
@@ -549,7 +550,9 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
                 {{- ": " }}
                 {{- render_typescript_type(param_spec, tool.parameters.required or []) }}
                 {%- if param_spec.default is defined -%}
-                    {%- if param_spec.oneOf %}
+                    {%- if param_spec.enum %}
+                        {{- ", // default: " + param_spec.default }}
+                    {%- elif param_spec.oneOf %}
                         {{- "// default: " + param_spec.default }}
                     {%- else %}
                         {{- ", // default: " + param_spec.default|tojson }}
@@ -557,14 +560,16 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
                 {%- endif -%}
                 {%- if not loop.last %}
                     {{- ",\n" }}
+                {%- else %}
+                    {{- "\n" }}
                 {%- endif -%}
             {%- endfor %}
-            {{- ",\n}) => any;\n" }}
+            {{- "}) => any;\n\n" }}
         {%- else -%}
-            {{- "\n}) => any;\n" }}
+            {{- "() => any;\n\n" }}
         {%- endif -%}
     {%- endfor %}
-    {{- "\n} // namespace " + namespace_name }}
+    {{- "} // namespace " + namespace_name }}
 {%- endmacro -%}
 
 {%- macro render_builtin_tools(browser_tool, python_tool) -%}
@@ -636,8 +641,10 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         {%- endfor %}
         {{- render_builtin_tools(available_builtin_tools.browser, available_builtin_tools.python) }}
     {%- endif -%}
-    {{- "# Valid channels: analysis, commentary, final. Channel must be included for every message.\n" }}
-    {{- "Calls to these tools must go to the commentary channel: 'functions'." }}
+    {{- "# Valid channels: analysis, commentary, final. Channel must be included for every message." }}
+    {%- if tools -%}
+        {{- "\nCalls to these tools must go to the commentary channel: 'functions'." }}
+    {%- endif -%}
 {%- endmacro -%}
 
 {#- Main Template Logic ================================================= #}
@@ -703,9 +710,10 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
-            {{- "functions." + tool_call.name + "<|channel|>commentary json<|message|>" }}
+            {{- "functions." + tool_call.name + "<|channel|>commentary " }}
+            {{- (tool_call.content_type if tool_call.content_type is defined else "json") + "<|message|>" }}
             {{- tool_call.arguments|tojson }}
-            {{- "<|end|>" }}
+            {{- "<|call|>" }}
             {%- set last_tool_call.name = tool_call.name %}
         {%- elif loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
@@ -727,7 +735,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {{- raise_exception("Message has tool role, but there was no previous assistant message with a tool call!") }}
         {%- endif %}
         {{- "<|start|>functions." + last_tool_call.name }}
-        {{- " to=assistant<|channel|>commentary<|message|>" + message.content|tojson + "<|end|>" }}
+        {%- set js = message.content|tojson %}
+        {{- " to=assistant<|channel|>commentary<|message|>{ " + js[1:-1] + " }<|end|>" }}
     {%- elif message.role == 'user' -%}
         {{- "<|start|>user<|message|>" + message.content + "<|end|>" }}
     {%- endif -%}
