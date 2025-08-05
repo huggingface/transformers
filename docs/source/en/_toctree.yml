@@ -90,6 +90,18 @@
       title: Tools and RAG
     title: Chat with models
   - sections:
+      - local: serving
+        title: Serving LLMs, VLMs, and other chat-based models
+      - local: jan
+        title: Jan
+      - local: cursor
+        title: Cursor
+      - local: tiny_agents
+        title: Tiny-Agents CLI and MCP tools
+      - local: open_webui
+        title: Open WebUI
+    title: Serving
+  - sections:
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_one
@@ -103,8 +115,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: serving
-    title: Serving
   - local: transformers_as_backend
     title: Inference server backends
   title: Inference
@@ -971,6 +981,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/cohere2_vision
+        title: Cohere2Vision
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
@@ -1049,6 +1061,8 @@
         title: Mistral3
       - local: model_doc/mllama
         title: mllama
+      - local: model_doc/mm-grounding-dino
+        title: MM Grounding DINO
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo

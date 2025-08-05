@@ -14,8 +14,10 @@
 # limitations under the License.
 """Auto Model class."""
 
+import os
 import warnings
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Union
 
 from ...utils import logging
 from .auto_factory import (
@@ -25,6 +27,15 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
+
+
+if TYPE_CHECKING:
+    from ...generation import GenerationMixin
+    from ...modeling_utils import PreTrainedModel
+
+    # class for better type annotations
+    class _BaseModelWithGenerate(PreTrainedModel, GenerationMixin):
+        pass
 
 
 logger = logging.get_logger(__name__)
@@ -77,6 +88,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("codegen", "CodeGenModel"),
         ("cohere", "CohereModel"),
         ("cohere2", "Cohere2Model"),
+        ("cohere2_vision", "Cohere2VisionModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
@@ -232,6 +244,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralModel"),
         ("mlcd", "MLCDVisionModel"),
         ("mllama", "MllamaModel"),
+        ("mm-grounding-dino", "MMGroundingDinoModel"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -711,6 +724,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("aimv2_vision_model", "Aimv2VisionModel"),
         ("beit", "BeitModel"),
         ("bit", "BitModel"),
+        ("cohere2_vision", "Cohere2VisionModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
@@ -944,6 +958,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("chameleon", "ChameleonForConditionalGeneration"),
+        ("cohere2_vision", "Cohere2VisionForConditionalGeneration"),
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
         ("emu3", "Emu3ForConditionalGeneration"),
@@ -1054,6 +1069,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Object Detection mapping
         ("grounding-dino", "GroundingDinoForObjectDetection"),
+        ("mm-grounding-dino", "MMGroundingDinoForObjectDetection"),
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("owlv2", "Owlv2ForObjectDetection"),
         ("owlvit", "OwlViTForObjectDetection"),
@@ -1453,6 +1469,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaForMultipleChoice"),
         ("megatron-bert", "MegatronBertForMultipleChoice"),
         ("mobilebert", "MobileBertForMultipleChoice"),
+        ("modernbert", "ModernBertForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("mra", "MraForMultipleChoice"),
         ("nezha", "NezhaForMultipleChoice"),
@@ -1858,6 +1875,16 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
 
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForCausalLM"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> "_BaseModelWithGenerate":
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
 
@@ -2051,6 +2078,16 @@ _AutoModelForVision2Seq = auto_class_update(_AutoModelForVision2Seq, head_doc="v
 
 class AutoModelForImageTextToText(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
+
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForImageTextToText"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> "_BaseModelWithGenerate":
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")
