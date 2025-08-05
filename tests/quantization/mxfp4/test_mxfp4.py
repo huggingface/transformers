@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_large_gpu,
     require_triton,
-    require_triton_kernels,
+    require_kernels,
     slow,
 )
 from transformers.utils import (
@@ -135,7 +135,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_triton_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -149,7 +149,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available but model is pre-quantized and dequantize is False"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_triton_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -289,7 +289,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.dtype, torch.bfloat16)
 
     @require_triton(min_version="3.4.0")
-    @require_triton_kernels
+    @require_kernels
     @require_torch_gpu
     @require_torch
     def test_quantize_to_mxfp4(self):
