@@ -735,8 +735,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {{- raise_exception("Message has tool role, but there was no previous assistant message with a tool call!") }}
         {%- endif %}
         {{- "<|start|>functions." + last_tool_call.name }}
-        {%- set js = message.content|tojson %}
-        {{- " to=assistant<|channel|>commentary<|message|>{ " + js[1:-1] + " }<|end|>" }}
+        {{- " to=assistant<|channel|>commentary<|message|>" + message.content|tojson + "<|end|>" }}
     {%- elif message.role == 'user' -%}
         {{- "<|start|>user<|message|>" + message.content + "<|end|>" }}
     {%- endif -%}
