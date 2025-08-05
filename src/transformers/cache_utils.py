@@ -222,6 +222,19 @@ class StaticLayer(CacheLayerMixin):
         self.max_cache_len = max_cache_len
 
     def lazy_initialization(self, key_states: torch.Tensor):
+        """
+        Lazy initialization of the keys and values tensors. This allows to get all properties (dtype, device,
+        num_heads in case of TP etc...) at runtime directly, which is extremely practical as it avoids moving
+        devices, dtypes etc later on for each `update` (which could break the static dynamo addresses as well).
+
+        If this is unwanted, one can call `early_initialization(...)` on the Cache directly, which will call this
+        function ahead-of-time (this is required for `torch.export` for example). Note that for `compile`, as we
+        internally don't compile the prefill, this is guaranteed to have been called already when compiling.
+        If compiling the prefill as well, e.g. calling `model.compile(...)` before `generate` with a static cache,
+        it is still supported in general, but without guarantees depending on the compilation options (e.g. cuda graphs,
+        i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
+        not be compiled anyway for performances!
+        """
         self.max_batch_size, self.num_heads, _, self.head_dim = key_states.shape
         self.dtype, self.device = key_states.dtype, key_states.device
 
@@ -826,13 +839,12 @@ class Cache:
         self, batch_size: int, num_heads: int, head_dim: int, dtype: torch.dtype, device: torch.device
     ):
         """
-        Initialize all the layers in advance (it's otherwise lazy initialized on the first `update` call).
+        Initialize all the layers in advance (it's otherwise lazily initialized on the first `update` call).
         This is useful for our `export` recipes, as `export` needs everything in advance.
-
-        Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
-        this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
-        creates an empty tensor with correct shape, dtype and device), which is very efficient and practical.
         """
+        # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
+        # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
+        # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
         fake_keys_tensor = torch.zeros((batch_size, num_heads, 0, head_dim), dtype=dtype, device=device)
         # Init all layers
         for layer in self.layers:
