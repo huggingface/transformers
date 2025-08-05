@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 import numpy as np
 import packaging.version
 
+from transformers.utils.import_utils import _is_package_available
+
 
 if os.getenv("WANDB_MODE") == "offline":
     print("⚙️  Running in WANDB offline mode")
@@ -109,7 +111,14 @@ def is_wandb_available():
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
-    return importlib.util.find_spec("wandb") is not None
+    if importlib.util.find_spec("wandb") is not None:
+        import wandb
+
+        # wandb might still be detected by find_spec after an uninstall (leftover files or metadata), but not actually
+        # import correctly. To confirm it's fully installed and usable, we check for a key attribute like "run".
+        return hasattr(wandb, "run")
+    else:
+        return False
 
 
 def is_trackio_available():
@@ -1043,6 +1052,14 @@ class WandbCallback(TrainerCallback):
 class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
+
+    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
+    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+
+    **Requires**:
+    ```bash
+    pip install trackio
+    ```
     """
 
     def __init__(self):
@@ -1119,12 +1136,14 @@ class TrackioCallback(TrainerCallback):
             device_idx = torch.cuda.current_device()
             total_memory = torch.cuda.get_device_properties(device_idx).total_memory
             memory_allocated = torch.cuda.memory_allocated(device_idx)
-            power = torch.cuda.power_draw(device_idx)
+
             gpu_memory_logs = {
                 f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
                 f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-                f"gpu/{device_idx}/power": power / 1000,  # Watts
             }
+            if _is_package_available("pynvml"):
+                power = torch.cuda.power_draw(device_idx)
+                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
             if dist.is_available() and dist.is_initialized():
                 gathered_logs = [None] * dist.get_world_size()
                 dist.all_gather_object(gathered_logs, gpu_memory_logs)
