@@ -50,8 +50,10 @@ def paged_attention_forward(
     """
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
 
+    sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
     if implementation is not None:
         flash_attn_varlen_func = implementation.flash_attn_varlen_func
+    custom_kwargs = {"s_aux": kwargs.get("s_aux")}
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
         k.transpose(1, 2).squeeze(0).contiguous(),
@@ -62,9 +64,9 @@ def paged_attention_forward(
         max_seqlen_k,
         softmax_scale=module.scaling,
         causal=True,  # kind of a must, it automatically aligns the mask for q < k
-        window_size=(-1, -1),  # -1 means infinite context window
+        window_size=sliding_window,  # -1 means infinite context window
         # block_table=block_tables, -> torch.Tensor
-        # **kwargs,
+        **custom_kwargs,
     )
     if isinstance(attn_output, tuple):
         attn_output = attn_output[0]

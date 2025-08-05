@@ -806,6 +806,19 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
+            # Check if wandb is actually installed but disabled via WANDB_DISABLED
+            if importlib.util.find_spec("wandb") is not None:
+                # wandb is installed but disabled
+                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
+                if wandb_disabled:
+                    raise RuntimeError(
+                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
+                        "This disables wandb logging, even though it was explicitly requested.\n\n"
+                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
+                        "- To disable logging: use `report_to='none'`.\n\n"
+                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
+                    )
+            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
         if has_wandb:
             import wandb
