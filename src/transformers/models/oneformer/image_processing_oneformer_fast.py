@@ -51,6 +51,8 @@ if is_torch_available():
     from torch import nn
 
 if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
@@ -457,7 +459,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
+                        stacked_segmentation_maps,
+                        size=size,
+                        interpolation=pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
                     )
                 processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(

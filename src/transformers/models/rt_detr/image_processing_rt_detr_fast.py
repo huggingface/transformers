@@ -51,6 +51,14 @@ elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
+if is_torchvision_v2_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+elif is_torchvision_available():
+    from torchvision.transforms import functional as F
+
+    from ...image_utils import pil_torch_interpolation_mapping
+
+
 class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -264,10 +272,12 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST_EXACT`):
+            resample (`InterpolationMode`, defaults to `pil_torch_interpolation_mapping[PILImageResampling.NEAREST]`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST_EXACT
+        interpolation = (
+            interpolation if interpolation is not None else pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+        )
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
