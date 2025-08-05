@@ -270,7 +270,6 @@ from .import_utils import (
     is_torchvision_v2_available,
     is_training_run_on_sagemaker,
     is_triton_available,
-    is_triton_kernels_availalble,
     is_uroman_available,
     is_vision_available,
     is_vptq_available,
