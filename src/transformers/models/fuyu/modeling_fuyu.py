@@ -225,7 +225,7 @@ class FuyuModel(FuyuPreTrainedModel):
         if image_patches is not None:
             patch_embeddings = self.get_image_features(image_patches)
             patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_tokens(
+            special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
@@ -379,6 +379,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         image_patches=None,
         image_patches_indices=None,
+        cache_position=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -393,7 +394,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if past_key_values is not None:
+        if cache_position[0] != 0:
+            # set image_patches and image_patches_indices to `None` for decoding stage
             model_inputs["image_patches_indices"] = None
             model_inputs["image_patches"] = None
 
