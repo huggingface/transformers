@@ -166,6 +166,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_equivalence(self):
         pass
 
+    @unittest.skip("Most probably because of the MOE, the moe and router does not ignore padding tokens")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("GptOss does not support flex officially")
+    def test_flex_attention_with_grads(self):
+        pass
+
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 

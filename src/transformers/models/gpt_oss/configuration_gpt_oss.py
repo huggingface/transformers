@@ -48,7 +48,7 @@ class GptOssConfig(PretrainedConfig):
     def __init__(
         self,
         num_hidden_layers: int = 36,
-        num_local_experts: int = 128,  # TODO: rename to num_experts otherwise confusing with EP
+        num_local_experts: int = 128,
         vocab_size: int = 201088,
         hidden_size: int = 2880,
         intermediate_size: int = 2880,
