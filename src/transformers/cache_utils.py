@@ -370,6 +370,7 @@ class SlidingWindowLayer(StaticLayer):
             new_keys = self.keys.roll(-1, dims=-2)
             new_values = self.values.roll(-1, dims=-2)
             # Overwrite the last position with new states
+            # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
             index = torch.tensor([-1], dtype=int, device=self.device)
             new_keys[:, :, index] = key_states
             new_values[:, :, index] = value_states
