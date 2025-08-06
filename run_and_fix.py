@@ -1,7 +1,7 @@
 import os
 import json
 
-fn = "new_failures_with_bad_commit_grouped_by_authors"
+fn = "new_failures_with_bad_commit_grouped_by_authors.json"
 
 with open(fn) as fp:
     data = json.load(fp)
