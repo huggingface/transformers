@@ -179,7 +179,9 @@ if is_torch_available():
 
             info = f"{info}\n\n{actual}"
 
-            with open("collected.txt", "w") as fp:
+            info = f"{info}\n\n{'=' * 80}\n\n"
+
+            with open("collected.txt", "a") as fp:
                 fp.write(info)
 
             # TODO: what to do here?
