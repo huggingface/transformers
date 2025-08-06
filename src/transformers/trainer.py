@@ -1034,17 +1034,16 @@ class Trainer:
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
-        dataloader = DataLoader(dataset, **dataloader_params)
+        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # Accelerator.free_memory() will destroy the references, so
-        # we need to store the non-prepared version for eval dataloaders.
+        # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
             if hasattr(self, "_eval_dataloaders"):
                 self._eval_dataloaders[dataloader_key] = dataloader
             else:
                 self._eval_dataloaders = {dataloader_key: dataloader}
 
-        return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -1132,7 +1131,7 @@ class Trainer:
             and dataloader_key in self._eval_dataloaders
             and self.args.dataloader_persistent_workers
         ):
-            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+            return self._eval_dataloaders[dataloader_key]
 
         eval_dataset = (
             self.eval_dataset[eval_dataset]

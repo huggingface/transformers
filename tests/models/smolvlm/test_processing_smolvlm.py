@@ -417,20 +417,20 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
-        # Load with `video_fps` arg
-        video_fps = 1
+        # Load with `fps` arg
+        fps = 1
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            fps=fps,
             return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), video_fps * 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
 
         # NOTE: the last assert checks are removed
         # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
