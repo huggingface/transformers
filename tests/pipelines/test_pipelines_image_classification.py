@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import unittest
-
+import os
+import numpy as np
 import datasets
 from huggingface_hub import ImageClassificationOutputElement
 
@@ -173,6 +174,27 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
             ],
         )
+    
+    @require_torch
+    def test_image_classification_pipeline_with_tensors(self):
+        # Create a dummy pipeline
+        pipe = pipeline("image-classification", model="hf-internal-testing/tiny-random-vit")
+        
+        # Create a dummy image tensor/array
+        dummy_tensor_pt = torch.rand(3, 224, 224)
+        dummy_array_np = np.random.rand(224, 224, 3).astype(np.float32)
+    
+        # Assert that the pipeline works with a PyTorch tensor
+        output_pt = pipe(dummy_tensor_pt)
+        self.assertIsInstance(output_pt, list)
+        self.assertGreater(len(output_pt), 0)
+        self.assertIsInstance(output_pt[0], dict)
+
+        # Assert that the pipeline works with a NumPy array
+        output_np = pipe(dummy_array_np)
+        self.assertIsInstance(output_np, list)
+        self.assertGreater(len(output_np), 0)
+        self.assertIsInstance(output_np[0], dict)
 
     def test_custom_tokenizer(self):
         tokenizer = PreTrainedTokenizerBase()
