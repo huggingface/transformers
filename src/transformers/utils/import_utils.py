@@ -76,6 +76,11 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = importlib.metadata.version("amd-quark")
                 except Exception:
                     package_exists = False
+            elif pkg_name == "triton":
+                try:
+                    package_version = importlib.metadata.version("pytorch-triton")
+                except Exception:
+                    package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -111,6 +116,7 @@ HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
+TRITON_MIN_VERSION = "1.0.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -120,6 +126,7 @@ _vptq_available, _vptq_version = _is_package_available("vptq", return_version=Tr
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -225,12 +232,13 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-_triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
+_triton_available, _triton_version = _is_package_available("triton", return_version=True)
+_triton_kernels_available = _is_package_available("triton_kernels")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -379,6 +387,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_libcst_available():
+    return _libcst_available
+
+
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
@@ -405,6 +417,14 @@ def is_torch_deterministic():
             return True
 
     return False
+
+
+def is_triton_available(min_version: str = TRITON_MIN_VERSION):
+    return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
+
+
+def is_triton_kernels_availalble():
+    return _triton_kernels_available
 
 
 def is_hadamard_available():
@@ -1583,10 +1603,6 @@ def is_liger_kernel_available():
         return False
 
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
-
-
-def is_triton_available():
-    return _triton_available
 
 
 def is_rich_available():
