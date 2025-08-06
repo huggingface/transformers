@@ -59,7 +59,6 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
 def load_balancing_loss_func(
     gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
     num_experts: Optional[int] = None,
@@ -138,7 +137,8 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    rank = routing_weights.shape[1] * int(routing_weights.device.index)
+    device_index = routing_weights.device.index if routing_weights.device.index is not None else 0
+    rank = routing_weights.shape[1] * int(device_index)
     overall_loss = torch.sum(
         tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
     )
