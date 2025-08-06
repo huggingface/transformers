@@ -16,6 +16,7 @@ import codecs
 import os
 import tempfile
 import unittest
+import warnings
 from io import BytesIO
 from typing import Optional
 
@@ -943,7 +944,8 @@ class ValidateKwargsTest(unittest.TestCase):
         captured_keys = ["height", "width", "do_resize"]
 
         # Should not raise any warning
-        with pytest.warns(None) as warning_list:
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs(valid_keys, captured_keys)
 
         # Verify no warnings were raised
@@ -955,35 +957,69 @@ class ValidateKwargsTest(unittest.TestCase):
         captured_keys = ["height", "width", "invalid_param", "another_invalid"]
 
         # Should raise a UserWarning
-        with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid_param, another_invalid"):
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid_param", warning_message)
+        self.assertIn("another_invalid", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
 
     def test_validate_kwargs_single_unused_key(self):
         """Test warning with a single unused key."""
         valid_keys = ["height", "width"]
         captured_keys = ["height", "invalid_param"]
 
-        with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid_param"):
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid_param", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
 
     def test_validate_kwargs_all_unused_keys(self):
         """Test warning when all captured keys are unused."""
         valid_keys = ["height", "width"]
         captured_keys = ["invalid1", "invalid2"]
 
-        with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid1, invalid2"):
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid1", warning_message)
+        self.assertIn("invalid2", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
 
     def test_validate_kwargs_empty_lists(self):
         """Test that empty lists don't cause issues."""
         # Empty captured keys should not warn
-        with pytest.warns(None) as warning_list:
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs(["height", "width"], [])
         self.assertEqual(len(warning_list), 0)
 
         # Empty valid keys with captured keys should warn
-        with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: height"):
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             validate_kwargs([], ["height"])
+
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("height", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
 
     def test_validate_kwargs_warning_stacklevel(self):
         """Test that warnings are raised with correct stacklevel for proper attribution."""
@@ -991,9 +1027,11 @@ class ValidateKwargsTest(unittest.TestCase):
         def call_validate():
             validate_kwargs(["valid"], ["invalid"])
 
-        with pytest.warns(UserWarning) as warning_info:
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
             call_validate()
 
         # Warning should be attributed to call_validate, not validate_kwargs itself
         # (stacklevel=2 means it points to the caller of validate_kwargs)
-        self.assertTrue(len(warning_info) > 0)
+        self.assertEqual(len(warning_list), 1)
+        self.assertEqual(warning_list[0].category, UserWarning)
