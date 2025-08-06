@@ -95,6 +95,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
             # we can't quantize the model in this case so we raise an error
             raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
 
+        if not self.pre_quantized:
+            from kernels import get_kernel
+
+            global triton_kernels_hub
+            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
@@ -164,15 +170,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
-            if is_kernels_available() and is_triton_available("3.4.0"):
-                from kernels import get_kernel
-
-                triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-                PrecisionConfig, FlexCtx, InFlexData = (
-                    triton_kernels_hub.matmul_ogs.PrecisionConfig,
-                    triton_kernels_hub.matmul_ogs.FlexCtx,
-                    triton_kernels_hub.matmul_ogs.InFlexData,
-                )
+            PrecisionConfig, FlexCtx, InFlexData = (
+                triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                triton_kernels_hub.matmul_ogs.FlexCtx,
+                triton_kernels_hub.matmul_ogs.InFlexData,
+            )
             module, _ = get_module_from_name(model, param_name)
             with torch.cuda.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
