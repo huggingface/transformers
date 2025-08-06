@@ -129,7 +129,7 @@ jobs:
           apt-get update && apt-get install -y wget curl
           rm -rf conftest.py
           curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/conftest.py
-          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/run_and_fix.py.py
+          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/run_and_fix.py
           curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/new_failures_with_bad_commit_grouped_by_authors.json
 
       - name: Run all tests on GPU
