@@ -163,12 +163,19 @@ if is_torch_available():
             else:
                 actual = args[0]
 
+            def format(t):
+                t = t.to("cpu")
+                t = f"{t}"
+                t = f'{t}'.replace("tensor(", "").replace(")", "").replace("\n", " ")
+                while "  " in t:
+                    t = t.replace("  ", " ")
+
+                return t
+
             # to string
-            actual = actual.to('cpu')
-            actual = f"{actual}"
-            actual = f'{actual}'.replace("tensor(", "").replace(")", "").replace("\n", " ")
-            while "  " in actual:
-                actual = actual.replace("  ", " ")
+            import json
+            actual_str_1 = format(actual)
+            actual_str_2 = json.dumps([format(x) for x in actual], indent=4).replace('"', '')
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526
@@ -195,7 +202,7 @@ if is_torch_available():
                 code = '\n'.join(source.getstatement(caller_frame.lineno-1).lines)
             info = f"{info}\n\n{caller_path}:{caller_frame.lineno}\n\n{code}"
 
-            info = f"{info}\n\n{actual}"
+            info = f"{info}\n\n{actual_str_1}\n\n{actual_str_2}"
             info = f"{info}\n\n{'=' * 80}\n\n"
 
             with open("collected.txt", "a") as fp:
