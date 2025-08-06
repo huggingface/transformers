@@ -1,6 +1,5 @@
 import re
-from enum import Enum
-from typing import Optional, List, Union
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,66 +7,60 @@ import torch
 from PIL import Image
 
 from transformers import AutoConfig, AutoProcessor
-import numpy as np
-from PIL import Image, ImageChops
 
 
 # archs failing that should raise immediately for this util:
 
 INCOMPATIBLE_MODELS = [
-    'bit',
-    'colpali',
-    'colqwen2',
-    'convnext',
-    'd_fine',
-    'data2vec',
-    'efficientloftr',
-    'efficientnet',
-    'fuyu',
-    'gemma3',
-    'glm4v',
-    'glpn',
-    'hgnet_v2',
-    'hiera',
-    'internvl',
-    'janus',
-    'layoutlmv3',
-    'levit',
-    'lightglue',
-    'llama4',
-    'mistral3',
-    'mllama',
-    'mobilevit',
-    'mobilevitv2',
-    'musicgen',
-    'musicgen_melody',
-    'oneformer',
-    'perceiver',
-    'perception_lm',
-    'phi4_multimodal',
-    'qwen2_5_omni',
-    'qwen2_5_vl',
-    'qwen2_vl',
-    'regnet',
-    'resnet',
-    'superglue',
-    'superpoint',
-    'swin2sr',
-    'timm_wrapper',
-    'tvp',
-    'udop',
-    'vitmatte',
-    'vitpose',
-    'vjepa2',
-    'whisper',
-    ]
+    "bit",
+    "colpali",
+    "colqwen2",
+    "convnext",
+    "d_fine",
+    "data2vec",
+    "efficientloftr",
+    "efficientnet",
+    "fuyu",
+    "gemma3",
+    "glm4v",
+    "glpn",
+    "hgnet_v2",
+    "hiera",
+    "internvl",
+    "janus",
+    "layoutlmv3",
+    "levit",
+    "lightglue",
+    "llama4",
+    "mistral3",
+    "mllama",
+    "mobilevit",
+    "mobilevitv2",
+    "musicgen",
+    "musicgen_melody",
+    "oneformer",
+    "perceiver",
+    "perception_lm",
+    "phi4_multimodal",
+    "qwen2_5_omni",
+    "qwen2_5_vl",
+    "qwen2_vl",
+    "regnet",
+    "resnet",
+    "superglue",
+    "superpoint",
+    "swin2sr",
+    "timm_wrapper",
+    "tvp",
+    "udop",
+    "vitmatte",
+    "vitpose",
+    "vjepa2",
+    "whisper",
+]
 
 
-def _looks_like_global(tile: np.ndarray,
-                       base: Image.Image,
-                       *,
-                       mae_tol: float = 0.3
-                       ) -> bool:
+def _looks_like_global(tile: np.ndarray, base: Image.Image, *, mae_tol: float = 0.3) -> bool:
     """
     Very simple visualizer heuristic.
     """
@@ -86,15 +79,14 @@ class ImageVisualizer:
     def __init__(self, repo_id: str):
         self.processor = AutoProcessor.from_pretrained(repo_id, trust_remote_code=False)
         self.config = AutoConfig.from_pretrained(repo_id, trust_remote_code=False)
-         
-        # infer processor 
+
+        # infer processor
         if hasattr(self.processor, "image_processor"):
             image_processor = self.processor.image_processor
         elif hasattr(self.processor, "image_mean"):
-            image_processor = self.processor # weak test, but works most of the time
+            image_processor = self.processor  # weak test, but works most of the time
         else:
             raise ValueError(f"No image processor found for {repo_id}.")
-
 
         # Image normalization parameters
         self.channel_means = getattr(image_processor, "image_mean", [0.485, 0.456, 0.406])
@@ -106,12 +98,12 @@ class ImageVisualizer:
 
         # Vision configuration
         self.vision_config = getattr(self.config, "vision_config", None)
-        self.patch_size = getattr(
-            self.vision_config, "patch_size", getattr(image_processor, "patch_size", 14)
-        )
+        self.patch_size = getattr(self.vision_config, "patch_size", getattr(image_processor, "patch_size", 14))
         self.merge_size = getattr(image_processor, "merge_size", 1)
 
-    def _pixel_values_as_tensor(self, pixel_values: Union[torch.Tensor, np.ndarray, List[np.ndarray], List[torch.Tensor]]):
+    def _pixel_values_as_tensor(
+        self, pixel_values: Union[torch.Tensor, np.ndarray, list[np.ndarray], list[torch.Tensor]]
+    ):
         """
         Normalize input to a 4D tensor with shape (batch, channels, height, width).
         Supports input of shape:
@@ -149,15 +141,21 @@ class ImageVisualizer:
         else:
             raise TypeError(f"Unsupported image input type: {type(image_input)}")
 
-    def _unnormalize(self, pixel_values: Union[torch.Tensor, np.ndarray, List[np.ndarray], List[torch.Tensor]]) -> np.ndarray:
+    def _unnormalize(
+        self, pixel_values: Union[torch.Tensor, np.ndarray, list[np.ndarray], list[torch.Tensor]]
+    ) -> np.ndarray:
         """
         Inverse-normalize pixel values using stored means/stds and return numpy array(s) in HWC.
         """
         tensor_pixels = self._pixel_values_as_tensor(pixel_values).float()
 
         num_channels = tensor_pixels.shape[-3]
-        means = torch.tensor(self.channel_means[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device).view(-1, 1, 1)
-        stds = torch.tensor(self.channel_stds[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device).view(-1, 1, 1)
+        means = torch.tensor(
+            self.channel_means[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device
+        ).view(-1, 1, 1)
+        stds = torch.tensor(
+            self.channel_stds[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device
+        ).view(-1, 1, 1)
 
         tensor_pixels = tensor_pixels * stds + means
         tensor_pixels = tensor_pixels.clamp(0, 1)
@@ -206,12 +204,12 @@ class ImageVisualizer:
 
         original_tile_index = None
         saved_original_tile = None
-        
+
         for idx in (0, num_tiles - 1):
             if _looks_like_global(tiles_array[idx], source_image):
                 original_tile_index = idx
                 break
-        
+
         if original_tile_index is not None:
             saved_original_tile = tiles_array[original_tile_index]
             tiles_array = np.delete(tiles_array, original_tile_index, axis=0)
@@ -334,11 +332,14 @@ class ImageVisualizer:
             )
             return f"{image_token_string} {'Please describe this image.'}"
 
-    def visualize(self, images: Union[Image.Image, np.ndarray, str, List[Union[Image.Image, np.ndarray, str]]],
-                  rows: Optional[int] = None,
-                  cols: Optional[int] = None,
-                  add_grid: bool = True,
-                  figsize=(12, 12)):
+    def visualize(
+        self,
+        images: Union[Image.Image, np.ndarray, str, list[Union[Image.Image, np.ndarray, str]]],
+        rows: Optional[int] = None,
+        cols: Optional[int] = None,
+        add_grid: bool = True,
+        figsize=(12, 12),
+    ):
         """
         Visualize the model-processed image(s). Only single images are supported.
         If the processor returns multiple tiles, display them in a grid with optional patch grid overlay.
@@ -347,7 +348,9 @@ class ImageVisualizer:
             images = [images]
         else:
             if len(images) > 1:
-                raise ValueError("You passed a list of several images. Only single images are accepted by the visualizer.")
+                raise ValueError(
+                    "You passed a list of several images. Only single images are accepted by the visualizer."
+                )
 
         pil_images = [self._to_pil(x) for x in images]
         img_width, img_height = pil_images[0].size
