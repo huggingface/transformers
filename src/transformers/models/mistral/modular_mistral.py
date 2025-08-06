@@ -6,7 +6,7 @@ from torch import nn
 from transformers.utils.generic import check_model_inputs
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_masks_for_generate
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -49,13 +49,7 @@ class MistralAttention(LlamaAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        # This check is necessary to support models that inherit via modular (e.g. Mixtral) and do not use layer_types
-        is_sliding = (
-            config.layer_types[layer_idx] == "sliding_attention"
-            if getattr(config, "layer_types", None) is not None
-            else getattr(config, "sliding_window", None) is not None
-        )
-        self.sliding_window = config.sliding_window if is_sliding else None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -107,9 +101,7 @@ class MistralDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MistralMLP(config)
-        self.attention_type = (
-            config.layer_types[layer_idx] if getattr(config, "layer_types", None) is not None else None
-        )
+        self.attention_type = config.layer_types[layer_idx]
 
 
 class MistralPreTrainedModel(LlamaPreTrainedModel):
@@ -152,31 +144,35 @@ class MistralModel(LlamaModel):
             position_ids = cache_position.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        mask_already_prepared = isinstance(attention_mask, dict) or (
-            isinstance(attention_mask, torch.Tensor) and len(attention_mask.shape) > 2
-        )
-        if not mask_already_prepared:
-            attention_mask = create_masks_for_generate(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
-
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            full_mask_already_prepared = isinstance(attention_mask, torch.Tensor) and len(attention_mask.shape) > 2
+            causal_mask_mapping = {}
+            if "sliding_attention" in self.config.layer_types:
+                sliding_attention_mask = (
+                    create_sliding_window_causal_mask(**mask_kwargs)
+                    if not full_mask_already_prepared
+                    else attention_mask
+                )
+                causal_mask_mapping["sliding_attention"] = sliding_attention_mask
+            if "full_attention" in self.config.layer_types:
+                causal_mask = create_causal_mask(**mask_kwargs) if not full_mask_already_prepared else attention_mask
+                causal_mask_mapping["full_attention"] = causal_mask
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            causal_mask = (
-                attention_mask[decoder_layer.attention_type]
-                if decoder_layer.attention_type is not None and isinstance(attention_mask, dict)
-                else attention_mask
-            )
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 use_cache=use_cache,
