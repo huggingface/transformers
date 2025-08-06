@@ -1576,7 +1576,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Phi4MultimodalDecoderLayer"]
+    _no_split_modules = ["Phi4MultimodalDecoderLayer", "Phi4MultimodalRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

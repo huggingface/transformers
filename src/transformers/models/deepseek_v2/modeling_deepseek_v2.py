@@ -450,7 +450,7 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     config: DeepseekV2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepseekV2DecoderLayer"]
+    _no_split_modules = ["DeepseekV2DecoderLayer", "DeepseekV2RMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

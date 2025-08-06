@@ -250,7 +250,7 @@ class MistralPreTrainedModel(PreTrainedModel):
     config: MistralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MistralDecoderLayer"]
+    _no_split_modules = ["MistralDecoderLayer", "MistralRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

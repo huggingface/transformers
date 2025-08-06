@@ -401,7 +401,7 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
     config: Qwen3MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3MoeDecoderLayer"]
+    _no_split_modules = ["Qwen3MoeDecoderLayer", "Qwen3MoeRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

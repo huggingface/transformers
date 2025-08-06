@@ -305,7 +305,7 @@ class Ernie4_5PreTrainedModel(PreTrainedModel):
     config: Ernie4_5Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Ernie4_5DecoderLayer"]
+    _no_split_modules = ["Ernie4_5DecoderLayer", "Ernie4_5RMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

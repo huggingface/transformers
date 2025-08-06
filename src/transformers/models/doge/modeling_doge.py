@@ -481,7 +481,7 @@ class DogePreTrainedModel(PreTrainedModel):
     config: DogeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DogeDecoderLayer"]
+    _no_split_modules = ["DogeDecoderLayer", "DogeRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = True

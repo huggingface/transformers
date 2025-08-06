@@ -303,7 +303,7 @@ class GranitePreTrainedModel(PreTrainedModel):
     config: GraniteConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GraniteDecoderLayer"]
+    _no_split_modules = ["GraniteDecoderLayer", "GraniteRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

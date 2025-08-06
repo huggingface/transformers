@@ -398,7 +398,7 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     config: Glm4MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Glm4MoeDecoderLayer"]
+    _no_split_modules = ["Glm4MoeDecoderLayer", "Glm4MoeRMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

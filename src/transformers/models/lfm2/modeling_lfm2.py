@@ -573,7 +573,7 @@ class Lfm2PreTrainedModel(PreTrainedModel):
     config: Lfm2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Lfm2DecoderLayer"]
+    _no_split_modules = ["Lfm2DecoderLayer", "Lfm2RMSNorm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
