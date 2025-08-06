@@ -52,6 +52,8 @@ if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
 
+    from ..model_debugging_utils import model_addition_debugger_context
+
 
 class cached_property(property):
     """
@@ -1032,11 +1034,20 @@ def check_model_inputs(func):
             def wrapped_forward(*args, **kwargs):
                 if key == "hidden_states" and len(collected_outputs[key]) == 0:
                     collected_outputs[key] += (args[0],)
-                output = orig_forward(*args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
+                    ):
+                        output = orig_forward(*args, **kwargs)
+                else:
+                    output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
-                    collected_outputs[key] += (output[index],)
+                    if key not in collected_outputs:
+                        collected_outputs[key] = (output[index],)
+                    else:
+                        collected_outputs[key] += (output[index],)
                 return output
 
             return wrapped_forward
