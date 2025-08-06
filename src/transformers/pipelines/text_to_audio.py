@@ -269,9 +269,7 @@ class TextToAudioPipeline(Pipeline):
             waveform = self.processor.decode(audio)
 
         if isinstance(audio, list):
-            output_dict["audio"] = [
-                el.to(device="cpu", dtype=torch.float).numpy() for el in waveform
-            ]
+            output_dict["audio"] = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
         else:
             output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
