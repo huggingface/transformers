@@ -16,9 +16,9 @@
 import io
 import unittest
 
+import torch
 import pytest
 import requests
-import torch
 from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
@@ -230,10 +230,6 @@ class FuyuModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
         return FuyuProcessor.from_pretrained("adept/fuyu-8b")
-
-    @cached_property
-    def default_model(self):
-        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
 
     def test_greedy_generation(self):
         processor = self.default_processor
