@@ -144,9 +144,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 quantizer.validate_environment()
             except RuntimeError as e:
                 if "requires a GPU" in str(e):
-                    self.fail(
-                        "Should not raise GPU requirement error when dequantize=True on CPU"
-                    )
+                    self.fail("Should not raise GPU requirement error when dequantize=True on CPU")
 
     def test_quantizer_validation_order_dequantize_before_cuda_check(self):
         """Test that dequantize check happens before CUDA availability check"""
