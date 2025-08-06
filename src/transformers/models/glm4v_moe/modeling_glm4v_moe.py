@@ -651,7 +651,7 @@ class Glm4v_moeVisionAttention(nn.Module):
 
         if self.config._attn_implementation == "flash_attention_2":
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -1279,8 +1279,9 @@ class Glm4v_moeModel(Glm4v_moePreTrainedModel):
             )
             special_video_mask = special_video_mask.all(-1)
         else:
+            # GLM-4.1V and GLM-4.5V special_video_mask is special_image_mask
             special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.video_token_id
+            special_video_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

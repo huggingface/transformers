@@ -1166,8 +1166,9 @@ class Glm4vModel(Glm4vPreTrainedModel):
             )
             special_video_mask = special_video_mask.all(-1)
         else:
+            # GLM-4.1V and GLM-4.5V special_video_mask is special_image_mask
             special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.video_token_id
+            special_video_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
