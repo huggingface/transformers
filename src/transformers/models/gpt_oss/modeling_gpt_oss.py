@@ -75,7 +75,7 @@ class GptOssExperts(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
-        When training it is more efficient to just loop over the experts and compute the output for each expert
+        When training is is more efficient to just loop over the experts and compute the output for each expert
         as otherwise the memory would explode.
 
         For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
