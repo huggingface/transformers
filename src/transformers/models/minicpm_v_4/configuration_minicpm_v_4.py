@@ -17,10 +17,10 @@ import os
 from typing import Union
 
 from transformers import LlamaConfig
-from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-
 from transformers.configuration_utils import PretrainedConfig
+from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.utils import logging
+
 
 logger = logging.get_logger(__name__)
 class MiniCPMVSliceConfig(PretrainedConfig):

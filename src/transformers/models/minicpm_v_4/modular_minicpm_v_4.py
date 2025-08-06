@@ -15,54 +15,37 @@
 
 import json
 import math
-import os
 import warnings
 from copy import deepcopy
-from dataclasses import dataclass
 from functools import partial
 from threading import Thread
-from typing import Any, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import torchvision
 from PIL import Image
 from torch import Tensor, nn
 from torch.nn.functional import *
-from torch.nn.init import (
-    _calculate_fan_in_and_fan_out,
-    constant_,
-    trunc_normal_,
-    xavier_normal_,
-    xavier_uniform_
-)
+from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
 from torch.nn.modules.activation import *
 
-from transformers import (
-    AutoProcessor,
-    LlamaForCausalLM,
-    LlamaPreTrainedModel,
-    TextIteratorStreamer
-)
-from transformers.activations import ACT2FN
-from transformers.configuration_utils import PretrainedConfig
+from transformers import AutoProcessor, LlamaForCausalLM, LlamaPreTrainedModel, TextIteratorStreamer
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.utils import (
-    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     logging,
-    replace_return_docstrings
+    replace_return_docstrings,
 )
 
 from .configuration_minicpm_v_4 import MiniCPM_V_4Config
+
 
 logger = logging.get_logger(__name__)
 
@@ -231,7 +214,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
             inputs_embeds=vllm_embedding,
             **kwargs
         )
-    
+
     def _decode(self, inputs_embeds, tokenizer, attention_mask, decode_text=False, **kwargs):
         terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
         output = self.llm.generate(
@@ -258,7 +241,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
         thread = Thread(target=self.llm.generate, kwargs=generation_kwargs)
         thread.start()
-    
+
         return streamer
 
     def _decode_text(self, result_ids, tokenizer):
@@ -314,7 +297,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
         if return_vision_hidden_states:
             return result, vision_hidden_states
-        
+
         return result
 
     def chat(
@@ -340,7 +323,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
             batched = False
         msgs_list = msgs
         images_list = image
-        
+
         if batched is False:
             images_list, msgs_list = [images_list], [msgs_list]
         else:
@@ -352,7 +335,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
             if self.processor is None:
                 self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
             processor = self.processor
-        
+
         assert self.config.query_num == processor.image_processor.image_feature_size, "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
         assert self.config.patch_size == processor.image_processor.patch_size, "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
         assert self.config.use_image_id == processor.image_processor.use_image_id, "These two values should be the same. Check `config.json` and `preprocessor_config.json`."
@@ -392,17 +375,17 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
             if system_prompt:
                 sys_msg = {'role': 'system', 'content': system_prompt}
-                copy_msgs = [sys_msg] + copy_msgs        
+                copy_msgs = [sys_msg] + copy_msgs
 
             prompts_lists.append(processor.tokenizer.apply_chat_template(copy_msgs, tokenize=False, add_generation_prompt=True))
             input_images_lists.append(images)
 
         inputs = processor(
-            prompts_lists, 
-            input_images_lists, 
+            prompts_lists,
+            input_images_lists,
             max_slice_nums=max_slice_nums,
             use_image_id=use_image_id,
-            return_tensors="pt", 
+            return_tensors="pt",
             max_length=max_inp_length
         ).to(self.device)
 
@@ -419,7 +402,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
                 "num_beams": 3,
                 "repetition_penalty": 1.2,
             }
-            
+
         if min_new_tokens > 0:
             generation_config['min_new_tokens'] = min_new_tokens
 
@@ -438,7 +421,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
                 decode_text=True,
                 **generation_config
             )
-        
+
         if stream:
             def stream_gen():
                 for text in res:
@@ -615,7 +598,7 @@ class Resampler(nn.Module):
 
 
 class MultiheadAttention(nn.MultiheadAttention):
-    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, 
+    def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False,
                  add_zero_attn=False, kdim=None, vdim=None, batch_first=False, device=None, dtype=None):
         super().__init__(embed_dim, num_heads, dropout, bias, add_bias_kv, add_zero_attn, kdim, vdim, batch_first, device, dtype)
 
@@ -631,7 +614,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 need_weights: bool = True,
                 attn_mask: Optional[Tensor] = None,
                 average_attn_weights: bool = True,
-                is_causal : bool = False) -> Tuple[Tensor, Optional[Tensor]]:
+                is_causal : bool = False) -> tuple[Tensor, Optional[Tensor]]:
         why_not_fast_path = ''
         if ((attn_mask is not None and torch.is_floating_point(attn_mask))
            or (key_padding_mask is not None) and torch.is_floating_point(key_padding_mask)):
@@ -746,7 +729,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                     value = key
             else:
                 query, key, value = (x.transpose(1, 0) for x in (query, key, value))
-        
+
         if not self._qkv_same_embed_dim:
             attn_output, attn_output_weights = self.multi_head_attention_forward(
                 query, key, value, self.embed_dim, self.num_heads,
@@ -777,7 +760,7 @@ class MultiheadAttention(nn.MultiheadAttention):
             return attn_output.transpose(1, 0), attn_output_weights
         else:
             return attn_output, attn_output_weights
-            
+
     def multi_head_attention_forward(
         self,
         query: Tensor,
@@ -805,11 +788,9 @@ class MultiheadAttention(nn.MultiheadAttention):
         static_v: Optional[Tensor] = None,
         average_attn_weights: bool = True,
         is_causal: bool = False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        tens_ops = (query, key, value, in_proj_weight, in_proj_bias, bias_k, bias_v, out_proj_weight, out_proj_bias)
-    
+    ) -> tuple[Tensor, Optional[Tensor]]:
         is_batched = _mha_shape_check(query, key, value, key_padding_mask, attn_mask, num_heads)
-    
+
         # For unbatched input, we unsqueeze at the expected batch-dim to pretend that the input
         # is batched, run the computation and before returning squeeze the
         # batch dimension so that the output doesn't carry this temporary batch dimension.
@@ -820,11 +801,11 @@ class MultiheadAttention(nn.MultiheadAttention):
             value = value.unsqueeze(1)
             if key_padding_mask is not None:
                 key_padding_mask = key_padding_mask.unsqueeze(0)
-    
+
         # set up shape vars
         tgt_len, bsz, embed_dim = query.shape
         src_len, _, _ = key.shape
-    
+
         key_padding_mask = _canonical_mask(
             mask=key_padding_mask,
             mask_name="key_padding_mask",
@@ -832,14 +813,14 @@ class MultiheadAttention(nn.MultiheadAttention):
             other_name="attn_mask",
             target_type=query.dtype
         )
-    
+
         if is_causal and attn_mask is None:
             raise RuntimeError(
                 "Need attn_mask if specifying the is_causal hint. "
                 "You may use the Transformer module method "
                 "`generate_square_subsequent_mask` to create this mask."
             )
-    
+
         if is_causal and key_padding_mask is None and not need_weights:
             # when we have a kpm or need weights, we need attn_mask
             # Otherwise, we use the is_causal hint go as is_causal
@@ -854,13 +835,13 @@ class MultiheadAttention(nn.MultiheadAttention):
                 target_type=query.dtype,
                 check_other=False,
             )
-    
+
             if key_padding_mask is not None:
                 # We have the attn_mask, and use that to merge kpm into it.
                 # Turn off use of is_causal hint, as the merged mask is no
                 # longer causal.
                 is_causal = False
-    
+
         assert embed_dim == embed_dim_to_check, \
             f"was expecting embedding dimension of {embed_dim_to_check}, but got {embed_dim}"
         if isinstance(embed_dim, torch.Tensor):
@@ -875,7 +856,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
         else:
             assert key.shape == value.shape, f"key shape {key.shape} does not match value shape {value.shape}"
-    
+
         #
         # compute in-projection
         #
@@ -891,9 +872,9 @@ class MultiheadAttention(nn.MultiheadAttention):
             else:
                 b_q, b_k, b_v = in_proj_bias.chunk(3)
             q, k, v = _in_projection(query, key, value, q_proj_weight, k_proj_weight, v_proj_weight, b_q, b_k, b_v)
-    
+
         # prep attention mask
-    
+
         if attn_mask is not None:
             # ensure attn_mask's dim is 3
             if attn_mask.dim() == 2:
@@ -907,7 +888,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                     raise RuntimeError(f"The shape of the 3D attn_mask is {attn_mask.shape}, but should be {correct_3d_size}.")
             else:
                 raise RuntimeError(f"attn_mask's dimension {attn_mask.dim()} is not supported")
-    
+
         # add bias along batch dimension (currently second)
         if bias_k is not None and bias_v is not None:
             assert static_k is None, "bias cannot be added to static key."
@@ -921,7 +902,7 @@ class MultiheadAttention(nn.MultiheadAttention):
         else:
             assert bias_k is None
             assert bias_v is None
-    
+
         #
         # reshape q, k, v for multihead attention and make em batch first
         #
@@ -944,7 +925,7 @@ class MultiheadAttention(nn.MultiheadAttention):
             assert static_v.size(2) == head_dim, \
                 f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
             v = static_v
-    
+
         # add zero attention along batch dimension (now first)
         if add_zero_attn:
             zero_attn_shape = (bsz * num_heads, 1, head_dim)
@@ -954,10 +935,10 @@ class MultiheadAttention(nn.MultiheadAttention):
                 attn_mask = pad(attn_mask, (0, 1))
             if key_padding_mask is not None:
                 key_padding_mask = pad(key_padding_mask, (0, 1))
-    
+
         # update source sequence length after adjustments
         src_len = k.size(1)
-    
+
         # merge key padding and attention masks
         if key_padding_mask is not None:
             assert key_padding_mask.shape == (bsz, src_len), \
@@ -968,21 +949,21 @@ class MultiheadAttention(nn.MultiheadAttention):
                 attn_mask = key_padding_mask
             else:
                 attn_mask = attn_mask + key_padding_mask
-    
+
         # adjust dropout probability
         if not training:
             dropout_p = 0.0
-    
+
         #
         # (deep breath) calculate attention and out projection
         #
-    
+
         if need_weights:
             B, Nt, E = q.shape
             q_scaled = q / math.sqrt(E)
-    
+
             assert not (is_causal and attn_mask is None), "FIXME: is_causal not implemented for need_weights"
-    
+
             if attn_mask is not None:
                 attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
             else:
@@ -990,18 +971,18 @@ class MultiheadAttention(nn.MultiheadAttention):
             attn_output_weights = softmax(attn_output_weights, dim=-1)
             if dropout_p > 0.0:
                 attn_output_weights = dropout(attn_output_weights, p=dropout_p)
-    
+
             attn_output = torch.bmm(attn_output_weights, v)
-    
+
             attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
             attn_output = self.out_proj(attn_output)
             attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
-    
+
             # optionally average attention weights over heads
             attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
             if average_attn_weights:
                 attn_output_weights = attn_output_weights.mean(dim=1)
-    
+
             if not is_batched:
                 # squeeze the output if input was unbatched
                 attn_output = attn_output.squeeze(1)
@@ -1016,14 +997,14 @@ class MultiheadAttention(nn.MultiheadAttention):
                     attn_mask = attn_mask.unsqueeze(0)
                 else:
                     attn_mask = attn_mask.view(bsz, num_heads, -1, src_len)
-    
+
             q = q.view(bsz, num_heads, tgt_len, head_dim)
             k = k.view(bsz, num_heads, src_len, head_dim)
             v = v.view(bsz, num_heads, src_len, head_dim)
-    
+
             attn_output = F.scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
             attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
-    
+
             attn_output = self.out_proj(attn_output)
             attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
             if not is_batched:
@@ -1122,7 +1103,7 @@ def _in_projection_packed(
     v: Tensor,
     w: Tensor,
     b: Optional[Tensor] = None,
-) -> List[Tensor]:
+) -> list[Tensor]:
     r"""
     Performs the in-projection step of the attention operation, using packed weights.
     Output is a triple containing projection tensors for query, key and value.
@@ -1186,7 +1167,7 @@ def _in_projection(
     b_q: Optional[Tensor] = None,
     b_k: Optional[Tensor] = None,
     b_v: Optional[Tensor] = None,
-) -> Tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     r"""
     Performs the in-projection step of the attention operation. This is simply
     a triple of linear projections, with shape constraints on the weights which
@@ -1222,7 +1203,7 @@ def _in_projection(
     assert b_q is None or b_q.shape == (Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
     assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
     assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
-    return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v) 
+    return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
 
 
 
@@ -1234,7 +1215,6 @@ SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import (index_first_axis, pad_input,  # noqa
                                          unpad_input)
 
@@ -1470,7 +1450,7 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
         """

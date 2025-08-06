@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from .image_processing_minicpm import *
     from .modeling_minicpm_v_4 import *
     from .processing_minicpm_v_4 import *
-    from .tokenization_minicpm_v_4_fast import *
     from .tokenization_minicpm_v_4 import *
+    from .tokenization_minicpm_v_4_fast import *
 else:
     import sys
 
