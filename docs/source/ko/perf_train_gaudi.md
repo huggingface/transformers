@@ -25,7 +25,7 @@ Transformers의 일부 모델링 코드는 HPU의 지연 실행(lazy) 모드에 
 PT_HPU_LAZY_MODE=0
 ```
 
-경우에 따라 long integer의 자료형 변환 문제를 피하려면 int64 지원을 활성화해야 하는 경우도 있습니다:
+경우에 따라 long integer의 자료형 변환 문제를 피하려면 아래와 같이 int64 지원을 활성화해야 하는 경우도 있습니다.
 
 ```
 PT_ENABLE_INT64_SUPPORT=1
