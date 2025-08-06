@@ -61,6 +61,8 @@ class HeliumRMSNorm(nn.Module):
 
 
 class HeliumRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
     def __init__(self, config: HeliumConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -75,7 +77,6 @@ class HeliumRotaryEmbedding(nn.Module):
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.inv_freq: torch.Tensor
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
