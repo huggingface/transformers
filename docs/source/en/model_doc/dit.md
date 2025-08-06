@@ -81,6 +81,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 ```
 
 </hfoption>
+</hfoptions>
 
 ## Notes
 
