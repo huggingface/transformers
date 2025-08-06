@@ -511,6 +511,8 @@
         title: GPT2
       - local: model_doc/gpt_bigcode
         title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
