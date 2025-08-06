@@ -679,18 +679,18 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             reshaped_input_sizes = reshaped_input_sizes.tolist()
         if max_hole_area > 0 or max_sprinkle_area > 0:
             processed_masks = []
-            for mask in masks:
-                if mask.ndim == 3:
-                    mask_flat = mask.flatten(0).unsqueeze(1)
-                elif mask.ndim == 4:
-                    mask_flat = mask.flatten(0, 1).unsqueeze(1)
-                elif mask.ndim == 5:
-                    mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
-                else:
-                    raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-                # TODO: add connected components kernel for postprocessing
-            else:
-                processed_masks = masks
+            # TODO: add connected components kernel for postprocessing
+            # for mask in masks:
+            #     if mask.ndim == 3:
+            #         mask_flat = mask.flatten(0).unsqueeze(1)
+            #     elif mask.ndim == 4:
+            #         mask_flat = mask.flatten(0, 1).unsqueeze(1)
+            #     elif mask.ndim == 5:
+            #         mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
+            #     else:
+            #         raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+            # else:
+            processed_masks = masks
             masks = processed_masks
         output_masks = []
         for i, original_size in enumerate(original_sizes):

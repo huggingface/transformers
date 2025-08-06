@@ -163,6 +163,8 @@ class Sam2VideoConfig(PretrainedConfig):
             The non-linear activation function in the mask downsampler.
         memory_fuser_num_layers (`int`, *optional*, defaults to 2):
             The number of layers in the memory fuser.
+        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the embedding layer in the memory fuser.
         memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
             The dimension of the intermediate layer in the memory fuser.
         memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
@@ -898,6 +900,28 @@ class Sam2VideoFeedForward(Sam2FeedForward):
 
 class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
     r"""
+    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
+        The Intersection over Union (IoU) scores of the predicted masks.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+        The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
+        by the processor to be brought to the original image size.
+    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
+        original image size.
+    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
+        Logits for the object score, indicating if an object is present.
+    image_embeddings (`tuple(torch.FloatTensor)`):
+        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
+        tensor has shape `(batch_size, channels, height, width)`.
+    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
+        Hidden-states of the vision model at the output of each stage.
+    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+        Attentions weights of the vision model.
+    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+        Attentions weights of the mask decoder.
     high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
         The predicted masks, upscaled to the original image size. Only used for Sam2VideoModel.
     object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
@@ -2104,11 +2128,11 @@ class Sam2VideoModel(Sam2Model):
         r"""
         inference_session (`Sam2VideoInferenceSession`):
             The video inference session object.
-        frame (`torch.Tensor`, *optional*):
-            The frame to process. Provide when streaming.
         frame_idx (`int`, *optional*):
             The index of the frame on which to run inference. No need to provide when inferring
             on a new streamed frame.
+        frame (`torch.Tensor`, *optional*):
+            The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
         consolidate_at_video_res (`bool`, *optional*, defaults to `True`):

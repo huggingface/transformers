@@ -261,18 +261,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             reshaped_input_sizes = reshaped_input_sizes.tolist()
         if max_hole_area > 0 or max_sprinkle_area > 0:
             processed_masks = []
-            for mask in masks:
-                if mask.ndim == 3:
-                    mask_flat = mask.flatten(0).unsqueeze(1)
-                elif mask.ndim == 4:
-                    mask_flat = mask.flatten(0, 1).unsqueeze(1)
-                elif mask.ndim == 5:
-                    mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
-                else:
-                    raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-                # TODO: add connected components kernel for postprocessing
-            else:
-                processed_masks = masks
+            # TODO: add connected components kernel for postprocessing
+            # for mask in masks:
+            #     if mask.ndim == 3:
+            #         mask_flat = mask.flatten(0).unsqueeze(1)
+            #     elif mask.ndim == 4:
+            #         mask_flat = mask.flatten(0, 1).unsqueeze(1)
+            #     elif mask.ndim == 5:
+            #         mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
+            #     else:
+            #         raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+            # else:
+            processed_masks = masks
             masks = processed_masks
         output_masks = []
         for i, original_size in enumerate(original_sizes):
@@ -894,6 +894,17 @@ class Sam2PromptEncoder(SamPromptEncoder):
         point_embedding = point_embedding + self.point_embed(labels.clamp(min=0)) * (labels >= 0).unsqueeze(-1)
 
         return point_embedding
+
+    def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
+        """Embeds box prompts."""
+        boxes = boxes + 0.5  # Shift to center of pixel
+        batch_size, nb_boxes = boxes.shape[:2]
+        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
+        input_shape = (self.input_image_size, self.input_image_size)
+        corner_embedding = self.shared_embedding(coords, input_shape)
+        corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
+        corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        return corner_embedding
 
 
 class Sam2Attention(SamAttention):

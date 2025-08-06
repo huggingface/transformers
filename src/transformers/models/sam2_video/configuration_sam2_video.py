@@ -228,6 +228,8 @@ class Sam2VideoConfig(PretrainedConfig):
             The non-linear activation function in the mask downsampler.
         memory_fuser_num_layers (`int`, *optional*, defaults to 2):
             The number of layers in the memory fuser.
+        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+            The dimension of the embedding layer in the memory fuser.
         memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
             The dimension of the intermediate layer in the memory fuser.
         memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
