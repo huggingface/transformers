@@ -29,7 +29,7 @@ alt="drawing" width="600"/>
 
 <small> Deformable DETR architecture. Taken from the <a href="https://huggingface.co/papers/2010.04159">original paper</a>.</small>
 
-You can find all the available Deformable DETR checkpoints under the [Deformable DETR](https://huggingface.co/models?search=sensetime/deformable-detr) collection.
+You can find all the available Deformable DETR checkpoints under the [SenseTime](https://huggingface.co/SenseTime) organization.
 
 > [!TIP]
 > This model was contributed by [nielsr](https://huggingface.co/nielsr).
