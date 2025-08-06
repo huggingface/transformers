@@ -13,7 +13,7 @@ for model in data["ydshieh"]:
 
 print(len(tests))
 
-for test in tests[:3]:
+for test in tests:
     print(test)
     command = f"HF_HOME=/mnt/cache RUN_SLOW=1 python3 -m pytest -v {test}"
     os.system(command)
