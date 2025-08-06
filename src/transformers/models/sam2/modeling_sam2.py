@@ -772,9 +772,7 @@ class Sam2PromptEncoder(nn.Module):
         self.mask_input_size = (4 * config.image_size // config.patch_size, 4 * config.image_size // config.patch_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, config.hidden_size) for _ in range(config.num_point_embeddings)]
-        )
+        self.point_embed = nn.Embedding(config.num_point_embeddings, config.hidden_size)
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 
@@ -798,13 +796,8 @@ class Sam2PromptEncoder(nn.Module):
             torch.zeros_like(point_embedding),
         )
 
-        # Add point embeddings for labels 0, 1, 2, 3
-        for label_val in range(len(self.point_embed)):
-            point_embedding = torch.where(
-                (labels == label_val)[:, :, :, None],
-                point_embedding + self.point_embed[label_val].weight[None, None, :, :],
-                point_embedding,
-            )
+        # Add point embeddings for labels >= 0
+        point_embedding = point_embedding + self.point_embed(labels.clamp(min=0)) * (labels >= 0).unsqueeze(-1)
 
         return point_embedding
 
@@ -815,8 +808,8 @@ class Sam2PromptEncoder(nn.Module):
         coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
         input_shape = (self.input_image_size, self.input_image_size)
         corner_embedding = self.shared_embedding(coords, input_shape)
-        corner_embedding[:, :, 0, :] += self.point_embed[2].weight
-        corner_embedding[:, :, 1, :] += self.point_embed[3].weight
+        corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
+        corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
         return corner_embedding
 
     def forward(

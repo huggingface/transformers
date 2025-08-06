@@ -217,7 +217,10 @@ def replace_keys(state_dict):
     model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
         "prompt_encoder.shared_embedding.positional_embedding"
     ]
-
+    model_state_dict["prompt_encoder.point_embed.weight"] = torch.cat(
+        [model_state_dict.pop(f"prompt_encoder.point_embed.{i}.weight") for i in range(4)],
+        dim=0,
+    )
     return model_state_dict
 
 
