@@ -2290,6 +2290,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
 
     def dequantize(self):
         """
