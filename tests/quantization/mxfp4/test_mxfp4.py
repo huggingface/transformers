@@ -368,12 +368,14 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
 @require_torch
 @require_torch_large_gpu
+@require_triton(min_version="3.4.0")
+@require_kernels
 @slow
 class Mxfp4ModelTest(unittest.TestCase):
     """Test mxfp4 with actual models (requires specific model and hardware)"""
 
     # These should be paths to real OpenAI MoE models for proper testing
-    model_name_packed = "/fsx/mohamed/oai-hf/tests/20b_converted_packed"  # TODO: Use real packed quantized model
+    model_name = "openai/gpt-oss-20b"
 
     input_text = "Once upon a time"
 
@@ -421,12 +423,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         self.assertFalse(quantization_config.dequantize)
 
         model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name_packed)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.check_inference_correctness_quantized(model, tokenizer)
 
     def test_gpt_oss_model_loading_dequantized_with_device_map(self):
@@ -438,12 +440,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         self.assertTrue(quantization_config.dequantize)
 
         model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name_packed)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.check_inference_correctness_quantized(model, tokenizer)
 
     def test_model_device_map_validation(self):
@@ -464,12 +466,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         # Expected: quantized < dequantized < unquantized memory usage
         quantization_config = Mxfp4Config(dequantize=True)
         quantized_model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
         dequantized_model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             torch_dtype=torch.bfloat16,
             device_map="auto",
             quantization_config=quantization_config,
