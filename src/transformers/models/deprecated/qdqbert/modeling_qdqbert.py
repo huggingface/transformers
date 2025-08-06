@@ -49,7 +49,7 @@ from ....utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_qdqbert import QDQBertConfig
 
 

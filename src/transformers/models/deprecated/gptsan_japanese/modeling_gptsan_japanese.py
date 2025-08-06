@@ -30,7 +30,7 @@ from ....utils import (
     is_torch_fx_proxy,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 

@@ -34,7 +34,7 @@ from ....modeling_outputs import (
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_ernie_m import ErnieMConfig
 
 

@@ -27,7 +27,7 @@ from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging, replace_return_docstrings
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 

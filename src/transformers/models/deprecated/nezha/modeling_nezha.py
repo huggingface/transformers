@@ -47,7 +47,7 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_nezha import NezhaConfig
 
 

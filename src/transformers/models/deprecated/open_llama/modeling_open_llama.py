@@ -33,7 +33,7 @@ from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from ...utils.deprecation import deprecate_kwarg
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_open_llama import OpenLlamaConfig
 
 
