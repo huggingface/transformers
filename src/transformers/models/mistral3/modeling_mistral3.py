@@ -283,7 +283,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         torch._check(
             inputs_embeds[special_image_mask].numel() == image_features.numel(),
             message=(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+                lambda: f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
             ),
         )
         return special_image_mask
