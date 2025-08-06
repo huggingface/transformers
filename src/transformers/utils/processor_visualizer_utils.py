@@ -8,21 +8,97 @@ import torch
 from PIL import Image
 
 from transformers import AutoConfig, AutoProcessor
+import numpy as np
+from PIL import Image, ImageChops
 
 
-class ImageMode(Enum):
-    SINGLE = "single"
-    TILED = "tiled"
+# archs failing that should raise immediately for this util:
+
+INCOMPATIBLE_MODELS = [
+    'bit',
+    'colpali',
+    'colqwen2',
+    'convnext',
+    'd_fine',
+    'data2vec',
+    'efficientloftr',
+    'efficientnet',
+    'fuyu',
+    'gemma3',
+    'glm4v',
+    'glpn',
+    'hgnet_v2',
+    'hiera',
+    'internvl',
+    'janus',
+    'layoutlmv3',
+    'levit',
+    'lightglue',
+    'llama4',
+    'mistral3',
+    'mllama',
+    'mobilevit',
+    'mobilevitv2',
+    'musicgen',
+    'musicgen_melody',
+    'oneformer',
+    'perceiver',
+    'perception_lm',
+    'phi4_multimodal',
+    'qwen2_5_omni',
+    'qwen2_5_vl',
+    'qwen2_vl',
+    'regnet',
+    'resnet',
+    'superglue',
+    'superpoint',
+    'swin2sr',
+    'timm_wrapper',
+    'tvp',
+    'udop',
+    'vitmatte',
+    'vitpose',
+    'vjepa2',
+    'whisper',
+    ]
+
+
+def _looks_like_global(tile: np.ndarray,
+                       base: Image.Image,
+                       *,
+                       mae_tol: float = 0.3
+                       ) -> bool:
+    """
+    Very simple visualizer heuristic.
+    """
+    base_r = base.convert("RGB").resize(tile.shape[:2][::-1], Image.BILINEAR)
+    base_np = np.asarray(base_r).astype(np.float32) / 255.0
+
+    tile_f32 = tile.astype(np.float32)
+    if tile_f32.max() > 1.5:
+        tile_f32 /= 255.0
+
+    mae = np.abs(tile_f32 - base_np).mean()
+    return mae < mae_tol
 
 
 class ImageVisualizer:
     def __init__(self, repo_id: str):
-        self.processor = AutoProcessor.from_pretrained(repo_id)
-        self.config = AutoConfig.from_pretrained(repo_id)
+        self.processor = AutoProcessor.from_pretrained(repo_id, trust_remote_code=False)
+        self.config = AutoConfig.from_pretrained(repo_id, trust_remote_code=False)
+         
+        # infer processor 
+        if hasattr(self.processor, "image_processor"):
+            image_processor = self.processor.image_processor
+        elif hasattr(self.processor, "image_mean"):
+            image_processor = self.processor # weak test, but works most of the time
+        else:
+            raise ValueError(f"No image processor found for {repo_id}.")
+
 
         # Image normalization parameters
-        self.channel_means = getattr(self.processor.image_processor, "image_mean", [0.485, 0.456, 0.406])
-        self.channel_stds = getattr(self.processor.image_processor, "image_std", [0.229, 0.224, 0.225])
+        self.channel_means = getattr(image_processor, "image_mean", [0.485, 0.456, 0.406])
+        self.channel_stds = getattr(image_processor, "image_std", [0.229, 0.224, 0.225])
 
         # Image token marker used in prompts
         self.image_token_marker = getattr(self.processor, "image_token_index", "<image>")
@@ -31,9 +107,9 @@ class ImageVisualizer:
         # Vision configuration
         self.vision_config = getattr(self.config, "vision_config", None)
         self.patch_size = getattr(
-            self.vision_config, "patch_size", getattr(self.processor.image_processor, "patch_size", 14)
+            self.vision_config, "patch_size", getattr(image_processor, "patch_size", 14)
         )
-        self.merge_size = getattr(self.processor.image_processor, "merge_size", 1)
+        self.merge_size = getattr(image_processor, "merge_size", 1)
 
     def _pixel_values_as_tensor(self, pixel_values: Union[torch.Tensor, np.ndarray, List[np.ndarray], List[torch.Tensor]]):
         """
@@ -65,10 +141,13 @@ class ImageVisualizer:
 
     def _to_pil(self, image_input: Union[str, np.ndarray, Image.Image]) -> Image.Image:
         if isinstance(image_input, str):
-            return Image.open(image_input)
+            return Image.open(image_input).convert("RGB")
         elif isinstance(image_input, np.ndarray):
-            return Image.fromarray(image_input)
-        return image_input
+            return Image.fromarray(image_input).convert("RGB")
+        elif isinstance(image_input, Image.Image):
+            return image_input.convert("RGB")
+        else:
+            raise TypeError(f"Unsupported image input type: {type(image_input)}")
 
     def _unnormalize(self, pixel_values: Union[torch.Tensor, np.ndarray, List[np.ndarray], List[torch.Tensor]]) -> np.ndarray:
         """
@@ -104,7 +183,9 @@ class ImageVisualizer:
             for y_pos in range(0, height, step):
                 plt.axhline(y_pos, color="red", linewidth=0.5)
 
+        caption = f"{width}×{height} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
         plt.tight_layout()
+        plt.figtext(0.5, -0.02, caption, ha="center", va="top", fontsize=12)
         plt.show()
 
     def _display_tiled_images(
@@ -124,19 +205,13 @@ class ImageVisualizer:
         num_tiles = tiles_array.shape[0]
 
         original_tile_index = None
-        if source_image is not None and num_tiles > 0:
-            # Note: PIL expects (width, height); passing tiles_array[0].shape[:2] preserves original behavior.
-            resized_source = source_image.convert("RGB").resize(tiles_array[0].shape[:2])
-            if np.allclose(tiles_array[0], resized_source, atol=1e-2):
-                original_tile_index = 0
-            elif np.allclose(tiles_array[-1], resized_source, atol=1e-2):
-                original_tile_index = num_tiles - 1
-
         saved_original_tile = None
-
-        # FIXME global image detection is broken - infer from processor class/docstring?
-        original_tile_index = num_tiles - 1  # Will fail in many cases
-
+        
+        for idx in (0, num_tiles - 1):
+            if _looks_like_global(tiles_array[idx], source_image):
+                original_tile_index = idx
+                break
+        
         if original_tile_index is not None:
             saved_original_tile = tiles_array[original_tile_index]
             tiles_array = np.delete(tiles_array, original_tile_index, axis=0)
@@ -176,7 +251,11 @@ class ImageVisualizer:
                     ax.axis("off")
                 tile_index += 1
 
+        unique = sorted({f"{t.shape[1]}×{t.shape[0]}" for t in tiles_array})
+        sizes = ", ".join(unique)
+        caption = f"{tiles_array.shape[0]} patches | {sizes} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
         plt.tight_layout()
+        fig.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=12)
         plt.show()
 
         if saved_original_tile is not None:
@@ -185,7 +264,10 @@ class ImageVisualizer:
             plt.imshow(saved_original_tile)
             plt.xticks([])
             plt.yticks([])
+            h0, w0 = saved_original_tile.shape[:2]
+            caption = f"{w0}×{h0} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
             plt.tight_layout()
+            plt.figtext(0.5, -0.02, caption, ha="center", va="top", fontsize=12)
             plt.show()
 
     def default_message(self, full_output: bool = False) -> str:
@@ -271,13 +353,38 @@ class ImageVisualizer:
         img_width, img_height = pil_images[0].size
         aspect_ratio = img_width / max(img_height, 1)
 
-        processed_inputs = self.processor(images=pil_images, text=[self.default_prompt], return_tensors="pt")
+        processed_inputs = self.processor(images=pil_images, text=self.default_prompt, return_tensors="pt")
         pixel_values = processed_inputs["pixel_values"]
         unnormalized = self._unnormalize(pixel_values)
+        if unnormalized.ndim == 3 or unnormalized.shape[0] == 1:
+            self._display_single_image(
+                unnormalized[0] if unnormalized.ndim == 4 else unnormalized,
+                show_patch_grid=add_grid,
+                figsize=figsize,
+            )
+            return
+        elif unnormalized.ndim != 4:
+            raise ValueError(f"Unsupported shape after unnormalization: {unnormalized.shape}")
 
-        if unnormalized.ndim == 3:
-            self._display_single_image(unnormalized, show_patch_grid=add_grid, figsize=figsize)
-        elif unnormalized.ndim == 4:
+        num_tiles = unnormalized.shape[0]
+
+        if rows is None or cols is None:
+            tile_h, tile_w = unnormalized.shape[1:3]
+            tile_aspect = tile_w / tile_h if tile_h > 0 else 1.0
+            target_aspect = aspect_ratio / tile_aspect
+
+            best_rows, best_cols = 1, num_tiles
+            min_diff = float("inf")
+            for r in range(1, num_tiles + 1):
+                c = int(np.ceil(num_tiles / r))
+                diff = abs((c / r) - target_aspect)
+                if diff < min_diff:
+                    min_diff = diff
+                    best_rows, best_cols = r, c
+
+            rows = best_rows
+            cols = best_cols
+
             self._display_tiled_images(
                 unnormalized,
                 images[0],
@@ -287,5 +394,3 @@ class ImageVisualizer:
                 add_grid=add_grid,
                 figsize=figsize,
             )
-        else:
-            raise ValueError(f"Unsupported shape after squeeze: {unnormalized.shape}.")
