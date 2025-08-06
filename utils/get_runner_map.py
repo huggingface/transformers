@@ -36,7 +36,7 @@ if __name__ == "__main__":
     # A10
     a10_runners = {
         "single-gpu": "aws-g5-4xlarge-cache",
-        "multi-gpu": "aws-g5-12xlarge-cache",
+        # "multi-gpu": "aws-g5-12xlarge-cache",
     }
 
     tests = os.getcwd()
