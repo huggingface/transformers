@@ -957,7 +957,7 @@ def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str])
         warnings.warn(
             f"Unused or unrecognized kwargs: {unused_key_str}. These arguments will be ignored.",
             UserWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
 

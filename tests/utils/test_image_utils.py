@@ -987,6 +987,7 @@ class ValidateKwargsTest(unittest.TestCase):
 
     def test_validate_kwargs_warning_stacklevel(self):
         """Test that warnings are raised with correct stacklevel for proper attribution."""
+
         def call_validate():
             validate_kwargs(["valid"], ["invalid"])
 
