@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - torch_assert_close_not_fail_but_do_something_disabled
+      - torch_assert_close_not_fail_but_do_something
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
