@@ -141,7 +141,47 @@ if is_torch_available():
     def patched_torch_testing_assert_close(*args, **kwargs):
         try:
             original_torch_testing_assert_close(*args, **kwargs)
-        except AssertionError:
+        except AssertionError as e:
+
+            import os
+            full_test_name = os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0]
+            test_file, test_class, test_name = full_test_name.split("::")
+
+            import traceback
+            stack = traceback.extract_stack()
+            target_frame = None
+            for frame in stack:
+                if test_file in str(frame) and test_name in str(frame):
+                    target_frame = frame
+                    break
+
+            if target_frame is not None:
+                line_number = target_frame.lineno
+
+            if "actual" in kwargs:
+                actual = kwargs["actual"]
+            else:
+                actual = args[0]
+
+            # to string
+            actual = f"{actual}"
+
+            # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
+            # tests/models/beit/test_modeling_beit.py:526
+            # torch.testing.assert_close(
+            # TODO: get the full method body
+            info = f"{full_test_name}\n{test_file}:{line_number}\n\n{target_frame.line}"
+
+            # Adding the frame that calls this patched method
+            caller_frame = stack[-2]
+            caller_path = os.path.relpath(caller_frame.filename)
+            info = f"{info}\n\n{caller_path}:{caller_frame.lineno}\n\n{caller_frame.line}"
+
+            info = f"{info}\n\n{actual}"
+
+            with open("collected.txt", "w") as fp:
+                fp.write(info)
+
             # TODO: what to do here?
             pass
 
