@@ -209,7 +209,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         # check if the param_name is not in self.modules_to_not_convert
         if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
             return False
-        elif param_device == "disk" and self.offload:
+        elif param_device == "cpu" and self.offload:
             # We don't quantize weights that we offload
             return False
         else:
