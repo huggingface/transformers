@@ -48,6 +48,7 @@ if is_torch_available():
         AutoTokenizer,
         Cache,
         DynamicCache,
+        EncoderDecoderCache,
         Gemma2Config,
         GenerationConfig,
         HQQQuantizedCacheProcessor,
@@ -944,6 +945,23 @@ class SyntheticCacheTest(unittest.TestCase):
         for i in range(len(static_cache.layers)):
             self.assertEqual(static_cache.layers[i].keys.tolist(), restored_cache.layers[i].keys.tolist())
             self.assertEqual(static_cache.layers[i].values.tolist(), restored_cache.layers[i].values.tolist())
+
+    def test_encoder_decoder_cache_unflatten_flatten(self):
+        c1 = DynamicCache()
+        c2 = DynamicCache()
+        c1.update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 0)
+        c2.update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 0)
+        ec_cache = EncoderDecoderCache(c1, c2)
+        flat, _spec = torch.utils._pytree.tree_flatten(ec_cache)
+        self.assertIsInstance(flat, list)
+        restored_cache = torch.utils._pytree.tree_unflatten(flat, _spec)
+        for att in ["self_attention_cache", "cross_attention_cache"]:
+            expected_cache = getattr(ec_cache, att)
+            rt_cache = getattr(restored_cache, att)
+            self.assertEqual(len(expected_cache.layers), len(rt_cache.layers))
+            for i in range(len(expected_cache.layers)):
+                self.assertEqual(expected_cache.layers[i].keys.tolist(), rt_cache.layers[i].keys.tolist())
+                self.assertEqual(expected_cache.layers[i].values.tolist(), rt_cache.layers[i].values.tolist())
 
     @require_torch_greater_or_equal("2.8")
     def test_static_cache_generic_exportability(self):

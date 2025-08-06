@@ -1926,6 +1926,35 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
 
 
+if is_torch_greater_or_equal("2.3"):
+
+    def flatten_encoder_decoder_cache(ec_cache: EncoderDecoderCache):
+        dictionary = {
+            "self_attention_cache": ec_cache.self_attention_cache,
+            "cross_attention_cache": ec_cache.cross_attention_cache,
+        }
+        return torch.utils._pytree._dict_flatten(dictionary)
+
+    def flatten_with_keys_encoder_decoder_cache(ec_cache: EncoderDecoderCache):
+        dictionary = {
+            "self_attention_cache": ec_cache.self_attention_cache,
+            "cross_attention_cache": ec_cache.cross_attention_cache,
+        }
+        return torch.utils._pytree._dict_flatten_with_keys(dictionary)
+
+    def unflatten_encoder_decoder_cache(values, context, output_type=None):
+        dictionary = torch.utils._pytree._dict_unflatten(values, context)
+        return EncoderDecoderCache(**dictionary)
+
+    torch.utils._pytree.register_pytree_node(
+        EncoderDecoderCache,
+        flatten_encoder_decoder_cache,
+        unflatten_encoder_decoder_cache,
+        serialized_type_name=f"{EncoderDecoderCache.__module__}.{EncoderDecoderCache.__name__}",
+        flatten_with_keys_fn=flatten_with_keys_encoder_decoder_cache,
+    )
+
+
 def parse_processor_args(processor_class: Optional[type["CacheProcessor"]], kwargs: dict) -> tuple[dict, dict]:
     """
     Parse processor arguments from kwargs based on the processor class init signature.
