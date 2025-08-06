@@ -118,13 +118,27 @@ jobs:
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
+      - name: checkout to start_commit
+        working-directory: /transformers
+        run: git checkout 8c4ea670dceace8d9b1bac8310bc62146b7134cd
+
+      - name: download and copy the fixed script
+        working-directory: /transformers
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y wget curl
+          rm -rf conftest.py
+          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/conftest.py
+          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/run_and_fix.py.py
+          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/new_failures_with_bad_commit_grouped_by_authors.json
+
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m temp.py
+        run: python3 -m run_and_fix.py
 
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
+      - name: "Upload collected.txt"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+          name: collected
+          path: /transformers/collected.txt
