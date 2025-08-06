@@ -654,33 +654,33 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
         freqs_x = torch.outer(x_positions, freqs).float()
         freqs_y = torch.outer(y_positions, freqs).float()
-        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
+        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+        # directly register the cos and sin embeddings as we have a fixed feature shape
+        self.register_buffer("pos_embeddings", torch.stack((inv_freq.cos(), inv_freq.sin())), persistent=False)
 
     @torch.no_grad()
-    def forward(self, feat_sizes: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Generate cosine and sine position embeddings for 2D spatial dimensions.
-
-        Args:
-            feat_sizes (`tuple[int, int]`):
-                Tuple of (width, height) for the feature map
-
-        Returns:
-            `tuple[torch.Tensor, torch.Tensor]`: A tuple of (cos, sin) tensors of shape (seq_len, dim).
-        """
-        end_x, end_y = feat_sizes
-        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
-        cos = freqs.cos()
-        sin = freqs.sin()
-        return cos, sin
+    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
+        # As the feature map size is fixed, we can just return the pre-computed embeddings.
+        return self.pos_embeddings
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
+    """
+    Rotates half the hidden dims of the input.
+
+    This is an optimized version of the following more explicit implementation:
+    ```python
     x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
     x_rotated[..., ::2] = -x[..., 1::2]
     x_rotated[..., 1::2] = x[..., ::2]
     return x_rotated
+    ```
+    """
+    x = x.view(*x.shape[:-1], -1, 2)
+    x1, x2 = x.unbind(dim=-1)
+    x = torch.stack((-x2, x1), dim=-1)
+    return x.flatten(start_dim=-2)
 
 
 # TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
@@ -705,10 +705,6 @@ def apply_rotary_pos_emb_2d(
     Returns:
         Rotated (q, k) tensors
     """
-    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
-    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
-    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
     q_embed = q.float()  # force upscale to float32 as in the original implementation
     q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
     if k.shape[-2] == 0:
@@ -767,11 +763,6 @@ class Sam2VideoRoPEAttention(nn.Module):
         self.feat_sizes = feat_sizes
         self.dropout_p = config.memory_attention_rope_dropout
 
-        # Cache for position embeddings
-        self._cached_cos = None
-        self._cached_sin = None
-        self._cached_feat_sizes = None
-
     def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
         batch, point_batch_size, n_tokens, channel = hidden_states.shape
         c_per_head = channel // num_attention_heads
@@ -801,20 +792,8 @@ class Sam2VideoRoPEAttention(nn.Module):
         key = self._separate_heads(key, self.num_attention_heads)
         value = self._separate_heads(value, self.num_attention_heads)
 
-        # Determine feature map size - assume square for simplicity and infer from sequence length
-        seq_len = query.shape[-2]
-        width = height = int(math.sqrt(seq_len))
-        current_feat_sizes = (width, height)
-
-        # Generate or use cached position embeddings
-        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
-            cos, sin = self.rotary_emb(current_feat_sizes)
-            self._cached_cos = cos
-            self._cached_sin = sin
-            self._cached_feat_sizes = current_feat_sizes
-        else:
-            cos = self._cached_cos
-            sin = self._cached_sin
+        # get position embeddings (always the same as fixed feature shape)
+        cos, sin = self.rotary_emb()
 
         # Apply rotary position encoding, excluding some keys if specified
         if num_k_exclude_rope > 0:
