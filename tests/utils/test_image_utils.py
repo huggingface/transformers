@@ -941,11 +941,11 @@ class ValidateKwargsTest(unittest.TestCase):
         """Test that no warning is raised when all kwargs are valid."""
         valid_keys = ["height", "width", "do_resize", "do_normalize"]
         captured_keys = ["height", "width", "do_resize"]
-        
+
         # Should not raise any warning
         with pytest.warns(None) as warning_list:
             validate_kwargs(valid_keys, captured_keys)
-        
+
         # Verify no warnings were raised
         self.assertEqual(len(warning_list), 0)
 
@@ -953,7 +953,7 @@ class ValidateKwargsTest(unittest.TestCase):
         """Test that UserWarning is raised when unused kwargs are found."""
         valid_keys = ["height", "width", "do_resize", "do_normalize"]
         captured_keys = ["height", "width", "invalid_param", "another_invalid"]
-        
+
         # Should raise a UserWarning
         with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid_param, another_invalid"):
             validate_kwargs(valid_keys, captured_keys)
@@ -962,7 +962,7 @@ class ValidateKwargsTest(unittest.TestCase):
         """Test warning with a single unused key."""
         valid_keys = ["height", "width"]
         captured_keys = ["height", "invalid_param"]
-        
+
         with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid_param"):
             validate_kwargs(valid_keys, captured_keys)
 
@@ -970,7 +970,7 @@ class ValidateKwargsTest(unittest.TestCase):
         """Test warning when all captured keys are unused."""
         valid_keys = ["height", "width"]
         captured_keys = ["invalid1", "invalid2"]
-        
+
         with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: invalid1, invalid2"):
             validate_kwargs(valid_keys, captured_keys)
 
@@ -980,7 +980,7 @@ class ValidateKwargsTest(unittest.TestCase):
         with pytest.warns(None) as warning_list:
             validate_kwargs(["height", "width"], [])
         self.assertEqual(len(warning_list), 0)
-        
+
         # Empty valid keys with captured keys should warn
         with pytest.warns(UserWarning, match="Unused or unrecognized kwargs: height"):
             validate_kwargs([], ["height"])
@@ -989,10 +989,10 @@ class ValidateKwargsTest(unittest.TestCase):
         """Test that warnings are raised with correct stacklevel for proper attribution."""
         def call_validate():
             validate_kwargs(["valid"], ["invalid"])
-        
+
         with pytest.warns(UserWarning) as warning_info:
             call_validate()
-        
+
         # Warning should be attributed to call_validate, not validate_kwargs itself
         # (stacklevel=2 means it points to the caller of validate_kwargs)
         self.assertTrue(len(warning_info) > 0)

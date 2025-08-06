@@ -941,13 +941,13 @@ def validate_annotations(
 def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str]):
     """
     Validates that captured kwargs are recognized processor keys.
-    
+
     Args:
         valid_processor_keys (`list[str]`):
             List of valid processor parameter names.
         captured_kwargs (`list[str]`):
             List of captured keyword argument names to validate.
-    
+
     Warns:
         UserWarning: When unused or unrecognized kwargs are found.
     """
