@@ -689,9 +689,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     def test_model_4b_bf16(self):
         model_id = "Google/gemma-3n-E4B-it"
 
-        model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = Gemma3nForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -715,7 +713,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+            model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
 
         messages = [
@@ -752,7 +750,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=False, torch_dtype=torch.bfloat16, device_map=torch_device
+            model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
 
         messages_2 = [
@@ -789,7 +787,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+            model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
 
         inputs = self.processor.apply_chat_template(
@@ -812,7 +810,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         model_id = "Google/gemma-3n-E4B-it"
 
         model = Gemma3nForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
+            model_id, torch_dtype=torch.bfloat16, device_map=torch_device
         )
 
         messages = [
@@ -845,9 +843,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3nForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = Gemma3nForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
