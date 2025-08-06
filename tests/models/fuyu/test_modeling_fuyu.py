@@ -16,9 +16,9 @@
 import io
 import unittest
 
-import torch
 import pytest
 import requests
+import torch
 from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
@@ -231,9 +231,13 @@ class FuyuModelIntegrationTest(unittest.TestCase):
     def default_processor(self):
         return FuyuProcessor.from_pretrained("adept/fuyu-8b")
 
+    @cached_property
+    def default_model(self):
+        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b", torch_dtype="float16", device_map=torch_device)
+
     def test_greedy_generation(self):
         processor = self.default_processor
-        model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b", torch_dtype="float16", device_map=torch_device)
+        model = self.default_model
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         image = Image.open(io.BytesIO(requests.get(url).content))
