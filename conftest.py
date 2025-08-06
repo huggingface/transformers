@@ -164,7 +164,11 @@ if is_torch_available():
                 actual = args[0]
 
             # to string
+            actual = actual.to('cpu')
             actual = f"{actual}"
+            actual = f'{actual}'.replace("tensor(", "").replace(")", "").replace("\n", " ")
+            while "  " in actual:
+                actual = actual.replace("  ", " ")
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526
