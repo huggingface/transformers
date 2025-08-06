@@ -431,13 +431,14 @@ class XLMRobertaXLAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -447,7 +448,7 @@ class XLMRobertaXLAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
-            past_key_value,
+            past_key_values,
             output_attentions,
             cache_position,
         )
@@ -501,6 +502,7 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
         self.output = XLMRobertaXLOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states,
@@ -508,7 +510,7 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -517,7 +519,7 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
@@ -535,7 +537,7 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )

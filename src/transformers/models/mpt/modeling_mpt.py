@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_mpt import MptConfig
 
 
@@ -86,11 +87,12 @@ class MptAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_bias: torch.Tensor,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
     ):
@@ -105,12 +107,12 @@ class MptAttention(nn.Module):
         key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
-        query_length = seq_length if past_key_value is None else seq_length + past_key_value.get_seq_length()
+        query_length = seq_length if past_key_values is None else seq_length + past_key_values.get_seq_length()
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
@@ -201,7 +203,7 @@ class MptBlock(GradientCheckpointingLayer):
             layernorm_output,
             position_bias=position_bias,
             attention_mask=attention_mask,
-            past_key_value=layer_past,
+            past_key_values=layer_past,
             cache_position=cache_position,
         )
 
@@ -246,13 +248,14 @@ class MptPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     @staticmethod
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def _convert_to_mpt_cache(
-        past_key_value: tuple[tuple[torch.Tensor, torch.Tensor]],
+        past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]],
     ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
         """
-        batch_size, num_heads, head_dim, seq_length = past_key_value[0][0].shape
+        batch_size, num_heads, head_dim, seq_length = past_key_values[0][0].shape
         batch_size_times_num_heads = batch_size * num_heads
         # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
         # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
@@ -261,7 +264,7 @@ class MptPreTrainedModel(PreTrainedModel):
                 layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
                 layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
             )
-            for layer_past in past_key_value
+            for layer_past in past_key_values
         )
 
 
