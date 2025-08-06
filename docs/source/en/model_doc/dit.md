@@ -47,7 +47,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
+pipeline(inputs="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
 ```
 
 </hfoption>
