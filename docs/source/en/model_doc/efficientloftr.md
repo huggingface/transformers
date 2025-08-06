@@ -28,9 +28,26 @@ rendered properly in your Markdown viewer.
 >
 > Click on the EfficientLoFTR models in the right sidebar for more examples of how to apply EfficientLoFTR to different computer vision tasks.
 
-The example below demonstrates how to match keypoints between two images with the [`AutoModel`] class.
+The example below demonstrates how to match keypoints between two images with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="image-classification",
+    model="zju-community/efficientloftr",
+    threshold=0.2
+)
+pipeline(images=[
+    "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg",
+    "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+])
+```
+<hfoption id="AutoModel">
 <hfoption id="AutoModel">
 
 ```py
