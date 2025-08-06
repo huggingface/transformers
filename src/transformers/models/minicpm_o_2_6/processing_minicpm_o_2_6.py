@@ -266,13 +266,35 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 audio_ph_list.append([])
 
         for idx, audios in enumerate(audios_list):
-            final_merge_audio = self.feature_extractor.merge_audios(
-                audio_part = audio_parts[idx] if audio_parts is not None else None,
-                audios = audios,
-                sampling_rate=sampling_rate,
-            )
+            if audio_parts is not None:
+                # same audio part merge
+                audio_part = audio_parts[idx]
+                merge_audio = []
+                cur_audio = []
+                for aid, (part, audio) in enumerate(zip(audio_part, audios)):
+                    if aid == 0 or audio_part[aid] == audio_part[aid - 1]:
+                        cur_audio.append(audio)
+                    else:
+                        merge_audio.append(np.hstack(cur_audio))
+                        cur_audio = [audio]
+                if cur_audio:
+                    merge_audio.append(np.hstack(cur_audio))
+
+            else:
+                merge_audio = audios
 
             audio_feature_lens = []
+
+            # If the audio exceeds 30 seconds, split it into chunks every 30 seconds.
+            final_merge_audio = []
+            max_audio_inp_len = 30 * sampling_rate
+            for audio in merge_audio:
+                if len(audio) <= max_audio_inp_len:
+                    final_merge_audio.append(audio)
+                else:
+                    for i in range(math.ceil(len(audio) / max_audio_inp_len)):
+                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
+
             if audios:
                 audio_inputs = self.feature_extractor(
                     final_merge_audio,

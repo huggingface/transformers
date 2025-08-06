@@ -17,11 +17,10 @@ Feature extraction saving/loading class for common feature extractors.
 
 import copy
 import json
-import math
 import os
 import warnings
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, Union, List
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 
@@ -674,47 +673,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-    def merge_audios(self, audio_part: List[int], audios: List[np.ndarray], sampling_rate: int) -> List[np.ndarray]:
-        """
-        Merge audio segments based on their part IDs and ensure no audio exceeds a maximum length.
-        Args:
-            audio_part (List[int]): A list of integers indicating the part or segment ID of each audio.
-                Audios with the same part ID are merged together.
-            audios (List[np.ndarray]): A list of numpy arrays, each representing an audio segment.
-            sampling_rate (int): The sampling rate of the audios, used to calculate the maximum length in samples.
-        Returns:
-            List[np.ndarray]: A list of merged and potentially chunked audio segments, where no segment exceeds 30 seconds.
-                If an audio segment is longer than 30 seconds, it is split into multiple chunks.
-        Note:
-            If `audio_part` is empty, the function simply returns the original `audios` list after checking 
-            and potentially chunking based on the maximum length.
-        """
-        if audio_part:
-            merge_audio = []
-            cur_audio = []
-            for aid, (part, audio) in enumerate(zip(audio_part, audios)):
-                if aid == 0 or audio_part[aid] == audio_part[aid - 1]:
-                    cur_audio.append(audio)
-                else:
-                    merge_audio.append(np.hstack(cur_audio))
-                    cur_audio = [audio]
-            if cur_audio:
-                merge_audio.append(np.hstack(cur_audio))
-        else:
-            merge_audio = audios
-
-        # If the audio exceeds 30 seconds, split it into chunks every 30 seconds.
-        final_merge_audio = []
-        max_audio_inp_len = 30 * sampling_rate
-        for audio in merge_audio:
-            if len(audio) <= max_audio_inp_len:
-                final_merge_audio.append(audio)
-            else:
-                for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                    final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
-
-        return final_merge_audio
 
 
 FeatureExtractionMixin.push_to_hub = copy_func(FeatureExtractionMixin.push_to_hub)
