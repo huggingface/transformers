@@ -19,7 +19,7 @@ Intel Gaudi AI 가속기 제품군에는 [Intel Gaudi 1](https://habana.ai/produ
 
 [`TrainingArguments`], [`Trainer`], [`Pipeline`]는 Intel Gaudi 장치를 자동으로 감지해, 백엔드 디바이스를 `hpu`로 설정합니다. 별도 설정 없이 곧바로 학습과 추론을 실행할 수 있습니다.
 
-Transformers의 일부 모델링 코드는 HPU의 지연 실행(lazy) 모드에 최적화되어 있지 않습니다. 오류가 발생하는 경우, 다음 환경 변수를 설정하여 즉시 실행(eager) 모드로 전환하세요:
+Transformers의 일부 모델링 코드는 HPU의 지연 실행(lazy) 모드에 최적화되어 있지 않습니다. 오류가 발생하는 경우, 아래처럼 환경 변수를 설정하여 즉시 실행(eager) 모드로 전환하세요.
 
 ```
 PT_HPU_LAZY_MODE=0
