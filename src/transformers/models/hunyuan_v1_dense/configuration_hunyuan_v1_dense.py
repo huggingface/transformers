@@ -52,8 +52,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        attention_head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
@@ -95,18 +93,10 @@ class HunYuanDenseV1Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether query and key in attention use norm
-        use_rotary_pos_emb (`bool`, *optional*, defaults to `True`):
-            Whether to use rotary_pos_emb.
-        norm_type (str, *optional*, defaults to `"hf_rms"`):
-            Normalization type to use. Supported values are `"hf_rms"` (HuggingFace RMSNorm),
-            `"layer_norm"` (standard LayerNorm), or `"no_norm"` (disabled normalization).
-        pad_id (int, *optional*, defaults to -1):
-            Token id used for padding sequences. Values <= -1 typically indicate no padding.
-            Should match the tokenizer's pad_token_id if padding is enabled.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
     """
 
     model_type = "hunyuan_v1_dense"
@@ -120,7 +110,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
-        attention_head_dim=None,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -136,11 +125,8 @@ class HunYuanDenseV1Config(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        use_qk_norm=False,
-        use_rotary_pos_emb=True,
-        norm_type="hf_rms",
-        pad_id=-1,
         head_dim=None,
+        sliding_window=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -149,12 +135,8 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-
+        self.sliding_window = sliding_window
         self.head_dim = head_dim
-        if attention_head_dim is not None:
-            self.attention_head_dim = attention_head_dim
-        else:
-            self.attention_head_dim = self.hidden_size // num_attention_heads
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -170,10 +152,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         # self._rope_scaling_validation()   # TODO: Need validation?
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.use_qk_norm = use_qk_norm
-        self.use_rotary_pos_emb = use_rotary_pos_emb
-        self.norm_type = norm_type
-        self.pad_id = pad_id
 
         super().__init__(
             pad_token_id=pad_token_id,
