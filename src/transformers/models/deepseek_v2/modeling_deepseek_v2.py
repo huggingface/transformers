@@ -194,6 +194,8 @@ class DeepseekV2RMSNorm(nn.Module):
 
 
 class DeepseekV2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

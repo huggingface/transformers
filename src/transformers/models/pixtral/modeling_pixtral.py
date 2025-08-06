@@ -58,6 +58,8 @@ class PixtralRotaryEmbedding(nn.Module):
     a corresponding positional embedding, based on its index in the grid.
     """
 
+    inv_freq: torch.Tensor
+
     def __init__(self, config, device=None):
         super().__init__()
         self.rope_type = "default"
