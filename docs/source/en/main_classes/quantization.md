@@ -65,6 +65,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] HqqConfig
 
+## Mxfp4Config
+
+[[autodoc]] Mxfp4Config
+
 ## FbgemmFp8Config
 
 [[autodoc]] FbgemmFp8Config

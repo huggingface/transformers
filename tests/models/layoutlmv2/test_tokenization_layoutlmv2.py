@@ -860,7 +860,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding="longest"
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -873,7 +873,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding=False
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -1358,7 +1358,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     add_special_tokens=True,
                 )
 
-                for key in tokens_p.keys():
+                for key in tokens_p:
                     self.assertEqual(tokens_r[key], tokens_p[key])
 
                 if "token_type_ids" in tokens_r:
@@ -1389,7 +1389,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # encode_plus()
                 no_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     self.assertEqual(
                         len(no_special_tokens[key]),
                         len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
@@ -1400,7 +1400,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 no_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                         self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
