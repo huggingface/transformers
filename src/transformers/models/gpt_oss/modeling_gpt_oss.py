@@ -97,8 +97,8 @@ class GptOssExperts(nn.Module):
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence lenght to get which experts
                 # are hit this time around
-                expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hitted[:]:
+                expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+            for expert_idx in expert_hit[:]:
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx[0]])
                 current_state = hidden_states[token_idx]
