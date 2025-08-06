@@ -1105,7 +1105,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
 
 
 class Emu3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Emu3Config, device=None):
         super().__init__()

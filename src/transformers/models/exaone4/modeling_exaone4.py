@@ -68,7 +68,7 @@ class Exaone4RMSNorm(nn.Module):
 
 
 class Exaone4RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Exaone4Config, device=None):
         super().__init__()

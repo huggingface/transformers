@@ -363,7 +363,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
 
 
 class Qwen3MoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Qwen3MoeConfig, device=None):
         super().__init__()

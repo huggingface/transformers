@@ -140,7 +140,7 @@ class DiaRMSNorm(nn.Module):
 
 
 class DiaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: DiaConfig, device=None):
         super().__init__()

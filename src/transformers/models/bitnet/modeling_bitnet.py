@@ -268,7 +268,7 @@ class BitNetDecoderLayer(GradientCheckpointingLayer):
 
 
 class BitNetRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: BitNetConfig, device=None):
         super().__init__()

@@ -65,7 +65,7 @@ class CohereLayerNorm(nn.Module):
 
 
 class CohereRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: CohereConfig, device=None):
         super().__init__()

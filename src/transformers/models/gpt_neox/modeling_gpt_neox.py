@@ -254,7 +254,7 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
 
 
 class GPTNeoXRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: GPTNeoXConfig, device=None):
         super().__init__()

@@ -340,7 +340,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
 
 class MixtralRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: MixtralConfig, device=None):
         super().__init__()

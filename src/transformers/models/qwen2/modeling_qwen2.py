@@ -268,7 +268,7 @@ class Qwen2PreTrainedModel(PreTrainedModel):
 
 
 class Qwen2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Qwen2Config, device=None):
         super().__init__()

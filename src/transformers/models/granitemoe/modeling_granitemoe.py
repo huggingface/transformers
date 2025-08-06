@@ -146,7 +146,7 @@ class GraniteMoeRMSNorm(nn.Module):
 
 # Copied from transformers.models.granite.modeling_granite.GraniteRotaryEmbedding with Granite->GraniteMoe
 class GraniteMoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: GraniteMoeConfig, device=None):
         super().__init__()

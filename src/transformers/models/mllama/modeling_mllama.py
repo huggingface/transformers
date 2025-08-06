@@ -718,7 +718,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
 
 
 class MllamaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()

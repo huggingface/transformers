@@ -297,7 +297,7 @@ class Phi3PreTrainedModel(PreTrainedModel):
 
 
 class Phi3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Phi3Config, device=None):
         super().__init__()

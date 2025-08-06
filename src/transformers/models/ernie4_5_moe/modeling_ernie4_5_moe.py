@@ -79,7 +79,7 @@ class Ernie4_5_MoeMLP(nn.Module):
 
 
 class Ernie4_5_MoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Ernie4_5_MoeConfig, device=None):
         super().__init__()

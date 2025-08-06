@@ -238,7 +238,7 @@ class GlmRMSNorm(nn.Module):
 
 
 class GlmRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: GlmConfig, device=None):
         super().__init__()

@@ -62,7 +62,7 @@ class Dots1RMSNorm(nn.Module):
 
 
 class Dots1RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Dots1Config, device=None):
         super().__init__()

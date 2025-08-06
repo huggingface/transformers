@@ -87,7 +87,7 @@ class RotaryEmbedding(torch.nn.Module):
     matrices which depend on their relative positions.
     """
 
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int):
         super().__init__()

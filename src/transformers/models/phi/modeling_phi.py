@@ -254,7 +254,7 @@ class PhiDecoderLayer(GradientCheckpointingLayer):
 
 
 class PhiRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: PhiConfig, device=None):
         super().__init__()

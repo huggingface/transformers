@@ -216,7 +216,7 @@ class Zamba2HybridDynamicCache(Cache):
 
 
 class Zamba2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Zamba2Config, device=None):
         super().__init__()

@@ -1538,7 +1538,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
 
 class Phi4MultimodalRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: Phi4MultimodalConfig, device=None):
         super().__init__()

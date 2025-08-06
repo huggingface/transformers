@@ -195,7 +195,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     matrices which depend on their relative positions.
     """
 
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int):
         super().__init__()
@@ -1230,7 +1230,7 @@ class EvollaRMSNorm(nn.Module):
 
 
 class EvollaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()

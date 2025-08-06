@@ -591,7 +591,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
 
 
 class MiniMaxRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: MiniMaxConfig, device=None):
         super().__init__()

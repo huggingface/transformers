@@ -82,7 +82,7 @@ class ArceeRMSNorm(nn.Module):
 
 
 class ArceeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: ArceeConfig, device=None):
         super().__init__()
