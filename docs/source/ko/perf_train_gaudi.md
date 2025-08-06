@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Intel Gaudi[[intel-gaudi]]
 
-Intel Gaudi AI 가속기 제품군에는 [Intel Gaudi 1](https://habana.ai/products/gaudi/), [Intel Gaudi 2](https://habana.ai/products/gaudi2/), [Intel Gaudi 3](https://habana.ai/products/gaudi3/)가 포함되어 있습니다. 각 서버에는 Habana Processing Unit(HPUs)라는 장치가 8개씩 탑재되어 있으며, Gaudi 3는 128GB, Gaudi 2는 96GB, Gaudi 1은 32GB 메모리가 제공됩니다. 하드웨어 구조에 대한 더 자세한 내용은 [Gaudi Architecture](https://docs.habana.ai/en/latest/Gaudi_Overview/Gaudi_Architecture.html)를 참고하세요.
+Intel Gaudi AI 가속기 제품군에는 [Intel Gaudi 1](https://habana.ai/products/gaudi/), [Intel Gaudi 2](https://habana.ai/products/gaudi2/), [Intel Gaudi 3](https://habana.ai/products/gaudi3/)가 포함되어 있습니다. 각 서버에는 Habana Processing Units(HPUs)라는 장치가 8개씩 탑재되어 있으며, Gaudi 3는 128GB, Gaudi 2는 96GB, Gaudi 1은 32GB 메모리가 제공됩니다. 하드웨어 구조에 대한 더 자세한 내용은 [Gaudi Architecture](https://docs.habana.ai/en/latest/Gaudi_Overview/Gaudi_Architecture.html)를 참고하세요.
 
 [`TrainingArguments`], [`Trainer`], [`Pipeline`]는 Intel Gaudi 장치를 자동으로 감지해, 백엔드 디바이스를 `hpu`로 설정합니다. 별도 설정 없이 곧바로 학습과 추론을 실행할 수 있습니다.
 
