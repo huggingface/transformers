@@ -107,18 +107,31 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
     def test_quantizer_validation_low_compute_capability(self):
         """Test quantizer validation with low compute capability"""
-        with patch("torch.cuda.get_device_capability", return_value=(8, 0)):
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            config = Mxfp4Config()
+            quantizer = Mxfp4HfQuantizer(config)
+            quantizer.pre_quantized = False
+
+            with self.assertRaises(ValueError):
+                quantizer.validate_environment()
+
+    def test_quantizer_validation_low_compute_capability_with_prequantized(self):
+        """Test quantizer validation with low compute capability"""
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
             quantizer = Mxfp4HfQuantizer(config)
 
-            with self.assertRaises(ValueError):
-                quantizer.validate_environment()
+            # Should automatically set dequantize=True and warn
+            quantizer.validate_environment()
+            self.assertTrue(quantizer.quantization_config.dequantize)
 
     def test_quantizer_validation_low_compute_capability_with_dequantize(self):
         """Test quantizer validation with low compute capability but dequantize enabled"""
-        with patch("torch.cuda.get_device_capability", return_value=(8, 0)):
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config(dequantize=True)
@@ -130,6 +143,52 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             except ValueError as e:
                 if "compute capability" in str(e):
                     self.fail("Should not raise compute capability error when dequantize=True")
+
+    def test_quantizer_validation_dequantize_on_cpu(self):
+        """Test quantizer validation with dequantize enabled on CPU-only environment"""
+        with patch("torch.cuda.is_available", return_value=False):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            config = Mxfp4Config(dequantize=True)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            # Should not raise error when dequantize=True even without CUDA
+            try:
+                quantizer.validate_environment()
+            except RuntimeError as e:
+                if "requires a GPU" in str(e):
+                    self.fail("Should not raise GPU requirement error when dequantize=True on CPU")
+
+    def test_quantizer_validation_order_dequantize_before_cuda_check(self):
+        """Test that dequantize check happens before CUDA availability check"""
+        # Mock both torch.cuda.is_available and is_accelerate_available to return False
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch(
+                "transformers.quantizers.quantizer_mxfp4.is_accelerate_available",
+                return_value=False,
+            ),
+        ):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            # Test with dequantize=True - should pass even without CUDA and accelerate
+            config = Mxfp4Config(dequantize=True)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            # This should not raise any error because dequantize check comes first
+            try:
+                quantizer.validate_environment()
+            except (RuntimeError, ImportError) as e:
+                if "requires a GPU" in str(e) or "requires Accelerate" in str(e):
+                    self.fail(f"Should not raise error when dequantize=True: {e}")
+
+            # Test with dequantize=False - should still fail due to missing CUDA
+            config = Mxfp4Config(dequantize=False)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            with self.assertRaises(RuntimeError) as context:
+                quantizer.validate_environment()
+            self.assertIn("requires a GPU", str(context.exception))
 
     def test_quantizer_validation_missing_triton(self):
         """Test quantizer validation when triton is not available"""
