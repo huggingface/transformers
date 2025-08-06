@@ -170,15 +170,28 @@ if is_torch_available():
             # tests/models/beit/test_modeling_beit.py:526
             # torch.testing.assert_close(
             # TODO: get the full method body
-            info = f"{full_test_name}\n{test_file}:{line_number}\n\n{target_frame.line}"
+            # info = f"{full_test_name}\n{test_file}:{line_number}\n\n{target_frame.line}"
+
+            from _pytest._code.source import Source
+            with open(test_file) as fp:
+                s = fp.read()
+                source = Source(s)
+                code = '\n'.join(source.getstatement(line_number-1).lines)
+            info = f"{full_test_name}\n{test_file}:{line_number}\n\n{code}"
 
             # Adding the frame that calls this patched method
             caller_frame = stack[-2]
             caller_path = os.path.relpath(caller_frame.filename)
-            info = f"{info}\n\n{caller_path}:{caller_frame.lineno}\n\n{caller_frame.line}"
+            # info = f"{info}\n\n{caller_path}:{caller_frame.lineno}\n\n{caller_frame.line}"
+
+            from _pytest._code.source import Source
+            with open(caller_path) as fp:
+                s = fp.read()
+                source = Source(s)
+                code = '\n'.join(source.getstatement(caller_frame.lineno-1).lines)
+            info = f"{info}\n\n{caller_path}:{caller_frame.lineno}\n\n{code}"
 
             info = f"{info}\n\n{actual}"
-
             info = f"{info}\n\n{'=' * 80}\n\n"
 
             with open("collected.txt", "a") as fp:
