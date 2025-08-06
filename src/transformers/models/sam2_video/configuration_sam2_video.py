@@ -174,8 +174,6 @@ class Sam2VideoConfig(PretrainedConfig):
             Scale factor for the sigmoid function in the memory encoder.
         sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
             Bias for the sigmoid function in the memory encoder.
-        binarize_mask_from_pts_for_mem_enc (`bool`, *optional*, defaults to `True`):
-            Whether to binarize the mask from points for the memory encoder.
         enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
             Whether to enable spatial embedding for occlusions.
         multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
@@ -192,10 +190,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The maximum number of object pointers in the encoder.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
-        project_temporal_pos_encoding_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to project temporal positional encoding in object pointers.
-        preserve_temporal_direction_in_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to preserve temporal direction in object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the memory attention hidden states.
         memory_attention_num_layers (`int`, *optional*, defaults to 4):
@@ -215,13 +209,7 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
             The feature sizes for the Rope positional encoding.
         memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
-        memory_attention_apply_pe_at_self_attn (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the self-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_keys (`bool`, *optional*, defaults to `True`):
-            Whether to apply positional encoding at the keys of the cross-attention of the memory attention module.
-        memory_attention_apply_pe_at_cross_attn_queries (`bool`, *optional*, defaults to `False`):
-            Whether to apply positional encoding at the queries of the cross-attention of the memory attention module.
+                The dropout rate for the Rope positional encoding.
         memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
             Dimensionality of the memory encoder hidden states.
         memory_encoder_output_channels (`int`, *optional*, defaults to 64):
@@ -248,8 +236,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The padding for the memory fuser.
         memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
             The initial value for the layer scale in the memory fuser.
-        memory_fuser_use_depthwise_conv (`bool`, *optional*, defaults to `True`):
-            Whether to use a depthwise convolution for the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
         fill_hole_area (`int`, *optional*, defaults to 8):
@@ -305,7 +291,6 @@ class Sam2VideoConfig(PretrainedConfig):
         image_size=1024,
         sigmoid_scale_for_mem_enc=20.0,
         sigmoid_bias_for_mem_enc=-10.0,
-        binarize_mask_from_pts_for_mem_enc=True,
         enable_occlusion_spatial_embedding=True,
         multimask_output_in_sam=True,
         multimask_min_pt_num=0,
@@ -314,8 +299,6 @@ class Sam2VideoConfig(PretrainedConfig):
         non_overlap_masks_for_mem_enc=False,
         max_object_pointers_in_encoder=16,
         enable_temporal_pos_encoding_for_object_pointers=True,
-        project_temporal_pos_encoding_in_object_pointers=True,
-        preserve_temporal_direction_in_object_pointers=True,
         # memory attention
         memory_attention_hidden_size=256,
         memory_attention_num_layers=4,
@@ -327,9 +310,6 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_attention_rope_theta=10000,
         memory_attention_rope_feat_sizes=[64, 64],
         memory_attention_rope_dropout=0.1,
-        memory_attention_apply_pe_at_self_attn=False,
-        memory_attention_apply_pe_at_cross_attn_keys=True,
-        memory_attention_apply_pe_at_cross_attn_queries=False,
         # memory encoder
         memory_encoder_hidden_size=256,
         memory_encoder_output_channels=64,
@@ -345,7 +325,6 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_fuser_kernel_size=7,
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_use_depthwise_conv=True,
         memory_fuser_hidden_act="gelu",
         # post-processing parameters
         fill_hole_area=8,
@@ -376,19 +355,17 @@ class Sam2VideoConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
         self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc  # scale factor for mask sigmoid prob
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc  # bias factor for mask sigmoid prob
-        self.binarize_mask_from_pts_for_mem_enc = binarize_mask_from_pts_for_mem_enc
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
+        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc
+        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc
         self.multimask_output_in_sam = multimask_output_in_sam
         self.multimask_min_pt_num = multimask_min_pt_num
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
         self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
+        # The next 4 are True for sam2.1 and False for sam2
+        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
-        self.project_temporal_pos_encoding_in_object_pointers = project_temporal_pos_encoding_in_object_pointers
-        self.preserve_temporal_direction_in_object_pointers = preserve_temporal_direction_in_object_pointers
 
         # memory attention
         self.memory_attention_hidden_size = memory_attention_hidden_size
@@ -401,9 +378,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_attention_rope_theta = memory_attention_rope_theta
         self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
         self.memory_attention_rope_dropout = memory_attention_rope_dropout
-        self.memory_attention_apply_pe_at_self_attn = memory_attention_apply_pe_at_self_attn
-        self.memory_attention_apply_pe_at_cross_attn_keys = memory_attention_apply_pe_at_cross_attn_keys
-        self.memory_attention_apply_pe_at_cross_attn_queries = memory_attention_apply_pe_at_cross_attn_queries
 
         # memory encoder
         self.memory_encoder_hidden_size = memory_encoder_hidden_size
@@ -420,7 +394,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_fuser_kernel_size = memory_fuser_kernel_size
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_use_depthwise_conv = memory_fuser_use_depthwise_conv
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
         # post-processing parameters

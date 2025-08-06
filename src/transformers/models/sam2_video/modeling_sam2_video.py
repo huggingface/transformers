@@ -875,32 +875,23 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
 
         self.activation = ACT2FN[config.memory_attention_feed_forward_hidden_act]
 
-        # Where to add pos enc
-        self.apply_pe_at_self_attn = config.memory_attention_apply_pe_at_self_attn
-        self.apply_pe_at_cross_attn_queries = config.memory_attention_apply_pe_at_cross_attn_queries
-        self.apply_pe_at_cross_attn_keys = config.memory_attention_apply_pe_at_cross_attn_keys
-
     def forward(
         self,
         queries: Tensor,
         keys: Tensor,
-        query_point_embedding: Optional[Tensor] = None,
         key_point_embedding: Optional[Tensor] = None,
         num_k_exclude_rope: int = 0,
     ) -> torch.Tensor:
         # Self-Attention
         query = self.layer_norm1(queries)
-        if self.apply_pe_at_self_attn:
-            query = self.self_attn(query=query + query_point_embedding, key=query + query_point_embedding, value=query)
-        else:
-            query = self.self_attn(query=query, key=query, value=query)
+        query = self.self_attn(query=query, key=query, value=query)
         queries = queries + self.dropout1(query)
 
         # Cross-Attention
         query = self.layer_norm2(queries)
         query = self.cross_attn_image(
-            query=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
-            key=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
+            query=query,
+            key=keys + key_point_embedding,
             value=keys,
             num_k_exclude_rope=num_k_exclude_rope,
         )
@@ -953,7 +944,6 @@ class Sam2VideoMemoryAttention(nn.Module):
 
         # Convert to batch first
         output = output.transpose(0, 1)
-        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1).unsqueeze(1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
 
@@ -961,7 +951,6 @@ class Sam2VideoMemoryAttention(nn.Module):
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
                 keys=memory,
-                query_point_embedding=current_vision_position_embeddings,
                 key_point_embedding=memory_posision_embeddings,
                 num_k_exclude_rope=num_object_pointer_tokens,
             )
@@ -983,7 +972,7 @@ class Sam2VideoMemoryFuserCXBlock(GradientCheckpointingLayer):
             config.memory_fuser_embed_dim,
             kernel_size=config.memory_fuser_kernel_size,
             padding=config.memory_fuser_padding,
-            groups=config.memory_fuser_embed_dim if config.memory_fuser_use_depthwise_conv else 1,
+            groups=config.memory_fuser_embed_dim,
         )  # depthwise conv
         self.layer_norm = Sam2VideoLayerNorm(config.memory_fuser_embed_dim, eps=1e-6)
         self.activation = ACT2FN[config.memory_fuser_hidden_act]
@@ -1668,6 +1657,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         # a single token to indicate no memory embedding from previous frames
         self.hidden_dim = config.vision_config.fpn_hidden_size
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
+        self.config = config
         # For video sequence inference
         self.image_size = config.image_size
         self.memory_attention = Sam2VideoMemoryAttention(config)
@@ -1682,11 +1672,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             torch.zeros(self.num_maskmem, 1, 1, self.mem_dim)
         )
 
-        # prompt encoder part
-        self.project_temporal_pos_encoding_in_object_pointers = (
-            config.project_temporal_pos_encoding_in_object_pointers
-        )  # compatibility with Sam2
-
         self.no_object_pointer = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
         # A conv layer to downsample the mask prompt to stride 4 (the same stride as
         # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
@@ -1695,7 +1680,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         # a feedforward layer on SAM output tokens to turn them into object pointers
         self.object_pointer_proj = Sam2VideoFeedForward(self.hidden_dim, self.hidden_dim, self.hidden_dim, 3)
 
-        if self.project_temporal_pos_encoding_in_object_pointers:
+        if self.config.enable_temporal_pos_encoding_for_object_pointers:
             # a linear projection on temporal positional encoding in object pointers to
             # avoid potential interference with spatial positional encoding
             self.temporal_positional_encoding_projection_layer = torch.nn.Linear(self.hidden_dim, self.mem_dim)
@@ -1705,24 +1690,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         self.occlusion_spatial_embedding_parameter = None  # compatibility with Sam2
         if config.enable_occlusion_spatial_embedding:
             self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
-
-        # Video Inference specific parameters
-        self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
-        # Additional configuration for video tracking
-        self.non_overlap_masks = config.non_overlap_masks
-        self.fill_hole_area = config.fill_hole_area
-        self.multimask_output_in_sam = config.multimask_output_in_sam
-        self.multimask_min_pt_num = config.multimask_min_pt_num
-        self.multimask_max_pt_num = config.multimask_max_pt_num
-        self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
-        self.max_object_pointers_in_encoder = config.max_object_pointers_in_encoder
-        # Compatibility with SAM2
-        self.enable_temporal_pos_encoding_for_object_pointers = config.enable_temporal_pos_encoding_for_object_pointers
-        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
-        # Compatibility with SAM2
-        self.preserve_temporal_direction_in_object_pointers = config.preserve_temporal_direction_in_object_pointers
-        self.multimask_output_for_tracking = config.multimask_output_for_tracking
 
         self.post_init()
 
@@ -2180,7 +2147,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 mode="bilinear",
                 align_corners=False,
             )
-        if self.non_overlap_masks:
+        if self.config.non_overlap_masks:
             video_res_masks = self._apply_non_overlapping_constraints(video_res_masks)
         return any_res_masks, video_res_masks
 
@@ -2648,8 +2615,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         pred_masks = current_out["pred_masks"]
         # TODO: add kernel for fill_holes_in_mask_scores
         # potentially fill holes in the predicted masks
-        # if self.fill_hole_area > 0:
-        #     pred_masks = fill_holes_in_mask_scores(pred_masks, self.fill_hole_area)
+        # if self.config.fill_hole_area > 0:
+        #     pred_masks = fill_holes_in_mask_scores(pred_masks, self.config.fill_hole_area)
         # "maskmem_pos_enc" is the same across frames, so we only need to store one copy of it
         maskmem_pos_enc = self._get_maskmem_pos_enc(inference_session, current_out)
         # object pointer is a small tensor, so we always keep it on GPU memory for fast access
@@ -2847,9 +2814,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
             # Construct the list of past object pointers to be used in attention
             if streaming:
-                max_object_pointers_to_use = self.max_object_pointers_in_encoder
+                max_object_pointers_to_use = self.config.max_object_pointers_in_encoder
             else:
-                max_object_pointers_to_use = min(num_total_frames, self.max_object_pointers_in_encoder)
+                max_object_pointers_to_use = min(num_total_frames, self.config.max_object_pointers_in_encoder)
             temporal_diff_and_pointers = []
 
             # Add object pointers from selected conditioning frames
@@ -2864,8 +2831,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
             for t_idx, out_data in eligible_conditioning_outputs.items():
                 temporal_difference = (frame_idx - t_idx) * temporal_position_sign_multiplier
-                if not self.preserve_temporal_direction_in_object_pointers:
-                    temporal_difference = abs(temporal_difference)
                 temporal_diff_and_pointers.append((temporal_difference, out_data["object_pointer"]))
 
             # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
@@ -2888,12 +2853,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
                 object_pointers = torch.stack(object_pointers_list, dim=0)
 
-                if self.enable_temporal_pos_encoding_for_object_pointers:
+                if self.config.enable_temporal_pos_encoding_for_object_pointers:
                     max_temporal_diff = float(max_object_pointers_to_use - 1)
                     # Determine dimensionality for temporal positional encoding of pointers
-                    pointer_tpos_dim = (
-                        num_channels if self.project_temporal_pos_encoding_in_object_pointers else self.mem_dim
-                    )
+                    pointer_tpos_dim = num_channels
 
                     # Normalize temporal differences before sine PE calculation
                     normalized_temporal_diffs = (
@@ -2963,21 +2926,20 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
         pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(batch_size, channels, height, width)
-        if self.non_overlap_masks_for_mem_enc and not self.training:
+        if self.config.non_overlap_masks_for_mem_enc and not self.training:
             # optionally, apply non-overlapping constraints to the masks (it's applied
             # in the batch dimension and should only be used during eval, where all
             # the objects come from the same video under batch size 1).
             pred_masks_high_res = self._apply_non_overlapping_constraints(pred_masks_high_res)
-        # scale the raw mask logits with a temperature before applying sigmoid
-        binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
-        if binarize and not self.training:
+        if is_mask_from_pts and not self.training:
+            # binarize the mask logits
             mask_for_mem = (pred_masks_high_res > 0).to(pred_masks_high_res.dtype)
         else:
             # apply sigmoid on the raw mask logits to turn them into range (0, 1)
             mask_for_mem = torch.sigmoid(pred_masks_high_res)
         # apply scale and bias terms to the sigmoid probabilities
-        mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
-        mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
+        mask_for_mem = mask_for_mem * self.config.sigmoid_scale_for_mem_enc
+        mask_for_mem = mask_for_mem + self.config.sigmoid_bias_for_mem_enc
 
         maskmem_features, maskmem_pos_enc = self.memory_encoder(
             pix_feat,
@@ -3230,9 +3192,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
-            self.multimask_output_in_sam
-            and (is_init_cond_frame or self.multimask_output_for_tracking)
-            and (self.multimask_min_pt_num <= num_pts <= self.multimask_max_pt_num)
+            self.config.multimask_output_in_sam
+            and (is_init_cond_frame or self.config.multimask_output_for_tracking)
+            and (self.config.multimask_min_pt_num <= num_pts <= self.config.multimask_max_pt_num)
         )
         return multimask_output
 
