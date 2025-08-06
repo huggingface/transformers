@@ -69,17 +69,12 @@ class GradientCheckpointingLayer(nn.Module):
                 message += " `use_cache=False`,"
                 do_warn = True
 
-            # different names for the same thing in different layers
-            if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                kwargs["past_key_value"] = None
-                message += " `past_key_value=None`,"
-                do_warn = True
-
             if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
                 kwargs["past_key_values"] = None
                 message += " `past_key_values=None`,"
                 do_warn = True
 
+            # layer_past is an old name for `past_key_values`
             if "layer_past" in kwargs and kwargs["layer_past"] is not None:
                 kwargs["layer_past"] = None
                 message += " `layer_past=None`,"
