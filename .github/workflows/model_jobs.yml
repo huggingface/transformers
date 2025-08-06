@@ -134,7 +134,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m run_and_fix.py
+        run: python3 run_and_fix.py
 
       - name: "Upload collected.txt"
         if: ${{ always() }}
