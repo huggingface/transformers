@@ -38,6 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_zamba2 import Zamba2Config
 
@@ -395,12 +396,13 @@ class Zamba2Attention(nn.Module):
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states: torch.Tensor,
         layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -424,8 +426,8 @@ class Zamba2Attention(nn.Module):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, layer_idx)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, layer_idx)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -986,13 +988,14 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: torch.Tensor,
         layer_idx: int,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -1006,7 +1009,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
                 (see fig. 2 in https://huggingface.co/papers/2405.16712).
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
+            past_key_values (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1023,7 +1026,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             layer_idx=layer_idx,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -1117,6 +1120,7 @@ class Zamba2HybridLayer(nn.Module):
         self.mamba_decoder = mamba
         self.shared_transformer = shared_transformer
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1124,7 +1128,7 @@ class Zamba2HybridLayer(nn.Module):
         layer_idx: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         position_embeddings: Optional[torch.LongTensor] = None,
@@ -1137,7 +1141,7 @@ class Zamba2HybridLayer(nn.Module):
             layer_idx (`int`): layer number.
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
+            past_key_values (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1154,7 +1158,7 @@ class Zamba2HybridLayer(nn.Module):
             original_hidden_states=original_hidden_states,
             layer_idx=layer_idx,
             attention_mask=causal_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             position_embeddings=position_embeddings,
         )
@@ -1170,7 +1174,7 @@ class Zamba2HybridLayer(nn.Module):
             hidden_states,
             transformer_hidden_states=transformer_hidden_states,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
@@ -1348,7 +1352,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     layer_idx=layer_idx,
                     attention_mask=attention_mask,
                     causal_mask=causal_mask,
-                    past_key_value=past_key_values,
+                    past_key_values=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     position_embeddings=position_embeddings,
