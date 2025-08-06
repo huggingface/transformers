@@ -796,6 +796,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
+    @pytest.mark.torch_export_test
     def test_export_text_only_with_hybrid_cache(self):
         if not is_torch_greater_or_equal("2.6.0"):
             self.skipTest(reason="This test requires torch >= 2.6 to run.")

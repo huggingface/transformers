@@ -31,6 +31,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -1362,6 +1363,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
+    @pytest.mark.torch_compile_test
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1381,6 +1383,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_peft
     @require_bitsandbytes
+    @pytest.mark.torch_compile_test
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
 

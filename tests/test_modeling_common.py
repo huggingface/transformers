@@ -27,6 +27,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 
 import numpy as np
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
@@ -3849,6 +3850,7 @@ class ModelTesterMixin:
 
     @require_torch_sdpa
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
@@ -4097,6 +4099,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @pytest.mark.torch_compile_test
     @slow
     def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
@@ -4477,6 +4480,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
@@ -4549,6 +4553,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.5")
+    @pytest.mark.torch_export_test
     def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
         """
         Test if model can be exported with torch.export.export()

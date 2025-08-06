@@ -305,6 +305,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @pytest.mark.torch_export_test
     @slow
     @require_read_token
     def test_export_static_cache(self):
@@ -375,6 +376,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     @require_large_cpu_ram
+    @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
         from transformers.pytorch_utils import is_torch_greater_or_equal
