@@ -56,7 +56,7 @@ Dateien lassen sich auch in einem Repository leicht bearbeiten, und Sie können 
 Bevor Sie ein Modell für den Hub freigeben, benötigen Sie Ihre Hugging Face-Anmeldedaten. Wenn Sie Zugang zu einem Terminal haben, führen Sie den folgenden Befehl in der virtuellen Umgebung aus, in der 🤗 Transformers installiert ist. Dadurch werden Ihre Zugangsdaten in Ihrem Hugging Face-Cache-Ordner (standardmäßig `~/.cache/`) gespeichert:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Wenn Sie ein Notebook wie Jupyter oder Colaboratory verwenden, stellen Sie sicher, dass Sie die [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) Bibliothek installiert haben. Diese Bibliothek ermöglicht Ihnen die programmatische Interaktion mit dem Hub.

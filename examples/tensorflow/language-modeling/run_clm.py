@@ -116,7 +116,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -299,7 +299,7 @@ def main():
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
-        if "validation" not in raw_datasets.keys():
+        if "validation" not in raw_datasets:
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
@@ -339,7 +339,7 @@ def main():
             **dataset_args,
         )
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
-        if "validation" not in raw_datasets.keys():
+        if "validation" not in raw_datasets:
             raw_datasets["validation"] = load_dataset(
                 extension,
                 data_files=data_files,
@@ -429,7 +429,7 @@ def main():
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.

@@ -555,7 +555,7 @@ if is_torch_available():
         output_dir=None,
         **kwargs,
     ):
-        label_names = kwargs.get("label_names", None)
+        label_names = kwargs.get("label_names")
         gradient_checkpointing = kwargs.get("gradient_checkpointing", False)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
         eval_dataset = RegressionDataset(length=eval_len, label_names=label_names)
@@ -1340,7 +1340,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
-        for key in dict1.keys():
+        for key in dict1:
             # Logging dir can be slightly different as they default to something with the time.
             if key != "logging_dir":
                 self.assertEqual(dict1[key], dict2[key])
@@ -2520,7 +2520,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     @require_torch_optimi
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_stable_adamw(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2539,7 +2539,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_torch_optimi
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_stable_adamw_extra_args(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2561,7 +2561,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_torch_optimi
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_stable_adamw_lr_display_without_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2586,7 +2586,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
 
     @require_torch_optimi
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_stable_adamw_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2615,19 +2615,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         logs = trainer.state.log_history[1:][:-1]
 
         # reach given learning rate peak and end with 0 lr
-        self.assertTrue(logs[num_warmup_steps - 2]["learning_rate"] == learning_rate)
-        self.assertTrue(logs[-1]["learning_rate"] == 0)
+        self.assertTrue(logs[num_warmup_steps - 1]["learning_rate"] == learning_rate)
+        self.assertTrue(np.allclose(logs[-1]["learning_rate"], 0, atol=5e-6))
 
         # increasing and decreasing pattern of lrs
         increasing_lrs = [
             logs[i]["learning_rate"] < logs[i + 1]["learning_rate"]
             for i in range(len(logs))
-            if i < num_warmup_steps - 2
+            if i < num_warmup_steps - 1
         ]
         decreasing_lrs = [
             logs[i]["learning_rate"] > logs[i + 1]["learning_rate"]
             for i in range(len(logs) - 1)
-            if i >= num_warmup_steps - 2
+            if i >= num_warmup_steps - 1
         ]
 
         self.assertTrue(all(increasing_lrs))

@@ -507,21 +507,22 @@ class GenerationMixin(ContinuousMixin):
             #     else:
             #         if input_ids.shape[1] != cache_position.shape[0]:
             #             input_ids = input_ids[:, cache_position]
+            # We need to clone the outputs to avoid aliasing.
             def branch_1(inputs_embeds, cache_position):
-                return inputs_embeds[:, -cache_position.shape[0] :]
+                return inputs_embeds[:, -cache_position.shape[0] :].clone()
 
             def branch_2(input_ids, cache_position):
-                return input_ids[:, -cache_position.shape[0] :]
+                return input_ids[:, -cache_position.shape[0] :].clone()
 
             def branch_3(input_ids, cache_position):
-                return input_ids[:, cache_position]
+                return input_ids[:, cache_position].clone()
 
             inputs_embeds, input_ids = torch.cond(
                 input_ids.shape[1] == 0,
                 (
                     lambda input_ids, inputs_embeds, cache_position: (
                         branch_1(inputs_embeds, cache_position),
-                        input_ids,
+                        input_ids.clone(),
                     )
                 ),
                 (
@@ -534,7 +535,7 @@ class GenerationMixin(ContinuousMixin):
                                 torch.cond(
                                     input_ids.shape[1] != cache_position.shape[0],
                                     branch_3,
-                                    (lambda input_ids, cache_position: input_ids),
+                                    (lambda input_ids, cache_position: input_ids.clone()),
                                     [input_ids, cache_position],
                                 )
                             ),
@@ -1800,7 +1801,7 @@ class GenerationMixin(ContinuousMixin):
     def _get_initial_cache_position(self, seq_length, device, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "cache_position" in model_kwargs and model_kwargs["cache_position"]:
+        if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
             return model_kwargs
         if "inputs_embeds" in model_kwargs and not self.config.is_encoder_decoder:
             cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
@@ -1867,7 +1868,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
             decoder_mapped_modules = [
-                module_name for module_name in execution_device_map.keys() if decoder_name in module_name
+                module_name for module_name in execution_device_map if decoder_name in module_name
             ]
             # The decoder name may be present in `execution_device_map` in two forms:
             # a) each layer has a device mapping
@@ -2055,7 +2056,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = None
 
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(), "cache_implementation", None
+            self.config.get_text_config(decoder=True), "cache_implementation", None
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
@@ -5275,7 +5276,7 @@ def stack_model_outputs(model_outputs: list[ModelOutput], config: PretrainedConf
     # Use a dictionary comprehension to gather attributes from all objects and concatenate them
     concatenated_data = {
         k: _concat([getattr(model_output, k) for model_output in model_outputs])
-        for k in model_output_cls.__dataclass_fields__.keys()
+        for k in model_output_cls.__dataclass_fields__
     }
 
     # Return a new object of the inferred class with the concatenated attributes
