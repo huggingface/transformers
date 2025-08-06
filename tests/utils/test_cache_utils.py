@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
@@ -944,6 +945,7 @@ class SyntheticCacheTest(unittest.TestCase):
             self.assertEqual(static_cache.layers[i].keys.tolist(), restored_cache.layers[i].keys.tolist())
             self.assertEqual(static_cache.layers[i].values.tolist(), restored_cache.layers[i].values.tolist())
 
+    @require_torch_greater_or_equal("2.8")
     def test_static_cache_generic_exportability(self):
         class Model(torch.nn.Module):
             def forward(self, cache: StaticCache):
