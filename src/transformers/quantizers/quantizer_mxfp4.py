@@ -67,23 +67,33 @@ class Mxfp4HfQuantizer(HfQuantizer):
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
         compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
+        gpu_is_supported = compute_capability >= (7, 5)
+        kernels_available = is_triton_available("3.4.0") and is_triton_kernels_availalble()
 
-        if not is_triton_available("3.4.0") or not is_triton_kernels_availalble():
-            if self.pre_quantized and not self.quantization_config.dequantize:
+        if self.pre_quantized:
+            # On unsupported GPUs or without kernels, we will dequantize the model to bf16
+            if not gpu_is_supported:
+                logger.warning_once(
+                    "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200). "
+                    "We will default to dequantizing the model to bf16."
+                )
+                self.quantization_config.dequantize = True
+                return
+
+            if not kernels_available:
                 logger.warning_once(
                     "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16"
                 )
                 self.quantization_config.dequantize = True
                 return
-            else:
-                # we can't quantize the model in this case so we raise an error
-                raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
-
-        if major < 9:
+        elif not gpu_is_supported:
+            # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
+                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200)"
             )
+        elif not kernels_available:
+            # we can't quantize the model in this case so we raise an error
+            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
 
         device_map = kwargs.get("device_map", None)
         if device_map is None:
