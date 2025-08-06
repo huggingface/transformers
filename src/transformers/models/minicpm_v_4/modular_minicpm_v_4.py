@@ -27,9 +27,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from PIL import Image
 from torch import Tensor, nn
-from torch.nn.functional import *
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
-from torch.nn.modules.activation import *
 
 from transformers import AutoProcessor, LlamaForCausalLM, LlamaPreTrainedModel, TextIteratorStreamer
 from transformers.integrations import is_deepspeed_zero3_enabled
@@ -139,7 +137,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
                     patch_attn_mask[i, 0, :tgt_sizes[i][0] * tgt_sizes[i][1]] = True
 
                 vision_batch_size = self.config.vision_batch_size
-                all_pixel_values = all_pixel_values.type(dtype)
+                all_pixel_values = all_pixel_values.type(dtype).to(device=device)
                 if B > vision_batch_size:
                     hs = []
                     for i in range(0, B, vision_batch_size):
@@ -185,24 +183,67 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
             i, torch.Tensor) else i for i in vision_hidden_states]
 
         bs = len(data['input_ids'])
+        device = vllm_embedding.device
+        embed_dim = vllm_embedding.shape[-1]
+
+        new_vllm_embeddings = []
+
         for i in range(bs):
             cur_vs_hs = vision_hidden_states[i]
-            if len(cur_vs_hs) > 0:
-                cur_vllm_emb = vllm_embedding[i]
-                cur_image_bound = data['image_bound'][i]
-                if len(cur_image_bound) > 0:
-                    image_indices = torch.stack(
-                        [torch.arange(r[0], r[1], dtype=torch.long) for r in cur_image_bound]
-                    ).to(vllm_embedding.device)
+            cur_vllm_emb = vllm_embedding[i]
 
-                    cur_vllm_emb.scatter_(0, image_indices.view(-1, 1).repeat(1, cur_vllm_emb.shape[-1]),
-                                          cur_vs_hs.view(-1, cur_vs_hs.shape[-1]))
-                elif self.training:
-                    cur_vllm_emb += cur_vs_hs[0].mean() * 0
+            if len(cur_vs_hs) == 0:
+                new_vllm_embeddings.append(cur_vllm_emb)
+                continue
+
+            cur_image_bound = data['image_bound'][i]
+
+            if len(cur_image_bound) > 0:
+                image_indices = torch.stack([
+                    torch.arange(r[0], r[1], dtype=torch.long)
+                    for r in cur_image_bound
+                ], dim=0).flatten().to(device)
+
+                indices_expanded = image_indices.view(-1, 1).expand(-1, embed_dim)
+                vision_features = cur_vs_hs.view(-1, embed_dim)
+
+                updated_emb = cur_vllm_emb.scatter(0, indices_expanded, vision_features)
+                new_vllm_embeddings.append(updated_emb)
+            elif self.training:
+                dummy_term = cur_vs_hs[0].sum() * 0
+                new_vllm_embeddings.append(cur_vllm_emb + dummy_term)
+            else:
+                new_vllm_embeddings.append(cur_vllm_emb)
+
+        vllm_embedding = torch.stack(new_vllm_embeddings, dim=0)
 
         return vllm_embedding, vision_hidden_states
 
-    def forward(self, data, **kwargs):
+    def forward(self, data=None, **kwargs):
+        if isinstance(data, torch.Tensor):
+            attention_mask = torch.ones_like(data, dtype=torch.bool)
+            kwargs = {'attention_mask': attention_mask}
+            return self.llm(
+                input_ids=data,
+                **kwargs
+            )
+
+        if data is None:
+            data = {
+                "input_ids": kwargs.pop("input_ids", None),
+                "pixel_values": kwargs.pop("pixel_values", None),
+                "image_bound": kwargs.pop("image_bound", None),
+                "tgt_sizes": kwargs.pop("tgt_sizes", None),
+                "position_ids": kwargs.pop("position_ids", None),
+            }
+        else:
+            kwargs.pop("input_ids", None)
+            kwargs.pop("pixel_values", None)
+            kwargs.pop("image_bound", None)
+            kwargs.pop("tgt_sizes", None)
+            kwargs.pop("position_ids", None)
+        kwargs.pop("inputs_embeds", None)
+
         vllm_embedding, vision_hidden_states = self.get_vllm_embedding(data)
         position_ids = data["position_ids"]
         if position_ids.dtype != torch.int64:
@@ -302,15 +343,15 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
     def chat(
         self,
-        image,
-        msgs,
-        tokenizer,
+        image=None,
+        msgs=None,
+        tokenizer=None,
         processor=None,
         vision_hidden_states=None,
         max_new_tokens=2048,
         min_new_tokens=0,
         sampling=True,
-        max_inp_length=8192,
+        max_inp_length=32768,
         system_prompt='',
         stream=False,
         max_slice_nums=None,
@@ -544,7 +585,7 @@ class Resampler(nn.Module):
             self.max_size = [max(max_h, self.max_size[0]), max(max_w, self.max_size[1])]
             self._set_2d_pos_cache(self.max_size, device)
 
-    def _init_weights(self, m):
+    def _initialize_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -968,7 +1009,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
             else:
                 attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
-            attn_output_weights = softmax(attn_output_weights, dim=-1)
+            attn_output_weights = F.softmax(attn_output_weights, dim=-1)
             if dropout_p > 0.0:
                 attn_output_weights = dropout(attn_output_weights, p=dropout_p)
 
@@ -1064,9 +1105,9 @@ def _mha_shape_check(query: Tensor, key: Tensor, value: Tensor,
 def _canonical_mask(
         mask: Optional[Tensor],
         mask_name: str,
-        other_type: Optional[DType],
+        other_type: Optional[F.DType],
         other_name: str,
-        target_type: DType,
+        target_type: F.DType,
         check_other: bool = True,
 ) -> Optional[Tensor]:
 
@@ -1090,7 +1131,7 @@ def _canonical_mask(
     return mask
 
 
-def _none_or_dtype(input: Optional[Tensor]) -> Optional[DType]:
+def _none_or_dtype(input: Optional[Tensor]) -> Optional[F.DType]:
     if input is None:
         return None
     elif isinstance(input, torch.Tensor):
@@ -1132,7 +1173,7 @@ def _in_projection_packed(
     if k is v:
         if q is k:
             # self-attention
-            proj = linear(q, w, b)
+            proj = F.linear(q, w, b)
             # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
             proj = proj.unflatten(-1, (3, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return proj[0], proj[1], proj[2]
@@ -1143,8 +1184,8 @@ def _in_projection_packed(
                 b_q = b_kv = None
             else:
                 b_q, b_kv = b.split([E, E * 2])
-            q_proj = linear(q, w_q, b_q)
-            kv_proj = linear(k, w_kv, b_kv)
+            q_proj = F.linear(q, w_q, b_q)
+            kv_proj = F.linear(k, w_kv, b_kv)
             # reshape to 2, E and not E, 2 is deliberate for better memory coalescing and keeping same order as chunk()
             kv_proj = kv_proj.unflatten(-1, (2, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return (q_proj, kv_proj[0], kv_proj[1])
@@ -1154,7 +1195,7 @@ def _in_projection_packed(
             b_q = b_k = b_v = None
         else:
             b_q, b_k, b_v = b.chunk(3)
-        return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
+        return F.linear(q, w_q, b_q), F.linear(k, w_k, b_k), F.linear(v, w_v, b_v)
 
 
 def _in_projection(
@@ -1203,7 +1244,7 @@ def _in_projection(
     assert b_q is None or b_q.shape == (Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
     assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
     assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
-    return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
+    return F.linear(q, w_q, b_q), F.linear(k, w_k, b_k), F.linear(v, w_v, b_v)
 
 
 
@@ -1215,8 +1256,7 @@ SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 if is_flash_attn_2_available():
-    from flash_attn.bert_padding import (index_first_axis, pad_input,  # noqa
-                                         unpad_input)
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data

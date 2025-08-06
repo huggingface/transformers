@@ -28,9 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from PIL import Image
 from torch import Tensor, nn
-from torch.nn.functional import *
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
-from torch.nn.modules.activation import *
 
 from transformers import AutoProcessor, LlamaForCausalLM, LlamaPreTrainedModel, TextIteratorStreamer
 from transformers.activations import ACT2FN
@@ -1015,7 +1013,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
             else:
                 attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
-            attn_output_weights = softmax(attn_output_weights, dim=-1)
+            attn_output_weights = F.softmax(attn_output_weights, dim=-1)
             if dropout_p > 0.0:
                 attn_output_weights = dropout(attn_output_weights, p=dropout_p)
 
@@ -1111,9 +1109,9 @@ def _mha_shape_check(query: Tensor, key: Tensor, value: Tensor,
 def _canonical_mask(
         mask: Optional[Tensor],
         mask_name: str,
-        other_type: Optional[DType],
+        other_type: Optional[F.DType],
         other_name: str,
-        target_type: DType,
+        target_type: F.DType,
         check_other: bool = True,
 ) -> Optional[Tensor]:
 
@@ -1137,7 +1135,7 @@ def _canonical_mask(
     return mask
 
 
-def _none_or_dtype(input: Optional[Tensor]) -> Optional[DType]:
+def _none_or_dtype(input: Optional[Tensor]) -> Optional[F.DType]:
     if input is None:
         return None
     elif isinstance(input, torch.Tensor):
@@ -1179,7 +1177,7 @@ def _in_projection_packed(
     if k is v:
         if q is k:
             # self-attention
-            proj = linear(q, w, b)
+            proj = F.linear(q, w, b)
             # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
             proj = proj.unflatten(-1, (3, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return proj[0], proj[1], proj[2]
@@ -1190,8 +1188,8 @@ def _in_projection_packed(
                 b_q = b_kv = None
             else:
                 b_q, b_kv = b.split([E, E * 2])
-            q_proj = linear(q, w_q, b_q)
-            kv_proj = linear(k, w_kv, b_kv)
+            q_proj = F.linear(q, w_q, b_q)
+            kv_proj = F.linear(k, w_kv, b_kv)
             # reshape to 2, E and not E, 2 is deliberate for better memory coalescing and keeping same order as chunk()
             kv_proj = kv_proj.unflatten(-1, (2, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
             return (q_proj, kv_proj[0], kv_proj[1])
@@ -1201,7 +1199,7 @@ def _in_projection_packed(
             b_q = b_k = b_v = None
         else:
             b_q, b_k, b_v = b.chunk(3)
-        return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
+        return F.linear(q, w_q, b_q), F.linear(k, w_k, b_k), F.linear(v, w_v, b_v)
 
 
 def _in_projection(
@@ -1250,7 +1248,7 @@ def _in_projection(
     assert b_q is None or b_q.shape == (Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
     assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
     assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
-    return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
+    return F.linear(q, w_q, b_q), F.linear(k, w_k, b_k), F.linear(v, w_v, b_v)
 
 
 
