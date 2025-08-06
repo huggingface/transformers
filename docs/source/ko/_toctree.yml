@@ -327,8 +327,6 @@
     title: (번역중) Contribute new quantization method
   title: (번역중) 경량화 메소드
 - sections:
-  - local: performance
-    title: 성능 및 확장성
   - local: in_translation
     title: (번역중) Quantization
   - local: llm_optims
@@ -348,8 +346,6 @@
       title: CPU에서 훈련
     - local: perf_train_cpu_many
       title: 다중 CPU에서 훈련하기
-    - local: perf_train_tpu_tf
-      title: TensorFlow로 TPU에서 훈련하기
     - local: perf_train_special
       title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
@@ -363,12 +359,8 @@
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
     title: 추론 최적화하기
-  - local: big_models
-    title: 대형 모델을 인스턴스화
   - local: debugging
     title: 디버깅
-  - local: tf_xla
-    title: TensorFlow 모델을 위한 XLA 통합
   - local: in_translation
     title: (번역중) Optimize inference using `torch.compile()`
   title: (번역중) 성능 및 확장성
