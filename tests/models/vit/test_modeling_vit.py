@@ -12,20 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the PyTorch ViT model."""
-from copy import deepcopy
-
-
-def patched_torch_testing_close(*args, **kwargs):
-    try:
-        orig_method(*args, **kwargs)
-    except AssertionError:
-        breakpoint()
-
-import torch
-
-import copy
-orig_method = copy.deepcopy(torch.testing.assert_close)
-torch.testing.assert_close = patched_torch_testing_close
 
 import unittest
 

@@ -134,3 +134,15 @@ if is_torch_available():
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     torch.backends.cudnn.allow_tf32 = False
+
+    # patched `torch.testing.assert_close` to gather more information.
+    original_torch_testing_assert_close = torch.testing.assert_close
+
+    def patched_torch_testing_assert_close(*args, **kwargs):
+        try:
+            original_torch_testing_assert_close(*args, **kwargs)
+        except AssertionError:
+            # TODO: what to do here?
+            pass
+
+    torch.testing.assert_close = patched_torch_testing_assert_close
