@@ -56,14 +56,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "Using mxfp4 quantization requires torch"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
+
+        if self.quantization_config.dequantize:
+            return
+
         if not torch.cuda.is_available():
             raise RuntimeError("Using MXFP4 quantized models requires a GPU")
 
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
-
-        if self.quantization_config.dequantize:
-            return
 
         compute_capability = torch.cuda.get_device_capability()
         major, minor = compute_capability
