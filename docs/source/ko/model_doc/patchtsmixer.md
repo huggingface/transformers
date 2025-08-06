@@ -35,7 +35,7 @@ PatchTSMixer는 MLP-Mixer 아키텍처를 기반으로 한 경량 시계열 모�
 ## 사용 예[[usage-example]]
 
 아래의 코드 스니펫은 PatchTSMixer 모델을 무작위로 초기화하는 방법을 보여줍니다. 
-PatchTSMixer 모델은 [Trainer API](../trainer.md)와 호환됩니다.
+PatchTSMixer 모델은 [Trainer API](../trainer)와 호환됩니다.
 
 ```python
 

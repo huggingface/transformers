@@ -657,7 +657,7 @@ class RowwiseParallel(TensorParallelLayer):
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
         if hasattr(mod, "bias") and mod.bias is not None:
-            mod._bias = mod.bias
+            mod._bias = mod.bias.to_local()
             mod.bias = None
 
         input_tensor = inputs[0]
@@ -675,10 +675,11 @@ class RowwiseParallel(TensorParallelLayer):
         # 2. to shard -> reduce_scatter
         if outputs.placements != output_layouts:
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
+        outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
             outputs += mod._bias
         # back to local tensor if use_local_output is True
-        return outputs.to_local() if use_local_output and isinstance(outputs, DTensor) else outputs
+        return outputs
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
@@ -996,7 +997,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1013,7 +1014,7 @@ def shard_and_distribute_module(
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
     tp_plan = model._tp_plan or {}
-    tp_plan.update(getattr(type(model), "_tp_plan", {}))
+    tp_plan.update(getattr(type(model), "_tp_plan", None) or {})
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
@@ -1079,7 +1080,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
 
 def distribute_model(model, distributed_config, device_mesh, tp_size):
     _plan = "_tp_plan"
-    tp_plan = getattr(model, "_tp_plan", {}).copy()
+    tp_plan = (getattr(model, "_tp_plan", None) or {}).copy()
     model._tp_plan = getattr(model.config, "base_model_tp_plan").copy()
     model._tp_plan.update(tp_plan)
     model._tp_size = tp_size
