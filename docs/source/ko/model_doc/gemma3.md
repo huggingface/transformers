@@ -31,7 +31,7 @@ rendered properly in your Markdown viewer.
 Gemma 3의 모든 원본 체크포인트는 [Gemma 3](https://huggingface.co/collections/google/gemma-3-release-67c6c6f89c4f76621268bb6d) 릴리스에서 확인할 수 있습니다.
 
 > [!팁]
-> Gemma를 다양한 비전 및 언어 작업에 적용하는 방법에 대한 더 많은 예시는 오른쪽 사이드바에서 Gemma 3 모델을 클릭하세요.
+> Gemma를 다양한 비전 및 언어 작업에 적용하는 추가 예시를 보려면 오른쪽 사이드바의 Gemma 3 모델을 클릭하세요.
 
 아래 예시는 [`Pipeline`] 또는 [`AutoModel`] 클래스를 사용하여 이미지를 기반으로 텍스트를 생성하는 방법을 보여줍니다.
 
@@ -171,7 +171,7 @@ visualizer("<img>What is shown in this image?")
 ## 노트 [[notes]]
 
 - 이미지-텍스트 및 이미지 전용 입력에는 [`Gemma3ForConditionalGeneration`]을 사용하세요.
-- Gemma 3는 다중 입력 이미지를 지원하지만, 프로세서에 전달하기 전에 이미지가 올바르게 배치되었는지 확인하세요. 각 배치는 하나 이상의 이미지 리스트이어야 합니다.
+- Gemma 3는 다중 입력 이미지를 지원하지만, 프로세서에 전달하기 전에 이미지가 올바르게 배치되었는지 확인하세요. 각 배치는 하나 이상의 이미지를 포함한 리스트여야 합니다.
 
     ```py
     url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
