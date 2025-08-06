@@ -264,8 +264,8 @@ def routing_torch_dist(
 
         expt_data = compute_expt_data_torch(hist, n_local_experts, n_gates_pad)
 
-        hitted_experts = n_expts_act
-    return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
+        hit_experts = n_expts_act
+    return RoutingData(gate_scal, hist, n_local_experts, hit_experts, expt_data), gather_indx, scatter_indx
 
 
 def mlp_forward(self, hidden_states):
