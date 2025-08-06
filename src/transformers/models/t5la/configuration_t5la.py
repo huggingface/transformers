@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -31,7 +30,7 @@ class T5LaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`T5LaModel`] or a [`TFT5Model`]. It is used to
     instantiate a T5LA model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the T5LA
-    [google-t5la/t5la-small](https://huggingface.co/google-t5la/t5la-small) architecture.
+    [hrezaei/T5LA](https://huggingface.co/hrezaei/T5LA) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -71,10 +70,16 @@ class T5LaConfig(PretrainedConfig):
             `"gated-gelu"` feed forward projection. Original T5LA uses `"relu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        lookahead_type (`string`, *optional*, defaults to "la"):
+            other options are "laa", "laa2", and "lae". For more details, see the paper:
+            https://aclanthology.org/2025.acl-srw.41/
+        lookahead_size (`int`, *optional*, defaults to 1):
+            Number of future tokens to be predicted after the immediately next token. The K parameter as explained in
+            the paper https://aclanthology.org/2025.acl-srw.41/
     """
 
     model_type = "t5la"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["past_key_values", "lookahead_logits", "lookahead_loss"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "num_heads",
@@ -102,8 +107,16 @@ class T5LaConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
+        lookahead_type="la",
+        lookahead_size=1,
         **kwargs,
     ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -136,13 +149,8 @@ class T5LaConfig(PretrainedConfig):
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        self.lookahead_type = lookahead_type
+        self.lookahead_size = lookahead_size
 
 
 class T5LaOnnxConfig(OnnxSeq2SeqConfigWithPast):

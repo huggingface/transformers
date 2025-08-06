@@ -48,14 +48,10 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        ByT5LaTokenizer,
+        ByT5Tokenizer,
         T5LaEncoderModel,
         T5LaForConditionalGeneration,
-        T5LaForQuestionAnswering,
-        T5LaForSequenceClassification,
-        T5LaForTokenClassification,
-        T5LaModel,
-        T5LaTokenizer,
+        T5Tokenizer,
     )
 
 
@@ -83,6 +79,7 @@ class T5LaModelTester:
         decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
+        lookahead_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,6 +103,7 @@ class T5LaModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
+        self.lookahead_size = lookahead_size
 
     def get_large_model_config(self):
         return T5LaConfig.from_pretrained("google-t5/t5-base")
@@ -122,8 +120,10 @@ class T5LaModelTester:
             decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
 
         lm_labels = None
+        la_labels = None
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            la_labels = lm_labels.unsqueeze(0).repeat(self.get_config().lookahead_size, 1, 1)
 
         config = self.get_config()
 
@@ -134,6 +134,7 @@ class T5LaModelTester:
             attention_mask,
             decoder_attention_mask,
             lm_labels,
+            la_labels,
         )
 
     def get_pipeline_config(self):
@@ -170,6 +171,8 @@ class T5LaModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            lookahead_type="la",
+            lookahead_size=self.lookahead_size,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -180,8 +183,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config)
+        model = T5LaForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -219,8 +223,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config)
+        model = T5LaForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -230,7 +235,7 @@ class T5LaModelTester:
             decoder_attention_mask=decoder_attention_mask,
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        decoder_output = result.last_hidden_state
+        decoder_output = result.decoder_last_hidden_state
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
 
@@ -249,6 +254,7 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
         model = T5LaForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
@@ -256,30 +262,16 @@ class T5LaModelTester:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            lookahead_targets=la_labels,
         )
-        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(len(outputs), 7)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
-
-    def create_and_check_with_sequence_classification_head(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
-        model = T5LaForSequenceClassification(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=input_ids,
-            labels=labels,
+        self.parent.assertEqual(
+            outputs["lookahead_logits"].size(),
+            (self.batch_size, self.lookahead_size, self.decoder_seq_length, self.vocab_size),
         )
-        # self.parent.assertEqual(len(outputs), 4)
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, config.num_labels))
-        self.parent.assertEqual(outputs["loss"].size(), ())
+        self.parent.assertEqual(outputs["lookahead_loss"].size(), ())
 
     def create_and_check_decoder_model_past(
         self,
@@ -289,8 +281,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config).get_decoder().to(torch_device).eval()
+        model = T5LaForConditionalGeneration(config=config).get_decoder().to(torch_device).eval()
         # first forward pass
         outputs = model(input_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids)
@@ -326,8 +319,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config).get_decoder()
+        model = T5LaForConditionalGeneration(config=config).get_decoder()
         model.to(torch_device)
         model.eval()
 
@@ -377,8 +371,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config).get_decoder().to(torch_device).eval()
+        model = T5LaForConditionalGeneration(config=config).get_decoder().to(torch_device).eval()
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
@@ -415,6 +410,7 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
         model = T5LaForConditionalGeneration(config=config).to(torch_device).eval()
         torch.manual_seed(0)
@@ -433,8 +429,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        model = T5LaModel(config=config).to(torch_device).half().eval()
+        model = T5LaForConditionalGeneration(config=config).to(torch_device).half().eval()
         output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
@@ -446,8 +443,9 @@ class T5LaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
+        la_labels,
     ):
-        for model_class in [T5LaModel, T5LaForConditionalGeneration]:
+        for model_class in [T5LaForConditionalGeneration]:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
@@ -537,6 +535,7 @@ class T5LaModelTester:
             attention_mask,
             decoder_attention_mask,
             lm_labels,
+            la_labels,
         ) = config_and_inputs
 
         inputs_dict = {
@@ -544,31 +543,24 @@ class T5LaModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
+            "lookahead_targets": la_labels,
         }
         return config, inputs_dict
 
 
 @require_torch
 class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (T5LaModel, T5LaForConditionalGeneration, T5LaForSequenceClassification, T5LaForQuestionAnswering)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (T5LaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": T5LaModel,
-            "question-answering": T5LaForQuestionAnswering,
             "summarization": T5LaForConditionalGeneration,
-            "text-classification": T5LaForSequenceClassification,
             "text2text-generation": T5LaForConditionalGeneration,
             "translation": T5LaForConditionalGeneration,
-            "zero-shot": T5LaForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (T5LaModel, T5LaForConditionalGeneration) if is_torch_available() else ()
+    all_parallelizable_model_classes = (T5LaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = True
@@ -608,8 +600,6 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         configs_no_init.return_dict = False
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "T5LaForSequenceClassification":
-                continue
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
@@ -767,11 +757,10 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
-    # T5LaForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (T5LaModel, T5LaForConditionalGeneration, T5LaForQuestionAnswering):
+        for model_class in [T5LaForConditionalGeneration]:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -807,10 +796,6 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
 
-    def test_with_sequence_classification_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
-
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
@@ -827,6 +812,7 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             attention_mask,
             decoder_attention_mask,
             lm_labels,
+            la_labels,
         ) = self.model_tester.prepare_config_and_inputs()
 
         attention_mask = ids_tensor(
@@ -845,6 +831,7 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             attention_mask,
             decoder_attention_mask,
             lm_labels,
+            la_labels,
         )
 
     def test_decoder_model_past_with_large_inputs(self):
@@ -871,7 +858,7 @@ class T5LaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-t5/t5-small"
-        model = T5LaModel.from_pretrained(model_name)
+        model = T5LaForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -977,22 +964,6 @@ class T5LaEncoderOnlyModelTester:
         output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_with_token_classification_head(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
-        labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
-        model = T5LaForTokenClassification(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            labels=labels,
-            attention_mask=attention_mask,
-        )
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, config.num_labels))
-        self.parent.assertEqual(outputs["loss"].size(), ())
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -1009,13 +980,13 @@ class T5LaEncoderOnlyModelTester:
 
 
 class T5LaEncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (T5LaEncoderModel, T5LaForTokenClassification) if is_torch_available() else ()
+    all_model_classes = (T5LaEncoderModel,) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = True
     pipeline_model_mapping = (
         {
-            "token-classification": T5LaForTokenClassification,
+            # "token-classification": T5LaForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -1037,10 +1008,6 @@ class T5LaEncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_with_token_classification_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
     def is_pipeline_test_to_skip(
         self,
@@ -1146,7 +1113,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tokenizer(self):
-        return T5LaTokenizer.from_pretrained("google-t5/t5-base")
+        return T5Tokenizer.from_pretrained("google-t5/t5-base")
 
     @slow
     def test_torch_quant(self):
@@ -1154,7 +1121,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
         Test that a simple `torch.quantization.quantize_dynamic` call works on a T5La model.
         """
         model_name = "google/flan-t5-small"
-        tokenizer = T5LaTokenizer.from_pretrained(model_name)
+        tokenizer = T5Tokenizer.from_pretrained(model_name)
         model = T5LaForConditionalGeneration.from_pretrained(model_name)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         input_text = "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single tweet?"
@@ -1167,7 +1134,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
-        tokenizer = T5LaTokenizer.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
 
@@ -1191,7 +1158,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
         """
 
         model = T5LaForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
-        tokenizer = T5LaTokenizer.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
@@ -1217,7 +1184,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
         """
 
         model = T5LaForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
-        tokenizer = T5LaTokenizer.from_pretrained("google/t5-v1_1-small")
+        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
@@ -1241,7 +1208,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
         """
 
         model = T5LaForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
-        tokenizer = ByT5LaTokenizer.from_pretrained("google/byt5-small")
+        tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
         labels = tokenizer("Hi I am", return_tensors="pt").input_ids
@@ -1626,7 +1593,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my pizza.",
         ]
         model = T5LaForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
-        tokenizer = T5LaTokenizer.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
@@ -1660,7 +1627,7 @@ class T5LaModelIntegrationTests(unittest.TestCase):
             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my pizza.",
         ]
         model = T5LaEncoderModel.from_pretrained("google-t5/t5-small").to(torch_device)
-        tokenizer = T5LaTokenizer.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         logits = model(**inputs)
@@ -1825,6 +1792,7 @@ class TestAsymmetricT5La(unittest.TestCase):
             attention_mask,
             decoder_attention_mask,
             lm_labels,
+            lookahead_targets,
         ) = inputs
         model = T5LaForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
@@ -1832,11 +1800,19 @@ class TestAsymmetricT5La(unittest.TestCase):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            lookahead_targets=lookahead_targets,
         )
         # outputs = model(*inputs)
-        assert len(outputs) == 4
+        assert len(outputs) == 7
         assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
         assert outputs["loss"].size() == ()
+        assert outputs["lookahead_logits"].size() == (
+            tester.batch_size,
+            tester.lookahead_size,
+            tester.decoder_seq_length,
+            tester.vocab_size,
+        )
+        assert outputs["lookahead_loss"].size() == ()
         return model
 
     def test_small_decoder(self):

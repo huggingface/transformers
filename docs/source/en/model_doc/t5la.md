@@ -16,6 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-05.*
 
 
 # T5LA
@@ -57,11 +58,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] T5LaForConditionalGeneration
 
-## T5LaModel
-
-[[autodoc]] T5LaModel
-    - forward
-
 ## T5LaPreTrainedModel
 
 [[autodoc]] T5LaPreTrainedModel
@@ -70,15 +66,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## load_tf_weights_in_t5
 
 [[autodoc]] load_tf_weights_in_t5
-
-## T5LaForQuestionAnswering
-
-[[autodoc]] T5LaForQuestionAnswering
-
-## T5LaForSequenceClassification
-
-[[autodoc]] T5LaForSequenceClassification
-
-## T5LaForTokenClassification
-
-[[autodoc]] T5LaForTokenClassification
