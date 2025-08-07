@@ -160,12 +160,29 @@ if is_torch_available():
             if target_frame is not None:
                 line_number = target_frame.lineno
 
+            import inspect
+            # from the most recent frame to the top frame
+            stack_from_inspect = inspect.stack()
+            # but visit from the top frame to the most recent frame
+            for frame in reversed(stack_from_inspect):
+                if test_file in str(frame):
+                    if test_name == frame.frame.f_locals["self"]._testMethodName:
+                        target_frame = frame
+                        break
+
+            if target_frame is not None:
+                line_number = target_frame.lineno
+
             if "actual" in kwargs:
                 actual = kwargs["actual"]
             else:
                 actual = args[0]
 
             def format(t):
+
+                if not isinstance(t, torch.Tensor):
+                    t = torch.tensor(t)
+
                 is_scalar = False
                 if t.ndim == 0:
                     t = torch.tensor([t])
