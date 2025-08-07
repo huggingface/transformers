@@ -1464,7 +1464,25 @@ class EncoderDecoderCache(Cache):
     ```
     """
 
-    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
+    # Override @property from Cache -> this will be set in __init__ on the instances
+    is_compileable = False
+
+    def __init__(self, *caches) -> None:
+        # If only one argument is passed, it should be a legacy cache ie. an iterable of tuples of tensors
+        # This is not only for legacy reason, but also to be compatible with nn.DataParallel
+        if len(caches) == 1:
+            self_attention_cache, cross_attention_cache = self.create_dynamic_caches_from_legacy_cache(caches[0])
+        # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
+        elif len(caches) == 2:
+            assert isinstance(caches[0], Cache), f"{type(caches[0]) = } is not a Cache"
+            assert isinstance(caches[1], Cache), f"{type(caches[1]) = } is not a Cache"
+            self_attention_cache = caches[0]
+            cross_attention_cache = caches[1]
+        # Error case
+        else:
+            raise ValueError(f"Expected 1 or 2 arguments, got {len(caches)}")
+
+        # Initialize caches
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
 
@@ -1526,25 +1544,35 @@ class EncoderDecoderCache(Cache):
         return legacy_cache
 
     @classmethod
+    def create_dynamic_caches_from_legacy_cache(
+        cls, past_key_values: Iterable[tuple[torch.FloatTensor, ...]]
+    ) -> tuple[Cache, Cache]:
+        """Create a self-attention cache and a cross-attention cache from (past_key_values), which is an iterable of
+        tuples of tensors. Legacy cache is a tuple of tuples of tensors but this also supports Iterables of tensor to
+        be compatible with nn.DataParallel.gather."""
+        self_attention_cache = DynamicCache()
+        cross_attention_cache = DynamicCache()
+
+        for layer_idx, key_value_states in enumerate(past_key_values):
+            key_states, value_states = key_value_states[:2]
+            self_attention_cache.update(key_states, value_states, layer_idx)
+            if len(key_value_states) > 2:
+                key_states, value_states = key_value_states[2:]
+                cross_attention_cache.update(key_states, value_states, layer_idx)
+                # cross_attention_cache.is_updated[layer_idx] = True # NOTE: this is handled in __init__
+        return self_attention_cache, cross_attention_cache
+
+    @classmethod
     def from_legacy_cache(
-        cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]
+        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]],
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         if past_key_values is None:
             logger.warning_once("past_key_values should not be None in from_legacy_cache()")
-        cache = cls(
-            self_attention_cache=DynamicCache(),
-            cross_attention_cache=DynamicCache(),
-        )
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx][:2]
-                cache.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(past_key_values[layer_idx]) > 2:
-                    key_states, value_states = past_key_values[layer_idx][2:]
-                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
-                    cache.is_updated[layer_idx] = True
-        return cache
+            self_attention_cache, cross_attention_cache = DynamicCache(), DynamicCache()
+        else:
+            self_attention_cache, cross_attention_cache = cls.create_dynamic_caches_from_legacy_cache(past_key_values)
+        return cls(self_attention_cache, cross_attention_cache)
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
