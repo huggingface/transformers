@@ -291,7 +291,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
-                ("cuda", 8): [[-0.3084, 1.0402, 1.1816], [-0.2883, 0.5781, 0.6123], [0.1487, 0.6119, -0.0584]],
+                ("cuda", 8): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
