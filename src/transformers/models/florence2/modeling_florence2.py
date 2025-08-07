@@ -642,7 +642,7 @@ class Florence2PreTrainedModel(PreTrainedModel):
     """
 )
 class Florence2Model(Florence2PreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = [
         "language_model.encoder.embed_tokens.weight",
         "language_model.decoder.embed_tokens.weight",
@@ -803,12 +803,7 @@ class Florence2Model(Florence2PreTrainedModel):
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = [
         "model.language_model.encoder.embed_tokens.weight",
         "model.language_model.decoder.embed_tokens.weight",

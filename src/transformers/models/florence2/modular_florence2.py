@@ -1643,6 +1643,7 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
     """
 )
 class Florence2Model(LlavaModel):
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = [
         "language_model.encoder.embed_tokens.weight",
         "language_model.decoder.embed_tokens.weight",
@@ -1766,6 +1767,7 @@ class Florence2Model(LlavaModel):
     """
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = [
         "model.language_model.encoder.embed_tokens.weight",
         "model.language_model.decoder.embed_tokens.weight",
