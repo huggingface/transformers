@@ -22,9 +22,7 @@ import torch.nn.functional as F
 from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
-    is_kernels_available,
     is_torch_npu_available,
     logging,
 )
@@ -50,9 +48,12 @@ flash_fn = None
 flash_varlen_fn = None
 pad_fn = None
 unpad_fn = None
-is_fa3 = None
+
+supports_dropout = None
 supports_sliding_window = None
 supports_determinism = None
+supports_softcap = None
+supports_s_aux = None
 
 
 def is_flash_attn_available():
@@ -61,7 +62,7 @@ def is_flash_attn_available():
 
 def _lazy_imports(implementation: Optional[str]):
     """
-    Lazy loads the respective flash attention implementation with kernels fallback for fa2.
+    Lazy loads the respective flash attention implementation.
 
     Return:
         flash_attn_func: The base flash attention function.
@@ -69,79 +70,55 @@ def _lazy_imports(implementation: Optional[str]):
                                 e.g. for padding-free training.
         pad_input: The function to pad inputs into one sequence and returning the respective kwargs.
         unpad_input: The function to unpad outputs based on the kwargs (from pad_input).
-        is_fa3: Flag that indicates the usage of fa3 which supports a different set of kwargs.
     """
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
     if implementation == "flash_attention_2" or (implementation is None and is_fa2 and not is_fa3):
-        try:
-            from flash_attn import flash_attn_func, flash_attn_varlen_func
-            from flash_attn.bert_padding import pad_input, unpad_input
-
-            return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, False
-
-        except ImportError as e:
-            if not globals().get("use_remote_fa2", None):
-                use_remote_fa2 = (
-                    input(
-                        "Unable to import the official flash attention, do you want to try to use `kernels-community/flash-attn` (trust remote code) Yes or No? [y/N] "
-                    )
-                    .strip()
-                    .lower()
-                )
-                globals()["use_remote_fa2"] = use_remote_fa2 in {"yes", "y", "1"}
-            if globals()["use_remote_fa2"]:
-                if not is_kernels_available():
-                    raise ImportError("You need to install kernels: `pip install kernels`")
-                from kernels import get_kernel
-
-                implementation = get_kernel("kernels-community/flash-attn")
-                pad_input, unpad_input = _pad_input, _unpad_input
-                return (
-                    getattr(implementation, "flash_attn_func", None),
-                    getattr(implementation, "flash_attn_varlen_func"),
-                    pad_input,
-                    unpad_input,
-                    False,
-                )
-            else:
-                raise ImportError(
-                    "Failed to import flash attention 2, please install it or use another implementation."
-                ) from e
-    elif is_torch_npu_available():
-        # get flash attention related functions from `.integrations.npu_flash_attention` module for Ascend NPU
-        from .integrations.npu_flash_attention import get_npu_flash_attn_funcs
-
-        return get_npu_flash_attn_funcs()
-    elif implementation == "flash_attention_3" or (implementation is None and is_fa3):
-        from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
-
-        pad_input, unpad_input = _pad_input, _unpad_input
-        return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, True
+        from flash_attn import flash_attn_func, flash_attn_varlen_func
+        from flash_attn.bert_padding import pad_input, unpad_input
     else:
         pad_input, unpad_input = _pad_input, _unpad_input
-        return (
-            getattr(implementation, "flash_attn_func", None),
-            getattr(implementation, "flash_attn_varlen_func"),
-            pad_input,
-            unpad_input,
-            True,
-        )
+        if implementation == "flash_attention_3" or (implementation is None and is_fa3):
+            from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
+        elif is_torch_npu_available():
+            from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
+            from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+        # Kernels fallback
+        else:
+            flash_attn_func = getattr(implementation, "flash_attn_func", None)
+            flash_attn_varlen_func = getattr(implementation, "flash_attn_varlen_func", None)
+            if flash_attn_varlen_func is None or flash_attn_func is None:
+                raise ValueError(
+                    f"Could not find the currently requested flash attention implementation at `{implementation}`."
+                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                )
+
+    return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
 
 
 def lazy_import_flash_attention(implementation: Optional[str]):
     """Lazy loading flash attention and returning the respective functions + flags back"""
-    global flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3, supports_sliding_window, supports_determinism
+    global flash_fn, flash_varlen_fn, pad_fn, unpad_fn
+    if any(k is None for k in [flash_fn, flash_varlen_fn, pad_fn, unpad_fn]):
+        flash_fn, flash_varlen_fn, pad_fn, unpad_fn = _lazy_imports(implementation)
 
+    # Depending on version and kernel some features are not supported
+    global supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux
     if any(
         k is None
-        for k in [flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3, supports_sliding_window, supports_determinism]
+        for k in [supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux]
     ):
-        flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3 = _lazy_imports(implementation)
-        supports_sliding_window = "window_size" in inspect.signature(flash_varlen_fn).parameters
-        supports_determinism = is_fa3 or is_flash_attn_greater_or_equal("2.4.1")
+        fn_parameters = inspect.signature(flash_varlen_fn).parameters
+        supports_dropout = "dropout_p" in fn_parameters
+        supports_sliding_window = "window_size" in fn_parameters
+        supports_determinism = "deterministic" in fn_parameters
+        supports_softcap = "softcap" in fn_parameters
+        supports_s_aux = "s_aux" in fn_parameters  # attention sink (e.g. gpt oss)
 
-    return flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3, supports_sliding_window, supports_determinism
+    return (
+        (flash_fn, flash_varlen_fn, pad_fn, unpad_fn),
+        (supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux),
+    )
 
 
 def _index_first_axis(tensor, indices):
@@ -408,13 +385,11 @@ def _is_packed_sequence(position_ids, batch_size):
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
+    increasing_position_sequences = (torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min())
     return (
         position_ids is not None
         and batch_size == 1
-        and ((torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()) - position_ids)
-        .abs()
-        .sum()
-        .to(torch.bool)
+        and (increasing_position_sequences - position_ids).abs().sum().bool()
     )
 
 
@@ -504,9 +479,8 @@ def _flash_attention_forward(
         implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    flash_fn, flash_varlen_fn, pad_fn, unpad_fn, is_fa3, supports_sliding_window, supports_determinism = (
-        lazy_import_flash_attention(implementation)
-    )
+    (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), supports_flags = lazy_import_flash_attention(implementation)
+    supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux = supports_flags
 
     # Iterating through optional possible kwargs to be passed down
     flash_kwargs = {
@@ -514,7 +488,7 @@ def _flash_attention_forward(
         "softmax_scale": softmax_scale,
     }
 
-    if not is_fa3:
+    if supports_dropout:
         flash_kwargs["dropout_p"] = dropout
 
     if supports_sliding_window and sliding_window is not None and key_states.shape[1] > sliding_window:
@@ -525,11 +499,11 @@ def _flash_attention_forward(
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if softcap is not None:
+    if supports_softcap and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
     # Only within kernel implementation atm
-    if "s_aux" in kwargs:
+    if supports_s_aux and "s_aux" in kwargs:
         flash_kwargs["s_aux"] = kwargs.get("s_aux")
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
