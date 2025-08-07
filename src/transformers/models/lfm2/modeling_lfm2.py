@@ -66,6 +66,8 @@ class Lfm2RMSNorm(nn.Module):
 
 
 class Lfm2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Lfm2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -365,7 +367,7 @@ class Lfm2Attention(nn.Module):
         past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

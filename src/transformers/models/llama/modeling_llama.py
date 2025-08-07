@@ -70,6 +70,8 @@ class LlamaRMSNorm(nn.Module):
 
 
 class LlamaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: LlamaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -282,7 +284,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention

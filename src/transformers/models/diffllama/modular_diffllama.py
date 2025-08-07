@@ -177,7 +177,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         past_key_value: Optional[Cache] = None,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, None]:
         if isinstance(past_key_value, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
