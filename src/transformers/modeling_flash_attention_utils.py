@@ -233,7 +233,9 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         tensor_kws = {"dtype": torch.int32, "device": position_ids.device}
         last_position_ids = position_ids[:, -1]
 
-        cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0)
+        cu_seq_lens_k = torch.cat(
+            [torch.zeros(1, **tensor_kws), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0
+        )
         max_length_k = int(last_position_ids.max()) + 1
 
         batch_size, seq_len = query.shape[:2]
