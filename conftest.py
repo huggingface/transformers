@@ -195,7 +195,11 @@ if is_torch_available():
             # to string
             import json
             actual_str_1 = format(actual)
+
+            use_sci_mode = "e+" in actual_str_1
+            torch.set_printoptions(sci_mode=use_sci_mode)
             actual_str_2 = json.dumps([format(x) for x in actual], indent=4)
+            torch.set_printoptions(sci_mode=False)
 
             #
             actual_str_2 = actual_str_2.replace('"', '')
