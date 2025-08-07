@@ -177,14 +177,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # fmt: on
         expected_slice = expected_slices.get_expectation().to(torch_device)
         actual_slice = out.logits[0, 0, :15].float()
-        self.assertTrue(
-            torch.allclose(
-                expected_slice,
-                actual_slice,
-                atol=1e-2,
-                rtol=1e-2
-            )
-        )
+        self.assertTrue(torch.allclose(expected_slice, actual_slice, atol=1e-2, rtol=1e-2))
 
     @slow
     def test_model_7b_logits(self):
