@@ -96,7 +96,7 @@ def _lazy_imports(implementation: Optional[str]):
                 from kernels import get_kernel
 
                 implementation = get_kernel("kernels-community/flash-attn")
-                pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
+                pad_input, unpad_input = _pad_input, _unpad_input
                 return (
                     getattr(implementation, "flash_attn_func", None),
                     getattr(implementation, "flash_attn_varlen_func"),
@@ -116,10 +116,10 @@ def _lazy_imports(implementation: Optional[str]):
     elif implementation == "flash_attention_3" or (implementation is None and is_fa3):
         from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
 
-        pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
+        pad_input, unpad_input = _pad_input, _unpad_input
         return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input, True
     else:
-        pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
+        pad_input, unpad_input = _pad_input, _unpad_input
         return (
             getattr(implementation, "flash_attn_func", None),
             getattr(implementation, "flash_attn_varlen_func"),
@@ -156,9 +156,9 @@ def _index_first_axis(tensor, indices):
     return reshaped_tensor[indices]
 
 
-def _fa3_unpad_input(hidden_states, attention_mask, unused_mask=None):
+def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     """
-    FA3-compatible unpad_input function.
+    unpad_input function for flash attention variants that do not have them within their pkg themselves, e.g. fa3.
 
     Arguments:
         hidden_states: (batch, seqlen, ...)
@@ -188,9 +188,9 @@ def _fa3_unpad_input(hidden_states, attention_mask, unused_mask=None):
     )
 
 
-def _fa3_pad_input(hidden_states, indices, batch, seqlen):
+def _pad_input(hidden_states, indices, batch, seqlen):
     """
-    FA3-compatible pad_input function.
+    pad_input function for flash attention variants that do not have them within their pkg themselves, e.g. fa3.
 
     Arguments:
         hidden_states: (total_nnz, ...), where total_nnz = number of tokens in selected in attention_mask.
@@ -533,9 +533,9 @@ def _flash_attention_forward(
             query_states, key_states, value_states, attention_mask, query_length, unpad_fn
         )
 
-        # TODO for now this is required to work with https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
+        # TODO for now this is required to work with
+        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
         if "mps" in str(q.device):
-            cu_seq_lens_q = cu_seq_lens_q.clone()
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
         out_unpad = flash_varlen_fn(
@@ -564,9 +564,9 @@ def _flash_attention_forward(
             k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
             v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
 
-        # TODO for now this is required to work with https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
+        # TODO for now this is required to work with
+        # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
         if "mps" in str(q.device):
-            cu_seq_lens_q = cu_seq_lens_q.clone()
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
         out = flash_varlen_fn(
@@ -587,5 +587,7 @@ def _flash_attention_forward(
     # No padding
     else:
         out = flash_fn(query_states, key_states, value_states, **flash_kwargs)
+        if isinstance(out, tuple):
+            out = out[0]
 
-    return out[0] if isinstance(out, tuple) else out
+    return out
