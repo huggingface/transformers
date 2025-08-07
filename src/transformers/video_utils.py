@@ -320,7 +320,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
 
 
 def read_video_opencv(
-    video_path: URL | Path,
+    video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -382,7 +382,7 @@ def read_video_opencv(
 
 
 def read_video_decord(
-    video_path: URL | Path,
+    video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -434,7 +434,7 @@ def read_video_decord(
 
 
 def read_video_pyav(
-    video_path: URL | Path,
+    video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -490,7 +490,7 @@ def read_video_pyav(
 
 
 def read_video_torchvision(
-    video_path: URL | Path,
+    video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -548,7 +548,7 @@ def read_video_torchvision(
 
 
 def read_video_torchcodec(
-    video_path: URL | Path,
+    video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
     **kwargs,
 ):
