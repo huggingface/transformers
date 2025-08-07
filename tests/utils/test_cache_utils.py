@@ -841,8 +841,24 @@ class CacheExportIntegrationTest(unittest.TestCase):
         model.eval()
         max_batch_size = 1
         max_cache_len = 23
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, max_batch_size, max_cache_len)
-        exported_program = exportable_module.export()
+        # Set generation config on the model for the hybrid cache model
+        from transformers.generation.configuration_utils import GenerationConfig
+
+        model.generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation="hybrid",
+            max_length=max_cache_len,
+            cache_config={
+                "batch_size": max_batch_size,
+                "max_cache_len": max_cache_len,
+                "device": model.device,
+            },
+        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         n_g_key_caches = n_g_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():
             if buffer_name.startswith("key_cache"):
@@ -1307,7 +1323,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 2
-        config.layer_types = ["full_attention", "sliding_attention"]
+        config.layer_types = ["full_attention", "chunked_attention"]
         config.sliding_window = 2
         max_cache_len = 4
         chunked_cache = HybridChunkedCache(config=config, max_batch_size=1, max_cache_len=max_cache_len)
@@ -1387,7 +1403,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 1
-        config.layer_types = ["sliding_attention"]
+        config.layer_types = ["chunked_attention"]
         config.sliding_window = 3
         cache = HybridChunkedCache(config, max_batch_size=1, max_cache_len=3)
 

@@ -56,7 +56,7 @@ Model Hubの組み込みバージョニングはgitおよび[git-lfs](https://gi
 モデルをHubに共有する前に、Hugging Faceの認証情報が必要です。ターミナルへのアクセス権がある場合、🤗 Transformersがインストールされている仮想環境で以下のコマンドを実行します。これにより、アクセストークンがHugging Faceのキャッシュフォルダに保存されます（デフォルトでは `~/.cache/` に保存されます）：
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 JupyterやColaboratoryのようなノートブックを使用している場合、[`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library)ライブラリがインストールされていることを確認してください。

@@ -255,7 +255,7 @@ class UdopPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):

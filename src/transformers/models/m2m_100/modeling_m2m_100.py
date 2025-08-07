@@ -525,7 +525,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     # Doesn't support `compile` (dynamic control flow). Can be fixed but low usage model
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -871,7 +871,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            skip_the_layer = self.training and dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
 
@@ -1120,7 +1120,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
+            skip_the_layer = self.training and dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
 

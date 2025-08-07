@@ -284,7 +284,7 @@ class HGNetV2Stage(nn.Module):
                     mid_channels,
                     out_channels,
                     num_layers,
-                    residual=False if i == 0 else True,
+                    residual=(i != 0),
                     kernel_size=kernel_size,
                     light_block=light_block,
                     drop_path=drop_path,
@@ -351,11 +351,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+        >>> from transformers import HGNetV2Config, HGNetV2Backbone
         >>> import torch
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+        >>> config = HGNetV2Config()
+        >>> model = HGNetV2Backbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 224, 224)
 

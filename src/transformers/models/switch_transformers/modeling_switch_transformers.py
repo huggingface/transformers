@@ -766,7 +766,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
 
-    _supports_static_cache = False
+    _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
     @property

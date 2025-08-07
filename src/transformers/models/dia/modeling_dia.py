@@ -67,7 +67,7 @@ class DiaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
 
@@ -140,6 +140,8 @@ class DiaRMSNorm(nn.Module):
 
 
 class DiaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: DiaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

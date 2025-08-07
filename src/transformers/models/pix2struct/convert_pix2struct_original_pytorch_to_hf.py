@@ -67,7 +67,7 @@ def rename_and_convert_flax_params(flax_dict):
         "decoder.logits_dense.weight": "decoder.lm_head.weight",
     }
 
-    for key in flax_dict.keys():
+    for key in flax_dict:
         if "target" in key:
             # remove the first prefix from the key
             new_key = ".".join(key[1:])

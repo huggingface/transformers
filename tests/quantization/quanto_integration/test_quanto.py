@@ -251,7 +251,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         d0 = dict(model1.named_parameters())
         d1 = dict(model2.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
-        for k in d0.keys():
+        for k in d0:
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)
