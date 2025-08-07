@@ -37,9 +37,7 @@ from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_ba
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
-from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3MoE,
-)
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 
 
 
@@ -83,7 +81,7 @@ class Qwen3MoeSparseMoeBlock(DeepseekV3MoE):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        Modified forward pass to utilize the efficient moe function.
+        Forward pass which utilizes the efficient moe function inherited from DeepseekV3MoE.
         """
         # Reshape the input tensor from (batch, seq_len, dim) to (num_tokens, dim)
         batch_size, sequence_length, hidden_dim = hidden_states.shape
