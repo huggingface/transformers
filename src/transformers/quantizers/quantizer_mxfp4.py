@@ -61,7 +61,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available():
-            raise RuntimeError("Using MXFP4 quantized models requires a GPU")
+            if self.pre_quantized:
+                logger.warning_once(
+                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
+                )
+                self.quantization_config.dequantize = True
+                return
+            else:
+                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
 
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
@@ -104,20 +111,31 @@ class Mxfp4HfQuantizer(HfQuantizer):
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
+                "You are loading an MXFP4 model on CPU and have a CUDA device available, make sure to set "
+                "your model on a GPU device in order to run your model in the quantized format. "
+                "We will default to dequantizing the model to bf16. "
+                "To remove this warning, pass device_map = 'cuda' or device_map = 'auto'. "
             )
+            self.quantization_config.dequantize = True
+            return
         elif device_map is not None:
             if (
-                not self.pre_quantized
-                and isinstance(device_map, dict)
-                and ("cpu" in device_map.values() or "disk" in device_map.values())
+                isinstance(device_map, dict)
+                and (torch.device(type="cpu") in device_map.values() or "cpu" in device_map.values() or "disk" in device_map.values())
             ):
-                raise ValueError(
-                    "You are attempting to load an FP4 model with a device_map that contains a CPU or disk device."
-                    "This is not supported when the model is quantized on the fly. "
-                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
-                )
+                if self.pre_quantized:
+                    logger.warning_once(
+                        "You are attempting to load an MXFP4 model with a device_map that contains a CPU or disk device. "
+                        "This is not supported when the model is quantized. "
+                        "We will default to dequantizing the model to bf16."
+                    )
+                    self.quantization_config.dequantize = True
+                else:
+                    raise ValueError(
+                        "You are attempting to load an MXFP4 model with a device_map that contains a CPU or disk device. "
+                        "This is not supported when the model is quantized. "
+                        "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
+                    )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
