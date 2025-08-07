@@ -4668,7 +4668,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
-        if tp_plan is not None and device_map is not None:
+        if tp_plan is not None and device_map is not None and device_mesh is not None:
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
@@ -4694,7 +4694,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
                     device_mesh = device_mesh["tp"]
                 tp_size = device_mesh.size()
-                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+                if device_map is None:
+                    device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
