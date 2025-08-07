@@ -356,15 +356,15 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         )
         cu_seq_lens_k = cu_seq_lens_q
 
+        # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
+        # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
+        # for some models (e.g. qwen2-vl).
+        max_length_q = cu_seq_lens_q.diff().max()
         # NOTE: With torch compile, this will cause a graph break if you don't set
         # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
         # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
         # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
         # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
-        max_length_q = cu_seq_lens_q.diff().max()
-        # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
-        # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
-        # for some models (e.g. qwen2-vl).
         max_length_q = max_length_q.item()
         max_length_k = max_length_q
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
