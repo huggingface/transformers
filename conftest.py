@@ -140,6 +140,8 @@ if is_torch_available():
 
     def patched_torch_testing_assert_close(*args, **kwargs):
         try:
+            with open("collected.txt", "a") as fp:
+                fp.write("")
             original_torch_testing_assert_close(*args, **kwargs)
         except AssertionError as e:
 
