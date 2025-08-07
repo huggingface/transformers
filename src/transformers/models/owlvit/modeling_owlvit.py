@@ -951,8 +951,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = OwlViTTextTransformer(text_config)
-        self.vision_model = OwlViTVisionTransformer(vision_config)
+        # First, initialize the text and vision models with proper attention implementation
+        text_model = OwlViTTextModel._from_config(text_config)
+        vision_model = OwlViTVisionModel._from_config(vision_config)
+
+        # Second, get the text and vision submodules (for backward compatibility)
+        self.text_model = text_model.text_model
+        self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)

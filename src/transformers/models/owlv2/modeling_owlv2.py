@@ -971,8 +971,13 @@ class Owlv2Model(Owlv2PreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = Owlv2TextTransformer(text_config)
-        self.vision_model = Owlv2VisionTransformer(vision_config)
+        # First, initialize the text and vision models with proper attention implementation
+        text_model = Owlv2TextModel._from_config(text_config)
+        vision_model = Owlv2VisionModel._from_config(vision_config)
+
+        # Second, get the text and vision submodules (for backward compatibility)
+        self.text_model = text_model.text_model
+        self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
