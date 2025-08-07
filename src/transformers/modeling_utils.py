@@ -2738,7 +2738,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
-            # extract the rev after the @ 
+            # extract the rev after the @ if it exists
             repo_id, _, rev = repo_id.partition("@")
             repo_id = repo_id.strip()
             rev = rev.strip() if rev else None
