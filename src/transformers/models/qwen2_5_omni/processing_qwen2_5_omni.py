@@ -185,7 +185,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
-            fps_list = [metadata.fps for metadata in video_metadata]
+            fps_list = [metadata.fps if metadata.fps is not None else 2.0 for metadata in video_metadata]
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps for fps in fps_list
             ]

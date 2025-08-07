@@ -151,8 +151,14 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = 40 if batch_size == 1 else 8
-        mm_len = batch_size * 4 if modality == "image" else video_len
+        if modality == "video":
+            # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
+            expected_video_token_count = 0
+            for thw in out_dict["video_grid_thw"]:
+                expected_video_token_count += thw[0] * thw[1] * thw[2]
+            mm_len = expected_video_token_count
+        else:
+            mm_len = batch_size * 4
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
@@ -236,6 +242,20 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 4)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
