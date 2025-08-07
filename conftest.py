@@ -164,6 +164,11 @@ if is_torch_available():
                 actual = args[0]
 
             def format(t):
+                is_scalar = False
+                if t.ndim == 0:
+                    t = torch.tensor([t])
+                    is_scalar = True
+
                 # `detach` to remove `grad_fn=<...>`, and `to("cpu")` to remove `device='...'`
                 t = t.detach().to("cpu")
                 t = f"{t}"
@@ -179,12 +184,21 @@ if is_torch_available():
                 while "  " in t:
                     t = t.replace("  ", " ")
 
+                # remove leading `[` and `]`
+                if is_scalar:
+                    t = t[1:-1]
+
                 return t
 
             # to string
             import json
             actual_str_1 = format(actual)
-            actual_str_2 = json.dumps([format(x) for x in actual], indent=4).replace('"', '').replace("\n]", ",\n]").replace("]\n]", "],\n]")
+            actual_str_2 = json.dumps([format(x) for x in actual], indent=4)
+
+            #
+            actual_str_2 = actual_str_2.replace('"', '')
+            actual_str_2 = actual_str_2.replace("\n]", ",\n]")
+            actual_str_2 = actual_str_2.replace("]\n]", "],\n]")
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526

@@ -120,7 +120,7 @@ jobs:
 
       - name: checkout to start_commit
         working-directory: /transformers
-        run: git checkout 8c4ea670dceace8d9b1bac8310bc62146b7134cd
+        run: git checkout 098a3789
 
       - name: download and copy the fixed script
         working-directory: /transformers
