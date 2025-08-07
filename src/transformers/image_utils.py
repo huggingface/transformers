@@ -14,6 +14,7 @@
 
 import base64
 import os
+import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
@@ -938,11 +939,26 @@ def validate_annotations(
 
 
 def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str]):
+    """
+    Validates that captured kwargs are recognized processor keys.
+
+    Args:
+        valid_processor_keys (`list[str]`):
+            List of valid processor parameter names.
+        captured_kwargs (`list[str]`):
+            List of captured keyword argument names to validate.
+
+    Warns:
+        UserWarning: When unused or unrecognized kwargs are found.
+    """
     unused_keys = set(captured_kwargs).difference(set(valid_processor_keys))
     if unused_keys:
         unused_key_str = ", ".join(unused_keys)
-        # TODO raise a warning here instead of simply logging?
-        logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
+        warnings.warn(
+            f"Unused or unrecognized kwargs: {unused_key_str}. These arguments will be ignored.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 @dataclass(frozen=True)
