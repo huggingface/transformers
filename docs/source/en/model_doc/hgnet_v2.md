@@ -27,6 +27,7 @@ rendered properly in your Markdown viewer.
 You can find all the original HGNet V2 models under the [USTC](https://huggingface.co/ustc-community/models?search=hgnet) organization.
 
 > [!TIP]
+> This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).
 > Click on the HGNet V2 models in the right sidebar for more examples of how to apply HGNet V2 to different computer vision tasks.
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
