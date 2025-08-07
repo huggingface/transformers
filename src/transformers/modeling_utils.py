@@ -2738,8 +2738,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
+            # extract the rev after the @ 
+            repo_id, _, rev = repo_id.partition("@")
+            repo_id = repo_id.strip()
+            rev = rev.strip() if rev else None
             try:
-                kernel = get_kernel(repo_id)
+                kernel = get_kernel(repo_id, revision=rev)
                 if hasattr(kernel, "flash_attn_varlen_func"):
                     if attention_wrapper is None:
                         attention_wrapper = flash_attention_forward
