@@ -42,7 +42,7 @@ args = TrainingArguments(
 pip install apollo-torch
 ```
 
-[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://github.com/zhuhanqing/APOLLO) 는 사전 학습과 파인튜닝 모두에 대해 전체 파라미터 학습을 지원하는, 메모리 효율적인 옵티마이저입니다. 이 옵티마이저는 SGD와 유사한 메모리 효율성으로 AdamW 수준의 성능을 유지합니다. 극한의 메모리 효율성이 필요하다면 APOLLO의 rank 1 변형인 APOLLO-Mini를 사용할 수 있습니다. It maintains AdamW-level performance with SGD-like memory efficiency. APOLLO 옵티마이저는 다음과 같은 특징을 지원합니다. APOLLO optimizers support:
+[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://github.com/zhuhanqing/APOLLO) 는 사전 학습과 파인튜닝 모두에 대해 전체 파라미터 학습을 지원하는, 메모리 효율적인 옵티마이저입니다. 이 옵티마이저는 SGD와 유사한 메모리 효율성으로 AdamW 수준의 성능을 유지합니다. 극한의 메모리 효율성이 필요하다면 APOLLO의 rank 1 변형인 APOLLO-Mini를 사용할 수 있습니다. APOLLO 옵티마이저는 다음과 같은 특징을 지원합니다. 
 
 * 초저랭크(rank) 효율성. [GaLoRE](./trainer#galore)보다 훨씬 낮은 랭크를 사용할 수 있으며, 랭크 1로도 충분합니다.
 * 고비용 SVD 연산 회피. APOLLO는 학습 중단(training stalls)을 피하기 위해 무작위 투영(random projections)을 활용합니다.
