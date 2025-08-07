@@ -82,7 +82,7 @@ class GptOssExperts(nn.Module):
 
         Args:
             hidden_states (torch.Tensor): (batch_size, seq_len, hidden_size)
-            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
+            router_indices (torch.Tensor): (batch_size * token_num, top_k)
             routing_weights (torch.Tensor): (batch_size * token_num, num_experts)
         Returns:
             torch.Tensor
@@ -112,6 +112,19 @@ class GptOssExperts(nn.Module):
                 weighted_output = out[0] * routing_weights[token_idx, expert_idx, None]
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
+        elif hidden_states.device.type == "cpu" and hidden_states.shape[0] == 1:
+            expert_idx = expert_hit.reshape(-1)
+            local_num_exports = expert_idx.shape[0]
+            current_state = hidden_states.repeat(local_num_exports, 1, 1)
+            gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx].unsqueeze(1)
+            gate, up = gate_up[..., ::2], gate_up[..., 1::2]
+            gate = gate.clamp(min=None, max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
+            glu = gate * torch.sigmoid(gate * self.alpha)
+            gated_output = (up + 1) * glu
+            out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx].unsqueeze(1)
+            weighted_output = out[0] * routing_weights[0, expert_idx, None].unsqueeze(1)
+            next_states = weighted_output.sum(0).view(batch_size, -1, self.hidden_size)
         else:
             hidden_states = hidden_states.repeat(num_experts, 1)
             hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
