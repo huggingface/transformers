@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Optional, Union
+from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
 
 import numpy as np
@@ -56,6 +56,8 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+URL = NewType("URL", str)
+Path = NewType("Path", str)
 
 VideoInput = Union[
     list["PIL.Image.Image"],
@@ -66,9 +68,12 @@ VideoInput = Union[
     list[list["PIL.Image.Image"]],
     list[list["np.ndarrray"]],
     list[list["torch.Tensor"]],
-    str,  # `str` when provided at path/url
-    list[str],
-    list[list[str]],
+    URL,
+    list[URL],
+    list[list[URL]],
+    Path,
+    list[Path],
+    list[list[Path]],
 ]  # noqa
 
 
@@ -146,7 +151,7 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndar
             Video inputs to turn into a list of videos.
     """
 
-    if not (isinstance(videos[0], (list, tuple)) and isinstance(videos[0][0], (PIL.Image.Image))):
+    if not (isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0])):
         return videos
 
     video_converted = []
@@ -157,7 +162,7 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndar
     return video_converted
 
 
-def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "str"]]:
+def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL", "Path"]]:
     """
     Ensure that the input is a list of videos. If the input is a single video, it is converted to a list of length 1.
     If the input is a batch of videos, it is converted to a list of 4D video arrays. Videos passed as list `PIL.Image`
@@ -308,7 +313,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
 
 
 def read_video_opencv(
-    video_path: str,
+    video_path: URL | Path,
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -370,8 +375,8 @@ def read_video_opencv(
 
 
 def read_video_decord(
-    video_path: str,
-    sample_indices_fn: Optional[Callable] = None,
+    video_path: URL | Path,
+    sample_indices_fn: Callable,
     **kwargs,
 ):
     """
@@ -380,7 +385,7 @@ def read_video_decord(
     Args:
         video_path (`str`):
             Path to the video file.
-        sample_indices_fn (`Callable`, *optional*):
+        sample_indices_fn (`Callable`):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
             If not provided, simple uniform sampling with fps is performed.
@@ -422,7 +427,7 @@ def read_video_decord(
 
 
 def read_video_pyav(
-    video_path: str,
+    video_path: URL | Path,
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -478,7 +483,7 @@ def read_video_pyav(
 
 
 def read_video_torchvision(
-    video_path: str,
+    video_path: URL | Path,
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -536,7 +541,7 @@ def read_video_torchvision(
 
 
 def read_video_torchcodec(
-    video_path: str,
+    video_path: URL | Path,
     sample_indices_fn: Callable,
     **kwargs,
 ):
@@ -546,7 +551,7 @@ def read_video_torchcodec(
     Args:
         video_path (`str`):
             Path to the video file.
-        sample_indices_fn (`Callable`, *optional*):
+        sample_indices_fn (`Callable`):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
             If not provided, simple uniform sampling with fps is performed.
@@ -594,7 +599,7 @@ VIDEO_DECODERS = {
 
 
 def load_video(
-    video: Union[str, "VideoInput"],
+    video: VideoInput,
     num_frames: Optional[int] = None,
     fps: Optional[Union[int, float]] = None,
     backend: str = "pyav",
@@ -605,7 +610,7 @@ def load_video(
     Loads `video` to a numpy array.
 
     Args:
-        video (`str` or `VideoInput`):
+        video (`VideoInput`):
             The video to convert to the numpy array format. Can be a link to video or local path.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not passed, the whole video is loaded.
