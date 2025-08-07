@@ -2439,7 +2439,7 @@ BASE_FILE_REQUIREMENTS = {
 }
 
 
-def fetch__all__(file_content) -> list[str] | None:
+def fetch__all__(file_content) -> list[str]:
     """
     Returns the content of the __all__ variable in the file content.
     Returns None if not defined, otherwise returns a list of strings.
