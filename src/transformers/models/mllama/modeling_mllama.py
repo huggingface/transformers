@@ -705,13 +705,18 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
+        
+        # Fix: Apply `full_text_row_masked_out_mask` immediately after cross-attention,
+        # before adding to the residual connection. This prevents image tokens from leaking
+        # into text tokens that should not see them.
+        if full_text_row_masked_out_mask is not None:
+            hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states
+        
         hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if full_text_row_masked_out_mask is not None:
-            hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
         hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
 
         return hidden_states
