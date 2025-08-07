@@ -213,15 +213,20 @@ if is_torch_available():
             import json
             actual_str_1 = format(actual)
 
-            use_sci_mode = "e+" in actual_str_1
-            torch.set_printoptions(sci_mode=use_sci_mode)
-            actual_str_2 = json.dumps([format(x) for x in actual], indent=4)
-            torch.set_printoptions(sci_mode=False)
+            if isinstance(actual, torch.Tensor) and actual.ndim > 0:
 
-            #
-            actual_str_2 = actual_str_2.replace('"', '')
-            actual_str_2 = actual_str_2.replace("\n]", ",\n]")
-            actual_str_2 = actual_str_2.replace("]\n]", "],\n]")
+                use_sci_mode = "e+" in actual_str_1
+                torch.set_printoptions(sci_mode=use_sci_mode)
+                actual_str_2 = json.dumps([format(x) for x in actual], indent=4)
+                torch.set_printoptions(sci_mode=False)
+
+                #
+                actual_str_2 = actual_str_2.replace('"', '')
+                actual_str_2 = actual_str_2.replace("\n]", ",\n]")
+                actual_str_2 = actual_str_2.replace("]\n]", "],\n]")
+
+            else:
+                actual_str_2 = actual_str_1
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526
