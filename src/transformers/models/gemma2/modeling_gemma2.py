@@ -297,6 +297,8 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Gemma2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

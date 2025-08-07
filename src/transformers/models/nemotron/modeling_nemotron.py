@@ -89,6 +89,8 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     # Ignore copy
     def __init__(
         self,
