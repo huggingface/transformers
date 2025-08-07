@@ -18,11 +18,11 @@ from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
+    require_kernels,
     require_torch,
     require_torch_gpu,
     require_torch_large_gpu,
     require_triton,
-    require_triton_kernels,
     slow,
 )
 from transformers.utils import (
@@ -107,18 +107,31 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
     def test_quantizer_validation_low_compute_capability(self):
         """Test quantizer validation with low compute capability"""
-        with patch("torch.cuda.get_device_capability", return_value=(8, 0)):
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            config = Mxfp4Config()
+            quantizer = Mxfp4HfQuantizer(config)
+            quantizer.pre_quantized = False
+
+            with self.assertRaises(ValueError):
+                quantizer.validate_environment()
+
+    def test_quantizer_validation_low_compute_capability_with_prequantized(self):
+        """Test quantizer validation with low compute capability"""
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
             quantizer = Mxfp4HfQuantizer(config)
 
-            with self.assertRaises(ValueError):
-                quantizer.validate_environment()
+            # Should automatically set dequantize=True and warn
+            quantizer.validate_environment()
+            self.assertTrue(quantizer.quantization_config.dequantize)
 
     def test_quantizer_validation_low_compute_capability_with_dequantize(self):
         """Test quantizer validation with low compute capability but dequantize enabled"""
-        with patch("torch.cuda.get_device_capability", return_value=(8, 0)):
+        with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config(dequantize=True)
@@ -131,11 +144,57 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 if "compute capability" in str(e):
                     self.fail("Should not raise compute capability error when dequantize=True")
 
+    def test_quantizer_validation_dequantize_on_cpu(self):
+        """Test quantizer validation with dequantize enabled on CPU-only environment"""
+        with patch("torch.cuda.is_available", return_value=False):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            config = Mxfp4Config(dequantize=True)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            # Should not raise error when dequantize=True even without CUDA
+            try:
+                quantizer.validate_environment()
+            except RuntimeError as e:
+                if "requires a GPU" in str(e):
+                    self.fail("Should not raise GPU requirement error when dequantize=True on CPU")
+
+    def test_quantizer_validation_order_dequantize_before_cuda_check(self):
+        """Test that dequantize check happens before CUDA availability check"""
+        # Mock both torch.cuda.is_available and is_accelerate_available to return False
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch(
+                "transformers.quantizers.quantizer_mxfp4.is_accelerate_available",
+                return_value=False,
+            ),
+        ):
+            from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+            # Test with dequantize=True - should pass even without CUDA and accelerate
+            config = Mxfp4Config(dequantize=True)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            # This should not raise any error because dequantize check comes first
+            try:
+                quantizer.validate_environment()
+            except (RuntimeError, ImportError) as e:
+                if "requires a GPU" in str(e) or "requires Accelerate" in str(e):
+                    self.fail(f"Should not raise error when dequantize=True: {e}")
+
+            # Test with dequantize=False - should still fail due to missing CUDA
+            config = Mxfp4Config(dequantize=False)
+            quantizer = Mxfp4HfQuantizer(config)
+
+            with self.assertRaises(RuntimeError) as context:
+                quantizer.validate_environment()
+            self.assertIn("requires a GPU", str(context.exception))
+
     def test_quantizer_validation_missing_triton(self):
         """Test quantizer validation when triton is not available"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_triton_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -149,7 +208,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         """Test quantizer validation when triton is not available but model is pre-quantized and dequantize is False"""
         with (
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
-            patch("transformers.quantizers.quantizer_mxfp4.is_triton_kernels_availalble", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_availalble", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -289,7 +348,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.dtype, torch.bfloat16)
 
     @require_triton(min_version="3.4.0")
-    @require_triton_kernels
+    @require_kernels
     @require_torch_gpu
     @require_torch
     def test_quantize_to_mxfp4(self):
@@ -309,12 +368,14 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
 @require_torch
 @require_torch_large_gpu
+@require_triton(min_version="3.4.0")
+@require_kernels
 @slow
 class Mxfp4ModelTest(unittest.TestCase):
     """Test mxfp4 with actual models (requires specific model and hardware)"""
 
     # These should be paths to real OpenAI MoE models for proper testing
-    model_name_packed = "/fsx/mohamed/oai-hf/tests/20b_converted_packed"  # TODO: Use real packed quantized model
+    model_name = "openai/gpt-oss-20b"
 
     input_text = "Once upon a time"
 
@@ -362,12 +423,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         self.assertFalse(quantization_config.dequantize)
 
         model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name_packed)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.check_inference_correctness_quantized(model, tokenizer)
 
     def test_gpt_oss_model_loading_dequantized_with_device_map(self):
@@ -379,12 +440,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         self.assertTrue(quantization_config.dequantize)
 
         model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name_packed)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.check_inference_correctness_quantized(model, tokenizer)
 
     def test_model_device_map_validation(self):
@@ -405,12 +466,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         # Expected: quantized < dequantized < unquantized memory usage
         quantization_config = Mxfp4Config(dequantize=True)
         quantized_model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
         dequantized_model = GptOssForCausalLM.from_pretrained(
-            self.model_name_packed,
+            self.model_name,
             torch_dtype=torch.bfloat16,
             device_map="auto",
             quantization_config=quantization_config,
