@@ -1058,8 +1058,8 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             model_name, attn_implementation="sdpa", torch_dtype=torch.float16
         ).to(torch_device)
         self.assertTrue(model.config._attn_implementation == "sdpa")
-        self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
-        self.assertTrue(model.text_model.config._attn_implementation == "sdpa")
+        self.assertTrue(model.owlv2.vision_model.config._attn_implementation == "sdpa")
+        self.assertTrue(model.owlv2.text_model.config._attn_implementation == "sdpa")
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 
