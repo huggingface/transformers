@@ -144,11 +144,11 @@ class Idefics2VisionEmbeddings(nn.Module):
         position_ids = torch.full(size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
 
         for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
-            nb_patches_h = p_attn_mask[:, 0].sum()
-            nb_patches_w = p_attn_mask[0].sum()
+            nb_patches_h = p_attn_mask[:, 0].sum().item()
+            nb_patches_w = p_attn_mask[0].sum().item()
 
-            h_indices = torch.arange(nb_patches_h, device=pixel_values.device, dtype=pixel_values.dtype)
-            w_indices = torch.arange(nb_patches_w, device=pixel_values.device, dtype=pixel_values.dtype)
+            h_indices = torch.arange(nb_patches_h, dtype=pixel_values.dtype)
+            w_indices = torch.arange(nb_patches_w, dtype=pixel_values.dtype)
 
             fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
             fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
