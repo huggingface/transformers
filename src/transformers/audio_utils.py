@@ -49,9 +49,7 @@ if is_torchcodec_available():
     from torchcodec.decoders import AudioDecoder
 
 
-AudioInput = Union[
-    np.ndarray, "torch.Tensor", list[np.ndarray], tuple[np.ndarray], list["torch.Tensor"], tuple["torch.Tensor"]  # noqa: F821
-]
+AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
