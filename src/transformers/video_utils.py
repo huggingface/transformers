@@ -253,7 +253,7 @@ def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> t
         A tuple of the video's height and width.
     """
     if channel_dim is None:
-        channel_dim = infer_channel_dimension_format(video)
+        channel_dim = infer_channel_dimension_format(video, num_channels=(1, 3, 4))
 
     if channel_dim == ChannelDimension.FIRST:
         return video.shape[-2], video.shape[-1]
