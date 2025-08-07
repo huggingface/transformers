@@ -67,11 +67,8 @@ if is_torch_available():
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 
-    from ...image_utils import pil_torch_interpolation_mapping
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
 
 
 def convert_segmentation_map_to_binary_masks_fast(
@@ -374,7 +371,9 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                         image=grouped_segmentation_maps[shape],
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                        interpolation=F.InterpolationMode.NEAREST_EXACT
+                        if is_torchvision_v2_available()
+                        else F.InterpolationMode.NEAREST,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

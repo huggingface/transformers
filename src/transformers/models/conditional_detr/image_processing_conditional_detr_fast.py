@@ -58,12 +58,9 @@ if is_torchvision_v2_available():
     from torchvision.io import read_image
     from torchvision.transforms.v2 import functional as F
 
-    from ...image_utils import pil_torch_interpolation_mapping
 elif is_torchvision_available():
     from torchvision.io import read_image
     from torchvision.transforms import functional as F
-
-    from ...image_utils import pil_torch_interpolation_mapping
 
 
 logger = logging.get_logger(__name__)
@@ -458,11 +455,15 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `pil_torch_interpolation_mapping[PILImageResampling.NEAREST]`):
+            resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
         interpolation = (
-            interpolation if interpolation is not None else pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+            interpolation
+            if interpolation is not None
+            else F.InterpolationMode.NEAREST_EXACT
+            if is_torchvision_v2_available()
+            else F.InterpolationMode.NEAREST
         )
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
