@@ -677,24 +677,6 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
-        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
-            tensor_kws = {"dtype": torch.int32, "device": self.device}
-            pos = model_inputs["position_ids"][:, -1]
-
-            cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), pos.cumsum(0).add(1)], 0)
-            max_length_k = int(pos.max()) + 1
-
-            bs, seq_len = input_ids.size()
-            q_len = torch.ones(bs, **tensor_kws) if seq_len == 1 else pos.to(torch.int32).add(1)
-            cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0)], 0)
-            max_length_q = int(q_len.max())
-
-            model_inputs.update(
-                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
-                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
-                max_length_q=max_length_q,
-                max_length_k=max_length_k,
-            )
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
