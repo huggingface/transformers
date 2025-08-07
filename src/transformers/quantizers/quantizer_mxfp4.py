@@ -126,9 +126,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please pass device_map = 'cuda' or device_map = 'auto'."
                 )
         elif device_map is not None:
-            if (
-                isinstance(device_map, dict)
-                and (torch.device(type="cpu") in device_map.values() or "cpu" in device_map.values() or "disk" in device_map.values())
+            if isinstance(device_map, dict) and (
+                torch.device(type="cpu") in device_map.values()
+                or "cpu" in device_map.values()
+                or "disk" in device_map.values()
             ):
                 if self.pre_quantized:
                     logger.warning_once(
