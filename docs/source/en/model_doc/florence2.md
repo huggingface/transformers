@@ -29,7 +29,6 @@ You can find all the original Florence-2 checkpoints under the [Florence-2](http
 
 > [!TIP]
 > This model was contributed by [ducviet00](https://huggingface.co/ducviet00).
->
 > Click on the Florence-2 models in the right sidebar for more examples of how to apply Florence-2 to different vision and language tasks.
 
 The example below demonstrates how to perform object detection with [`Pipeline`] or the [`AutoModel`] class.
@@ -87,7 +86,6 @@ print(parsed_answer)
 ```
 
 </hfoption>
-<hfoption id="transformers-cli"></hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
