@@ -33,7 +33,7 @@ from .utils import (
 logger = logging.get_logger(__name__)
 
 
-# TODO Deprecate when all have models have the attention interface
+# TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
     if is_flash_attn_3_available():
         return False
