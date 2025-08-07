@@ -25,6 +25,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
@@ -33,7 +34,6 @@ from ..mixtral.modeling_mixtral import (
 )
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 
 
 logger = logging.get_logger(__name__)
@@ -97,7 +97,6 @@ class Ernie4_5_MoeStatics(nn.Module):
 
 
 class Ernie4_5_MoeSparseMoeBlock(DeepseekV3MoE):
-
     def __init__(self, config):
         nn.Module().__init__()
         self.num_experts = config.moe_num_experts
@@ -149,9 +148,7 @@ class Ernie4_5_MoeSparseMoeBlock(DeepseekV3MoE):
             topk_weights = torch.gather(routing_weights, dim=-1, index=topk_indices)
 
             # Normalize the gathered weights
-            topk_weights = topk_weights / torch.clamp(
-                topk_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-            )
+            topk_weights = topk_weights / torch.clamp(topk_weights.sum(dim=-1, keepdim=True), min=self.norm_min)
             topk_weights = topk_weights.to(hidden_states.dtype)
 
         # Use the moe method inherited from DeepSeekV3MoE to process tokens
@@ -167,6 +164,7 @@ class Ernie4_5_MoeSparseMoeBlock(DeepseekV3MoE):
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
+
 
 class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
     def __init__(self, config, layer_idx):

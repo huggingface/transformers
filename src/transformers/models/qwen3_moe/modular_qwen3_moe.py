@@ -27,6 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -37,8 +38,6 @@ from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel, load_ba
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
-
 
 
 logger = logging.get_logger(__name__)
