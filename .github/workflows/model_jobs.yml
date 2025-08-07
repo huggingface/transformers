@@ -118,27 +118,39 @@ jobs:
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
-      - name: checkout to start_commit
-        working-directory: /transformers
-        run: git checkout 098a3789
-
-      - name: download and copy the fixed script
-        working-directory: /transformers
-        shell: bash
-        run: |
-          apt-get update && apt-get install -y wget curl
-          rm -rf conftest.py
-          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/conftest.py
-          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/run_and_fix.py
-          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/new_failures_with_bad_commit_grouped_by_authors.json
+#      - name: checkout to start_commit
+#        working-directory: /transformers
+#        run: git checkout 098a3789
+#
+#      - name: download and copy the fixed script
+#        working-directory: /transformers
+#        shell: bash
+#        run: |
+#          apt-get update && apt-get install -y wget curl
+#          rm -rf conftest.py
+#          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/conftest.py
+#          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/run_and_fix.py
+#          curl -O https://raw.githubusercontent.com/huggingface/transformers/refs/heads/torch_assert_close_not_fail_but_do_something/new_failures_with_bad_commit_grouped_by_authors.json
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 run_and_fix.py
+        run: python3 -m pytest -v --make-reports=tests_models @fixed2.txt
 
       - name: "Upload collected.txt"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: collected
-          path: /transformers/collected.txt
+          name: tests_models
+          path: /transformers/reports/tests_models
+
+#
+#      - name: Run all tests on GPU
+#        working-directory: /transformers
+#        run: python3 run_and_fix.py
+#
+#      - name: "Upload collected.txt"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: collected
+#          path: /transformers/collected.txt
