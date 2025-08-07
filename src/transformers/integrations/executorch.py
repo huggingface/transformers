@@ -517,10 +517,10 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             max_cache_len=generation_config.cache_config.get("max_cache_len"),
             config=config,
         )
-        batch_size = generation_config.cache_config.get("batch_size"),
+        batch_size = generation_config.cache_config.get("batch_size")
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        device = generation_config.cache_config.get("device"),
+        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -673,8 +673,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         self.cache = HybridCache(max_cache_len=generation_config.cache_config.get("max_cache_len"), config=config)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        max_batch_size = generation_config.cache_config.get("batch_size"),
-        device = generation_config.cache_config.get("device"),
+        max_batch_size = generation_config.cache_config.get("batch_size")
+        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.cache.early_initialization(max_batch_size, num_heads, head_dim, dtype, device)
