@@ -42,15 +42,17 @@ class DeepseekVLHybridProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "image_token": "<image_placeholder>",
             },
         )
+        processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(
             image_processor=image_processor,
             tokenizer=tokenizer,
-            chat_template="dummy_template",
+            **processor_kwargs,
         )
         processor.save_pretrained(self.tmpdirname)
 
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "{% set seps = ['\n\n', '<\uff5cend\u2581of\u2581sentence\uff5c>'] %}{% set i = 0 %}You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n{% for message in messages %}{% if message['role']|lower == 'user' %}User: {% elif message['role']|lower == 'assistant' %}Assistant:{% if not (loop.last and not add_generation_prompt and message['content'][0]['type']=='text' and message['content'][0]['text']=='') %} {% endif %}{% else %}{{ message['role'].capitalize() }}: {% endif %}{% for content in message['content'] %}{% if content['type'] == 'image' %}<image_placeholder>{% elif content['type'] == 'text' %}{% set text = content['text'] %}{% if loop.first %}{% set text = text.lstrip() %}{% endif %}{% if loop.last %}{% set text = text.rstrip() %}{% endif %}{% if not loop.first and message['content'][loop.index0-1]['type'] == 'text' %}{{ ' ' + text }}{% else %}{{ text }}{% endif %}{% endif %}{% endfor %}{% if not loop.last or add_generation_prompt %}{% if message['role']|lower == 'user' %}{{ seps[0] }}{% else %}{{ seps[1] }}{% endif %}{% endif %}{% endfor %}{% if add_generation_prompt %}Assistant:{% endif %}",
             "num_image_tokens": 576,
-        }
+        }  # fmt: skip
