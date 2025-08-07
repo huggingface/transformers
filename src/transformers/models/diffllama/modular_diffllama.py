@@ -181,7 +181,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.Tensor, None]:
-        if isinstance(past_key_value, StaticCache):
+        if isinstance(past_key_values, StaticCache):
             raise ValueError(
                 "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
                 "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
