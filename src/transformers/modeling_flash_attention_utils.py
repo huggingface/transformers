@@ -492,9 +492,7 @@ def _flash_attention_forward(
         "softmax_scale": softmax_scale,
     }
 
-    if is_fa3 and dropout > 0.0:
-        logger.warning_once("Flash Attention 3 does not support dropout. Setting dropout to 0.0.")
-    else:
+    if not is_fa3:
         flash_kwargs["dropout_p"] = dropout
 
     if supports_sliding_window and sliding_window is not None and key_states.shape[1] > sliding_window:
