@@ -216,8 +216,10 @@ class SmolVLMProcessor(ProcessorMixin):
         for sample in text:
             while self.video_token in sample:
                 metadata = next(video_metadata)
-                timestamps = [(int(second // 60), int(second % 60)) for second in metadata["timestamps"]]
-                duration = int(metadata["duration"])
+                if metadata.fps is None:
+                    metadata.fps = 24  # Set the default fps to 24 for BC, otherwise `timestamps` can't be inferred
+                timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
+                duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
                 duration_td = timedelta(seconds=int(duration))
                 image_prompt_strings = DEFAULT_VIDEO_INTRO.format(
                     frame_count=num2words(num_frames), video_duration=str(duration_td)

@@ -90,9 +90,14 @@ class VideoMetadata:
     def __getitem__(self, item):
         return getattr(self, item)
 
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
+
     @property
     def timestamps(self) -> float:
         "Timestamps of the sampled frames in seconds."
+        if self.fps is None:
+            raise ValueError("Cannot infer video `timestamps` when `fps` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
     def update(self, dictionary):
@@ -206,13 +211,15 @@ def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor", "URL
 
 def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
     if video_metadata is None:
-        # Create default metadata with 24fps
+        # Create default metadata and fill attrbiutes we can infer from given video
         video_metadata = [
             {
                 "total_num_frames": len(video),
-                "fps": 24,
-                "duration": len(video) / 24,
+                "fps": None,
+                "duration": None,
                 "frames_indices": list(range(len(video))),
+                "height": get_video_size(video)[0] if is_valid_video(video) else None,
+                "width": get_video_size(video)[1] if is_valid_video(video) else None,
             }
             for video in videos
         ]

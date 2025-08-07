@@ -21,7 +21,7 @@ import io
 import os
 import warnings
 from io import BytesIO
-from typing import Any, Optional, Union, Sequence
+from typing import Any, Optional, Sequence, Union
 
 import numpy as np
 import requests

@@ -314,6 +314,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     torch.stack([F.pil_to_tensor(image) for image in images], dim=0)
                     for images in self.fetch_images(videos)
                 ]
+                if do_sample_frames:
+                    raise ValueError(
+                        "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`."
+                    )
             else:
                 videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
 

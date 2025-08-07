@@ -149,11 +149,9 @@ class Glm4vProcessor(ProcessorMixin):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
-            timestamps = [metadata.timestamps for metadata in video_metadata]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
-            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -178,14 +176,13 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    if hasattr(timestamps, "tolist"):
-                        timestamps_list = timestamps.tolist()[0]
-                    else:
-                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    # Set the default fps to 2.0 for BC, otherwise `timestamps` can't be inferred
+                    metadata = video_metadata[i]
+                    metadata.fps = 2.0 if metadata.fps is None else metadata.fps
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list)):
-                        unique_timestamps.append(timestamps_list[idx])
+                    for idx in range(0, len(metadata.timestamps)):
+                        unique_timestamps.append(metadata.timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
