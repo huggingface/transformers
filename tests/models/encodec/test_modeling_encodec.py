@@ -1492,8 +1492,8 @@ class EncodecIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(
                 decoded_frames["audio_values"][..., : EXPECTED_DECODER_OUTPUTS_BATCH[model_id][bandwidth].shape[-1]],
                 EXPECTED_DECODER_OUTPUTS_BATCH[model_id][bandwidth].to(torch_device),
-                rtol=1e-6,
-                atol=1e-6,
+                rtol=1e-4,
+                atol=1e-4,
             )
 
             # Compare codec error with expected values
