@@ -261,7 +261,7 @@ def fa_peft_integration_check(q, k, v, target_dtype: Optional[torch.dtype] = Non
 
 def _lazy_imports(impl: Optional[str]):
     # returns funcs and pad/unpad based on impl
-    is_fa2 = is_flash_attn_2_available() or is_torch_npu_available()
+    is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
     if impl == "flash_attention_2" or (impl is None and is_fa2 and not is_fa3):
         try:
@@ -299,7 +299,12 @@ def _lazy_imports(impl: Optional[str]):
                 raise ImportError(
                     "Failed to import flash attention 2, please install it or use another implementation."
                 ) from e
-    if impl == "flash_attention_3" or (impl is None and is_fa3):
+    elif is_torch_npu_available():
+        # get flash attention related functions from `.integrations.npu_flash_attention` module for Ascend NPU
+        from .integrations.npu_flash_attention import get_npu_flash_attn_funcs
+
+        return get_npu_flash_attn_funcs()
+    elif impl == "flash_attention_3" or (impl is None and is_fa3):
         from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
 
         pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
@@ -389,7 +394,8 @@ def _flash_attention_forward(
         flash_kwargs["deterministic"] = det
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
-
+    if "s_aux" in kwargs:
+        flash_kwargs["s_aux"] = kwargs.get("s_aux")
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
     )
