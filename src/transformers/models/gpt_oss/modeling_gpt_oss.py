@@ -160,6 +160,8 @@ class GptOssMLP(nn.Module):
 
 
 class GptOssRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GptOssConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
