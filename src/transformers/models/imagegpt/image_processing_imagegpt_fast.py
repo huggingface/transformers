@@ -125,7 +125,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]] = None,
         disable_grouping: Optional[bool] = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR,
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
@@ -145,6 +145,9 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         # Check for do_color_quantize and clusters.
         if do_color_quantize and clusters is None:
             raise ValueError("Clusters must be specified if do_color_quantize is True.")
+
+        # Convert images to torch float32
+        images = [image.to(torch.float32) for image in images]
 
         # Clusters come in np arrays. Convert to torch tensors.
         cluster_tensors = None
