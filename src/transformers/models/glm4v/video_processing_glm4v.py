@@ -144,6 +144,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         videos: list[torch.Tensor],
         video_metadata: Optional[Union[list[VideoMetadata], list[dict]]] = None,
         do_resize: bool = True,
+        size: bool = SizeDict,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
@@ -188,7 +189,8 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
-                    max_pixels=self.max_image_size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
                 stacked_videos = self.resize(
