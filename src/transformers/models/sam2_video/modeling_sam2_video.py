@@ -39,6 +39,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -323,10 +324,17 @@ class Sam2VideoPositionEmbeddingSine(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    @compile_compatible_method_lru_cache(maxsize=10)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = (~mask).to(x.dtype)
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        not_mask = (~mask).to(dtype)
         y_embed = not_mask.cumsum(1)
         x_embed = not_mask.cumsum(2)
         if self.normalize:
@@ -334,7 +342,7 @@ class Sam2VideoPositionEmbeddingSine(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1093,7 +1101,7 @@ class Sam2VideoMemoryEncoder(nn.Module):
         vision_features = self.memory_fuser(vision_features)
         vision_features = self.projection(vision_features)
 
-        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
+        vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
         return vision_features, [vision_pos_enc]
 

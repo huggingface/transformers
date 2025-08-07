@@ -432,7 +432,9 @@ class Sam2VisionNeck(nn.Module):
                 ).to(lateral_features.dtype)
                 prev_features = lateral_features + top_down_features
 
-            prev_position_encoding = self.position_encoding(prev_features).to(prev_features.dtype)
+            prev_position_encoding = self.position_encoding(
+                prev_features.shape, prev_features.device, prev_features.dtype
+            ).to(prev_features.dtype)
 
             fpn_hidden_states += (prev_features,)
             fpn_position_encoding += (prev_position_encoding,)

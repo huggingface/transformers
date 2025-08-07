@@ -1418,7 +1418,7 @@ class Sam2VideoMemoryEncoder(nn.Module):
         vision_features = self.memory_fuser(vision_features)
         vision_features = self.projection(vision_features)
 
-        vision_pos_enc = self.position_encoding(vision_features).to(vision_features.dtype)
+        vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
         return vision_features, [vision_pos_enc]
 
