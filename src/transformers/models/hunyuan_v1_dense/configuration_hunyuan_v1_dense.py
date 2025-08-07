@@ -26,7 +26,7 @@ class HunYuanDenseV1Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`HunYuanDenseV1Config`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
-    Hunyuan-7B-Instruct-0124 [tencent/Hunyuan-7B-Instruct-0124](https://huggingface.co/tencent/Hunyuan-7B-Instruct-0124).
+    Hunyuan-7B-Instruct [tencent/Hunyuan-7B-Instruct](https://huggingface.co/tencent/Hunyuan-7B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
