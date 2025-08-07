@@ -385,7 +385,9 @@ def _is_packed_sequence(position_ids, batch_size):
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
-    increasing_position_sequences = (torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min())
+    increasing_position_sequences = (
+        torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
+    )
     return (
         position_ids is not None
         and batch_size == 1
