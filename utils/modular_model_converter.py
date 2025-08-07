@@ -1092,6 +1092,8 @@ def find_file_type(class_name: str, model_name: str) -> str:
     The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
     """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
+    # We remove the model name to avoid ambiguity, e.g. for `Sam2VideoProcessor`,
+    # removing `Sam2Video` ensures we match `Processor` instead of `VideoProcessor`.
     match = re.search(rf"({match_pattern})$", class_name.replace(get_cased_name(model_name), ""))
     if match:
         file_type = TYPE_TO_FILE_TYPE[match.group(1)]
