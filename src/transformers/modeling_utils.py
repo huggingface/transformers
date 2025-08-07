@@ -195,7 +195,7 @@ def is_local_dist_rank_0():
     return (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", -1)) == 0
+        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
 
 
@@ -4663,7 +4663,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
                 "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
                 "If your plan is to load the model on each device, you should set device_map={"
