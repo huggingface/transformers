@@ -1303,7 +1303,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
             input_embeds.append(self.input_projections[level](x))
-            position_embeddings.append(self.position_embedding(x))
+            position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
             torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
@@ -2060,7 +2060,11 @@ class Mask2FormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
-            multi_stage_positional_embeddings.append(self.position_embedder(multi_scale_features[i], None).flatten(2))
+            multi_stage_positional_embeddings.append(
+                self.position_embedder(
+                    multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
+                ).flatten(2)
+            )
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
