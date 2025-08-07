@@ -165,29 +165,78 @@ class DeepseekV3MoE(nn.Module):
         )
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
+        This function implements an efficient Mixture of Experts (MoE) layer
+        using a scatter-gather approach to avoid a slow loop over the experts for each token.
 
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
+        Args:
+            hidden_states (torch.Tensor): The input tensor of shape (num_tokens, hidden_dim).
+            topk_indices (torch.Tensor): A tensor of shape (num_tokens, top_k) indicating
+                                        the chosen expert for each token.
+            topk_weights (torch.Tensor): A tensor of shape (num_tokens, top_k) containing
+                                        the weights for each chosen expert.
+        """
+        # Initial setup
+        num_tokens, hidden_dim = hidden_states.shape
+        top_k = topk_indices.shape[1]
+        
+        # Flatten the routing information to create a single list of token-expert assignments.
+        # Shape: (num_tokens * top_k)
+        flat_topk_indices = topk_indices.view(-1)
+        flat_topk_weights = topk_weights.view(-1)
+        
+        # Create a tensor that maps each flattened assignment back to its original token index.
+        # Shape: (num_tokens * top_k)
+        token_source_idx = torch.arange(
+            num_tokens, device=hidden_states.device
+        ).repeat_interleave(top_k)
 
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
+        # --- SCATTER (Permute & Group) ---
+        # 1. Get a permutation that sorts the flattened assignments by expert index.
+        # This is the core of the scatter operation.
+        perm_indices = flat_topk_indices.argsort()
+        
+        # 2. Apply this permutation to all related tensors.
+        sorted_expert_indices = flat_topk_indices[perm_indices]
+        sorted_weights = flat_topk_weights[perm_indices]
+        sorted_token_source_idx = token_source_idx[perm_indices]
 
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
+        # 3. Gather the hidden states according to the permutation. This groups tokens
+        #    by their assigned expert, creating a single, contiguous tensor.
+        permuted_hidden_states = hidden_states[sorted_token_source_idx]
+        
+        # --- BATCHED EXPERT PROCESSING ---
+        # 4. Find the boundaries in the sorted tensor that delineate each expert's tokens.
+        num_experts = len(self.experts)
+        expert_boundaries = torch.searchsorted(
+            sorted_expert_indices,
+            torch.arange(num_experts + 1, device=hidden_states.device),
+            right=True,
+        )
+        expert_counts = (expert_boundaries[1:] - expert_boundaries[:-1]).tolist()
+        
+        # 5. Split the permuted hidden states into chunks for each expert.
+        expert_inputs = torch.split(permuted_hidden_states, expert_counts, dim=0)
+        
+        # 6. Process the chunks in a loop. While this is still a loop, it operates on
+        #    large, contiguous tensors, which is highly efficient and is iterated over only once per batch.
+        expert_outputs = []
+        for i in range(num_experts):
+            if expert_counts[i] > 0:
+                expert_outputs.append(self.experts[i](expert_inputs[i]))
+        
+        # Concatenate the results from all experts.
+        concatenated_outputs = torch.cat(expert_outputs, dim=0)
+
+        # --- GATHER (Weighted Sum) ---
+        # 7. Apply the expert weights to the processed outputs.
+        weighted_outputs = concatenated_outputs * sorted_weights.unsqueeze(1)
+        
+        # 8. Scatter-add the weighted outputs back to their original token positions.
+        # This efficiently sums the contributions for tokens routed to multiple experts.
+        final_hidden_states = torch.zeros_like(hidden_states)
+        final_hidden_states.index_add_(0, sorted_token_source_idx, weighted_outputs)
+        
         return final_hidden_states.type(hidden_states.dtype)
 
     def forward(self, hidden_states):
