@@ -161,9 +161,7 @@ class PerceptionLMModel(LlavaModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
-        if pixel_values.ndim > 4:
-            pixel_values = pixel_values.flatten(0, 1)
-        image_outputs = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
         image_outputs = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
             image_outputs = image_outputs[:, 1:, :]
