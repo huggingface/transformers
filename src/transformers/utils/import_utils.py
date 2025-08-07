@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Optional, Union, Callable
+from typing import Any, Callable, Optional, Union
 
 from packaging import version
 
