@@ -175,7 +175,7 @@ if is_torch_available():
             # to string
             import json
             actual_str_1 = format(actual)
-            actual_str_2 = json.dumps([format(x) for x in actual], indent=4).replace('"', '')
+            actual_str_2 = json.dumps([format(x) for x in actual], indent=4).replace('"', '').replace("\n]", ",\n]").replace("]\n]", "],\n]")
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526
