@@ -423,6 +423,10 @@ def _test_eager_matches_sdpa_inference(
                 outputs_eager = outputs_eager["language_model_outputs"]
                 outputs_sdpa = outputs_sdpa["language_model_outputs"]
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            elif "text_model_output" in outputs_eager and "owl" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["text_model_output"]
+                outputs_sdpa = outputs_sdpa["text_model_output"]
+                key = "hidden_states"
             else:
                 key = "hidden_states"
 

@@ -490,9 +490,6 @@ class OwlViTAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, seq_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
