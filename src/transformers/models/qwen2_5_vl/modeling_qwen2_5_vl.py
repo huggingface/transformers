@@ -1190,8 +1190,8 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
+        # split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        # image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds
 
     @auto_docstring
@@ -1237,7 +1237,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = torch.cat(image_embeds, dim=0)
+            # image_embeds = torch.cat(image_embeds, dim=0)
 
             if input_ids is None:
                 image_mask = inputs_embeds == self.get_input_embeddings()(
