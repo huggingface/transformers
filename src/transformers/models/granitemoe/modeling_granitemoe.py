@@ -119,7 +119,8 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    rank = routing_weights.shape[1] * int(routing_weights.device.index)
+    device_index = routing_weights.device.index if routing_weights.device.index is not None else 0
+    rank = routing_weights.shape[1] * int(device_index)
     overall_loss = torch.sum(
         tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
     )
@@ -149,6 +150,8 @@ class GraniteMoeRMSNorm(nn.Module):
 
 # Copied from transformers.models.granite.modeling_granite.GraniteRotaryEmbedding with Granite->GraniteMoe
 class GraniteMoeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GraniteMoeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

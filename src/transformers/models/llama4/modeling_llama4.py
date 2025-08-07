@@ -165,6 +165,8 @@ class Llama4TextMoe(nn.Module):
 
 
 class Llama4TextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

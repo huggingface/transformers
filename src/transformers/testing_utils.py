@@ -170,7 +170,6 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
-    is_triton_kernels_availalble,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -469,13 +468,6 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
         )
 
     return decorator
-
-
-def require_triton_kernels(test_case):
-    """
-    Decorator marking a test that requires triton_kernels. These tests are skipped when triton_kernels isn't installed.
-    """
-    return unittest.skipUnless(is_triton_kernels_availalble(), "test requires triton_kernels")(test_case)
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
