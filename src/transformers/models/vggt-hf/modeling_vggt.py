@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViT model."""
+"""PyTorch VGGT model."""
 
 import collections.abc
 import math
@@ -34,23 +34,23 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
-from .configuration_vit import ViTConfig
+from .configuration_vggt import VGGTConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class ViTEmbeddings(nn.Module):
+class VGGTEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config: ViTConfig, use_mask_token: bool = False) -> None:
+    def __init__(self, config: VGGTConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = ViTPatchEmbeddings(config)
+        self.patch_embeddings = VGGTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -128,7 +128,7 @@ class ViTEmbeddings(nn.Module):
         return embeddings
 
 
-class ViTPatchEmbeddings(nn.Module):
+class VGGTPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -197,8 +197,8 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class ViTSelfAttention(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTSelfAttention(nn.Module):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -270,13 +270,13 @@ class ViTSelfAttention(nn.Module):
         return outputs
 
 
-class ViTSelfOutput(nn.Module):
+class VGGTSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in VGGTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -288,11 +288,11 @@ class ViTSelfOutput(nn.Module):
         return hidden_states
 
 
-class ViTAttention(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTAttention(nn.Module):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
-        self.attention = ViTSelfAttention(config)
-        self.output = ViTSelfOutput(config)
+        self.attention = VGGTSelfAttention(config)
+        self.output = VGGTSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads: set[int]) -> None:
@@ -327,8 +327,8 @@ class ViTAttention(nn.Module):
         return outputs
 
 
-class ViTIntermediate(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTIntermediate(nn.Module):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -343,8 +343,8 @@ class ViTIntermediate(nn.Module):
         return hidden_states
 
 
-class ViTOutput(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTOutput(nn.Module):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -358,16 +358,16 @@ class ViTOutput(nn.Module):
         return hidden_states
 
 
-class ViTLayer(GradientCheckpointingLayer):
+class VGGTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViTAttention(config)
-        self.intermediate = ViTIntermediate(config)
-        self.output = ViTOutput(config)
+        self.attention = VGGTAttention(config)
+        self.intermediate = VGGTIntermediate(config)
+        self.output = VGGTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -378,7 +378,7 @@ class ViTLayer(GradientCheckpointingLayer):
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in VGGT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -388,7 +388,7 @@ class ViTLayer(GradientCheckpointingLayer):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in ViT, layernorm is also applied after self-attention
+        # in VGGT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -400,11 +400,11 @@ class ViTLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class ViTEncoder(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTEncoder(nn.Module):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([VGGTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -444,12 +444,12 @@ class ViTEncoder(nn.Module):
 
 
 @auto_docstring
-class ViTPreTrainedModel(PreTrainedModel):
-    config: ViTConfig
-    base_model_prefix = "vit"
+class VGGTPreTrainedModel(PreTrainedModel):
+    config: VGGTConfig
+    base_model_prefix = "vggt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
+    _no_split_modules = ["VGGTEmbeddings", "VGGTLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -468,7 +468,7 @@ class ViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ViTEmbeddings):
+        elif isinstance(module, VGGTEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
@@ -486,8 +486,8 @@ class ViTPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class ViTModel(ViTPreTrainedModel):
-    def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+class VGGTModel(VGGTPreTrainedModel):
+    def __init__(self, config: VGGTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -497,16 +497,16 @@ class ViTModel(ViTPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViTEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ViTEncoder(config)
+        self.embeddings = VGGTEmbeddings(config, use_mask_token=use_mask_token)
+        self.encoder = VGGTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTPooler(config) if add_pooling_layer else None
+        self.pooler = VGGTPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> ViTPatchEmbeddings:
+    def get_input_embeddings(self) -> VGGTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
@@ -580,8 +580,8 @@ class ViTModel(ViTPreTrainedModel):
         )
 
 
-class ViTPooler(nn.Module):
-    def __init__(self, config: ViTConfig):
+class VGGTPooler(nn.Module):
+    def __init__(self, config: VGGTConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.pooler_output_size)
         self.activation = ACT2FN[config.pooler_act]
@@ -597,7 +597,7 @@ class ViTPooler(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    ViT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
+    VGGT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 
@@ -607,11 +607,11 @@ class ViTPooler(nn.Module):
     </Tip>
     """
 )
-class ViTForMaskedImageModeling(ViTPreTrainedModel):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTForMaskedImageModeling(VGGTPreTrainedModel):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__(config)
 
-        self.vit = ViTModel(config, add_pooling_layer=False, use_mask_token=True)
+        self.vggt = VGGTModel(config, add_pooling_layer=False, use_mask_token=True)
 
         self.decoder = nn.Sequential(
             nn.Conv2d(
@@ -642,7 +642,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoImageProcessor, ViTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, VGGTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -651,7 +651,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
-        >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> model = VGGTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
@@ -672,7 +672,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
             )
 
-        outputs = self.vit(
+        outputs = self.vggt(
             pixel_values,
             bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
@@ -720,24 +720,24 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    VGGT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
 
     <Tip>
 
-        Note that it's possible to fine-tune ViT on higher resolution images than the ones it has been trained on, by
+        Note that it's possible to fine-tune VGGT on higher resolution images than the ones it has been trained on, by
         setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
         position embeddings to the higher resolution.
 
     </Tip>
     """
 )
-class ViTForImageClassification(ViTPreTrainedModel):
-    def __init__(self, config: ViTConfig) -> None:
+class VGGTForImageClassification(VGGTPreTrainedModel):
+    def __init__(self, config: VGGTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vit = ViTModel(config, add_pooling_layer=False)
+        self.vggt = VGGTModel(config, add_pooling_layer=False)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -764,7 +764,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vit(
+        outputs = self.vggt(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -814,4 +814,4 @@ class ViTForImageClassification(ViTPreTrainedModel):
         )
 
 
-__all__ = ["ViTForImageClassification", "ViTForMaskedImageModeling", "ViTModel", "ViTPreTrainedModel"]
+__all__ = ["VGGTForImageClassification", "VGGTForMaskedImageModeling", "VGGTModel", "VGGTPreTrainedModel"]
