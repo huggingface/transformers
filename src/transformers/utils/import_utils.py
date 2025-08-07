@@ -83,7 +83,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = getattr(package, "__version__", "N/A")
                 except Exception:
                     try:
-                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton for windows
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
                     except Exception:
                         package_exists = False
             else:
