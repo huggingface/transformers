@@ -186,43 +186,45 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pil(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            )
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_numpy(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+            )
 
     @unittest.skip(reason="ImageGPT assumes clusters for 3 channels")
     def test_call_numpy_4_channels(self):
@@ -230,25 +232,26 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pytorch(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
 
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
-        self.assertEqual(
-            tuple(encoded_images.shape),
-            (self.image_processor_tester.batch_size, *expected_output_image_shape),
-        )
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+            self.assertEqual(
+                tuple(encoded_images.shape),
+                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+            )
 
 
 def prepare_images():
