@@ -388,6 +388,8 @@ class JetMoeRMSNorm(nn.Module):
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->JetMoe
 class JetMoeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: JetMoeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

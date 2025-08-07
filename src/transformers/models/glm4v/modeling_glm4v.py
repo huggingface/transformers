@@ -101,6 +101,8 @@ class Glm4vVisionPatchEmbed(nn.Module):
 
 
 class Glm4vVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -521,6 +523,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
 
 class Glm4vTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
