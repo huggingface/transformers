@@ -380,7 +380,6 @@ class Owlv2ModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             projection_dim=64,
-            attn_implementation="eager",
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -1073,12 +1072,12 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_torch_sdpa
     @require_torch_fp16
+    @require_torch_sdpa
     def test_inference_one_shot_object_detection_fp16_sdpa(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(
-            model_name, attention_type="sdpa", torch_dtype=torch.float16
+            model_name, attn_implementation="sdpa", torch_dtype=torch.float16
         ).to(torch_device)
         self.assertTrue(model.config._attn_implementation == "sdpa")
         self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")

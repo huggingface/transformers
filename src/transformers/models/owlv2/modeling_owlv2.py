@@ -432,7 +432,8 @@ def eager_attention_forward(
 
     attn_output = attn_output.view(bsz, num_heads, seq_len, head_dim)
     attn_output = attn_output.transpose(1, 2)
-    return attn_output, attn_weights
+
+    return attn_output, attn_weights_reshaped
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTAttention with OwlViT->Owlv2
