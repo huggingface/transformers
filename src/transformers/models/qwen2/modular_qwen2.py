@@ -24,6 +24,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -42,6 +43,10 @@ class Qwen2MLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
+class Qwen2RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
 class Qwen2Attention(LlamaAttention):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -49,7 +54,10 @@ class Qwen2Attention(LlamaAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+
+        self.rotary_emb = Qwen2RotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

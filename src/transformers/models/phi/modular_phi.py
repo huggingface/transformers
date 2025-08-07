@@ -12,6 +12,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -22,7 +23,6 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_phi import PhiConfig
 
 

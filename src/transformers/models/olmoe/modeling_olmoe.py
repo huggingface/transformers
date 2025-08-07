@@ -26,9 +26,9 @@ from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, TransformersKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_olmoe import OlmoeConfig
 
@@ -188,7 +188,7 @@ class OlmoeRotaryEmbedding(nn.Module):
             rope_scaling_dict = config.rope_scaling_dict
 
         base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 

@@ -23,8 +23,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, ext
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import check_model_inputs
 from .configuration_phi import PhiConfig
 
 
@@ -75,7 +75,7 @@ class PhiRotaryEmbedding(nn.Module):
             rope_scaling_dict = config.rope_scaling_dict
 
         base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 

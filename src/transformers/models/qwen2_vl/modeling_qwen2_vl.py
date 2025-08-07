@@ -152,7 +152,7 @@ class Qwen2VLRotaryEmbedding(nn.Module):
             rope_scaling_dict = config.rope_scaling_dict
 
         base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -551,9 +551,10 @@ class Qwen2VLAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
-        self.rotary_emb = Qwen2VLRotaryEmbedding(config=config)
+        self.rotary_emb = Qwen2VLRotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

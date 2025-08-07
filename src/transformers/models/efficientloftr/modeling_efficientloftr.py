@@ -124,7 +124,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
             rope_scaling_dict = config.rope_scaling_dict
 
         base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -414,8 +414,9 @@ class EfficientLoFTRAttention(nn.Module):
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(hidden_states)
-            cos = cos.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, dim)
-            sin = sin.expand(batch_size * 2, -1, -1, -1).reshape(batch_size * 2, -1, dim)
+            cos = cos.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
+            sin = sin.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
+            print(cos.shape, hidden_states.shape)
         else:
             logger.warning_once(
                 "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
@@ -530,7 +531,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, _, embed_dim, height, width = hidden_states.shape
@@ -562,7 +563,7 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         for layer in self.layers:

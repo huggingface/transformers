@@ -105,7 +105,7 @@ class StableLmRotaryEmbedding(nn.Module):
             rope_scaling_dict = config.rope_scaling_dict
 
         base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = rope_scaling_dict.get("partial_rotary_factor", 1.0)
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -263,6 +263,7 @@ class StableLmAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.is_causal = True
+        self.scaling = self.head_dim**-0.5
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(

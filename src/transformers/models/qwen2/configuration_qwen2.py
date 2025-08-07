@@ -65,8 +65,6 @@ class Qwen2Config(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -162,7 +160,6 @@ class Qwen2Config(PretrainedConfig):
         rms_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         use_sliding_window=False,
         sliding_window=4096,
@@ -190,14 +187,7 @@ class Qwen2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -208,6 +198,18 @@ class Qwen2Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
