@@ -208,7 +208,7 @@ There are some rules for documenting different types of arguments and they're li
     ```py
     argument_name (`type`, *optional*, defaults to `X`):
         Description of the argument.
-        Explain its purpose, expected shape/type if complex, and default behavior.
+        목적, 복잡한 경우 예상되는 shape/type, 기본 동작을 설명하세요.
         This can span multiple lines.
     ```
 
