@@ -1154,6 +1154,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             )
             use_cache = False
 
+        # TODO: change the type hint of past_key_values (here and in other models)
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
         if use_cache and isinstance(past_key_values, tuple):
