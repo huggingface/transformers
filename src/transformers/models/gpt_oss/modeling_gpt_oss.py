@@ -113,6 +113,12 @@ class GptOssExperts(nn.Module):
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         elif hidden_states.device.type == "cpu" and hidden_states.shape[0] == 1:
+            with torch.no_grad():
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
+                expert_mask = expert_mask.permute(2, 1, 0)
+                # we sum on the top_k and on the sequence lenght to get which experts
+                # are hit this time around
+                expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             expert_idx = expert_hit.reshape(-1)
             local_num_exports = expert_idx.shape[0]
             current_state = hidden_states.repeat(local_num_exports, 1, 1)
