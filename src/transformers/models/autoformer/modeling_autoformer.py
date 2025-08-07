@@ -1156,6 +1156,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):
+            # TODO: remove the warning when past_key_values is None (here and in other models)
+            # TODO: change the type hint of past_key_values (here and in other models)
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
