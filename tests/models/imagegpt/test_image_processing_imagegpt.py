@@ -108,7 +108,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processors_list:
+        for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "clusters"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
