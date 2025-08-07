@@ -427,10 +427,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    # Disable this since failing following SigLIP2
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
     # For multi-modal models like OwlV2, we need to include all required inputs for SDPA tests
     additional_model_inputs = ["input_ids", "attention_mask", "pixel_values"]
 
@@ -648,10 +644,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    # Disable this since failing following SigLIP2
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
     # For multi-modal models like OwlV2, we need to include all required inputs for SDPA tests
     additional_model_inputs = ["input_ids", "attention_mask", "pixel_values"]
 
