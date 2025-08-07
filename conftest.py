@@ -179,7 +179,7 @@ if is_torch_available():
                 # sometimes there are extra spaces between `[` and the actual values (for alignment).
                 # For example `[[ 0.06, -0.51], [-0.76, -0.49]]`.
                 # Let remove such extra spaces
-                t = t.replace("[ ", "")
+                t = t.replace("[ ", "[")
                 # Put everything in a single line: replace `\n` by a space ` ` so we still keep `,\n` as `, `
                 t = t.replace("\n", " ")
                 # Remove repeated spaces
