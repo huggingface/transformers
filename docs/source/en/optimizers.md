@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Optimizers
 
-Transformers offers two native optimizers, AdamW and AdaFactor. It also provides integrations for more specialized optimizers. Install the library that offers the optimizer and drop it in the `optim` parameter in [`TrainingArguments`].
+Transformers offers three native optimizers: AdamW, AdaFactor, and Muon. It also provides integrations for more specialized optimizers. Install the library that offers the optimizer and drop it in the `optim` parameter in [`TrainingArguments`].
 
 This guide will show you how to use these optimizers with [`Trainer`] using [`TrainingArguments`] shown below.
 
@@ -198,5 +198,30 @@ args = TrainingArguments(
     learning_rate=2e-6,
     save_strategy="no",
     run_name="stable-adamw",
+)
+```
+
+## Muon
+
+```bash
+pip install git+https://github.com/KellerJordan/Muon.git
+```
+
+[Muon](https://kellerjordan.github.io/posts/muon/) (MomentUm Orthogonalized by Newton-schulz) runs standard SGD-momentum and then performs an orthogonalization post-processing step, replacing each 2D parameter's update with the nearest orthogonal matrix. For efficient orthogonalization, it uses Newton-Schulz iteration that can be stably run in bfloat16 on GPU.
+
+> [!TIP]
+> Muon should only be used for hidden weight layers. The input embedding, final output layer, and any internal gains or biases should be optimized using a standard method such as AdamW.
+
+```diff
+args = TrainingArguments(
+    output_dir="./test-muon",
+    max_steps=1000,
+    per_device_train_batch_size=4,
++   optim="muon",
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-2,
+    save_strategy="no",
+    run_name="muon",
 )
 ```

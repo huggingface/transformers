@@ -971,3 +971,134 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
 
     """
     return AdafactorSchedule(optimizer, initial_lr)
+
+
+class MuonWithAuxAdam:
+    """
+    Distributed Muon variant that can be used for all parameters in the network, since it runs an
+    internal AdamW for the parameters that are not compatible with Muon. The user must manually
+    specify which parameters shall be optimized with Muon and which with Adam by passing in a
+    list of param_groups with the `use_muon` flag set.
+
+    The point of this class is to allow the user to have a single optimizer in their code, rather
+    than having both a Muon and an Adam which each need to be stepped.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import MuonWithAuxAdam
+
+    hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
+    hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
+    nonhidden_params = [*model.head.parameters(), *model.embed.parameters()]
+    param_groups = [
+        dict(params=hidden_weights, use_muon=True,
+             lr=0.02, weight_decay=0.01),
+        dict(params=hidden_gains_biases+nonhidden_params, use_muon=False,
+             lr=3e-4, betas=(0.9, 0.95), weight_decay=0.01),
+    ]
+    optimizer = MuonWithAuxAdam(param_groups)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        from muon import MuonWithAuxAdam as _MuonWithAuxAdam
+
+        return _MuonWithAuxAdam(*args, **kwargs)
+
+
+class SingleDeviceMuon:
+    """
+    Single-device variant of Muon optimizer.
+
+    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
+    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
+    matrix. For efficient orthogonalization we use a Newton-Schulz iteration, which has the
+    advantage that it can be stably run in bfloat16 on the GPU.
+
+    This single-device variant is optimized for training on a single GPU/device.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import SingleDeviceMuon
+
+    # Optimizer for hidden weight layers only
+    hidden_params = [p for n, p in model.named_parameters() if p.ndim >= 2 and "embed" not in n and "head" not in n]
+    optimizer = SingleDeviceMuon(hidden_params, lr=0.02, momentum=0.95)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        from muon import SingleDeviceMuon as _SingleDeviceMuon
+
+        return _SingleDeviceMuon(*args, **kwargs)
+
+
+class SingleDeviceMuonWithAuxAdam:
+    """
+    Non-distributed variant of MuonWithAuxAdam.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import SingleDeviceMuonWithAuxAdam
+
+    hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
+    hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
+    nonhidden_params = [*model.head.parameters(), *model.embed.parameters()]
+    param_groups = [
+        dict(params=hidden_weights, use_muon=True,
+             lr=0.02, weight_decay=0.01),
+        dict(params=hidden_gains_biases+nonhidden_params, use_muon=False,
+             lr=3e-4, betas=(0.9, 0.95), weight_decay=0.01),
+    ]
+    optimizer = SingleDeviceMuonWithAuxAdam(param_groups)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        from muon import SingleDeviceMuonWithAuxAdam as _SingleDeviceMuonWithAuxAdam
+
+        return _SingleDeviceMuonWithAuxAdam(*args, **kwargs)
+
+
+class MuonOptimizer:
+    """
+    Muon - MomentUm Orthogonalized by Newton-schulz
+
+    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
+    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
+    matrix. For efficient orthogonalization we use a Newton-Schulz iteration, which has the
+    advantage that it can be stably run in bfloat16 on the GPU.
+
+    Muon should only be used for hidden weight layers. The input embedding, final output layer,
+    and any internal gains or biases should be optimized using a standard method such as AdamW.
+
+    Example usage:
+
+    ```python
+    from transformers.optimization import MuonOptimizer
+
+    # Optimizer for hidden weight layers only
+    hidden_params = [p for n, p in model.named_parameters() if p.ndim >= 2 and "embed" not in n and "head" not in n]
+    optimizer = MuonOptimizer(hidden_params, lr=0.02, momentum=0.95)
+    ```
+
+    Note: This requires installing the Muon package first:
+    `pip install git+https://github.com/KellerJordan/Muon.git`
+    """
+
+    def __new__(cls, *args, **kwargs):
+        from muon import Muon as _Muon
+
+        return _Muon(*args, **kwargs)

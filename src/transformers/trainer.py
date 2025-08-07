@@ -158,6 +158,7 @@ from .utils import (
     is_in_notebook,
     is_liger_kernel_available,
     is_lomo_available,
+    is_muon_available,
     is_peft_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -1241,7 +1242,47 @@ class Trainer:
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
-            self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            # Handle Muon optimizers which have different parameter format requirements
+            if "Muon" in optimizer_cls.__name__:
+                optimizer_name = optimizer_cls.__name__
+
+                # MuonWithAuxAdam and SingleDeviceMuonWithAuxAdam expect parameter groups with specific keys
+                # and don't accept additional keyword arguments like lr, betas
+                if "WithAuxAdam" in optimizer_name:
+                    # These optimizers expect parameter groups with exact keys: params, lr, momentum, weight_decay, use_muon
+                    if isinstance(optimizer_grouped_parameters, list) and all(
+                        isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters
+                    ):
+                        for group in optimizer_grouped_parameters:
+                            # Ensure all required keys are present
+                            group["use_muon"] = group.get("use_muon", True)
+                            group["lr"] = group.get("lr", optimizer_kwargs.get("lr", 3e-4))
+                            group["momentum"] = group.get("momentum", 0.95)
+                            group["weight_decay"] = group.get("weight_decay", 0.0)
+
+                            # Remove any extra keys that MuonWithAuxAdam doesn't expect
+                            allowed_keys = {"params", "lr", "momentum", "weight_decay", "use_muon"}
+                            extra_keys = set(group.keys()) - allowed_keys
+                            for key in extra_keys:
+                                group.pop(key)
+
+                    # These optimizers only accept param_groups, no additional kwargs
+                    self.optimizer = optimizer_cls(optimizer_grouped_parameters)
+
+                # Regular Muon and SingleDeviceMuon expect direct parameter list
+                else:
+                    if isinstance(optimizer_grouped_parameters, list) and all(
+                        isinstance(group, dict) and "params" in group for group in optimizer_grouped_parameters
+                    ):
+                        # Extract all parameters from parameter groups
+                        all_params = []
+                        for group in optimizer_grouped_parameters:
+                            all_params.extend(group["params"])
+                        self.optimizer = optimizer_cls(all_params, **optimizer_kwargs)
+                    else:
+                        self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            else:
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
             if "bitsandbytes" in str(optimizer_cls) and optimizer_kwargs.get("optim_bits", None) == 8:
                 import bitsandbytes
@@ -1417,6 +1458,46 @@ class Trainer:
         if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+        elif args.optim == OptimizerNames.MUON:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import Muon
+
+            optimizer_cls = Muon
+            optimizer_kwargs.update({"momentum": 0.95})
+        elif args.optim == OptimizerNames.MUON_ADAM:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import MuonWithAuxAdam
+
+            optimizer_cls = MuonWithAuxAdam
+            optimizer_kwargs.update({"lr": 3e-4, "betas": (0.9, 0.95)})
+        elif args.optim == OptimizerNames.MUON_SINGLE:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import SingleDeviceMuon
+
+            optimizer_cls = SingleDeviceMuon
+            optimizer_kwargs.update({"momentum": 0.95})
+        elif args.optim == OptimizerNames.MUON_SINGLE_ADAM:
+            if not is_muon_available():
+                raise ImportError(
+                    "You need to install `muon` in order to use muon optimizers. "
+                    "Install it with `pip install git+https://github.com/KellerJordan/Muon.git`."
+                )
+            from muon import SingleDeviceMuonWithAuxAdam
+
+            optimizer_cls = SingleDeviceMuonWithAuxAdam
+            optimizer_kwargs.update({"lr": 3e-4, "betas": (0.9, 0.95)})
         elif args.optim in [OptimizerNames.ADAMW_TORCH, OptimizerNames.ADAMW_TORCH_FUSED]:
             from torch.optim import AdamW
 
