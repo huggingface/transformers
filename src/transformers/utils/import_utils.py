@@ -484,14 +484,6 @@ def is_torchvision_v2_available():
     return version.parse(_torchvision_version) >= version.parse("0.15")
 
 
-@lru_cache
-def is_torchvision_greater_or_equal(library_version: str):
-    if not is_torchvision_available():
-        return False
-
-    return version.parse(_torchvision_version) >= version.parse(library_version)
-
-
 def is_galore_torch_available():
     return _galore_torch_available
 
