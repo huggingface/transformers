@@ -59,7 +59,8 @@ class MiniCPMOBatchFeature(BatchFeature):
                     return tensor
             except:  # noqa E722
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        "Unable to create tensor returning overflowing values of different lengths. ")
                 raise ValueError(
                     "Unable to create tensor, you should probably activate padding "
                     "with 'padding=True' to have batched tensors with the same length."
@@ -96,13 +97,14 @@ class MiniCPMOBatchFeature(BatchFeature):
                 device = arg
             else:
                 # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+                raise ValueError(
+                    f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
             new_data[k] = recursive_converter(cast_tensor, v)
         self.data = new_data
         return self
-    
+
 
 class MiniCPMOImageKwargs(ImagesKwargs, total=False):
     max_slice_nums: Optional[int]
@@ -149,8 +151,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "feature_extractor", "tokenizer"]
-    feature_extractor_class = "WhisperFeatureExtractor"
     image_processor_class = "AutoImageProcessor"
+    feature_extractor_class = "MiniCPM_O_2_6FeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None):
@@ -166,7 +168,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]] = None,
+        audios: Union[np.ndarray, List[np.ndarray],
+                      List[List[np.ndarray]]] = None,
         **kwargs: Unpack[MiniCPM_o_2_6ProcessorKwargs],
     ) -> MiniCPMOBatchFeature:
         output_kwargs = self._merge_kwargs(
@@ -184,7 +187,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             image_inputs = None
 
         if audios:
-            audio_features, audio_feature_lens, audio_phs = self.audio_feature_extract(
+            audio_features, audio_feature_lens, audio_phs = self.feature_extractor(
                 audios,
                 audio_parts=audio_kwargs["audio_parts"],
                 chunk_input=audio_kwargs["chunk_input"],
@@ -207,125 +210,6 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
         return MiniCPMOBatchFeature(data={**model_inputs})
 
-    def get_audio_placeholder(self, audio_lens, chunk_input, chunk_length):
-        pool_step = 2
-        feature_lens = math.ceil(audio_lens / self.feature_extractor.hop_length)
-
-        feature_lens = (feature_lens - 1) // 2 + 1
-        output_lens = (feature_lens - pool_step) // pool_step + 1
-
-        if chunk_input:
-            fbank_feat_in_chunk = int(chunk_length * 100)
-            cnn_feat_in_chunk = (fbank_feat_in_chunk - 1) // 2 + 1
-            audio_embeds_in_chunk = (cnn_feat_in_chunk - pool_step) // pool_step + 1
-            num_audio_chunks = (output_lens + audio_embeds_in_chunk - 1) // audio_embeds_in_chunk
-
-            place_holders = ""
-            total_unk_len = 0
-            for _ in range(num_audio_chunks):
-                unk_len = min(audio_embeds_in_chunk, output_lens - total_unk_len)
-                place_holders += self.tokenizer.audio_start + self.tokenizer.unk_token * unk_len + self.tokenizer.audio_end
-                total_unk_len += unk_len
-            audio_placeholder = place_holders
-        else:
-            audio_placeholder = self.tokenizer.audio_start + self.tokenizer.unk_token * output_lens + self.tokenizer.audio_end
-
-        return audio_placeholder
-
-    def audio_feature_extract(
-        self,
-        audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]],
-        audio_parts: Optional[list] = None,
-        chunk_input: Optional[bool] = False,
-        sampling_rate: Optional[int] = None,
-        chunk_length: Optional[int] = 1,
-        **kwargs,
-    ):
-        if isinstance(audios, np.ndarray):
-            audios_list = [[audios]]
-        elif isinstance(audios[0], np.ndarray):
-            audios_list = [audios]
-        else:
-            audios_list = audios
-
-        if audio_parts is not None:
-            assert len(audio_parts) == len(audios_list)
-            for parts, audios in zip(audio_parts, audios_list):
-                assert len(parts) == len(audios)
-
-        audio_feature_lens_list = []
-        audio_ph_list = []
-
-        audio_features_all = []
-
-        # audio placeholder not dependent on audio_parts
-        for audios in audios_list:
-            if audios:
-                audio_ph_list.append([self.get_audio_placeholder(len(a), chunk_input, chunk_length) for a in audios])
-            else:
-                audio_ph_list.append([])
-
-        for idx, audios in enumerate(audios_list):
-            if audio_parts is not None:
-                # same audio part merge
-                audio_part = audio_parts[idx]
-                merge_audio = []
-                cur_audio = []
-                for aid, (part, audio) in enumerate(zip(audio_part, audios)):
-                    if aid == 0 or audio_part[aid] == audio_part[aid - 1]:
-                        cur_audio.append(audio)
-                    else:
-                        merge_audio.append(np.hstack(cur_audio))
-                        cur_audio = [audio]
-                if cur_audio:
-                    merge_audio.append(np.hstack(cur_audio))
-
-            else:
-                merge_audio = audios
-
-            audio_feature_lens = []
-
-            # If the audio exceeds 30 seconds, split it into chunks every 30 seconds.
-            final_merge_audio = []
-            max_audio_inp_len = 30 * sampling_rate
-            for audio in merge_audio:
-                if len(audio) <= max_audio_inp_len:
-                    final_merge_audio.append(audio)
-                else:
-                    for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
-
-            if audios:
-                audio_inputs = self.feature_extractor(
-                    final_merge_audio,
-                    sampling_rate=sampling_rate,
-                    return_attention_mask=True,
-                    padding="max_length",
-                    return_tensors="pt",
-                    **kwargs,
-                )
-                audio_feature = audio_inputs["input_features"]
-                actual_lens = audio_inputs["attention_mask"].sum(dim=1)
-
-                for feat, lens in zip(audio_feature, actual_lens):
-                    audio_features_all.append(feat[:, :lens])
-                    audio_feature_lens.append(lens)
-
-                audio_feature_lens = torch.hstack(audio_feature_lens)
-                audio_feature_lens_list.append(audio_feature_lens)
-            else:
-                audio_feature_lens_list.append([])
-
-        if audio_features_all:
-            audio_features = [i.permute(1, 0) for i in audio_features_all]
-            audio_features = torch.nn.utils.rnn.pad_sequence(
-                audio_features, batch_first=True, padding_value=0.0
-            ).permute(0, 2, 1)
-        else:
-            audio_features = []
-
-        return audio_features, audio_feature_lens_list, audio_ph_list
-
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
@@ -336,7 +220,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         result_text = []
         for result in output_ids:
             result = result[result != 0]
-            result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
+            result_text.append(self.tokenizer.decode(
+                result, *args[1:], **kwargs).strip())
         return result_text
         # return self.tokenizer.batch_decode(*args, **kwargs)
 
@@ -349,7 +234,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
         result = args[0]
         result = result[result != 0]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
-    
+
     def decode_text(self, result_ids, tokenizer, terminators):
         terminators = [tokenizer.convert_tokens_to_ids(i) for i in terminators]
         result_text = []
@@ -361,7 +246,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 result = result[:-1]
             result_text.append(tokenizer.decode(result))
         return result_text
-    
+
     def get_sys_prompt(self, ref_audio=None, mode="default", language="zh"):
         """
         Choose different system prompts according to different tasks
@@ -392,7 +277,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 vc_prompt_suffix = "As an assistant, you will speak using this voice style."
 
             if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+                sys_msgs = {"role": "user", "content": [
+                    vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
 
             else:
                 sys_msgs = {"role": "user", "content": [sys_prompt]}
@@ -407,13 +293,15 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 vc_prompt_suffix = "As an assistant, you will speak using this voice style."
 
             if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+                sys_msgs = {"role": "user", "content": [
+                    vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
 
             else:
                 logger.warning(
                     "Warning: ref_audio is None, speech generation will be performed based on the default voice."
                 )
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
+                sys_msgs = {"role": "user", "content": [
+                    "Use the <reserved_53> voice.", vc_prompt_suffix]}
 
             return sys_msgs
         elif mode == "audio_roleplay":
@@ -425,10 +313,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 vc_prompt_suffix = "Try to role-play the character based on the audio prompt above."
 
             if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
+                sys_msgs = {"role": "user", "content": [
+                    vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
             else:
-                print("Warning: ref_audio is None, speech generation will be performed based on the default voice.")
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
+                print(
+                    "Warning: ref_audio is None, speech generation will be performed based on the default voice.")
+                sys_msgs = {"role": "user", "content": [
+                    "Use the <reserved_53> voice.", vc_prompt_suffix]}
 
             return sys_msgs
         elif mode == "voice_cloning":
@@ -438,9 +329,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                 vc_prompt_prefix = "Clone the voice in the provided audio prompt."
 
             if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio]}
+                sys_msgs = {"role": "user", "content": [
+                    vc_prompt_prefix, ref_audio]}
             else:
-                raise ValueError("ref_audio con't be None in voice_cloning mode.")
+                raise ValueError(
+                    "ref_audio con't be None in voice_cloning mode.")
 
             return sys_msgs
         else:
@@ -455,9 +348,11 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             input_ids = input_ids[:max_inp_length]
         input_ids = torch.tensor(input_ids, dtype=torch.int32)
 
-        ## image bound
-        start_cond = (input_ids == self.tokenizer.im_start_id) | (input_ids == self.tokenizer.slice_start_id)
-        end_cond = (input_ids == self.tokenizer.im_end_id) | (input_ids == self.tokenizer.slice_end_id)
+        # image bound
+        start_cond = (input_ids == self.tokenizer.im_start_id) | (
+            input_ids == self.tokenizer.slice_start_id)
+        end_cond = (input_ids == self.tokenizer.im_end_id) | (
+            input_ids == self.tokenizer.slice_end_id)
 
         image_start_idx = torch.where(start_cond)[0]
         image_start_idx += 1
@@ -472,16 +367,21 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             ]
         )
 
-        ##  audio bound
-        audio_start_idx = torch.where(input_ids == self.tokenizer.audio_start_id)[0]
-        audio_end_idx = torch.where(input_ids == self.tokenizer.audio_end_id)[0]
+        # audio bound
+        audio_start_idx = torch.where(
+            input_ids == self.tokenizer.audio_start_id)[0]
+        audio_end_idx = torch.where(
+            input_ids == self.tokenizer.audio_end_id)[0]
         assert len(audio_start_idx) == len(audio_end_idx)
-        audio_bounds = torch.hstack([(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
+        audio_bounds = torch.hstack(
+            [(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
 
-        spk_start_idx = torch.where(input_ids == self.tokenizer.spk_start_id)[0]
+        spk_start_idx = torch.where(
+            input_ids == self.tokenizer.spk_start_id)[0]
         spk_end_idx = torch.where(input_ids == self.tokenizer.spk_end_id)[0]
         assert len(spk_start_idx) == len(spk_end_idx)
-        spk_bounds = torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
+        spk_bounds = torch.hstack(
+            [(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
 
         return input_ids, image_bounds, audio_bounds, spk_bounds
 
@@ -546,7 +446,8 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
                     text_chunks[i] = audio_placeholder
 
             final_text = "".join(text_chunks)
-            input_ids, image_bounds, audio_bounds, spk_bounds = self._convert(final_text, max_length, **kwargs)
+            input_ids, image_bounds, audio_bounds, spk_bounds = self._convert(
+                final_text, max_length, **kwargs)
 
             final_texts_list.append(final_text)
             input_ids_list.append(input_ids)
@@ -563,7 +464,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             max_length=max_length,
             **kwargs,
         )
-        
+
         padded_input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs["attention_mask"]
         for i in range(bs):
@@ -641,7 +542,8 @@ class ChatTTSProcessor:
         assert len(text_list) == len(audio_list)
         input_ids_varlen = []
         for text in text_list:
-            input_ids_ = self.text_tokenizer.encode(text, return_tensors="pt", add_special_tokens=False)  # [1, seq_len]
+            input_ids_ = self.text_tokenizer.encode(
+                text, return_tensors="pt", add_special_tokens=False)  # [1, seq_len]
             input_ids_ = input_ids_.squeeze(0)  # [seq_len]
             input_ids_varlen.append(input_ids_)
 
@@ -649,14 +551,16 @@ class ChatTTSProcessor:
         for audio in audio_list:
             assert audio.shape.__len__() == 1  # [seq_len]
             try:
-                mel = self.audio_processor(audio)  # [100(num_mel_bins), seq_len_mel]
+                # [100(num_mel_bins), seq_len_mel]
+                mel = self.audio_processor(audio)
             except Exception as e:
                 raise e
             audio_features_varlen.append(mel)
 
         return {
             "tts_input_ids_varlen": input_ids_varlen,  # return List[Tensor]
-            "tts_input_features_varlen": audio_features_varlen,  # return List[Tensor]
+            # return List[Tensor]
+            "tts_input_features_varlen": audio_features_varlen,
         }
 
 
@@ -802,7 +706,8 @@ class VoiceChecker:
             self.previous_mel = mel_db
             return -1.0
 
-        distance = np.linalg.norm(np.mean(mel_db, axis=1) - np.mean(self.previous_mel, axis=1))
+        distance = np.linalg.norm(
+            np.mean(mel_db, axis=1) - np.mean(self.previous_mel, axis=1))
         self.previous_mel = mel_db
         return distance
 
@@ -810,8 +715,9 @@ class VoiceChecker:
         num_chunks = len(audio_wav) // chunk_size
         mel_chunk_size = mel_spec.shape[-1] // num_chunks
         for i in range(num_chunks):
-            audio_chunk = audio_wav[i * chunk_size : (i + 1) * chunk_size]
-            mel_spec_chunk = mel_spec[:, i * mel_chunk_size : (i + 1) * mel_chunk_size]
+            audio_chunk = audio_wav[i * chunk_size: (i + 1) * chunk_size]
+            mel_spec_chunk = mel_spec[:, i *
+                                      mel_chunk_size: (i + 1) * mel_chunk_size]
 
             distance = self.compute_distance(audio_chunk, mel_spec_chunk)
             logger.warning(
@@ -821,13 +727,15 @@ class VoiceChecker:
                 self.consecutive_low_distance = 0  # reset
                 self.consecutive_zeros += 1
                 if self.consecutive_zeros >= 12:
-                    logger.warning("VoiceChecker detected 1.2 s silent. Marking as failed.")
+                    logger.warning(
+                        "VoiceChecker detected 1.2 s silent. Marking as failed.")
                     return True
             elif distance < thresh:
                 self.consecutive_zeros = 0
                 self.consecutive_low_distance += 1
                 if self.consecutive_low_distance >= 5:
-                    logger.warning("VoiceChecker detected 5 consecutive low distance chunks. Marking as failed.")
+                    logger.warning(
+                        "VoiceChecker detected 5 consecutive low distance chunks. Marking as failed.")
                     return True
             else:
                 self.consecutive_low_distance = 0

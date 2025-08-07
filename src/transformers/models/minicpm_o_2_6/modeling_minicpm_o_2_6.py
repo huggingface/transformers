@@ -67,6 +67,7 @@ except:
 
 from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config
 from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, MiniCPM_o_2_6Processor
+from .feature_extractor_minicpm_o_2_6 import MiniCPM_O_2_6FeatureExtractor
 
 logger = logging.get_logger(__name__)
 
@@ -113,10 +114,11 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
 
-        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
-        feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
         tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
+        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
         image_processor.tokenizer = tokenizer
+        feature_extractor = MiniCPM_O_2_6FeatureExtractor.from_pretrained(config._name_or_path)
+        feature_extractor.tokenizer = tokenizer
         self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
@@ -778,8 +780,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         assert len(images_list) == len(msgs_list), "The batch dim of images_list and msgs_list should be the same."
 
         if processor is None:
-            if self.processor is None:
-                self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
             processor = self.processor
 
         assert (
