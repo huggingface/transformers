@@ -830,7 +830,9 @@ class Gemma3Model(PaliGemmaModel):
                 is_image = (token_type_ids == 1).to(cache_position.device)
                 new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-                image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+                image_group_ids = torch.where(
+                    is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
+                )
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                     token_type_ids.to(cache_position.device), image_group_ids, self.config.mm_tokens_per_image
                 )
