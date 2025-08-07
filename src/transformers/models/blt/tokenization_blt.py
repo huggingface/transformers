@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 the Facebook Research and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,9 +19,6 @@ from typing import TYPE_CHECKING, Optional
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
 

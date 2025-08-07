@@ -14,7 +14,7 @@
 # limitations under the License.
 """Blt modular model, inheriting from Mllama where appropriate."""
 
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import torch
 import torch.distributions
@@ -22,9 +22,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -38,7 +39,7 @@ from .configuration_blt import (
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
+    pass
 
 
 from ..mllama.modeling_mllama import (
@@ -202,7 +203,7 @@ def _prepare_patch_cross_attention_mask(
     )
     cross_attention_mask *= full_text_row_masked_out_mask
 
-    return cross_attention_mask, full_text_row_masked_out_mask
+    return cross_attention_mask
 
 
 def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optional[int]) -> torch.Tensor:
@@ -294,14 +295,6 @@ class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):
         self.post_attention_layernorm = BltRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-def rotate_half(x):
-    # From Cohere2. Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
-
-
 class BltSelfAttention(MllamaTextSelfAttention):
     def __init__(self, config: BltConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -328,6 +321,70 @@ class BltSelfAttention(MllamaTextSelfAttention):
             cache_position=cache_position,
             **kwargs,
         )
+
+
+class BltCrossAttention(MllamaTextCrossAttention):
+    """Cross-attention module for Blt, following transformers style"""
+
+    def __init__(self, config: BltConfig, layer_idx: int, hidden_size: Optional[int] = None):
+        super().__init__()
+        self.is_causal = False
+        self.q_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        bsz, q_len, _ = hidden_states.size()
+        query_states = self.q_norm(hidden_states)
+        query_states = self.q_proj(query_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        if cross_attention_states is not None:
+            cross_attention_states = self.k_norm(cross_attention_states)
+            key_states = self.k_proj(cross_attention_states)
+            value_states = self.v_proj(cross_attention_states)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+        elif cache_position[0] != 0:
+            key_states, value_states = (
+                past_key_value.layers[self.layer_idx].keys,
+                past_key_value.layers[self.layer_idx].values,
+            )
+        else:
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        attn_output = attn_output + hidden_states
+        return attn_output, attn_weights
 
 
 class BltLocalEncoder(nn.Module):
@@ -361,7 +418,7 @@ class BltLocalEncoder(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cross_mask: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
@@ -402,7 +459,7 @@ class BltLocalEncoder(nn.Module):
                 cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
-                    attention_mask=cross_mask,
+                    attention_mask=cross_attention_mask,
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
@@ -475,8 +532,7 @@ class BltLocalDecoder(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        mask: Optional[Union["BlockMask", torch.Tensor, str]] = None,
-        cross_mask: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -505,7 +561,7 @@ class BltLocalDecoder(nn.Module):
                 cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
-                    attention_mask=cross_mask,
+                    attention_mask=cross_attention_mask,
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
@@ -520,70 +576,6 @@ class BltLocalDecoder(nn.Module):
             )
         logits = self.norm(hidden_states)
         return logits
-
-
-class BltCrossAttention(MllamaTextCrossAttention):
-    """Cross-attention module for Blt, following transformers style"""
-
-    def __init__(self, config: BltConfig, layer_idx: int, hidden_size: Optional[int] = None):
-        super().__init__()
-        self.is_causal = False
-        self.q_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cross_attention_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        bsz, q_len, _ = hidden_states.size()
-        query_states = self.q_norm(hidden_states)
-        query_states = self.q_proj(query_states)
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        if cross_attention_states is not None:
-            cross_attention_states = self.k_norm(cross_attention_states)
-            key_states = self.k_proj(cross_attention_states)
-            value_states = self.v_proj(cross_attention_states)
-            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-        elif cache_position[0] != 0:
-            key_states, value_states = (
-                past_key_value.layers[self.layer_idx].keys,
-                past_key_value.layers[self.layer_idx].values,
-            )
-        else:
-            raise ValueError(
-                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
-            )
-        attention_interface: Callable = eager_attention_forward
-
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        attn_output = attn_output + hidden_states
-        return attn_output, attn_weights
 
 
 class BltGlobalTransformer(nn.Module):
@@ -629,7 +621,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     config: BltConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
@@ -644,7 +635,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        raise AttributeError("No need to inherit it!")
 
 
 class BltModel(BltPreTrainedModel):
@@ -732,8 +723,17 @@ class BltModel(BltPreTrainedModel):
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
-        causal_mask = self._update_causal_mask(attention_mask, encoder_embeds, cache_position, past_key_values)
-        cross_attn_mask_enc, full_text_row_masked_out_mask_enc = _prepare_patch_cross_attention_mask(
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=encoder_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
         # Remove full_text_row_masked_out_mask from kwargs if present to avoid multiple values error
@@ -746,16 +746,22 @@ class BltModel(BltPreTrainedModel):
             position_ids=position_ids,
             past_key_values=None,
             cache_position=None,
-            cross_mask=cross_attn_mask_enc,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask_enc,
+            cross_attention_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
-            **kwargs,
         )
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
         global_cache_position = torch.arange(0, global_hidden_states.shape[1], device=global_hidden_states.device)
         global_position_ids = global_cache_position.unsqueeze(0)
-        global_causal_mask = self._update_causal_mask(None, global_hidden_states, global_cache_position, None)
+        global_causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=global_hidden_states,
+            attention_mask=None,
+            cache_position=global_cache_position,
+            past_key_values=None,
+            position_ids=None,
+        )
+
         global_hidden_states = self.global_transformer(
             input_embeds=global_hidden_states,
             attention_mask=global_causal_mask,
@@ -765,7 +771,7 @@ class BltModel(BltPreTrainedModel):
             **kwargs,
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
-        cross_attn_mask_dec, full_text_row_masked_out_mask_dec = _prepare_patch_cross_attention_mask(
+        cross_attn_mask_dec = _prepare_patch_cross_attention_mask(
             decoder_patch_ids,
             patch_lengths.shape[1],
             sequence_length,
@@ -781,10 +787,7 @@ class BltModel(BltPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             cache_position=cache_position,
-            mask=None,
-            cross_mask=cross_attn_mask_dec,
-            full_text_row_masked_out_mask=full_text_row_masked_out_mask_dec,
-            **kwargs,
+            cross_attention_mask=cross_attn_mask_dec,
         )
         return BaseModelOutputWithPast(
             last_hidden_state=output,
@@ -855,11 +858,14 @@ class BltPatcher(BltPreTrainedModel):
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
             cache_position = torch.arange(sequence_length, device=input_embeds.device)
-            causal_mask = self._update_causal_mask(
-                None,  # attention_mask
-                input_embeds,
-                cache_position,
-                None,  # past_key_values
+
+            causal_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=input_embeds,
+                attention_mask=None,
+                cache_position=cache_position,
+                past_key_values=None,
+                position_ids=None,
             )
 
             for i, layer in enumerate(self.layers):
