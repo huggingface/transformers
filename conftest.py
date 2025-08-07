@@ -178,8 +178,9 @@ if is_torch_available():
             else:
                 actual = args[0]
 
-            def format(t):
+            def format(t, run_format2=False, indent_level=0):
 
+                ot = t
                 if not isinstance(t, torch.Tensor):
                     t = torch.tensor(t)
 
@@ -207,26 +208,44 @@ if is_torch_available():
                 if is_scalar:
                     t = t[1:-1]
 
-                return t
+                if not run_format2:
+                    return t
+
+                def format2(tt):
+
+                    tt_str = format(tt, run_format2=False)
+
+                    if isinstance(tt, torch.Tensor) and tt.ndim > 1:
+
+                        use_sci_mode = "e+" in tt_str
+                        torch.set_printoptions(sci_mode=use_sci_mode)
+                        # actual_str_2 = json.dumps([format(x, run_format2=x.ndim > 1) for x in tt], indent=4)
+
+                        # actual_str_2 = f"[\n{[ for x in tt]}\n]"
+                        actual_str_2 = "[\n"
+                        for x in tt:
+                            actual_str_2 += ' ' * 4 * (indent_level+1) + format(x, run_format2=x.ndim > 1, indent_level=indent_level+1) + ',\n'
+                        actual_str_2 +=  "\n" + ' ' * 4 * indent_level + "]"
+
+                        torch.set_printoptions(sci_mode=False)
+
+                        # #
+                        # actual_str_2 = actual_str_2.replace('"', '')
+                        # actual_str_2 = actual_str_2.replace("\n]", ",\n]")
+                        # actual_str_2 = actual_str_2.replace("]\n]", "],\n]")
+
+                    else:
+                        actual_str_2 = tt_str
+
+                    return actual_str_2
+
+                return format2(ot)
 
             # to string
             import json
-            actual_str_1 = format(actual)
+            actual_str_1 = format(actual, run_format2=False)
+            actual_str_2 = format(actual, run_format2=True)
 
-            if isinstance(actual, torch.Tensor) and actual.ndim > 0:
-
-                use_sci_mode = "e+" in actual_str_1
-                torch.set_printoptions(sci_mode=use_sci_mode)
-                actual_str_2 = json.dumps([format(x) for x in actual], indent=4)
-                torch.set_printoptions(sci_mode=False)
-
-                #
-                actual_str_2 = actual_str_2.replace('"', '')
-                actual_str_2 = actual_str_2.replace("\n]", ",\n]")
-                actual_str_2 = actual_str_2.replace("]\n]", "],\n]")
-
-            else:
-                actual_str_2 = actual_str_1
 
             # tests/models/beit/test_modeling_beit.py::BeitModelIntegrationTest::test_inference_semantic_segmentation
             # tests/models/beit/test_modeling_beit.py:526
