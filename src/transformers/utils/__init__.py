@@ -267,7 +267,6 @@ from .import_utils import (
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
     is_torchvision_available,
-    is_torchvision_greater_or_equal,
     is_torchvision_v2_available,
     is_training_run_on_sagemaker,
     is_triton_available,
