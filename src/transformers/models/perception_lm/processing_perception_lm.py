@@ -180,7 +180,7 @@ class PerceptionLMProcessor(ProcessorMixin):
             media_token_list = []
             for media in media_list:
                 height, width = get_image_size(to_numpy_array(media))
-                num_tiles = media.shape[0]
+                num_tiles = media.shape[0] if media.ndim == 4 else 1  # 1 tile in case of vanilla image (C, H, W)
                 num_media_tokens = (
                     (height // self.patch_size // self.pooling_ratio)
                     * (width // self.patch_size // self.pooling_ratio)
