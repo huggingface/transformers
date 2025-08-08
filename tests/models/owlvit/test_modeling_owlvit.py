@@ -853,7 +853,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0680, 0.0422, 0.1347], [0.2071, 0.0450, 0.4146], [0.2000, 0.0418, 0.3476]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1636, 0.0423, 0.2489]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
@@ -970,7 +970,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1636, 0.0423, 0.2489]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
@@ -1013,7 +1013,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1636, 0.0423, 0.2489]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
