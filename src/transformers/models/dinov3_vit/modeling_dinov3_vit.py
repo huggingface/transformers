@@ -31,7 +31,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -542,6 +543,10 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _can_record_outputs = {
+        "hidden_states": "DINOv3ViTLayer",
+        "attentions": "DINOv3ViTAttention",
+    }
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -605,70 +610,38 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def get_input_embeddings(self) -> DINOv3ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states, (H, W) = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
             rope_sincos = self.rope_embeddings(H=H, W=W)
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 layer_head_mask,
                 position_embeddings=rope_sincos,
-                output_attentions=output_attentions,
             )
-
             hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
-        if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-                all_hidden_states,
-                all_self_attentions,
-            )
-
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
