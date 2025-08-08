@@ -28,7 +28,7 @@ from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
-from ...modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..cache_utils import (
     Cache,
     DynamicCache,
