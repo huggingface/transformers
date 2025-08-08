@@ -69,6 +69,7 @@ class GptOssConfig(PretrainedConfig):
         output_router_logits=False,
         use_cache=True,
         layer_types=None,
+        num_labels=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -110,6 +111,7 @@ class GptOssConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
         super().__init__(
+            num_labels=num_labels,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )

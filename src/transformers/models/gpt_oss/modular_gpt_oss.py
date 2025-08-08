@@ -40,6 +40,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
+from ..mistral.modeling_mistral import MistralForSequenceClassification
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 from .configuration_gpt_oss import GptOssConfig
@@ -440,8 +441,13 @@ class GptOssForCausalLM(MixtralForCausalLM):
     pass
 
 
+class GptOssForSequenceClassification(MistralForSequenceClassification):
+    pass
+
+
 __all__ = [
     "GptOssForCausalLM",
+    "GptOssForSequenceClassification",
     "GptOssModel",
     "GptOssPreTrainedModel",
 ]

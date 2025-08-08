@@ -48,6 +48,7 @@ if is_torch_available():
 
     from transformers import (
         GptOssForCausalLM,
+        GptOssForSequenceClassification,
         GptOssModel,
     )
 
@@ -63,7 +64,9 @@ class GptOssModelTester(CausalLMModelTester):
     pipeline_model_mapping = (
         {
             "feature-extraction": GptOssModel,
+            "text-classification": GptOssForSequenceClassification,
             "text-generation": GptOssForCausalLM,
+            "zero-shot": GptOssForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -72,11 +75,13 @@ class GptOssModelTester(CausalLMModelTester):
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (GptOssModel, GptOssForCausalLM) if is_torch_available() else ()
+    all_model_classes = (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GptOssModel,
+            "text-classification": GptOssForSequenceClassification,
             "text-generation": GptOssForCausalLM,
+            "zero-shot": GptOssForSequenceClassification,
         }
         if is_torch_available()
         else {}
