@@ -82,23 +82,33 @@ print(transcription[0])
 ## Quantization
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision.
-Refer to the [Quantization](https://huggingface.co/docs/transformers/en/quantization/overview) overview for more available quantization backends.
+Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses the [`bitsandbytes`](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) backend in Transformers with the [`BitsAndBytesConfig`] to load the model in 8-bit precision.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
-from transformers import HubertForCTC, BitsAndBytesConfig
+import torch
+from transformers import AutoProcessor, AutoModelForCTC, BitsAndBytesConfig
+from datasets import load_dataset
 
 bnb_config = BitsAndBytesConfig(
     load_in_8bit=True,
     llm_int8_threshold=6.0
 )
 
-model = HubertForCTC.from_pretrained(
-    "facebook/hubert-xlarge-ll60k",
-    quantization_config=bnb_config,
-    device_map="auto"
-)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
+
+processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+
+transcription = processor.batch_decode(predicted_ids)
+print(transcription[0])
 ```
 
 ## Notes
