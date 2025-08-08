@@ -60,6 +60,7 @@ class GptOssModelTester(CausalLMModelTester):
         config_class = GptOssConfig
         base_model_class = GptOssModel
         causal_lm_class = GptOssForCausalLM
+        sequence_classification_class = GptOssForSequenceClassification
 
     pipeline_model_mapping = (
         {

@@ -21,6 +21,7 @@ from torch.nn import functional as F
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
@@ -40,7 +41,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from ..mistral.modeling_mistral import MistralForSequenceClassification
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 from .configuration_gpt_oss import GptOssConfig
@@ -441,7 +441,7 @@ class GptOssForCausalLM(MixtralForCausalLM):
     pass
 
 
-class GptOssForSequenceClassification(MistralForSequenceClassification):
+class GptOssForSequenceClassification(GenericForSequenceClassification, GptOssPreTrainedModel):
     pass
 
 
