@@ -28,7 +28,6 @@ from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
-from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..cache_utils import (
     Cache,
     DynamicCache,
@@ -47,6 +46,7 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
