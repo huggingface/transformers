@@ -37,7 +37,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     requires_parameters_quantization = True
-    is_qat_trainable = False
+    is_qat_trainable = True
     required_packages = ["fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -160,7 +160,12 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return False
+        trainable = self.quantization_config.store_master_weights
+        if not trainable:
+            logger.warning(
+                "You are attempting to train a model with FPQuant quantization. This is only supported when `store_master_weights=True`. Please set `store_master_weights=True` to train the model."
+            )
+        return trainable
 
     def is_serializable(self, safe_serialization=None):
         return True
