@@ -28,6 +28,7 @@ from packaging import version
 from torch import nn
 from torch.nn import functional as F
 
+from ...modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..cache_utils import (
     Cache,
     DynamicCache,
@@ -678,17 +679,9 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["attention_mask"] = encoder_attention_mask
 
         if "flash" in self.config._attn_implementation and self._supports_attention_backend:
-            tensor_kws = {"dtype": torch.int32, "device": self.device}
-            pos = model_inputs["position_ids"][:, -1]
-
-            cu_seq_lens_k = torch.cat([torch.zeros(1, **tensor_kws), pos.cumsum(0).add(1)], 0)
-            max_length_k = int(pos.max()) + 1
-
-            bs, seq_len = input_ids.size()
-            q_len = torch.ones(bs, **tensor_kws) if seq_len == 1 else pos.to(torch.int32).add(1)
-            cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0)], 0)
-            max_length_q = int(q_len.max())
-
+            cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k = prepare_fa_kwargs_from_position_ids(
+                position_ids, is_packed_sequence=False
+            )
             model_inputs.update(
                 cu_seq_lens_q=cu_seq_lens_q.to(self.device),
                 cu_seq_lens_k=cu_seq_lens_k.to(self.device),
