@@ -42,7 +42,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"cls_token":               r"embeddings.cls_token",
     r"mask_token":              r"embeddings.mask_token",
     r"storage_tokens":          r"embeddings.register_tokens",
-    r"patch_embed.proj":        r"embeddings.patch_embeddings.proj",
+    r"patch_embed.proj":        r"embeddings.patch_embeddings.projection",
     r"rope_embed":              r"rope_embeddings",
     r"blocks.(\d+).attn.proj":  r"layer.\1.attention.o_proj",
     r"blocks.(\d+).attn.":      r"layer.\1.attention.",

@@ -44,18 +44,16 @@ dtype_dict = {
     "bf16": torch.bfloat16,
 }
 
-
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings with Dinov2 -> DINOv3ViT
 class DINOv3ViTPatchEmbeddings(nn.Module):
     """
-    2D image to patch embedding: (B,C,H,W) -> (B,N,D)
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(
-        self,
-        config,
-    ) -> None:
+    def __init__(self, config):
         super().__init__()
-
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
@@ -65,21 +63,118 @@ class DINOv3ViTPatchEmbeddings(nn.Module):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.hidden_size = hidden_size
         self.num_patches = num_patches
 
-        self.proj = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-        self.norm = nn.Identity()
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, x: Tensor) -> Tensor:
-        _, _, H, W = x.shape
-        x = self.proj(x)  # B C H W
-        H, W = x.size(2), x.size(3)
-        x = x.flatten(2).transpose(1, 2)  # B HW C
-        x = self.norm(x)
-        x = x.reshape(-1, H, W, self.hidden_size)  # B H W C
-        return x
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
 
+
+# class Dinov2WithRegistersEmbeddings(nn.Module):
+#     """
+#     Construct the CLS token, mask token, register tokens, position and patch embeddings.
+#     """
+
+#     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
+#         super().__init__()
+
+#         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+#         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+#         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+#         self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
+#         num_patches = self.patch_embeddings.num_patches
+#         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+#         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+#         self.patch_size = config.patch_size
+#         self.config = config
+
+#     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+#         """
+#         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+#         resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
+#         with the original implementation.
+
+#         Adapted from:
+#         - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
+#         - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
+#         """
+#         num_patches = embeddings.shape[1] - 1
+#         num_positions = self.position_embeddings.shape[1] - 1
+
+#         # Skip interpolation for matching dimensions (unless tracing)
+#         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+#             return self.position_embeddings
+
+#         # Handle class token and patch embeddings separately
+#         class_pos_embed = self.position_embeddings[:, 0]
+#         patch_pos_embed = self.position_embeddings[:, 1:]
+#         dim = embeddings.shape[-1]
+
+#         # Calculate new dimensions
+#         height = height // self.config.patch_size
+#         width = width // self.config.patch_size
+
+#         # Reshape for interpolation
+#         sqrt_num_positions = torch_int(num_positions**0.5)
+#         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+#         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+#         # Store original dtype for restoration after interpolation
+#         target_dtype = patch_pos_embed.dtype
+
+#         # Interpolate at float32 precision
+#         patch_pos_embed = nn.functional.interpolate(
+#             patch_pos_embed.to(dtype=torch.float32),
+#             size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
+#             mode="bicubic",
+#             align_corners=False,
+#             antialias=True,
+#         ).to(dtype=target_dtype)
+
+#         # Validate output dimensions if not tracing
+#         if not torch.jit.is_tracing():
+#             if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
+#                 raise ValueError("Width or height does not match with the interpolated position embeddings")
+
+#         # Reshape back to original format
+#         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+#         # Combine class and patch embeddings
+#         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+#     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+#         batch_size, _, height, width = pixel_values.shape
+#         target_dtype = self.patch_embeddings.projection.weight.dtype
+#         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+
+#         if bool_masked_pos is not None:
+#             embeddings = torch.where(
+#                 bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
+#             )
+
+#         # add the [CLS] token to the embedded patch tokens
+#         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+#         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+#         # add positional encoding to each token
+#         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+#         # add register tokens
+#         embeddings = torch.cat(
+#             (embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1), embeddings[:, 1:]), dim=1
+#         )
+
+#         embeddings = self.dropout(embeddings)
+
+#         return embeddings
 
 class DINOv3ViTEmbeddings(nn.Module):
     """
@@ -89,6 +184,7 @@ class DINOv3ViTEmbeddings(nn.Module):
     def __init__(self, config: DINOv3ViTConfig) -> None:
         super().__init__()
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.num_register_tokens = config.num_register_tokens
         if self.num_register_tokens > 0:
             self.register_tokens = nn.Parameter(
@@ -98,17 +194,17 @@ class DINOv3ViTEmbeddings(nn.Module):
                     config.hidden_size,
                 )
             )
-        self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.patch_embeddings = DINOv3ViTPatchEmbeddings(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
 
     def forward(self, pixel_values: Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> Tensor:
-        target_dtype = self.patch_embeddings.proj.weight.dtype
+        target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        B, H, W, _ = embeddings.shape
-        embeddings = embeddings.flatten(1, 2)
+        B = embeddings.shape[0]
+        # B, H, W, _ = embeddings.shape
+        # embeddings = embeddings.flatten(1, 2)
         if bool_masked_pos is not None:
             embeddings = torch.where(
                 bool_masked_pos.unsqueeze(-1),
@@ -136,7 +232,7 @@ class DINOv3ViTEmbeddings(nn.Module):
             ],
             dim=1,
         )
-        return embeddings, (H, W)
+        return embeddings #, (H, W)
 
 
 class DINOv3ViTRopePositionEmbedding(nn.Module):
@@ -625,9 +721,13 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             pre-training.
         """
 
-        hidden_states, (H, W) = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+
+        num_patches_height = self.config.image_size // self.config.patch_size
+        num_patches_width = self.config.image_size // self.config.patch_size
+        rope_sincos = self.rope_embeddings(H=num_patches_height, W=num_patches_width)
+
         for i, layer_module in enumerate(self.layer):
-            rope_sincos = self.rope_embeddings(H=H, W=W)
             layer_head_mask = head_mask[i] if head_mask is not None else None
             layer_outputs = layer_module(
                 hidden_states,
