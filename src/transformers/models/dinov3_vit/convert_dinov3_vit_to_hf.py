@@ -6,6 +6,8 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 import argparse
 import os
 import random
+import re
+from typing import Optional
 
 import numpy as np
 import requests
@@ -34,6 +36,49 @@ HUB_CHECKPOINTS = {
     "vithplus": "dinov3_vith16plus_pretrain_lvd1689m-7c1da9a5.pth",
     "vit7b": "dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth",
 }
+
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"cls_token":               r"embeddings.cls_token",
+    r"mask_token":              r"embeddings.mask_token",
+    r"storage_tokens":          r"embeddings.register_tokens",
+    r"patch_embed.proj":        r"embeddings.patch_embeddings.proj",
+    r"rope_embed":              r"rope_embeddings",
+    r"blocks.(\d+).attn.":      r"layer.\1.attention.",
+    r"blocks.(\d+).ls(\d+)":    r"layer.\1.layer_scale\2",
+    r"blocks.(\d+).mlp":        r"layer.\1.mlp",
+    r"blocks.(\d+).norm":       r"layer.\1.norm",
+}
+# fmt: on
+
+
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
+
+
+def split_qkv(state_dict: dict):
+    keys = [x for x in state_dict.keys() if "qkv" in x]
+    for key in keys:
+        qkv = state_dict.pop(key)
+        q, k, v = torch.chunk(qkv, 3, dim=0)
+        state_dict[key.replace("qkv", "query")] = q
+        state_dict[key.replace("qkv", "key")] = k
+        state_dict[key.replace("qkv", "value")] = v
+    return state_dict
 
 
 def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
@@ -151,53 +196,53 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
     else:
         raise ValueError("Model not supported")
 
-
-def convert_dinov3_vit_to_hf_vit(original_dinov3_state_dict, config: DINOv3ViTConfig):
-    embed_dim = config.hidden_size
-    hf_dinov3_state_dict = {}
-    for key in original_dinov3_state_dict.keys():
-        val = original_dinov3_state_dict[key]
-        if key == "cls_token":
-            key = "embeddings.cls_token"
-        elif key == "mask_token":
-            key = "embeddings.mask_token"
-        elif key == "storage_tokens":
-            key = "embeddings.register_tokens"
-        elif key.startswith("patch_embed.proj"):
-            key = key.replace("patch_embed.proj", "embeddings.patch_embeddings.proj")
-        elif key.startswith("rope_embed"):
-            key = key.replace("rope_embed", "rope_embeddings")
-        elif key.startswith("blocks"):
-            key = key.replace("blocks", "layer")
-        if "ls1." in key:
-            key = key.replace("ls1", "layer_scale1")
-        if "ls2." in key:
-            key = key.replace("ls2", "layer_scale2")
-        if "attn." in key:
-            key = key.replace("attn.", "attention.")
-        if "qkv." in key:
-            prefix, suffix = key.split("qkv")
-            if "bias_mask" in suffix:
-                continue
-            elif "bias" in suffix:
-                q_e, k_e, v_e = (
-                    val[0:embed_dim],
-                    val[embed_dim : embed_dim * 2],
-                    val[embed_dim * 2 :],
-                )
-            else:
-                q_e, k_e, v_e = (
-                    val[0:embed_dim, :],
-                    val[embed_dim : embed_dim * 2, :],
-                    val[embed_dim * 2 :, :],
-                )
-            hf_dinov3_state_dict[prefix + "query" + suffix] = q_e
-            if not ("bias" in suffix and config.mask_k_bias):
-                hf_dinov3_state_dict[prefix + "key" + suffix] = k_e
-            hf_dinov3_state_dict[prefix + "value" + suffix] = v_e
-        else:
-            hf_dinov3_state_dict[key] = val
-    return hf_dinov3_state_dict
+# TODO: remove this function
+# def convert_dinov3_vit_to_hf_vit(original_dinov3_state_dict, config: DINOv3ViTConfig):
+#     embed_dim = config.hidden_size
+#     hf_dinov3_state_dict = {}
+#     for key in original_dinov3_state_dict.keys():
+#         val = original_dinov3_state_dict[key]
+#         if key == "cls_token":
+#             key = "embeddings.cls_token"
+#         elif key == "mask_token":
+#             key = "embeddings.mask_token"
+#         elif key == "storage_tokens":
+#             key = "embeddings.register_tokens"
+#         elif key.startswith("patch_embed.proj"):
+#             key = key.replace("patch_embed.proj", "embeddings.patch_embeddings.proj")
+#         elif key.startswith("rope_embed"):
+#             key = key.replace("rope_embed", "rope_embeddings")
+#         elif key.startswith("blocks"):
+#             key = key.replace("blocks", "layer")
+#         if "ls1." in key:
+#             key = key.replace("ls1", "layer_scale1")
+#         if "ls2." in key:
+#             key = key.replace("ls2", "layer_scale2")
+#         if "attn." in key:
+#             key = key.replace("attn.", "attention.")
+#         if "qkv." in key:
+#             prefix, suffix = key.split("qkv")
+#             if "bias_mask" in suffix:
+#                 continue
+#             elif "bias" in suffix:
+#                 q_e, k_e, v_e = (
+#                     val[0:embed_dim],
+#                     val[embed_dim : embed_dim * 2],
+#                     val[embed_dim * 2 :],
+#                 )
+#             else:
+#                 q_e, k_e, v_e = (
+#                     val[0:embed_dim, :],
+#                     val[embed_dim : embed_dim * 2, :],
+#                     val[embed_dim * 2 :, :],
+#                 )
+#             hf_dinov3_state_dict[prefix + "query" + suffix] = q_e
+#             if not ("bias" in suffix and config.mask_k_bias):
+#                 hf_dinov3_state_dict[prefix + "key" + suffix] = k_e
+#             hf_dinov3_state_dict[prefix + "value" + suffix] = v_e
+#         else:
+#             hf_dinov3_state_dict[key] = val
+#     return hf_dinov3_state_dict
 
 
 def prepare_img():
@@ -335,8 +380,19 @@ def convert_and_test_dinov3_checkpoint(args):
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
     original_state_dict = torch.load(state_dict_path)
 
-    hf_state_dict = convert_dinov3_vit_to_hf_vit(original_state_dict, config)
-    model.load_state_dict(hf_state_dict, strict=True)
+    original_state_dict = split_qkv(original_state_dict)
+    original_keys = list(original_state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(original_keys)
+
+    converted_state_dict = {}
+    for key in original_keys:
+        if "bias_mask" in key or "attn.key.bias" in key:
+            continue
+        new_key = new_keys[key]
+        weight_tensor = original_state_dict[key]
+        converted_state_dict[new_key] = weight_tensor
+
+    model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
     transform = get_transform()
