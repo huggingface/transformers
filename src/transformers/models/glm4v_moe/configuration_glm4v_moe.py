@@ -206,8 +206,6 @@ class Glm4vMoeTextConfig(PretrainedConfig):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use query-key normalization in the attention.
 
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig

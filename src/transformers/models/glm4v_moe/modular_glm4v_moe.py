@@ -25,8 +25,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
+from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeAttention,
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
     Glm4MoeMoE,
@@ -136,8 +136,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
                                                                     \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use query-key normalization in the attention.
 
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
@@ -355,9 +353,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-class Glm4vMoeTextAttention(Glm4MoeAttention):
+class Glm4vMoeTextAttention(Glm4Attention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
+        self.rope_scaling = config.rope_scaling
 
     def forward(
         self,
@@ -374,10 +373,6 @@ class Glm4vMoeTextAttention(Glm4MoeAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape)
-
-        if self.use_qk_norm:  # main diff from Llama
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
