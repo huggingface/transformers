@@ -42,6 +42,7 @@ from ...test_modeling_common import (
     _config_zero_init,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
@@ -141,12 +142,19 @@ class CsmModelTester:
         return config, inputs_dict
 
 
-class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase, PipelineTesterMixin):
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": CsmForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)

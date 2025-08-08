@@ -169,7 +169,16 @@ class SpeechT5ModelTester:
 class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        {
+            "automatic-speech-recognition": SpeechT5ForSpeechToText,
+            "feature-extraction": SpeechT5Model,
+            # TODO: two issues here:
+            # - major: with datasets 4.0.0, the main source of speaker embeddings (`Matthijs/cmu-arctic-xvectors`) can
+            #   no longer be loaded
+            # - minor: speecht5 requires `speaker_embeddings` to be passed as a parameter. It would be nice to use the
+            #   pipeline's `voice` parameter.
+            # "text-to-audio": SpeechT5ForTextToSpeech,
+        }
         if is_torch_available()
         else {}
     )

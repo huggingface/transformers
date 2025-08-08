@@ -347,7 +347,7 @@ class CsmGenerationMixin(GenerationMixin):
         streamer: Optional["BaseStreamer"] = None,
         output_audio: Optional[bool] = False,
         **kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
+    ) -> Union[CsmGenerateOutput, torch.LongTensor, list[torch.FloatTensor]]:
         r"""
         This method overrides [`~generation.utils.GenerationMixin.generate`] to match the specifics of the Csm model.
         Indeed, Csm model requires a custom generation sampling step:

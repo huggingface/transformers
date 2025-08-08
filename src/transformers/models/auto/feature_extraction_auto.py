@@ -411,7 +411,7 @@ class AutoFeatureExtractor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
+            feature_extractor_class ([`FeatureExtractionMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
 
