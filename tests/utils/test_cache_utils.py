@@ -49,12 +49,10 @@ if is_torch_available():
         DynamicCache,
         Gemma2Config,
         GenerationConfig,
-        HQQQuantizedCacheProcessor,
         HybridCache,
         HybridChunkedCache,
         LlamaConfig,
         QuantizedCache,
-        QuantoQuantizedCacheProcessor,
         SlidingWindowCache,
         StaticCache,
         convert_and_export_with_cache,
@@ -142,7 +140,7 @@ class CacheTest(unittest.TestCase):
             return random_keys, random_values
 
         mha_config = LlamaConfig(num_attention_heads=32)
-        mha_static_cache = StaticCache(config=mha_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        mha_static_cache = StaticCache(config=mha_config, max_cache_len=10)
         cached_keys, cached_values = mha_static_cache.update(
             *_random_kvs(mha_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -150,7 +148,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 32, 10, 128))
 
         gqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=4)
-        gqa_static_cache = StaticCache(config=gqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        gqa_static_cache = StaticCache(config=gqa_config, max_cache_len=10)
         cached_keys, cached_values = gqa_static_cache.update(
             *_random_kvs(gqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -158,7 +156,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_values.shape == (1, 4, 10, 128))
 
         mqa_config = LlamaConfig(num_attention_heads=32, num_key_value_heads=1)
-        mqa_static_cache = StaticCache(config=mqa_config, max_batch_size=1, max_cache_len=10, device=torch_device)
+        mqa_static_cache = StaticCache(config=mqa_config, max_cache_len=10)
         cached_keys, cached_values = mqa_static_cache.update(
             *_random_kvs(mqa_config), 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
         )
@@ -294,20 +292,11 @@ class CacheIntegrationTest(unittest.TestCase):
         )
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-        processor = gen_out.past_key_values.cache_processor
-        if backend == "quanto":
-            self.assertIsInstance(processor, QuantoQuantizedCacheProcessor)
-        elif backend == "hqq":
-            self.assertIsInstance(processor, HQQQuantizedCacheProcessor)
 
         decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
-        self.assertTrue(len(processor._quantized_keys) > 0)
-
         # Check that something is actually quantized
-        has_been_quantized = any((q[0] if isinstance(q, tuple) else q).numel() > 0 for q in processor._quantized_keys)
-        self.assertTrue(has_been_quantized)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
@@ -360,7 +349,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(0)
         gen_out = model.generate(
-            **inputs, do_sample=True, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
+            **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
         decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
@@ -371,21 +360,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
-            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have a body that is "
-            "covered in fur. They are carnivores, so they eat meat. They are also very clean animals, they groom "
-            "themselves. They have a lot of different breeds. Some are small, some are large. Some are friendly, "
-            "some are not. They have a lot of different personalities. They can be very independent, or they can be "
-            "very affectionate. They can be very playful, or they can be very lazy. They can be very intelligent, or "
-            "they can be very silly. They have a lot of different behaviors. They can be very curious, or they can "
-            "be very cautious. They can be very vocal, or they can be very quiet. They can be very social, or they "
-            "can be very solitary. They can be very active, or they can be very inactive. They can be very "
-            "affectionate, or they can be very aloof. They can be very playful, or they can be very lazy. They can "
-            "be very intelligent, or they can be very silly. They have a lot of different behaviors. They can be "
-            "very curious, or they can"
+            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
+            "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
+            "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
+            "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
+            "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
+            "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
+            "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
+            "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
+            "disabilities. They have a long life span, and they can live for many years. They are also known for "
+            "their agility and gracefulness. They are often associated with mystery and independence. They are also "
+            "known for their ability to land on their feet when they fall. They"
         )
-        EXPECTED_SCORE_SUM = 11017.4971
+        EXPECTED_SCORE_SUM = 10834.7919921875
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
-        self.assertAlmostEqual(score_sum, EXPECTED_SCORE_SUM, places=2)
+        self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
         self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
@@ -476,9 +465,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, torch_dtype=torch.bfloat16)
 
-        prompt_cache = StaticCache(
-            config=model.config, max_batch_size=1, max_cache_len=1024, device=torch_device, dtype=torch.bfloat16
-        )
+        prompt_cache = StaticCache(config=model.config, max_cache_len=1024)
 
         INITIAL_PROMPT = "You are a helpful assistant. "
         inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(torch_device)
@@ -498,11 +485,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an "
-            "enriching experience that broadens our horizons and allows us to explore the world beyond our comfort "
-            "zones. Whether it's a short weekend getaway",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital "
-            "of France.\n\n\n\n\n\n\n<|endoftext|>",
+            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+            "memories. Whether you're a seasoned traveler or someone",
+            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
         ]
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
@@ -899,12 +886,13 @@ class SyntheticCacheTest(unittest.TestCase):
             head_dim=1,
             hidden_size=1,
             sliding_window=self.window_size,
+            attention_chunk_size=self.window_size,
             layer_types=["full_attention"] * 1,  # Static cache by default
         )
 
     def test_static_cache_out_of_bounds(self):
         """Test StaticCache raises IndexError for out-of-bounds positions."""
-        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
         pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
 
         with self.assertRaises(IndexError):
@@ -926,7 +914,7 @@ class SyntheticCacheTest(unittest.TestCase):
         update pos 3:  [1.0, 2.0, 3.0, 4.0]
         """
         # Scenario 1: Fill up to near capacity
-        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
         static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
         static_cache.update(
@@ -968,19 +956,19 @@ class SyntheticCacheTest(unittest.TestCase):
         # Scenario 1: Update within window, no slide yet
         config = copy.deepcopy(self.config)
         config.layer_types = ["sliding_attention"] * config.num_hidden_layers
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         sliding_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -989,19 +977,19 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 2: Update causing slide
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         sliding_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(4)},
         )
         sliding_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1010,13 +998,13 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 3: Long prompt handling
-        sliding_cache = SlidingWindowCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        sliding_cache = SlidingWindowCache(config=config, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         sliding_cache.update(
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             sliding_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1038,13 +1026,13 @@ class SyntheticCacheTest(unittest.TestCase):
         config.layer_types = ["full_attention"] * config.num_hidden_layers
 
         # Scenario 1
-        hybrid_cache_static_mode = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        hybrid_cache_static_mode = HybridCache(config=config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         hybrid_cache_static_mode.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4)},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         hybrid_cache_static_mode.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
@@ -1092,19 +1080,19 @@ class SyntheticCacheTest(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config.layer_types = ["sliding_attention"] * config.num_hidden_layers
         # Scenario 1: Update within window, no slide yet
-        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
+        hybrid_cache = HybridCache(config=config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(2)},
         )
         hybrid_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1113,19 +1101,19 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 2: Update causing first slide
-        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_cache_len=self.max_cache_len)
         prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=prefill,
             value_states=prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(4), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(4)},
         )
         hybrid_cache.update(
             key_states=torch.tensor(5.0)[None, None, None, None],
             value_states=torch.tensor(5.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([4]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([4])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1138,7 +1126,7 @@ class SyntheticCacheTest(unittest.TestCase):
             key_states=torch.tensor(6.0)[None, None, None, None],
             value_states=torch.tensor(6.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([5]), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.tensor([5])},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1147,13 +1135,13 @@ class SyntheticCacheTest(unittest.TestCase):
         )
 
         # Scenario 4: Long prompt handling
-        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_cache_len=self.max_cache_len)
         long_prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
         hybrid_cache.update(
             key_states=long_prefill,
             value_states=long_prefill,
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.arange(6), "sliding_window": self.window_size},
+            cache_kwargs={"cache_position": torch.arange(6)},
         )
         self.assertEqual(
             hybrid_cache.layers[0].keys[0, 0, :, 0].tolist(),
@@ -1222,7 +1210,7 @@ class SyntheticCacheTest(unittest.TestCase):
         config.num_hidden_layers = 2
         config.layer_types = ["full_attention", "sliding_attention"]
         config.sliding_window = 2
-        hybrid_cache = HybridCache(config=config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        hybrid_cache = HybridCache(config=config, max_cache_len=self.max_cache_len)
 
         # Prefill both layers up to cache capacity
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
@@ -1324,9 +1312,9 @@ class SyntheticCacheTest(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 2
         config.layer_types = ["full_attention", "chunked_attention"]
-        config.sliding_window = 2
+        config.attention_chunk_size = 2
         max_cache_len = 4
-        chunked_cache = HybridChunkedCache(config=config, max_batch_size=1, max_cache_len=max_cache_len)
+        chunked_cache = HybridChunkedCache(config=config, max_cache_len=max_cache_len)
 
         # 1) PREFILL (3 tokens > sliding_window)
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
@@ -1405,7 +1393,7 @@ class SyntheticCacheTest(unittest.TestCase):
         config.num_hidden_layers = 1
         config.layer_types = ["chunked_attention"]
         config.sliding_window = 3
-        cache = HybridChunkedCache(config, max_batch_size=1, max_cache_len=3)
+        cache = HybridChunkedCache(config=config, max_cache_len=3)
 
         # Step 0 : multi-token prefill
         first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2
