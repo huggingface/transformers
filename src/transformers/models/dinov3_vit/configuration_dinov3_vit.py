@@ -133,9 +133,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         num_register_tokens: int = 0,
         mask_k_bias: bool = False,
         pos_embed_rope_base=100.0,
-        pos_embed_rope_min_period=None,
-        pos_embed_rope_max_period=None,
-        pos_embed_rope_normalize_coords="separate",
         pos_embed_rope_shift_coords=None,
         pos_embed_rope_jitter_coords=None,
         pos_embed_rope_rescale_coords=None,
@@ -181,9 +178,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.proj_bias = proj_bias
         self.mask_k_bias = mask_k_bias
         self.pos_embed_rope_base = pos_embed_rope_base
-        self.pos_embed_rope_min_period = pos_embed_rope_min_period
-        self.pos_embed_rope_max_period = pos_embed_rope_max_period
-        self.pos_embed_rope_normalize_coords = pos_embed_rope_normalize_coords
         self.pos_embed_rope_shift_coords = pos_embed_rope_shift_coords
         self.pos_embed_rope_jitter_coords = pos_embed_rope_jitter_coords
         self.pos_embed_rope_rescale_coords = pos_embed_rope_rescale_coords
