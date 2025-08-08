@@ -75,7 +75,7 @@ class GptOssExperts(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
-        When training is is more efficient to just loop over the experts and compute the output for each expert
+        When training it is more efficient to just loop over the experts and compute the output for each expert
         as otherwise the memory would explode.
 
         For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
@@ -97,8 +97,8 @@ class GptOssExperts(nn.Module):
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence lenght to get which experts
                 # are hit this time around
-                expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-            for expert_idx in expert_hitted[:]:
+                expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+            for expert_idx in expert_hit[:]:
                 with torch.no_grad():
                     _, token_idx = torch.where(expert_mask[expert_idx[0]])
                 current_state = hidden_states[token_idx]
@@ -160,6 +160,8 @@ class GptOssMLP(nn.Module):
 
 
 class GptOssRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GptOssConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -348,7 +350,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention

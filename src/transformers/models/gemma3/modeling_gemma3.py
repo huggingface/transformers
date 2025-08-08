@@ -150,6 +150,8 @@ class Gemma3RMSNorm(nn.Module):
 
 
 class Gemma3RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Gemma3TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -922,7 +924,9 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 is_image = (token_type_ids == 1).to(cache_position.device)
                 new_image_start = is_image & ~nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
                 image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-                image_group_ids = torch.where(is_image, image_group_ids, torch.full_like(token_type_ids, -1))
+                image_group_ids = torch.where(
+                    is_image, image_group_ids, torch.full_like(token_type_ids, -1, device=is_image.device)
+                )
                 mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                     token_type_ids.to(cache_position.device), image_group_ids, self.config.mm_tokens_per_image
                 )

@@ -1255,6 +1255,8 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
 
 
 class GraniteMoeHybridRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
