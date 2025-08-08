@@ -70,6 +70,8 @@ class DogeRMSNorm(nn.Module):
 
 
 class DogeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: DogeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
