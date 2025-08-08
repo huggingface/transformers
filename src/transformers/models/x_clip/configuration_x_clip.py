@@ -252,7 +252,7 @@ class XCLIPConfig(PretrainedConfig):
         prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the projection layers in the video specific prompt generator.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
+            The initial value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -364,18 +364,6 @@ class XCLIPConfig(PretrainedConfig):
         self.prompt_projection_dropout = prompt_projection_dropout
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: XCLIPTextConfig, vision_config: XCLIPVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`XCLIPConfig`] (or a derived class) from xclip text model configuration and xclip vision model
-        configuration.
-
-        Returns:
-            [`XCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]

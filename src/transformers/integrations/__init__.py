@@ -53,7 +53,7 @@ _import_structure = {
         "unset_hf_deepspeed_config",
     ],
     "eetq": ["replace_with_eetq_linear"],
-    "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
@@ -90,6 +90,7 @@ _import_structure = {
         "NeptuneMissingConfiguration",
         "SwanLabCallback",
         "TensorBoardCallback",
+        "TrackioCallback",
         "WandbCallback",
         "get_available_reporting_integrations",
         "get_reporting_integration_callbacks",
@@ -110,12 +111,21 @@ _import_structure = {
         "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
+        "is_trackio_available",
         "is_wandb_available",
         "rewrite_logs",
         "run_hp_search_optuna",
         "run_hp_search_ray",
         "run_hp_search_sigopt",
         "run_hp_search_wandb",
+    ],
+    "mxfp4": [
+        "Mxfp4GptOssExperts",
+        "convert_moe_packed_tensors",
+        "dequantize",
+        "load_and_swizzle_mxfp4",
+        "quantize_to_mxfp4",
+        "replace_with_mxfp4_linear",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -142,7 +152,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tensor_parallel"] = [
         "shard_and_distribute_module",
-        "SUPPORTED_TP_STYLES",
+        "ALL_PARALLEL_STYLES",
         "translate_to_torch_parallel_style",
     ]
 try:
@@ -192,7 +202,7 @@ if TYPE_CHECKING:
         unset_hf_deepspeed_config,
     )
     from .eetq import replace_with_eetq_linear
-    from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (
@@ -224,6 +234,7 @@ if TYPE_CHECKING:
         NeptuneMissingConfiguration,
         SwanLabCallback,
         TensorBoardCallback,
+        TrackioCallback,
         WandbCallback,
         get_available_reporting_integrations,
         get_reporting_integration_callbacks,
@@ -244,12 +255,20 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
+        is_trackio_available,
         is_wandb_available,
         rewrite_logs,
         run_hp_search_optuna,
         run_hp_search_ray,
         run_hp_search_sigopt,
         run_hp_search_wandb,
+    )
+    from .mxfp4 import (
+        Mxfp4GptOssExperts,
+        dequantize,
+        load_and_swizzle_mxfp4,
+        quantize_to_mxfp4,
+        replace_with_mxfp4_linear,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
@@ -271,7 +290,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .tensor_parallel import (
-            SUPPORTED_TP_STYLES,
+            ALL_PARALLEL_STYLES,
             shard_and_distribute_module,
             translate_to_torch_parallel_style,
         )

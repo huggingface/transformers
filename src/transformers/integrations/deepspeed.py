@@ -333,7 +333,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+            params_to_gather = [named_parameters[k] for k in state_dict if k in named_parameters]
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -458,11 +458,16 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
-        tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 0)
-        if tp_size > 1:
+        deepspeed_tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+        if deepspeed_tp_size > 1:
             import deepspeed
 
-            model = deepspeed.tp_model_init(model=model, tp_size=tp_size, dtype=hf_deepspeed_config.dtype())
+            model = deepspeed.tp_model_init(
+                model=model,
+                tp_size=deepspeed_tp_size,
+                dtype=hf_deepspeed_config.dtype(),
+                config=hf_deepspeed_config.config,
+            )
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters

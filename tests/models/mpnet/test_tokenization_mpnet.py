@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team, Microsoft Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

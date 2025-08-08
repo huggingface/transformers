@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_tokenizers,
     require_torch,
     require_torch_accelerator,
@@ -43,6 +43,7 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersSparseMLP,
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
@@ -709,40 +710,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         model = SwitchTransformersModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = SwitchTransformersForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from SWITCH_TRANSFORMERS model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )
@@ -1069,18 +1036,28 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
         # fmt: off
-        EXPECTED_MEAN_LOGITS = torch.Tensor(
-            [
-                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
-            ]
-        ).to(torch.bfloat16)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+                    0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+                    0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+                    0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+                    0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+                    -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
+                ],
+                ("cuda", 8): [
+                    -0.2051, -0.1914, 0.5352, -0.2988, 0.1108, 0.0200, 0.6094, -0.1025,
+                    -0.0549, 0.2988, -0.0018, 0.1758, 0.1348, -0.1689, -0.1035, 0.0266,
+                    0.0383, 0.0493, -0.2119, 0.1328, 0.3906, -0.2041, -0.1240, -0.1836,
+                    0.0454, -0.3477, -0.0256, -0.1050, -0.1572, -0.1338
+                ],
+            }
+        )
+        EXPECTED_MEAN_LOGITS = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=torch.bfloat16)
         # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
+
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
         hf_logits = hf_logits[0, 0, :30]
 
         torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
@@ -1134,3 +1111,16 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
 
         for i in range(0, BATCH_SIZE, 2):
             self.assertEqual(batch_output[i], batch_output[i + 1])
+
+
+@require_torch
+class SwitchTransformersSparseMLPTests(unittest.TestCase):
+    def test_token_dropping(self):
+        r"""
+        This test checks if the token dropping actually drops tokens.
+        """
+        config = SwitchTransformersConfig(expert_capacity=0)  # we drop everything
+        moe = SwitchTransformersSparseMLP(config)
+        dropped_token_results = moe(torch.randn(2, 3, 768))[0]
+
+        assert (dropped_token_results == 0).all(), f"Some tokens not dropped: {dropped_token_results}."

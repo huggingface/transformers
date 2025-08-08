@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -142,6 +141,7 @@ class ConfigTester:
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
                 sub_config_loaded_dict = sub_config_loaded.to_dict()
                 sub_config_loaded_dict.pop("transformers_version", None)
+                general_config_dict[sub_config_key].pop("transformers_version", None)
                 self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
 
                 # Verify that the loaded config type is same as in the general config
@@ -164,7 +164,7 @@ class ConfigTester:
         self.parent.assertEqual(len(config.label2id), 3)
 
     def check_config_can_be_init_without_params(self):
-        if self.config_class.is_composition:
+        if self.config_class.has_no_defaults_at_init:
             with self.parent.assertRaises(ValueError):
                 config = self.config_class()
         else:

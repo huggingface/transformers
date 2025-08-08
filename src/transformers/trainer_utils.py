@@ -49,11 +49,12 @@ if is_torch_available():
     import torch
 
 
-def seed_worker(_):
+def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2**32
+    init_seed = torch.initial_seed() % 2**32
+    worker_seed = num_workers * rank + init_seed
     set_seed(worker_seed)
 
 
@@ -259,7 +260,7 @@ class BestRun(NamedTuple):
             with run-{run_id}).
         objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (`Dict[str, Any]`):
+        hyperparameters (`dict[str, Any]`):
             The hyperparameters picked to get this run.
         run_summary (`Optional[Any]`):
             A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
@@ -277,7 +278,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
         `float`: The objective to minimize or maximize
@@ -287,9 +288,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
     speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
+        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
     ]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
@@ -362,13 +361,13 @@ class HPSearchBackend(ExplicitEnum):
 
 def is_main_process(local_rank):
     """
-    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    Whether or not the current process is the local process, based on `xr.global_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.get_ordinal() == 0
+        return xr.global_ordinal() == 0
     return local_rank in [-1, 0]
 
 
@@ -377,9 +376,9 @@ def total_processes_number(local_rank):
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.xrt_world_size()
+        return xr.world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -443,6 +442,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
@@ -792,7 +792,7 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
@@ -875,7 +875,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
-        optim_target_modules (`Union[str, List[str]]`):
+        optim_target_modules (`Union[str, list[str]]`):
             A list of strings to try to match. Can be also a full string.
         key (`str`):
             A key to search any matches in optim_target_modules
@@ -894,7 +894,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if not optim_target_modules == key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True

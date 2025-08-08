@@ -15,8 +15,8 @@
 """Convert MusicGen checkpoints from the original repository."""
 
 import argparse
+from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, OrderedDict, Tuple
 
 import torch
 from audiocraft.models import MusicGen
@@ -67,7 +67,7 @@ def rename_keys(name):
     return name
 
 
-def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, Dict]:
+def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> tuple[dict, dict]:
     """Function that takes the fairseq Musicgen state dict and renames it according to the HF
     module names. It further partitions the state dict into the decoder (LM) state dict, and that for the
     encoder-decoder projection."""

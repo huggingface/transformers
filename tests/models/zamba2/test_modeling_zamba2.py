@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -323,14 +323,22 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Zamba2 has a hybrid cache")
     def test_past_key_values_format(self):
-        r"""
-        Zamba2's cache shape depends on whether a given layer is mamba or attention.
-        For mamba layers, the KV cache has shape is empty and has shape [batch_size, 0].
-        The shape checks of this test assume instead that every layer has an attention cache, so we skip it.
         """
-        pass
+        Overwriting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs["input_ids"].shape
+        per_head_embed_dim = config.attention_head_dim  # note: this one is not a common attribute name
+        self_attention_cache_shape = (batch_size, config.num_key_value_heads, seq_length, per_head_embed_dim)
+        # build the full cache shapes, including mamba layers
+        all_cache_shapes = []
+        for i in range(config.num_hidden_layers):
+            if config.layers_block_type[i] == "mamba":
+                all_cache_shapes.append([torch.Size([batch_size, 0]), torch.Size([batch_size, 0])])
+            else:
+                all_cache_shapes.append([self_attention_cache_shape, self_attention_cache_shape])
+        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
@@ -415,7 +423,8 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -541,7 +550,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
 
@@ -570,6 +578,28 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        """
+        Overwriting as the base hidden size is big enough for compile.
+        Manipulation of dims causes issues due to other constraints not being satisfied anymore.
+        """
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+
+            model = model_class(config).to(device=torch_device)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
+
 
 @require_torch
 class Zamba2ModelIntegrationTest(unittest.TestCase):
@@ -580,9 +610,7 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
     @slow
     def setUpClass(cls):
         model_id = "Zyphra/Zamba2-1.2B"
-        cls.model = Zamba2ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float32, low_cpu_mem_usage=True, revision="PR"
-        )
+        cls.model = Zamba2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, revision="PR")
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision="PR")
 
     @parameterized.expand([(torch_device,), ("cpu",)])
@@ -651,14 +679,23 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
-            [
-               0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
-               -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
-               -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
-               -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
-               -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105          ]
-            , dtype=torch.float32)  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_1S = Expectations(
+            {
+                ("xpu", 3): torch.tensor([0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                                          -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                                          -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                                          -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                                          -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
+                                         dtype=torch.float32),
+                ("cuda", None): torch.tensor([0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
+                                              -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
+                                              -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
+                                              -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
+                                              -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105],
+                                             dtype=torch.float32),
+            }
+        )  # fmt: skip
+        EXPECTED_LOGITS_NO_GRAD_1 = EXPECTED_LOGITS_NO_GRAD_1S.get_expectation()
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(

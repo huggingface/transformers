@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 
 import unittest
-from typing import Tuple, Union
+from typing import Union
 
 import numpy as np
 
@@ -152,7 +151,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # taken from original implementation: https://github.com/haotian-liu/LLaVA/blob/c121f0432da27facab705978f83c4ada465e46fd/llava/mm_utils.py#L152
         def pad_to_square_original(
-            image: Image.Image, background_color: Union[int, Tuple[int, int, int]] = 0
+            image: Image.Image, background_color: Union[int, tuple[int, int, int]] = 0
         ) -> Image.Image:
             width, height = image.size
             if width == height:

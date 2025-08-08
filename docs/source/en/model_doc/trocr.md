@@ -22,7 +22,7 @@ specific language governing permissions and limitations under the License. -->
 ## Overview
 
 The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained
-Models](https://arxiv.org/abs/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+Models](https://huggingface.co/papers/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei. TrOCR consists of an image Transformer encoder and an autoregressive text Transformer decoder to
 perform [optical character recognition (OCR)](https://en.wikipedia.org/wiki/Optical_character_recognition).
 
@@ -40,7 +40,7 @@ tasks.*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> TrOCR architecture. Taken from the <a href="https://arxiv.org/abs/2109.10282">original paper</a>. </small>
+<small> TrOCR architecture. Taken from the <a href="https://huggingface.co/papers/2109.10282">original paper</a>. </small>
 
 Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 
@@ -56,6 +56,7 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
   on both printed (e.g. the [SROIE dataset](https://paperswithcode.com/dataset/sroie) and handwritten (e.g. the [IAM
   Handwriting dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>) text recognition tasks. For more
   information, see the [official models](https://huggingface.co/models?other=trocr>).
+- [Fine‑tune TrOCR on your own OCR dataset](https://github.com/Ashutosh-4485/trocr-custom-fine-tune.git).
 - TrOCR is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
 ## Resources

@@ -34,7 +34,7 @@ from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
 from .. import logging
-from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
@@ -56,15 +56,13 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    TORCH_FX_REQUIRED_VERSION,
-    get_torch_version,
     is_peft_available,
-    is_torch_fx_available,
 )
 
 
@@ -122,6 +120,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "albert",
     "bart",
     "bert",
+    "bitnet",
     "blenderbot",
     "blenderbot-small",
     "bloom",
@@ -168,6 +167,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "t5",
     "trocr",
     "vit",
+    "vjepa2",
     "xglm",
     "wav2vec2",
     #    "xlnet",
@@ -195,6 +195,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "TrOCRDecoder",
     "PeftModelForCausalLM",
     "PeftModelForSeq2SeqLM",
+    "VJEPA2ForVideoClassification",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -834,12 +835,6 @@ ProxyableDynamicCache = HFProxyableClassMeta(
     {},
     proxy_factory_fn=create_cache_proxy_factory_fn(DynamicCache),
 )
-ProxyableSinkCache = HFProxyableClassMeta(
-    "ProxyableSinkCache",
-    (SinkCache,),
-    {},
-    proxy_factory_fn=create_cache_proxy_factory_fn(SinkCache),
-)
 ProxyableStaticCache = HFProxyableClassMeta(
     "ProxyableStaticCache",
     (StaticCache,),
@@ -882,7 +877,6 @@ class HFTracer(Tracer):
     _CLASSES_TO_PATCH = {
         Cache: ProxyableCache,
         DynamicCache: ProxyableDynamicCache,
-        SinkCache: ProxyableSinkCache,
         StaticCache: ProxyableStaticCache,
     }
 
@@ -890,12 +884,6 @@ class HFTracer(Tracer):
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
-
-        if not is_torch_fx_available():
-            raise ImportError(
-                f"Found an incompatible version of torch. Found version {get_torch_version()}, but only version "
-                f"{TORCH_FX_REQUIRED_VERSION} is supported."
-            )
 
     def _generate_dummy_input(
         self, model: "PreTrainedModel", input_name: str, shape: list[int], input_names: list[str]
@@ -918,6 +906,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
@@ -1246,9 +1235,9 @@ class HFTracer(Tracer):
             root (`torch.nn.Module` or  `Callable`):
                 Either a `torch.nn.Module`` or a function to be traced through. If root is not a
                 [`~transformers.PreTrainedModel`], then `dummy_inputs` must be passed, otherwise tracing will fail.
-            concrete_args (`Dict[str, Any], *optional*):
+            concrete_args (`dict[str, Any], *optional*):
                 Concrete arguments that should not be treated as Proxies
-            dummy_inputs (`Dict[str, Any]`, *optional*):
+            dummy_inputs (`dict[str, Any]`, *optional*):
                 The dummy inputs needed to handle data-dependent control-flow if `root` is not a
                 [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
                 [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
@@ -1459,7 +1448,7 @@ def symbolic_trace(
     Args:
         model ([`PretrainedModel`]):
             The model to trace.
-        input_names (`List[str]`, *optional*):
+        input_names (`list[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
         disable_check (`bool`, *optional*, defaults to `False`):
             If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.

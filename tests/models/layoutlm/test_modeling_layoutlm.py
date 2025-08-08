@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,7 +243,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
 
     def setUp(self):
         self.model_tester = LayoutLMModelTester(self)

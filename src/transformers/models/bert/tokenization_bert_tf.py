@@ -1,14 +1,16 @@
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 from tensorflow_text import BertTokenizer as BertTokenizerLayer
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
 from ...modeling_tf_utils import keras
+from ...utils.import_utils import requires
 from .tokenization_bert import BertTokenizer
 
 
+@requires(backends=("tf", "tensorflow_text"))
 class TFBertTokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
@@ -56,7 +58,7 @@ class TFBertTokenizer(keras.layers.Layer):
 
     def __init__(
         self,
-        vocab_list: List,
+        vocab_list: list,
         do_lower_case: bool,
         cls_token_id: Optional[int] = None,
         sep_token_id: Optional[int] = None,

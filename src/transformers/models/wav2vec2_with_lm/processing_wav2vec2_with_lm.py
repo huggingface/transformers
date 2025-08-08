@@ -18,10 +18,11 @@ Speech processor class for Wav2Vec2
 
 import os
 import warnings
+from collections.abc import Iterable
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from multiprocessing import Pool, get_context, get_start_method
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
     from ...tokenization_utils import PreTrainedTokenizerBase
 
 
-ListOfDict = List[Dict[str, Union[int, str]]]
+ListOfDict = list[dict[str, Union[int, str]]]
 
 
 @dataclass
@@ -54,15 +55,15 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
             Total logit score of the beams associated with produced text.
         lm_score (list of `float`):
             Fused lm_score of the beams associated with produced text.
-        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
+        word_offsets (list of `list[dict[str, Union[int, str]]]` or `list[dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
 
-    text: Union[List[List[str]], List[str], str]
-    logit_score: Union[List[List[float]], List[float], float] = None
-    lm_score: Union[List[List[float]], List[float], float] = None
-    word_offsets: Union[List[List[ListOfDict]], List[ListOfDict], ListOfDict] = None
+    text: Union[list[list[str]], list[str], str]
+    logit_score: Union[list[list[float]], list[float], float] = None
+    lm_score: Union[list[list[float]], list[float], float] = None
+    word_offsets: Union[list[list[ListOfDict]], list[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
@@ -343,7 +344,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             token_min_logp (`int`, *optional*):
                 Tokens below this logp are skipped unless they are argmax of frame Defaults to pyctcdecode's
                 DEFAULT_MIN_TOKEN_LOGP.
-            hotwords (`List[str]`, *optional*):
+            hotwords (`list[str]`, *optional*):
                 List of words with extra importance, can be OOV for LM
             hotword_weight (`int`, *optional*):
                 Weight factor for hotword importance Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
@@ -502,7 +503,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             token_min_logp (`int`, *optional*):
                 Tokens with log-probs below token_min_logp are skipped unless they are have the maximum log-prob for an
                 utterance. Defaults to pyctcdecode's DEFAULT_MIN_TOKEN_LOGP.
-            hotwords (`List[str]`, *optional*):
+            hotwords (`list[str]`, *optional*):
                 List of words with extra importance which can be missing from the LM's vocabulary, e.g. ["huggingface"]
             hotword_weight (`int`, *optional*):
                 Weight multiplier that boosts hotword scores. Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
@@ -545,7 +546,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)

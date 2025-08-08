@@ -98,6 +98,8 @@ celerybeat-schedule
 .env
 .venv
 env/
+yenv/
+myenv/
 venv/
 ENV/
 env.bak/
@@ -167,3 +169,6 @@ tags
 
 # ruff
 .ruff_cache
+
+# modular conversion
+*.modular_backup

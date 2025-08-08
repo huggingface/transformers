@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Tuple, overload
+from typing import overload
 
 import torch
 import torch.types
@@ -31,7 +31,7 @@ def pseudo_beta_fn(aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_a
 @overload
 def pseudo_beta_fn(
     aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]: ...
+) -> tuple[torch.Tensor, torch.Tensor]: ...
 
 
 def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
@@ -55,7 +55,7 @@ def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
         return pseudo_beta
 
 
-def atom14_to_atom37(atom14: torch.Tensor, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+def atom14_to_atom37(atom14: torch.Tensor, batch: dict[str, torch.Tensor]) -> torch.Tensor:
     atom37_data = batched_gather(
         atom14,
         batch["residx_atom37_to_atom14"],
@@ -68,7 +68,7 @@ def atom14_to_atom37(atom14: torch.Tensor, batch: Dict[str, torch.Tensor]) -> to
     return atom37_data
 
 
-def build_template_angle_feat(template_feats: Dict[str, torch.Tensor]) -> torch.Tensor:
+def build_template_angle_feat(template_feats: dict[str, torch.Tensor]) -> torch.Tensor:
     template_aatype = template_feats["template_aatype"]
     torsion_angles_sin_cos = template_feats["template_torsion_angles_sin_cos"]
     alt_torsion_angles_sin_cos = template_feats["template_alt_torsion_angles_sin_cos"]
@@ -87,7 +87,7 @@ def build_template_angle_feat(template_feats: Dict[str, torch.Tensor]) -> torch.
 
 
 def build_template_pair_feat(
-    batch: Dict[str, torch.Tensor],
+    batch: dict[str, torch.Tensor],
     min_bin: torch.types.Number,
     max_bin: torch.types.Number,
     no_bins: int,
@@ -147,7 +147,7 @@ def build_template_pair_feat(
     return act
 
 
-def build_extra_msa_feat(batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+def build_extra_msa_feat(batch: dict[str, torch.Tensor]) -> torch.Tensor:
     msa_1hot: torch.LongTensor = nn.functional.one_hot(batch["extra_msa"], 23)
     msa_feat = [
         msa_1hot,

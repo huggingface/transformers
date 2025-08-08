@@ -14,37 +14,113 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# XLM-RoBERTa-XL
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# XLM-RoBERTa-XL
 
-The XLM-RoBERTa-XL model was proposed in [Larger-Scale Transformers for Multilingual Masked Language Modeling](https://arxiv.org/abs/2105.00572) by Naman Goyal, Jingfei Du, Myle Ott, Giri Anantharaman, Alexis Conneau. 
+[XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) is a 3.5B parameter multilingual masked language model pretrained on 100 languages. It shows that by scaling model capacity, multilingual models demonstrates strong performance on high-resource languages and can even zero-shot low-resource languages.
 
-The abstract from the paper is the following:
+You can find all the original XLM-RoBERTa-XL checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=xlm) organization.
 
-*Recent work has demonstrated the effectiveness of cross-lingual language model pretraining for cross-lingual understanding. In this study, we present the results of two larger multilingual masked language models, with 3.5B and 10.7B parameters. Our two new models dubbed XLM-R XL and XLM-R XXL outperform XLM-R by 1.8% and 2.4% average accuracy on XNLI. Our model also outperforms the RoBERTa-Large model on several English tasks of the GLUE benchmark by 0.3% on average while handling 99 more languages. This suggests pretrained models with larger capacity may obtain both strong performance on high-resource languages while greatly improving low-resource languages. We make our code and models publicly available.*
+> [!TIP]
+> Click on the XLM-RoBERTa-XL models in the right sidebar for more examples of how to apply XLM-RoBERTa-XL to different cross-lingual tasks like classification, translation, and question answering.
 
-This model was contributed by [Soonhwan-Kwon](https://github.com/Soonhwan-Kwon) and [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/xlmr).
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-## Usage tips
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-XLM-RoBERTa-XL is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does 
-not require `lang` tensors to understand which language is used, and should be able to determine the correct 
-language from the input ids.
+```python
+import torch  
+from transformers import pipeline  
 
-## Resources
+pipeline = pipeline(  
+    task="fill-mask",  
+    model="facebook/xlm-roberta-xl",  
+    torch_dtype=torch.float16,  
+    device=0  
+)  
+pipeline("Bonjour, je suis un modèle <mask>.")  
+```
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch  
+from transformers import AutoModelForMaskedLM, AutoTokenizer  
+
+tokenizer = AutoTokenizer.from_pretrained(  
+    "facebook/xlm-roberta-xl",  
+)  
+model = AutoModelForMaskedLM.from_pretrained(  
+    "facebook/xlm-roberta-xl",  
+    torch_dtype=torch.float16,  
+    device_map="auto",  
+    attn_implementation="sdpa"  
+)  
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")  
+
+with torch.no_grad():  
+    outputs = model(**inputs)  
+    predictions = outputs.logits  
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]  
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)  
+predicted_token = tokenizer.decode(predicted_token_id)  
+
+print(f"The predicted token is: {predicted_token}")
+```
+</hfoption>
+
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model facebook/xlm-roberta-xl --device 0
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained(
+    "facebook/xlm-roberta-xl",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-xl",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa",
+    quantization_config=quantization_config
+)
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+## Notes
+
+- Unlike some XLM models, XLM-RoBERTa-XL doesn't require `lang` tensors to understand which language is used. It automatically determines the language from the input ids.
 
 ## XLMRobertaXLConfig
 

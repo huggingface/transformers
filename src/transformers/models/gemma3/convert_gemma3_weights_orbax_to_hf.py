@@ -503,7 +503,12 @@ def main(*args):
 
     config = _VARIANTS[variant]
     config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
-    config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+
+    if variant == _VARIANT_GEMMA_3_1B:
+        config.vision_config = None
+    else:
+        config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
         # both "<eos>" and "<end_of_turn>" as generation stoppers.

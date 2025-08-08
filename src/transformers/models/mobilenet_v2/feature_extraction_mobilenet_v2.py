@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileNetV2FeatureExtractor(MobileNetV2ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(

@@ -14,100 +14,101 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ZoeDepth
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# ZoeDepth
 
-The ZoeDepth model was proposed in [ZoeDepth: Zero-shot Transfer by Combining Relative and Metric Depth](https://arxiv.org/abs/2302.12288) by Shariq Farooq Bhat, Reiner Birkl, Diana Wofk, Peter Wonka, Matthias Müller. ZoeDepth extends the [DPT](dpt) framework for metric (also called absolute) depth estimation. ZoeDepth is pre-trained on 12 datasets using relative depth and fine-tuned on two domains (NYU and KITTI) using metric depth. A lightweight head is used with a novel bin adjustment design called metric bins module for each domain. During inference, each input image is automatically routed to the appropriate head using a latent classifier.
-
-The abstract from the paper is the following:
-
-*This paper tackles the problem of depth estimation from a single image. Existing work either focuses on generalization performance disregarding metric scale, i.e. relative depth estimation, or state-of-the-art results on specific datasets, i.e. metric depth estimation. We propose the first approach that combines both worlds, leading to a model with excellent generalization performance while maintaining metric scale. Our flagship model, ZoeD-M12-NK, is pre-trained on 12 datasets using relative depth and fine-tuned on two datasets using metric depth. We use a lightweight head with a novel bin adjustment design called metric bins module for each domain. During inference, each input image is automatically routed to the appropriate head using a latent classifier. Our framework admits multiple configurations depending on the datasets used for relative depth pre-training and metric fine-tuning. Without pre-training, we can already significantly improve the state of the art (SOTA) on the NYU Depth v2 indoor dataset. Pre-training on twelve datasets and fine-tuning on the NYU Depth v2 indoor dataset, we can further improve SOTA for a total of 21% in terms of relative absolute error (REL). Finally, ZoeD-M12-NK is the first model that can jointly train on multiple datasets (NYU Depth v2 and KITTI) without a significant drop in performance and achieve unprecedented zero-shot generalization performance to eight unseen datasets from both indoor and outdoor domains.*
+[ZoeDepth](https://huggingface.co/papers/2302.12288) is a depth estimation model that combines the generalization performance of relative depth estimation (how far objects are from each other) and metric depth estimation (precise depth measurement on metric scale) from a single image. It is pre-trained on 12 datasets using relative depth and 2 datasets (NYU Depth v2 and KITTI) for metric accuracy. A lightweight head with a metric bin module for each domain is used, and during inference, it automatically selects the appropriate head for each input image with a latent classifier.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/zoedepth_architecture_bis.png"
 alt="drawing" width="600"/>
 
-<small> ZoeDepth architecture. Taken from the <a href="https://arxiv.org/abs/2302.12288">original paper.</a> </small>
+You can find all the original ZoeDepth checkpoints under the [Intel](https://huggingface.co/Intel?search=zoedepth) organization.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/isl-org/ZoeDepth).
+The example below demonstrates how to estimate depth with [`Pipeline`] or the [`AutoModel`] class.
 
-## Usage tips
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- ZoeDepth is an absolute (also called metric) depth estimation model, unlike DPT which is a relative depth estimation model. This means that ZoeDepth is able to estimate depth in metric units like meters.
+```py
+import requests
+import torch
+from transformers import pipeline
+from PIL import Image
 
-The easiest to perform inference with ZoeDepth is by leveraging the [pipeline API](../main_classes/pipelines.md):
-
-```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
-
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> pipe = pipeline(task="depth-estimation", model="Intel/zoedepth-nyu-kitti")
->>> result = pipe(image)
->>> depth = result["depth"]
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+pipeline = pipeline(
+    task="depth-estimation",
+    model="Intel/zoedepth-nyu-kitti",
+    torch_dtype=torch.float16,
+    device=0
+)
+results = pipeline(image)
+results["depth"]
 ```
 
-Alternatively, one can also perform inference using the classes:
+</hfoption>
+<hfoption id="AutoModel">
 
-```python
->>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
->>> import torch
->>> import numpy as np
->>> from PIL import Image
->>> import requests
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoModelForDepthEstimation, AutoImageProcessor
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+image_processor = AutoImageProcessor.from_pretrained(
+    "Intel/zoedepth-nyu-kitti"
+)
+model = AutoModelForDepthEstimation.from_pretrained(
+    "Intel/zoedepth-nyu-kitti",
+    device_map="auto"
+)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt").to("cuda")
 
->>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
->>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
+with torch.no_grad():
+  outputs = model(inputs)
 
->>> # prepare image for the model
->>> inputs = image_processor(images=image, return_tensors="pt")
+# interpolate to original size and visualize the prediction
+## ZoeDepth dynamically pads the input image, so pass the original image size as argument
+## to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    source_sizes=[(image.height, image.width)],
+)
 
->>> with torch.no_grad():   
-...     outputs = model(inputs)
-
->>> # interpolate to original size and visualize the prediction
->>> ## ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument
->>> ## to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     source_sizes=[(image.height, image.width)],
-... )
-
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
->>> depth = depth.detach().cpu().numpy() * 255
->>> depth = Image.fromarray(depth.astype("uint8"))
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+Image.fromarray(depth.astype("uint8"))
 ```
 
-<Tip>
-<p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
-<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():   
-...     outputs = model(pixel_values)
-...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
-&gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     source_sizes=[(image.height, image.width)],
-...     outputs_flipped=outputs_flipped,
-... )
-</code></pre>
-</Tip>
+</hfoption>
+</hfoptions>
 
+## Notes
+
+- In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth performs inference on both the original and flipped images and averages the results. The `post_process_depth_estimation` function handles this by passing the flipped outputs to the optional `outputs_flipped` argument as shown below.
+   ```py
+    with torch.no_grad():
+        outputs = model(pixel_values)
+        outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+        post_processed_output = image_processor.post_process_depth_estimation(
+            outputs,
+            source_sizes=[(image.height, image.width)],
+            outputs_flipped=outputs_flipped,
+        )
+   ```
+   
 ## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ZoeDepth.
-
-- A demo notebook regarding inference with ZoeDepth models can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth). 🌎
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth) for an inference example.
 
 ## ZoeDepthConfig
 
@@ -116,6 +117,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## ZoeDepthImageProcessor
 
 [[autodoc]] ZoeDepthImageProcessor
+    - preprocess
+
+## ZoeDepthImageProcessorFast
+
+[[autodoc]] ZoeDepthImageProcessorFast
     - preprocess
 
 ## ZoeDepthForDepthEstimation

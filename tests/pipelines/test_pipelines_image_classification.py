@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_or_tf,
     require_vision,
@@ -153,32 +152,6 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-vit"
         image_classifier = pipeline("image-classification", model=small_model)
-
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-        )
-
-        outputs = image_classifier(
-            [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-            ],
-            top_k=2,
-        )
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-            ],
-        )
-
-    @require_tf
-    def test_small_model_tf(self):
-        small_model = "hf-internal-testing/tiny-random-vit"
-        image_classifier = pipeline("image-classification", model=small_model, framework="tf")
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(

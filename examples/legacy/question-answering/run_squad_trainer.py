@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -123,7 +122,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=False,  # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
+        use_fast=False,  # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handling
     )
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,

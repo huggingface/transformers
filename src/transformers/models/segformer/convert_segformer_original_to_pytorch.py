@@ -191,9 +191,9 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     # load original state dict
     if encoder_only:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
     else:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))["state_dict"]
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)["state_dict"]
 
     # rename keys
     state_dict = rename_keys(state_dict, encoder_only=encoder_only)

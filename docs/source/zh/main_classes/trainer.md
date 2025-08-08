@@ -281,7 +281,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 [`Trainer`] 已经被扩展，以支持可能显著提高训练时间并适应更大模型的库。
 
-目前，它支持第三方解决方案 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054) 的部分内容。
+目前，它支持第三方解决方案 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://huggingface.co/papers/1910.02054) 的部分内容。
 
 截至撰写本文，此提供的支持是新的且实验性的。尽管我们欢迎围绕 DeepSpeed 和 PyTorch FSDP 的issues，但我们不再支持 FairScale 集成，因为它已经集成到了 PyTorch 主线（参见 [PyTorch FSDP 集成](#pytorch-fully-sharded-data-parallel)）。
 

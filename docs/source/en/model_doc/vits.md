@@ -7,168 +7,139 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
--->
+specific language governing permissions and limitations under the License.-->
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # VITS
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech)](https://hf.co/papers/2106.06103) is a end-to-end speech synthesis model, simplifying the traditional two-stage text-to-speech (TTS) systems. It's unique because it directly synthesizes speech from text using variational inference, adversarial learning, and normalizing flows to produce natural and expressive speech with diverse rhythms and intonations.
 
-## Overview
+You can find all the original VITS checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mms-tts) organization.
 
-The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.
+> [!TIP]
+> Click on the VITS models in the right sidebar for more examples of how to apply VITS.
 
-VITS (**V**ariational **I**nference with adversarial learning for end-to-end **T**ext-to-**S**peech) is an end-to-end 
-speech synthesis model that predicts a speech waveform conditional on an input text sequence. It is a conditional variational 
-autoencoder (VAE) comprised of a posterior encoder, decoder, and conditional prior.
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-A set of spectrogram-based acoustic features are predicted by the flow-based module, which is formed of a Transformer-based
-text encoder and multiple coupling layers. The spectrogram is decoded using a stack of transposed convolutional layers,
-much in the same style as the HiFi-GAN vocoder. Motivated by the one-to-many nature of the TTS problem, where the same text 
-input can be spoken in multiple ways, the model also includes a stochastic duration predictor, which allows the model to 
-synthesise speech with different rhythms from the same input text. 
-
-The model is trained end-to-end with a combination of losses derived from variational lower bound and adversarial training. 
-To improve the expressiveness of the model, normalizing flows are applied to the conditional prior distribution. During 
-inference, the text encodings are up-sampled based on the duration prediction module, and then mapped into the 
-waveform using a cascade of the flow module and HiFi-GAN decoder. Due to the stochastic nature of the duration predictor,
-the model is non-deterministic, and thus requires a fixed seed to generate the same speech waveform.
-
-The abstract from the paper is the following:
-
-*Several recent end-to-end text-to-speech (TTS) models enabling single-stage training and parallel sampling have been proposed, but their sample quality does not match that of two-stage TTS systems. In this work, we present a parallel end-to-end TTS method that generates more natural sounding audio than current two-stage models. Our method adopts variational inference augmented with normalizing flows and an adversarial training process, which improves the expressive power of generative modeling. We also propose a stochastic duration predictor to synthesize speech with diverse rhythms from input text. With the uncertainty modeling over latent variables and the stochastic duration predictor, our method expresses the natural one-to-many relationship in which a text input can be spoken in multiple ways with different pitches and rhythms. A subjective human evaluation (mean opinion score, or MOS) on the LJ Speech, a single speaker dataset, shows that our method outperforms the best publicly available TTS systems and achieves a MOS comparable to ground truth.*
-
-This model can also be used with TTS checkpoints from [Massively Multilingual Speech (MMS)](https://arxiv.org/abs/2305.13516) 
-as these checkpoints use the same architecture and a slightly modified tokenizer.
-
-This model was contributed by [Matthijs](https://huggingface.co/Matthijs) and [sanchit-gandhi](https://huggingface.co/sanchit-gandhi). The original code can be found [here](https://github.com/jaywalnut310/vits).
-
-## Usage examples
-
-Both the VITS and MMS-TTS checkpoints can be used with the same API. Since the flow-based model is non-deterministic, it 
-is good practice to set a seed to ensure reproducibility of the outputs. For languages with a Roman alphabet, 
-such as English or French, the tokenizer can be used directly to pre-process the text inputs. The following code example 
-runs a forward pass using the MMS-TTS English checkpoint:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
 import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
+from transformers import pipeline, set_seed
+from scipy.io.wavfile import write
 
-tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+set_seed(555)
 
-inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+pipe = pipeline(
+    task="text-to-speech",
+    model="facebook/mms-tts-eng",
+    torch_dtype=torch.float16,
+    device=0
+)
 
-set_seed(555)  # make deterministic
+speech = pipe("Hello, my dog is cute")
+
+# Extract audio data and sampling rate
+audio_data = speech["audio"]
+sampling_rate = speech["sampling_rate"]
+
+# Save as WAV file
+write("hello.wav", sampling_rate, audio_data.squeeze())
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+import scipy
+from IPython.display import Audio
+from transformers import AutoTokenizer, VitsModel, set_seed
+
+tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16).to("cuda")
+inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
+
+set_seed(555)
 
 with torch.no_grad():
-   outputs = model(**inputs)
+    outputs = model(**inputs)
 
 waveform = outputs.waveform[0]
-```
+scipy.io.wavfile.write("hello.wav", rate=model.config.sampling_rate, data=waveform)
 
-The resulting waveform can be saved as a `.wav` file:
-
-```python
-import scipy
-
-scipy.io.wavfile.write("techno.wav", rate=model.config.sampling_rate, data=waveform)
-```
-
-Or displayed in a Jupyter Notebook / Google Colab:
-
-```python
-from IPython.display import Audio
-
+# display in Colab notebook
 Audio(waveform, rate=model.config.sampling_rate)
 ```
 
-For certain languages with a non-Roman alphabet, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
-perl package is required to pre-process the text inputs to the Roman alphabet.
+</hfoption>
+</hfoptions>
 
-You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of 
-the pre-trained `tokenizer`:
+## Notes
 
-```python
-from transformers import VitsTokenizer
+- Set a seed for reproducibility because VITS synthesizes speech non-deterministically.
+- For languages with non-Roman alphabets (Korean, Arabic, etc.), install the [uroman](https://github.com/isi-nlp/uroman) package to preprocess the text inputs to the Roman alphabet. You can check if the tokenizer requires uroman as shown below.
 
-tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-print(tokenizer.is_uroman)
-```
-If the is_uroman attribute is `True`, the tokenizer will automatically apply the `uroman` package to your text inputs, but you need to install uroman if not already installed using:  
-```
-pip install --upgrade uroman
-```
-Note: Python version required to use `uroman` as python package should be >= `3.10`. 
-You can use the tokenizer as usual without any additional preprocessing steps:
-```python
-import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
-import os
-import subprocess
+   ```py
+   # pip install -U uroman
+   from transformers import VitsTokenizer
 
-tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-model = VitsModel.from_pretrained("facebook/mms-tts-kor")
-text = "이봐 무슨 일이야"
-inputs = tokenizer(text=text, return_tensors="pt")
+   tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+   print(tokenizer.is_uroman)
+   ```
 
-set_seed(555)  # make deterministic
-with torch.no_grad():
-   outputs = model(inputs["input_ids"])
+   If your language requires uroman, the tokenizer automatically applies it to the text inputs. Python >= 3.10 doesn't require any additional preprocessing steps. For Python < 3.10, follow the steps below.
 
-waveform = outputs.waveform[0]
-```
-If you don't want to upgrade to python >= `3.10`, then you can use the `uroman` perl package to pre-process the text inputs to the Roman alphabet.
-To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
+   ```bash
+   git clone https://github.com/isi-nlp/uroman.git
+   cd uroman
+   export UROMAN=$(pwd)
+   ```
 
+   Create a function to preprocess the inputs. You can either use the bash variable `UROMAN` or pass the directory path directly to the function.
 
-```bash
-git clone https://github.com/isi-nlp/uroman.git
-cd uroman
-export UROMAN=$(pwd)
-```
+   ```py
+   import torch
+   from transformers import VitsTokenizer, VitsModel, set_seed
+   import os
+   import subprocess
 
-You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
-`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromanize` function:
+   tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
+   model = VitsModel.from_pretrained("facebook/mms-tts-kor")
 
-```python
-import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
-import os
-import subprocess
+   def uromanize(input_string, uroman_path):
+       """Convert non-Roman strings to Roman using the `uroman` perl package."""
+       script_path = os.path.join(uroman_path, "bin", "uroman.pl")
 
-tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+       command = ["perl", script_path]
 
-def uromanize(input_string, uroman_path):
-    """Convert non-Roman strings to Roman using the `uroman` perl package."""
-    script_path = os.path.join(uroman_path, "bin", "uroman.pl")
+       process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+       # Execute the perl command
+       stdout, stderr = process.communicate(input=input_string.encode())
 
-    command = ["perl", script_path]
+       if process.returncode != 0:
+           raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
 
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # Execute the perl command
-    stdout, stderr = process.communicate(input=input_string.encode())
+       # Return the output as a string and skip the new-line character at the end
+       return stdout.decode()[:-1]
 
-    if process.returncode != 0:
-        raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
+   text = "이봐 무슨 일이야"
+   uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-    # Return the output as a string and skip the new-line character at the end
-    return stdout.decode()[:-1]
+   inputs = tokenizer(text=uromanized_text, return_tensors="pt")
 
-text = "이봐 무슨 일이야"
-uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
+   set_seed(555)  # make deterministic
+   with torch.no_grad():
+      outputs = model(inputs["input_ids"])
 
-inputs = tokenizer(text=uromanized_text, return_tensors="pt")
-
-set_seed(555)  # make deterministic
-with torch.no_grad():
-   outputs = model(inputs["input_ids"])
-
-waveform = outputs.waveform[0]
-```
+   waveform = outputs.waveform[0]
+   ```
 
 ## VitsConfig
 
@@ -177,10 +148,11 @@ waveform = outputs.waveform[0]
 ## VitsTokenizer
 
 [[autodoc]] VitsTokenizer
-    - __call__
-    - save_vocabulary
+- __call__
+- save_vocabulary
 
 ## VitsModel
 
 [[autodoc]] VitsModel
-    - forward
+- forward
+

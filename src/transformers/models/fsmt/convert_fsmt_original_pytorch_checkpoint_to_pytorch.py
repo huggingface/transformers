@@ -134,7 +134,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     # detect whether this is a do_lower_case situation, which can be derived by checking whether we
     # have at least one uppercase letter in the source vocab
     do_lower_case = True
-    for k in src_vocab.keys():
+    for k in src_vocab:
         if not k.islower():
             do_lower_case = False
             break
@@ -257,7 +257,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("Conversion is done!")
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
-    print(f"transformers-cli upload {model_dir}")
+    print(f"transformers upload {model_dir}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,11 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import WhisperFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torch_gpu
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_accelerator,
+)
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -251,11 +254,11 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration(self):
         # fmt: off
@@ -304,7 +307,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.all(np.mean(audio) < 1e-3))
         self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch
     def test_torch_integration_batch(self):
         # fmt: off
