@@ -90,16 +90,16 @@
       title: Tools and RAG
     title: Chat with models
   - sections:
-      - local: serving
-        title: Serving LLMs, VLMs, and other chat-based models
-      - local: jan
-        title: Jan
-      - local: cursor
-        title: Cursor
-      - local: tiny_agents
-        title: Tiny-Agents CLI and MCP tools
-      - local: open_webui
-        title: Open WebUI
+    - local: serving
+      title: Serving LLMs, VLMs, and other chat-based models
+    - local: jan
+      title: Jan
+    - local: cursor
+      title: Cursor
+    - local: tiny_agents
+      title: Tiny-Agents CLI and MCP tools
+    - local: open_webui
+      title: Open WebUI
     title: Serving
   - sections:
     - local: perf_torch_compile
@@ -511,6 +511,8 @@
         title: GPT2
       - local: model_doc/gpt_bigcode
         title: GPTBigCode
+      - local: model_doc/gpt_oss
+        title: GptOss
       - local: model_doc/gptsan-japanese
         title: GPTSAN Japanese
       - local: model_doc/gpt-sw3
@@ -527,8 +529,6 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
-      - local: model_doc/hgnet_v2
-        title: HGNet-V2
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -779,6 +779,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
       - local: model_doc/hiera
         title: Hiera
       - local: model_doc/ijepa

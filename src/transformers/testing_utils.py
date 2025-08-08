@@ -66,6 +66,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    TRITON_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
@@ -168,6 +169,7 @@ from .utils import (
     is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
+    is_triton_available,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -453,6 +455,19 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_triton(min_version: str = TRITON_MIN_VERSION):
+    """
+    Decorator marking a test that requires triton. These tests are skipped when triton isn't installed.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_triton_available(min_version), f"test requires triton version >= {min_version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
@@ -2853,7 +2868,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -3013,7 +3028,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):

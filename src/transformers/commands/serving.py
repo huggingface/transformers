@@ -909,7 +909,16 @@ class ServeCommand(BaseTransformersCLICommand):
         inputs = inputs.to(model.device)
         request_id = req.get("request_id", "req_0")
 
-        generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
+        # Temporary hack for GPTOSS 1: don't filter special tokens
+        skip_special_tokens = True
+        if "gptoss" in model.config.architectures[0].lower():
+            skip_special_tokens = False
+
+        generation_streamer = TextIteratorStreamer(
+            processor,
+            skip_special_tokens=skip_special_tokens,
+            skip_prompt=True,
+        )
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
@@ -925,12 +934,21 @@ class ServeCommand(BaseTransformersCLICommand):
         }
 
         def stream_chat_completion(streamer, _request_id):
+            # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
+            # classes and piping the reasoning trace into a new field
+            filter_cot = False
+            cot_trace_end = None
+            if "gptoss" in model.config.architectures[0].lower():
+                filter_cot = True
+                cot_trace_end = "<|channel|>final<|message|>"
+
             # Thin wrapper to save the KV cache after generation
             def generate_with_cache(**kwargs):
                 generate_output = model.generate(**kwargs)
                 self.last_kv_cache = generate_output.past_key_values
 
             thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
+            results = ""
 
             try:
                 thread.start()
@@ -941,6 +959,20 @@ class ServeCommand(BaseTransformersCLICommand):
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 for result in streamer:
+                    # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
+                    if "gptoss" in model.config.architectures[0].lower():
+                        if result.endswith("<|return|>"):
+                            result = result[: -len("<|return|>")]
+                    results += result
+
+                    # (related to temporary hack 2)
+                    if filter_cot:
+                        if cot_trace_end in results:  # end of reasoning trace observed -> stop filtering
+                            filter_cot = False
+                            continue
+                        else:
+                            continue
+
                     # ====== TOOL CALL LOGIC ======
                     if tool_model_family is not None:
                         # Start of a tool call: reset state variables, set `inside_tool_call`
@@ -1064,7 +1096,16 @@ class ServeCommand(BaseTransformersCLICommand):
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
-        generation_streamer = TextIteratorStreamer(processor, skip_special_tokens=True, skip_prompt=True)
+        # Temporary hack for GPTOSS 1: don't filter special tokens
+        skip_special_tokens = True
+        if "gptoss" in model.config.architectures[0].lower():
+            skip_special_tokens = False
+
+        generation_streamer = TextIteratorStreamer(
+            processor,
+            skip_special_tokens=skip_special_tokens,
+            skip_prompt=True,
+        )
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
         last_kv_cache = None
@@ -1081,6 +1122,14 @@ class ServeCommand(BaseTransformersCLICommand):
         }
 
         def stream_response(streamer, _request_id):
+            # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
+            # classes and piping the reasoning trace into a new field
+            filter_cot = False
+            cot_trace_end = None
+            if "gptoss" in model.config.architectures[0].lower():
+                filter_cot = True
+                cot_trace_end = "<|channel|>final<|message|>"
+
             # Thin wrapper to save the KV cache after generation
             def generate_with_cache(**kwargs):
                 generate_output = model.generate(**kwargs)
@@ -1167,7 +1216,21 @@ class ServeCommand(BaseTransformersCLICommand):
                 # Stream the actual generated text
                 results = ""
                 for result in streamer:
+                    # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
+                    if "gptoss" in model.config.architectures[0].lower():
+                        if result.endswith("<|return|>"):
+                            result = result[: -len("<|return|>")]
                     results += result
+
+                    # (related to temporary hack 2)
+                    if filter_cot:
+                        if cot_trace_end in results:  # end of reasoning trace observed -> stop filtering
+                            filter_cot = False
+                            results = ""  # reset the results -> results will now track the final response
+                            continue
+                        else:
+                            continue
+
                     response_output_text_delta = ResponseTextDeltaEvent(
                         type="response.output_text.delta",
                         item_id=f"msg_{request_id}",
@@ -1175,6 +1238,7 @@ class ServeCommand(BaseTransformersCLICommand):
                         output_index=output_index,
                         content_index=content_index,
                         delta=result,
+                        logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
                     )
                     sequence_number += 1
                     yield self.build_response_event(response_output_text_delta)
@@ -1187,6 +1251,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     output_index=output_index,
                     content_index=0,
                     text=results,
+                    logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
                 )
                 sequence_number += 1
                 yield self.build_response_event(response_output_text_done)
@@ -1446,9 +1511,10 @@ class ServeCommand(BaseTransformersCLICommand):
             "attn_implementation": args.attn_implementation,
             "torch_dtype": torch_dtype,
             "device_map": "auto",
-            "quantization_config": quantization_config,
             "trust_remote_code": args.trust_remote_code,
         }
+        if quantization_config is not None:
+            model_kwargs["quantization_config"] = quantization_config
 
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
