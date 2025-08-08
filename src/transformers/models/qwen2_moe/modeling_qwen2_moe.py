@@ -362,7 +362,6 @@ class Qwen2MoeAttention(nn.Module):
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
-    # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2Attention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,

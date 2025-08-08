@@ -183,7 +183,7 @@ class MiniMaxConfig(MixtralConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
-        rope_theta = super_kwargs.get("rope_theta", 1000000.0)
+        rope_theta = getattr(self, "rope_theta", 1000000.0)
         sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:

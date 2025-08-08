@@ -154,8 +154,7 @@ class DiaRotaryEmbedding(nn.Module):
 
         inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        self.original_inv_freq = inv_freq
+        self.original_inv_freq = self.inv_freq
         self.config = config
 
     def compute_default_rope_parameters(

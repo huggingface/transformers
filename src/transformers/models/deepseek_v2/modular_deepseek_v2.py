@@ -360,7 +360,22 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 
 
 class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
-    pass
+    def __init__(self, config: DeepseekV2Config, device=None, layer_type=None):
+        super().__init__()
+
+    def compute_default_rope_parameters(
+        self,
+        config: Optional[DeepseekV2Config] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(
+            config,
+            device,
+            seq_len,
+            layer_type,
+        )
 
 
 class DeepseekV2Attention(nn.Module):

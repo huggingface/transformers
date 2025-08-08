@@ -212,8 +212,8 @@ class Qwen2Attention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
         layer_type = config.layer_types[layer_idx]
-        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
         self.rotary_emb = Qwen2RotaryEmbedding(config=config, layer_type=layer_type)
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

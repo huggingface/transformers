@@ -128,6 +128,7 @@ class DiaSelfAttention(LlamaAttention, nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.rotary_emb = DiaRotaryEmbedding(config=config)
 
 
 class DiaCrossAttention(nn.Module):
@@ -247,7 +248,6 @@ class DiaEncoder(DiaPreTrainedModel):
             [DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.rotary_embeddings = DiaRotaryEmbedding(config)
 
     @auto_docstring
     @can_return_tuple
@@ -265,7 +265,6 @@ class DiaEncoder(DiaPreTrainedModel):
         # Note: We expect right padding and hence always generate
         # the position ids on the fly to reduce preparation overhead
         position_ids = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         attention_mask = self._update_full_mask(
             attention_mask,
@@ -281,8 +280,8 @@ class DiaEncoder(DiaPreTrainedModel):
 
             layer_outputs = encoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -355,11 +354,11 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         normed_states = self.pre_sa_norm(hidden_states)
         self_attn_output, self_attn_weights = self.self_attention(
             normed_states,
-            position_embeddings,
-            attention_mask,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
             # Needs to be an arg in order to function properly
             # on inplace operations to be carried (e.g. compile)
-            self_attn_cache,
+            past_key_value=self_attn_cache,
             cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,

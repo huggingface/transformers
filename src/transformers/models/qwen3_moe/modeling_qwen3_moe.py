@@ -199,6 +199,7 @@ class Qwen3MoeAttention(nn.Module):
 
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__()
+        layer_type = config.layer_types[layer_idx]
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -219,7 +220,7 @@ class Qwen3MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_emb = Qwen3MoeRotaryEmbedding(config=config)
+        self.rotary_emb = Qwen3MoeRotaryEmbedding(config=config, layer_type=layer_type)
         self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)

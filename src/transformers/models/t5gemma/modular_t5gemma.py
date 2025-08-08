@@ -619,7 +619,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                attentino_mask=self_attn_mask_mapping[layer_module.attention_type],
+                attention_mask=self_attn_mask_mapping[layer_module.attention_type],
                 position_ids=position_ids,
                 **kwargs,
             )
