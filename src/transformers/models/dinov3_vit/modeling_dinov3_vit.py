@@ -108,8 +108,35 @@ class DINOv3ViTEmbeddings(nn.Module):
         return embeddings
 
 
+def get_patches_center_coordinates(num_patches_h: int, num_patches_w: int, dtype: torch.dtype) -> torch.Tensor:
+    """
+    Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
+    The center of each patch is exactly halfway between its top-left and bottom-right corners.
+
+    Args:
+        num_patches_h (int): Number of patches along the vertical (height) axis.
+        num_patches_w (int): Number of patches along the horizontal (width) axis.
+        dtype (torch.dtype): The desired data type of the returned tensor.
+
+    Returns:
+        torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
+            coordinates of a patch center, normalized to [-1, +1].
+    """
+    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype)
+    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype)
+    coords_h = coords_h / num_patches_h
+    coords_w = coords_w / num_patches_w
+    # (height, width, 2) -> (height * width, 2)
+    coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)
+    coords = coords.flatten(0, 1)
+    # Shift range [0, 1] to [-1, +1]
+    coords = 2.0 * coords - 1.0
+    return coords
+
+
 class DINOv3ViTRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
+    patch_coords: torch.Tensor
     
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
@@ -117,55 +144,56 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.pos_embed_rope_base
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_patches_h = config.image_size // config.patch_size
+        self.num_patches_w = config.image_size // config.patch_size
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def augment_coords_(self, coords: torch.Tensor) -> torch.Tensor:
+        patch_coords = get_patches_center_coordinates(self.num_patches_h, self.num_patches_w, dtype=torch.float32)
+        self.register_buffer("patch_coords", patch_coords, persistent=False)
+
+    def _augment_coords(self, coords: torch.Tensor) -> torch.Tensor:
 
         # Shift coords by adding a uniform value in [-shift, shift]
         if shift := self.config.pos_embed_rope_shift_coords is not None:
             shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
             shift_hw = shift_hw.uniform_(-shift, shift)
-            coords += shift_hw
+            coords = coords + shift_hw
 
         # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
         if jitter := self.config.pos_embed_rope_jitter_coords is not None:
             jitter_range = np.log(jitter)
             jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
             jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
-            coords *= jitter_hw
+            coords = coords * jitter_hw
 
         # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
         if rescale := self.config.pos_embed_rope_rescale_coords is not None:
             rescale_range = np.log(rescale)
             rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
             rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
-            coords *= rescale_hw
+            coords = coords * rescale_hw
 
         return coords
 
-    def forward(self, *, H: int, W: int) -> tuple[Tensor, Tensor]:
-        device = self.inv_freq.device
-        dtype = torch.float32
-        dd = {"device": device, "dtype": dtype}
-        coords_h = torch.arange(0.5, H, **dd) / H  # [H]
-        coords_w = torch.arange(0.5, W, **dd) / W  # [W]
-        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)  # [H, W, 2]
-        coords = coords.flatten(0, 1)  # [HW, 2]
-        coords = 2.0 * coords - 1.0  # Shift range [0, 1] to [-1, +1]
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 
-        if self.training:
-            coords = self.augment_coords_(coords)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            patch_coords = self.patch_coords
+            if self.training:
+                patch_coords = self._augment_coords(patch_coords)
 
-        # Prepare angles and sin/cos
-        angles = 2 * math.pi * coords[:, :, None] * self.inv_freq[None, None, :]  # [HW, 2, D//4]
-        angles = angles.flatten(1, 2)  # [HW, D//2]
-        angles = angles.tile(2)  # [HW, D]
-        cos = torch.cos(angles)  # [HW, D]
-        sin = torch.sin(angles)  # [HW, D]
+            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+            angles = angles.flatten(1, 2) 
+            angles = angles.tile(2)
 
-        return (sin, cos)  # 2 * [HW, D]
+            cos = torch.cos(angles)
+            sin = torch.sin(angles)
+
+        return (sin, cos)
 
 
 # RoPE-related functions:
@@ -571,10 +599,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         """
 
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-
-        num_patches_height = self.config.image_size // self.config.patch_size
-        num_patches_width = self.config.image_size // self.config.patch_size
-        position_embeddings = self.rope_embeddings(H=num_patches_height, W=num_patches_width)
+        position_embeddings = self.rope_embeddings(hidden_states)
 
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
