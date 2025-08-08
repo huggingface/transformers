@@ -192,6 +192,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
     """
+
     is_sliding = True
 
     def __init__(self, sliding_window: int):
@@ -202,7 +203,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return self.sliding_window
-    
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -238,7 +239,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
         # Return the full states
         return full_key_states, full_value_states
-    
+
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
@@ -252,6 +253,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             kv_length = self.get_seq_length() + query_length
 
         return kv_length, kv_offset
+
 
 class StaticLayer(CacheLayerMixin):
     """
