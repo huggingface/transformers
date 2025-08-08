@@ -2184,7 +2184,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             assistant_model=None,
             batch_size=batch_size,
             max_cache_length=max_cache_length,
-            device=inputs_tensor.device,
         )
 
         # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
