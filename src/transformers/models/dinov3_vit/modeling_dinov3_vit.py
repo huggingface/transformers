@@ -24,7 +24,6 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -137,7 +136,7 @@ def get_patches_center_coordinates(num_patches_h: int, num_patches_w: int, dtype
 class DINOv3ViTRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
     patch_coords: torch.Tensor
-    
+
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
 
@@ -154,7 +153,6 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.register_buffer("patch_coords", patch_coords, persistent=False)
 
     def _augment_coords(self, coords: torch.Tensor) -> torch.Tensor:
-
         # Shift coords by adding a uniform value in [-shift, shift]
         if shift := self.config.pos_embed_rope_shift_coords is not None:
             shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
@@ -178,7 +176,6 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         return coords
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             patch_coords = self.patch_coords
@@ -187,28 +184,13 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
             angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2) 
+            angles = angles.flatten(1, 2)
             angles = angles.tile(2)
 
             cos = torch.cos(angles)
             sin = torch.sin(angles)
 
-        return (sin, cos)
-
-
-# RoPE-related functions:
-def rope_rotate_half(x: Tensor) -> Tensor:
-    # x:   [ x0  x1  x2  x3  x4  x5]
-    # out: [-x3 -x4 -x5  x0  x1  x2]
-    x1, x2 = x.chunk(2, dim=-1)
-    return torch.cat([-x2, x1], dim=-1)
-
-
-def rope_apply(x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
-    # x:   [..., D], eg [x0,     x1,   x2,   x3,   x4,   x5]
-    # sin: [..., D], eg [sin0, sin1, sin2, sin0, sin1, sin2]
-    # cos: [..., D], eg [cos0, cos1, cos2, cos0, cos1, cos2]
-    return (x * cos) + (rope_rotate_half(x) * sin)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Copied from transformers.models.vit.modeling_vit.eager_attention_forward
@@ -242,61 +224,43 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb(q: Tensor, k: Tensor, rope: Tensor | tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
-    # All operations will use the dtype of rope, the output is cast back to the dtype of q and k
-    q_dtype = q.dtype
-    k_dtype = k.dtype
-    sin, cos = rope
-    rope_dtype = sin.dtype
-    q = q.to(dtype=rope_dtype)
-    k = k.to(dtype=rope_dtype)
-    N = q.shape[-2]
-    prefix = N - sin.shape[-2]
-    assert prefix >= 0
-    q_prefix = q[:, :, :prefix, :]
-    q = rope_apply(q[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
-    q = torch.cat((q_prefix, q), dim=-2)  # [B, head, N, D//head]
-    k_prefix = k[:, :, :prefix, :]
-    k = rope_apply(k[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
-    k = torch.cat((k_prefix, k), dim=-2)  # [B, head, N, D//head]
-    q = q.to(dtype=q_dtype)
-    k = k.to(dtype=k_dtype)
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q: Tensor, k: Tensor, cos: Tensor, sin: Tensor) -> tuple[Tensor, Tensor]:
+    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
+    ignoring the prefix tokens (cls token and register tokens).
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+
+    num_tokens = q.shape[-2]
+    num_patches = sin.shape[-2]
+    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
+
+    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
+    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+
+    # apply rope only to patch tokens
+    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
+    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
+
+    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
+    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
     return q, k
-
-
-# # Copied from transformers.models.llama.modeling_llama.rotate_half
-# def rotate_half(x):
-#     """Rotates half the hidden dims of the input."""
-#     x1 = x[..., : x.shape[-1] // 2]
-#     x2 = x[..., x.shape[-1] // 2 :]
-#     return torch.cat((-x2, x1), dim=-1)
-
-
-# def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-#     """Applies Rotary Position Embedding to the query and key tensors.
-
-#     Args:
-#         q (`torch.Tensor`): The query tensor.
-#         k (`torch.Tensor`): The key tensor.
-#         cos (`torch.Tensor`): The cosine part of the rotary embedding.
-#         sin (`torch.Tensor`): The sine part of the rotary embedding.
-#         position_ids (`torch.Tensor`, *optional*):
-#             Deprecated and unused.
-#         unsqueeze_dim (`int`, *optional*, defaults to 1):
-#             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-#             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-#             that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-#             k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-#             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-#             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-#     Returns:
-#         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-#     """
-#     cos = cos.unsqueeze(unsqueeze_dim)
-#     sin = sin.unsqueeze(unsqueeze_dim)
-#     q_embed = (q * cos) + (rotate_half(q) * sin)
-#     k_embed = (k * cos) + (rotate_half(k) * sin)
-#     return q_embed, k_embed
 
 
 # Copied from transformers.models.pixtral.modeling_pixtral.PixtralAttention with Pixtral->DINOv3ViT
@@ -329,8 +293,7 @@ class DINOv3ViTAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -344,23 +307,12 @@ class DINOv3ViTAttention(nn.Module):
         key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # cos, sin = position_embeddings
-        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, position_embeddings)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        # Since we use packing, if flash_attention_2 is selected we rely on position_ids
-        if self.config._attn_implementation == "flash_attention_2":
-            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -376,8 +328,6 @@ class DINOv3ViTAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
         return attn_output, attn_weights
 
 

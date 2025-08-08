@@ -43,7 +43,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"mask_token":              r"embeddings.mask_token",
     r"storage_tokens":          r"embeddings.register_tokens",
     r"patch_embed.proj":        r"embeddings.patch_embeddings.projection",
-    r"periods":                 r"inv_freq", 
+    r"periods":                 r"inv_freq",
     r"rope_embed":              r"rope_embeddings",
     r"blocks.(\d+).attn.proj":  r"layer.\1.attention.o_proj",
     r"blocks.(\d+).attn.":      r"layer.\1.attention.",
@@ -371,7 +371,7 @@ def convert_and_test_dinov3_checkpoint(args):
     }
     model_name = args.model_name
     config = get_dinov3_config(model_name)
-    print(config)
+    # print(config)
 
     model = DINOv3ViTModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
