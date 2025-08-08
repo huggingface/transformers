@@ -22,9 +22,9 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Glm4v_moeVisionConfig(PretrainedConfig):
+class Glm4vMoeVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4v_moeVisionModel`]. It is used to instantiate an Glm4v_moeVisionModel
+    This is the configuration class to store the configuration of a [`Glm4vMoeVisionModel`]. It is used to instantiate an Glm4vMoeVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
     a similar configuration to that of
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
@@ -66,13 +66,13 @@ class Glm4v_moeVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Glm4v_moeVisionConfig, Glm4v_moeVisionModel
+    >>> from transformers import Glm4vMoeVisionConfig, Glm4vMoeVisionModel
 
-    >>> # Initializing a Glm4v_moeVisionConfig GLM-4.1V-9B style configuration
-    >>> configuration = Glm4v_moeVisionConfig()
+    >>> # Initializing a Glm4vMoeVisionConfig GLM-4.1V-9B style configuration
+    >>> configuration = Glm4vMoeVisionConfig()
 
     >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
-    >>> model = Glm4v_moeVisionModel(configuration)
+    >>> model = Glm4vMoeVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -119,9 +119,9 @@ class Glm4v_moeVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4v_moeTextConfig(PretrainedConfig):
+class Glm4vMoeTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4v_moeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [THUDM/GLM-4.5V](https://huggingface.co/THUDM/GLM-4.5V).
@@ -131,8 +131,8 @@ class Glm4v_moeTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151424):
-            Vocabulary size of the Glm4v_moe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4v_moeModel`]
+            Vocabulary size of the Glm4vMoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Glm4vMoeModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 10944):
@@ -210,21 +210,21 @@ class Glm4v_moeTextConfig(PretrainedConfig):
             Whether to use query-key normalization in the attention.
 
     ```python
-    >>> from transformers import Glm4v_moeTextModel, Glm4v_moeConfig
+    >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
     >>> # Initializing a GLM-4.5V style configuration
-    >>> configuration = Glm4v_moeConfig()
+    >>> configuration = Glm4vMoeConfig()
 
     >>> # Initializing a model from the GLM-4.5V style configuration
-    >>> model = Glm4v_moeTextModel(configuration)
+    >>> model = Glm4vMoeTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v_moe_text"
+    model_type = "Glm4vMoe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `Glm4v_moe`
+    # Default tensor parallel plan for base model `Glm4vMoe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -311,9 +311,9 @@ class Glm4v_moeTextConfig(PretrainedConfig):
         self.use_qk_norm = use_qk_norm
 
 
-class Glm4v_moeConfig(PretrainedConfig):
+class Glm4vMoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4v_moeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [zai_org/GLM-4.5V](https://huggingface.co/zai_org/GLM-4.5V).
@@ -323,9 +323,9 @@ class Glm4v_moeConfig(PretrainedConfig):
 
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4v_moeTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vMoeTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4v_moeVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vMoeVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151363):
             The image token index to encode the image prompt.
@@ -341,20 +341,20 @@ class Glm4v_moeConfig(PretrainedConfig):
             The video end token index to encode the end of video.
 
     ```python
-    >>> from transformers import Glm4v_moeForConditionalGeneration, Glm4v_moeConfig
+    >>> from transformers import Glm4vMoeForConditionalGeneration, Glm4vMoeConfig
 
     >>> # Initializing a GLM-4.5V style configuration
-    >>> configuration = Glm4v_moeConfig()
+    >>> configuration = Glm4vMoeConfig()
 
     >>> # Initializing a model from the GLM-4.5V style configuration
-    >>> model = Glm4v_moeForConditionalGeneration(configuration)
+    >>> model = Glm4vMoeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "glm4v_moe"
-    sub_configs = {"vision_config": Glm4v_moeVisionConfig, "text_config": Glm4v_moeTextConfig}
+    sub_configs = {"vision_config": Glm4vMoeVisionConfig, "text_config": Glm4vMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -389,4 +389,4 @@ class Glm4v_moeConfig(PretrainedConfig):
         self.image_end_token_id = image_end_token_id
 
 
-__all__ = ["Glm4v_moeConfig", "Glm4v_moeTextConfig"]
+__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig"]

@@ -40,17 +40,17 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
-from .configuration_glm4v_moe import Glm4v_moeConfig, Glm4v_moeTextConfig, Glm4v_moeVisionConfig
+from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Glm4v_moeRMSNorm(nn.Module):
+class Glm4vMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Glm4v_moeRMSNorm is equivalent to T5LayerNorm
+        Glm4vMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -68,10 +68,10 @@ class Glm4v_moeRMSNorm(nn.Module):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Glm4v_moeTextRMSNorm(nn.Module):
+class Glm4vMoeTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Glm4v_moeTextRMSNorm is equivalent to T5LayerNorm
+        Glm4vMoeTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -186,10 +186,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-class Glm4v_moeTextAttention(nn.Module):
+class Glm4vMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Glm4v_moeTextConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -212,8 +212,8 @@ class Glm4v_moeTextAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
-            self.q_norm = Glm4v_moeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Glm4v_moeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_norm = Glm4vMoeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Glm4vMoeTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -269,8 +269,8 @@ class Glm4v_moeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Glm4v_moeTextTopkRouter(nn.Module):
-    def __init__(self, config: Glm4v_moeTextConfig):
+class Glm4vMoeTextTopkRouter(nn.Module):
+    def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
@@ -316,22 +316,22 @@ class Glm4v_moeTextTopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-class Glm4v_moeTextMoE(nn.Module):
+class Glm4vMoeTextMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config: Glm4v_moeTextConfig):
+    def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__()
         self.config = config
         self.experts = nn.ModuleList(
             [
-                Glm4v_moeTextMLP(config, intermediate_size=config.moe_intermediate_size)
+                Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
-        self.gate = Glm4v_moeTextTopkRouter(config)
-        self.shared_experts = Glm4v_moeTextMLP(
+        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
@@ -371,7 +371,7 @@ class Glm4v_moeTextMoE(nn.Module):
         return hidden_states
 
 
-class Glm4v_moeTextMLP(nn.Module):
+class Glm4vMoeTextMLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -388,20 +388,20 @@ class Glm4v_moeTextMLP(nn.Module):
         return down_proj
 
 
-class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
+class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Glm4v_moeTextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = Glm4vMoeTextAttention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Glm4v_moeTextMoE(config)
+            self.mlp = Glm4vMoeTextMoE(config)
         else:
-            self.mlp = Glm4v_moeTextMLP(config)
+            self.mlp = Glm4vMoeTextMLP(config)
 
-        self.input_layernorm = Glm4v_moeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4v_moeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -437,7 +437,7 @@ class Glm4v_moeTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Glm4v_moeisionMlp(nn.Module):
+class Glm4vMoeisionMlp(nn.Module):
     def __init__(self, config, bias: bool = False):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -451,8 +451,8 @@ class Glm4v_moeisionMlp(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-class Glm4v_moeVisionPatchEmbed(nn.Module):
-    def __init__(self, config: Glm4v_moeVisionConfig) -> None:
+class Glm4vMoeVisionPatchEmbed(nn.Module):
+    def __init__(self, config: Glm4vMoeVisionConfig) -> None:
         super().__init__()
         self.patch_size = config.patch_size
         self.temporal_patch_size = config.temporal_patch_size
@@ -471,7 +471,7 @@ class Glm4v_moeVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Glm4v_moeVisionRotaryEmbedding(nn.Module):
+class Glm4vMoeVisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -483,7 +483,7 @@ class Glm4v_moeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
-class Glm4v_moeVisionPatchMerger(nn.Module):
+class Glm4vMoeVisionPatchMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
         super().__init__()
         self.proj = nn.Linear(dim, dim, bias=bias)
@@ -500,8 +500,8 @@ class Glm4v_moeVisionPatchMerger(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
-class Glm4v_moeVisionEmbeddings(nn.Module):
-    def __init__(self, config: Glm4v_moeVisionConfig):
+class Glm4vMoeVisionEmbeddings(nn.Module):
+    def __init__(self, config: Glm4vMoeVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -601,8 +601,8 @@ def apply_rotary_pos_emb_vision(
     return q_embed, k_embed
 
 
-class Glm4v_moeVisionAttention(nn.Module):
-    def __init__(self, config: Glm4v_moeVisionConfig) -> None:
+class Glm4vMoeVisionAttention(nn.Module):
+    def __init__(self, config: Glm4vMoeVisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -695,13 +695,13 @@ class Glm4v_moeVisionAttention(nn.Module):
         return attn_output
 
 
-class Glm4v_moeVisionBlock(GradientCheckpointingLayer):
+class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
-        self.norm1 = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.norm2 = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn = Glm4v_moeVisionAttention(config)
-        self.mlp = Glm4v_moeisionMlp(config, bias=False)
+        self.norm1 = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm2 = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attn = Glm4vMoeVisionAttention(config)
+        self.mlp = Glm4vMoeisionMlp(config, bias=False)
 
     def forward(
         self,
@@ -722,8 +722,8 @@ class Glm4v_moeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Glm4v_moeTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: Glm4v_moeTextConfig, device=None):
+class Glm4vMoeTextRotaryEmbedding(nn.Module):
+    def __init__(self, config: Glm4vMoeTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -743,7 +743,7 @@ class Glm4v_moeTextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, Glm4v_moeText has different position ids for the grids
+        # In contrast to other models, Glm4vMoeText has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
@@ -764,7 +764,7 @@ class Glm4v_moeTextRotaryEmbedding(nn.Module):
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
-class Glm4v_moeModelOutputWithPast(ModelOutput):
+class Glm4vMoeModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
@@ -784,11 +784,11 @@ class Glm4v_moeModelOutputWithPast(ModelOutput):
 
 
 @auto_docstring
-class Glm4v_moePreTrainedModel(PreTrainedModel):
-    config: Glm4v_moeConfig
+class Glm4vMoePreTrainedModel(PreTrainedModel):
+    config: Glm4vMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Glm4v_moeTextDecoderLayer", "Glm4v_moeVisionBlock"]
+    _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -796,39 +796,39 @@ class Glm4v_moePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Glm4v_moeTextDecoderLayer,
-        "attentions": Glm4v_moeTextAttention,
+        "hidden_states": Glm4vMoeTextDecoderLayer,
+        "attentions": Glm4vMoeTextAttention,
     }
 
 
-class Glm4v_moeVisionModel(Glm4v_moePreTrainedModel):
-    config: Glm4v_moeVisionConfig
-    _no_split_modules = ["Glm4v_moeVisionBlock"]
+class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
+    config: Glm4vMoeVisionConfig
+    _no_split_modules = ["Glm4vMoeVisionBlock"]
 
     def __init__(self, config) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
 
-        self.embeddings = Glm4v_moeVisionEmbeddings(config)
-        self.patch_embed = Glm4v_moeVisionPatchEmbed(config)
+        self.embeddings = Glm4vMoeVisionEmbeddings(config)
+        self.patch_embed = Glm4vMoeVisionPatchEmbed(config)
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Glm4v_moeVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Glm4vMoeVisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Glm4v_moeVisionBlock(config) for _ in range(config.depth)])
-        self.merger = Glm4v_moeVisionPatchMerger(
+        self.blocks = nn.ModuleList([Glm4vMoeVisionBlock(config) for _ in range(config.depth)])
+        self.merger = Glm4vMoeVisionPatchMerger(
             dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
         )
 
-        self.post_conv_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_conv_layernorm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.downsample = nn.Conv2d(
             in_channels=config.hidden_size,
             out_channels=config.out_hidden_size,
             kernel_size=config.spatial_merge_size,
             stride=config.spatial_merge_size,
         )
-        self.post_layernorm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_layernorm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         self.post_init()
@@ -912,20 +912,20 @@ class Glm4v_moeVisionModel(Glm4v_moePreTrainedModel):
 
 
 @auto_docstring
-class Glm4v_moeTextModel(Glm4v_moePreTrainedModel):
-    config: Glm4v_moeTextConfig
+class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
+    config: Glm4vMoeTextConfig
 
-    def __init__(self, config: Glm4v_moeTextConfig):
+    def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Glm4v_moeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Glm4v_moeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4v_moeTextRotaryEmbedding(config=config)
+        self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1001,16 +1001,16 @@ class Glm4v_moeTextModel(Glm4v_moePreTrainedModel):
 
 
 @auto_docstring
-class Glm4v_moeModel(Glm4v_moePreTrainedModel):
+class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {}
-    config: Glm4v_moeConfig
-    _no_split_modules = ["Glm4v_moeTextDecoderLayer", "Glm4v_moeVisionBlock"]
+    config: Glm4vMoeConfig
+    _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Glm4v_moeVisionModel._from_config(config.vision_config)
-        self.language_model = Glm4v_moeTextModel._from_config(config.text_config)
+        self.visual = Glm4vMoeVisionModel._from_config(config.vision_config)
+        self.language_model = Glm4vMoeTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1315,7 +1315,7 @@ class Glm4v_moeModel(Glm4v_moePreTrainedModel):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Glm4v_moeModelOutputWithPast]:
+    ) -> Union[tuple, Glm4vMoeModelOutputWithPast]:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -1398,7 +1398,7 @@ class Glm4v_moeModel(Glm4v_moePreTrainedModel):
             **kwargs,
         )
 
-        return Glm4v_moeModelOutputWithPast(
+        return Glm4vMoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -1410,10 +1410,10 @@ class Glm4v_moeModel(Glm4v_moePreTrainedModel):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for Glm4v_moe causal language model (or autoregressive) outputs.
+    Base class for Glm4vMoe causal language model (or autoregressive) outputs.
     """
 )
-class Glm4v_moeCausalLMOutputWithPast(ModelOutput):
+class Glm4vMoeCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -1437,13 +1437,13 @@ class Glm4v_moeCausalLMOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
-class Glm4v_moeForConditionalGeneration(Glm4v_moePreTrainedModel, GenerationMixin):
+class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Glm4v_moeModel(config)
+        self.model = Glm4vMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
@@ -1495,7 +1495,7 @@ class Glm4v_moeForConditionalGeneration(Glm4v_moePreTrainedModel, GenerationMixi
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Glm4v_moeCausalLMOutputWithPast]:
+    ) -> Union[tuple, Glm4vMoeCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1513,9 +1513,9 @@ class Glm4v_moeForConditionalGeneration(Glm4v_moePreTrainedModel, GenerationMixi
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, Glm4v_moeForConditionalGeneration
+        >>> from transformers import AutoProcessor, Glm4vMoeForConditionalGeneration
 
-        >>> model = Glm4v_moeForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
         >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
@@ -1562,7 +1562,7 @@ class Glm4v_moeForConditionalGeneration(Glm4v_moePreTrainedModel, GenerationMixi
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        return Glm4v_moeCausalLMOutputWithPast(
+        return Glm4vMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1761,4 +1761,4 @@ class Glm4v_moeForConditionalGeneration(Glm4v_moePreTrainedModel, GenerationMixi
         return input_ids, model_kwargs
 
 
-__all__ = ["Glm4v_moeForConditionalGeneration", "Glm4v_moeModel", "Glm4v_moePreTrainedModel", "Glm4v_moeTextModel"]
+__all__ = ["Glm4vMoeForConditionalGeneration", "Glm4vMoeModel", "Glm4vMoePreTrainedModel", "Glm4vMoeTextModel"]

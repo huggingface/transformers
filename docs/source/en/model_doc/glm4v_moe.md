@@ -21,11 +21,11 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
-# glm4v_moe
+# Glm4vMoe
 
 ## Overview
 
-The glm4v_moe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The Glm4vMoe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -40,25 +40,25 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## Glm4v_moeConfig
+## Glm4vMoeConfig
 
-[[autodoc]] Glm4v_moeConfig
+[[autodoc]] Glm4vMoeConfig
 
-## Glm4v_moeTextConfig
+## Glm4vMoeTextConfig
 
-[[autodoc]] Glm4v_moeTextConfig
+[[autodoc]] Glm4vMoeTextConfig
 
-## Glm4v_moeTextModel
+## Glm4vMoeTextModel
 
-[[autodoc]] Glm4v_moeTextModel
+[[autodoc]] Glm4vMoeTextModel
     - forward
 
-## Glm4v_moeModel
+## Glm4vMoeModel
 
-[[autodoc]] Glm4v_moeModel
+[[autodoc]] Glm4vMoeModel
     - forward
 
-## Glm4v_moeForConditionalGeneration
+## Glm4vMoeForConditionalGeneration
 
-[[autodoc]] Glm4v_moeForConditionalGeneration
+[[autodoc]] Glm4vMoeForConditionalGeneration
     - forward

@@ -19,9 +19,9 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    Glm4v_moeConfig,
-    Glm4v_moeForConditionalGeneration,
-    Glm4v_moeModel,
+    Glm4vMoeConfig,
+    Glm4vMoeForConditionalGeneration,
+    Glm4vMoeModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -45,7 +45,7 @@ if is_torch_available():
     import torch
 
 
-class Glm4v_moeVisionText2TextModelTester:
+class Glm4vMoeVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -124,7 +124,7 @@ class Glm4v_moeVisionText2TextModelTester:
         self.topk_group = text_config["topk_group"]
 
     def get_config(self):
-        return Glm4v_moeConfig(
+        return Glm4vMoeConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
@@ -177,8 +177,8 @@ class Glm4v_moeVisionText2TextModelTester:
 
 
 @require_torch
-class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Glm4v_moeModel, Glm4v_moeForConditionalGeneration) if is_torch_available() else ()
+class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
@@ -186,13 +186,13 @@ class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Glm4v_moeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Glm4v_moeConfig, has_text_modality=False)
+        self.model_tester = Glm4vMoeVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Glm4vMoeConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # GLM4V_MOE has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
+    # Glm4vMoe has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -241,10 +241,6 @@ class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Size mismatch")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
         pass
 
     @unittest.skip("GLM4's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
@@ -298,7 +294,7 @@ class Glm4v_moeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
 
 @require_torch
-class Glm4v_moeIntegrationTest(unittest.TestCase):
+class Glm4vMoeIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V")
         self.message = [
@@ -332,7 +328,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
         )
 
@@ -368,7 +364,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
         )
         batch_messages = [self.message] * 2
@@ -391,7 +387,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", max_image_size={"longest_edge": 50176})
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype=torch.float16, device_map="auto"
         )
         questions = ["Describe this video."] * 2
@@ -428,7 +424,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
         )
         inputs = self.processor.apply_chat_template(
@@ -448,7 +444,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
         )
         message_wo_image = [
@@ -478,7 +474,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
         )
         batched_messages = [self.message, self.message2]
@@ -507,7 +503,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
@@ -539,7 +535,7 @@ class Glm4v_moeIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = Glm4v_moeForConditionalGeneration.from_pretrained(
+        model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",

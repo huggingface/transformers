@@ -44,13 +44,13 @@ from ..glm4v.modeling_glm4v import (
 logger = logging.get_logger(__name__)
 
 
-class Glm4v_moeVisionConfig(Glm4vVisionConfig):
+class Glm4vMoeVisionConfig(Glm4vVisionConfig):
     pass
 
 
-class Glm4v_moeTextConfig(Glm4MoeConfig, nn.Module):
+class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4v_moeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [THUDM/GLM-4.5V](https://huggingface.co/THUDM/GLM-4.5V).
@@ -60,8 +60,8 @@ class Glm4v_moeTextConfig(Glm4MoeConfig, nn.Module):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151424):
-            Vocabulary size of the Glm4v_moe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4v_moeModel`]
+            Vocabulary size of the Glm4vMoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Glm4vMoeModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 10944):
@@ -139,22 +139,22 @@ class Glm4v_moeTextConfig(Glm4MoeConfig, nn.Module):
             Whether to use query-key normalization in the attention.
 
     ```python
-    >>> from transformers import Glm4v_moeTextModel, Glm4v_moeConfig
+    >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
 
     >>> # Initializing a GLM-4.5V style configuration
-    >>> configuration = Glm4v_moeConfig()
+    >>> configuration = Glm4vMoeConfig()
 
     >>> # Initializing a model from the GLM-4.5V style configuration
-    >>> model = Glm4v_moeTextModel(configuration)
+    >>> model = Glm4vMoeTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v_moe_text"
+    model_type = "Glm4vMoe_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `Glm4v_moe`
+    # Default tensor parallel plan for base model `Glm4vMoe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -240,9 +240,9 @@ class Glm4v_moeTextConfig(Glm4MoeConfig, nn.Module):
         self.use_qk_norm = use_qk_norm
 
 
-class Glm4v_moeConfig(Glm4vConfig):
+class Glm4vMoeConfig(Glm4vConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4v_moeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [zai_org/GLM-4.5V](https://huggingface.co/zai_org/GLM-4.5V).
@@ -252,9 +252,9 @@ class Glm4v_moeConfig(Glm4vConfig):
 
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4v_moeTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vMoeTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4v_moeVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vMoeVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151363):
             The image token index to encode the image prompt.
@@ -270,13 +270,13 @@ class Glm4v_moeConfig(Glm4vConfig):
             The video end token index to encode the end of video.
 
     ```python
-    >>> from transformers import Glm4v_moeForConditionalGeneration, Glm4v_moeConfig
+    >>> from transformers import Glm4vMoeForConditionalGeneration, Glm4vMoeConfig
 
     >>> # Initializing a GLM-4.5V style configuration
-    >>> configuration = Glm4v_moeConfig()
+    >>> configuration = Glm4vMoeConfig()
 
     >>> # Initializing a model from the GLM-4.5V style configuration
-    >>> model = Glm4v_moeForConditionalGeneration(configuration)
+    >>> model = Glm4vMoeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -297,7 +297,7 @@ class Glm4v_moeConfig(Glm4vConfig):
         super().__init__()
 
 
-class Glm4v_moeRMSNorm(Glm4MoeRMSNorm):
+class Glm4vMoeRMSNorm(Glm4MoeRMSNorm):
     pass
 
 
@@ -354,8 +354,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-class Glm4v_moeTextAttention(Glm4MoeAttention):
-    def __init__(self, config: Glm4v_moeTextConfig, layer_idx: Optional[int] = None):
+class Glm4vMoeTextAttention(Glm4MoeAttention):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
 
     def forward(
@@ -412,45 +412,45 @@ class Glm4v_moeTextAttention(Glm4MoeAttention):
         return attn_output, attn_weights
 
 
-class Glm4v_moeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
-    def __init__(self, config: Glm4v_moeTextConfig):
+class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
+    def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
 
 
-class Glm4v_moeTextMoE(Glm4MoeMoE):
-    def __init__(self, config: Glm4v_moeTextConfig):
+class Glm4vMoeTextMoE(Glm4MoeMoE):
+    def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
         self.experts = nn.ModuleList(
             [
-                Glm4v_moeTextMLP(config, intermediate_size=config.moe_intermediate_size)
+                Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
-        self.gate = Glm4v_moeTextTopkRouter(config)
-        self.shared_experts = Glm4v_moeTextMLP(
+        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
 
-class Glm4v_moeTextMLP(Glm4MoeMLP):
+class Glm4vMoeTextMLP(Glm4MoeMLP):
     pass
 
 
-class Glm4v_moeTextDecoderLayer(Glm4MoeDecoderLayer):
-    def __init__(self, config: Glm4v_moeTextConfig, layer_idx: int):
+class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
 
-class Glm4v_moeForConditionalGeneration(Glm4vForConditionalGeneration):
+class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
 __all__ = [
-    "Glm4v_moeConfig",
-    "Glm4v_moeTextConfig",
-    "Glm4v_moeForConditionalGeneration",
-    "Glm4v_moeModel",  # noqa: F822
-    "Glm4v_moePreTrainedModel",  # noqa: F822
-    "Glm4v_moeTextModel",  # noqa: F822
+    "Glm4vMoeConfig",
+    "Glm4vMoeTextConfig",
+    "Glm4vMoeForConditionalGeneration",
+    "Glm4vMoeModel",  # noqa: F822
+    "Glm4vMoePreTrainedModel",  # noqa: F822
+    "Glm4vMoeTextModel",  # noqa: F822
 ]
