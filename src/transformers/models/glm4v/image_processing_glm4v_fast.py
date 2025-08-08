@@ -89,44 +89,25 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
-        size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        size = self.size if size is None else size
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-            size.pop("min_pixels", None)
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-            size.pop("max_pixels", None)
-        if "shortest_edge" not in size or "longest_edge" not in size:
+        super().__init__(**kwargs)
+        if self.size is not None and (
+            getattr(self.size, "shortest_edge", None) is None or getattr(self.size, "longest_edge", None) is None
+        ):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
     def _further_process_kwargs(
         self,
         size: Optional[SizeDict] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         **kwargs,
     ) -> dict:
         """
         Update kwargs that need further processing before being validated
         Can be overridden by subclasses to customize the processing of kwargs.
         """
-        if min_pixels is not None and max_pixels is not None:
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        elif size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-            max_pixels = size["longest_edge"]
-        else:
-            size = {**self.size}
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def _preprocess(
         self,
