@@ -341,7 +341,7 @@ class DINOv3ViTLayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
+# Copied from transformers.models.dinov2.modeling_dinov2.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -362,6 +362,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2DropPath with Dinov2->DINOv3ViT
 class DINOv3ViTDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -375,46 +376,36 @@ class DINOv3ViTDropPath(nn.Module):
     def extra_repr(self) -> str:
         return f"p={self.drop_prob}"
 
-
+# Copied from transformers.models.arcee.modeling_arcee.ArceeMLP with Arcee->DINOv3ViT
 class DINOv3ViTMLP(nn.Module):
-    def __init__(self, config: DINOv3ViTConfig) -> None:
+    def __init__(self, config):
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 class DINOv3ViTSwiGLUFFN(nn.Module):
-    def __init__(
-        self,
-        config,
-        device=None,
-    ) -> None:
+    def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        d = int(hidden_features * 2 / 3)
-        swiglu_hidden_features = d + (-d % config.swiglu_align_to)
-        self.w1 = nn.Linear(in_features, swiglu_hidden_features, bias=True, device=device)
-        self.w2 = nn.Linear(in_features, swiglu_hidden_features, bias=True, device=device)
-        self.w3 = nn.Linear(swiglu_hidden_features, out_features, bias=True, device=device)
+        self.in_features = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.out_features = config.hidden_size
+        self.w1 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
+        self.w2 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
+        self.w3 = nn.Linear(self.intermediate_size, self.out_features, bias=config.mlp_bias)
 
-    def forward(self, x: Tensor) -> Tensor:
-        x1 = self.w1(x)
-        x2 = self.w2(x)
-        hidden = nn.functional.silu(x1) * x2
-        return self.w3(hidden)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        x1 = self.w1(hidden_state)
+        x2 = self.w2(hidden_state)
+        hidden_state = nn.functional.silu(x1) * x2
+        return self.w3(hidden_state)
 
 
 class DINOv3ViTLayer(GradientCheckpointingLayer):

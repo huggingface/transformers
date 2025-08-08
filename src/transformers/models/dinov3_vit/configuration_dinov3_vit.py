@@ -104,10 +104,10 @@ class DINOv3ViTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
+        hidden_size=384,
+        intermediate_size=1536,
         num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
+        num_attention_heads=6,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -120,6 +120,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         key_bias=False,
         value_bias=True,
         output_bias=True,
+        mlp_bias=True,
         qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
@@ -131,7 +132,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         reshape_hidden_states=True,
         proj_bias: bool = True,
         num_register_tokens: int = 0,
-        mask_k_bias: bool = False,
         pos_embed_rope_base=100.0,
         pos_embed_rope_shift_coords=None,
         pos_embed_rope_jitter_coords=None,
@@ -144,9 +144,9 @@ class DINOv3ViTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -160,6 +160,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.key_bias = key_bias
         self.value_bias = value_bias
         self.output_bias = output_bias
+        self.mlp_bias = mlp_bias
 
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
@@ -176,7 +177,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
         self.num_register_tokens = num_register_tokens
         self.proj_bias = proj_bias
-        self.mask_k_bias = mask_k_bias
         self.pos_embed_rope_base = pos_embed_rope_base
         self.pos_embed_rope_shift_coords = pos_embed_rope_shift_coords
         self.pos_embed_rope_jitter_coords = pos_embed_rope_jitter_coords
