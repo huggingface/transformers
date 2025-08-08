@@ -17,16 +17,15 @@ import math
 from typing import Any, Optional, Union
 
 import numpy as np
-import PIL
-import PIL.Image
-import PIL.ImageSequence
 import torch
 from PIL import Image
 
-from transformers import AutoImageProcessor
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
-from transformers.image_transforms import to_channel_dimension_format
-from transformers.image_utils import (
+from transformers.utils import TensorType, is_torch_device, is_torch_dtype, requires_backends
+
+from ... import AutoImageProcessor
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import to_channel_dimension_format
+from ...image_utils import (
     ChannelDimension,
     infer_channel_dimension_format,
     is_torch_tensor,
@@ -34,7 +33,6 @@ from transformers.image_utils import (
     to_numpy_array,
     valid_images,
 )
-from transformers.utils import TensorType, is_torch_device, is_torch_dtype, requires_backends
 
 
 def recursive_converter(converter, value):
@@ -318,7 +316,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             final_placeholder = final_placeholder + self.get_grid_placeholder(grid=grid)
         return final_placeholder
 
-    def to_pil_image(self, image, rescale=None) -> PIL.Image.Image:
+    def to_pil_image(self, image, rescale=None) -> Image.Image:
         """
         Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
         needed.
@@ -330,7 +328,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                 Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
                 default to `True` if the image type is a floating type, `False` otherwise.
         """
-        if isinstance(image, PIL.Image.Image):
+        if isinstance(image, Image.Image):
             return image
         if is_torch_tensor(image):
             image = image.numpy()
@@ -345,7 +343,7 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             if rescale:
                 image = image * 255
             image = image.astype(np.uint8)
-            return PIL.Image.fromarray(image)
+            return Image.fromarray(image)
         return image
 
     def reshape_by_patch(self, image):
