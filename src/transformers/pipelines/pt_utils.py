@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
+from ..cache_utils import Cache
 from ..utils.generic import ModelOutput
 
 
@@ -92,6 +93,9 @@ class PipelineIterator(IterableDataset):
                         loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
+                    continue
+                if isinstance(element, Cache):
+                    loader_batched[k] = element.batch_select_indices(self._loader_batch_index)
                     continue
                 if element is None:
                     # This can happen for optional data that get passed around

@@ -1348,6 +1348,8 @@ class DynamicCache(Cache):
         backward compatibility.
         """
         cache = cls()
+        if past_key_values is None:
+            raise ValueError("from_legacy_cache expects a non-None past_key_values")
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
@@ -1730,15 +1732,15 @@ class EncoderDecoderCache(Cache):
     # Override @property from Cache
     is_compileable = None
 
-    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
+    def __init__(self, self_attention_cache: Cache = None, cross_attention_cache: Cache = None):
         super().__init__(layer_classes=DynamicLayer)
-        self.self_attention_cache = self_attention_cache
-        self.cross_attention_cache = cross_attention_cache
+        self.self_attention_cache = self_attention_cache if self_attention_cache is not None else DynamicCache()
+        self.cross_attention_cache = cross_attention_cache if cross_attention_cache is not None else DynamicCache()
         self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
-        for layer_idx in range(len(cross_attention_cache)):
-            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+        for layer_idx in range(len(self.cross_attention_cache)):
+            self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
 
     def __iter__(self):
         """
