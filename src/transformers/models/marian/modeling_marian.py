@@ -978,7 +978,7 @@ class MarianDecoder(MarianPreTrainedModel):
                 use_cache = False
 
         # retrieve input_ids and inputs_embeds
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if (input_ids is not None) and (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             input = input_ids
