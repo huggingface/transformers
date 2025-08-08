@@ -48,7 +48,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     def and_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_ones((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result & mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result & mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return and_mask
@@ -62,7 +62,7 @@ def or_masks(*mask_functions: list[Callable]) -> Callable:
     def or_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_zeros((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result | mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result | mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return or_mask
