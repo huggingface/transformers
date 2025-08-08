@@ -70,7 +70,7 @@ class FuyuModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        pad_token_id=0,
+        pad_token_id=10,
         image_token_id=1,
         scope=None,
     ):
