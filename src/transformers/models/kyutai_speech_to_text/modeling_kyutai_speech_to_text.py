@@ -1228,6 +1228,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
             self.codec_model, "_supports_default_dynamic_cache", types.MethodType(lambda x: True, self.codec_model)
         )
 
+        self.codec_model.generation_config.cache_implementation = "dynamic"
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
