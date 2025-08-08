@@ -127,13 +127,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.use_image_id = kwargs.pop("use_image_id", False)
         self.image_feature_size = kwargs.pop("image_feature_size", 64)
-        self.im_start_token = kwargs.pop("im_start", "<image>")
-        self.im_end_token = kwargs.pop("im_end", "</image>")
-        self.slice_start_token = kwargs.pop("slice_start", "<slice>")
-        self.slice_end_token = kwargs.pop("slice_end", "</slice>")
-        self.unk_token = kwargs.pop("unk", "<unk>")
-        self.im_id_start = kwargs.pop("im_id_start", "<image_id>")
-        self.im_id_end = kwargs.pop("im_id_end", "</image_id>")
         self.slice_mode = kwargs.pop("slice_mode", True)
         self.mean = np.array(kwargs.pop("norm_mean", [0.5, 0.5, 0.5]))
         self.std = np.array(kwargs.pop("norm_std", [0.5, 0.5, 0.5]))
@@ -219,30 +212,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
         return source_image, patches, best_grid
 
-    def get_grid_placeholder(self, grid):
-        if grid is None:
-            return ""
-        slice_image_placeholder = (
-            self.slice_start_token
-            + self.unk_token * self.image_feature_size
-            + self.slice_end_token
-        )
-
-        cols = grid[0]
-        rows = grid[1]
-        slices = []
-        for i in range(rows):
-            lines = []
-            for j in range(cols):
-                lines.append(slice_image_placeholder)
-            slices.append("".join(lines))
-
-        slice_placeholder = "\n".join(slices)
-        return slice_placeholder
-
-    def get_image_id_placeholder(self, idx=0):
-        return f"{self.im_id_start}{idx}{self.im_id_end}"
-
     def get_sliced_images(self, image, max_slice_nums=None):
         slice_images = []
 
@@ -295,26 +264,6 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                 min_error = error
 
         return best_grid
-
-    def get_slice_image_placeholder(self, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
-        max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
-        assert max_slice_nums > 0
-        grid = self.get_sliced_grid(image_size=image_size, max_slice_nums=max_slice_nums)
-
-        image_placeholder = (
-            self.im_start_token
-            + self.unk_token * self.image_feature_size
-            + self.im_end_token
-        )
-        use_image_id = self.use_image_id if use_image_id is None else bool(use_image_id)
-        if use_image_id:
-            final_placeholder = self.get_image_id_placeholder(image_idx) + image_placeholder
-        else:
-            final_placeholder = image_placeholder
-
-        if self.slice_mode:
-            final_placeholder = final_placeholder + self.get_grid_placeholder(grid=grid)
-        return final_placeholder
 
     def to_pil_image(self, image, rescale=None) -> Image.Image:
         """

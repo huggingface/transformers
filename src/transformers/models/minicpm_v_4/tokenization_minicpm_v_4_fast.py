@@ -31,6 +31,7 @@ class MiniCPM_V_4TokenizerFast(LlamaTokenizerFast):
         self.slice_end = "</slice>"
         self.im_id_start = "<image_id>"
         self.im_id_end = "</image_id>"
+        self.unk = "<unk>"
 
     @property
     def eos_id(self):

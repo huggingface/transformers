@@ -106,6 +106,50 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         result = result[result != 0]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
 
+    def get_grid_placeholder(self, grid):
+        if grid is None:
+            return ""
+        slice_image_placeholder = (
+            self.tokenizer.slice_start
+            + self.tokenizer.unk * self.image_processor.image_feature_size
+            + self.tokenizer.slice_end
+        )
+
+        cols = grid[0]
+        rows = grid[1]
+        slices = []
+        for i in range(rows):
+            lines = []
+            for j in range(cols):
+                lines.append(slice_image_placeholder)
+            slices.append("".join(lines))
+
+        slice_placeholder = "\n".join(slices)
+        return slice_placeholder
+
+    def get_image_id_placeholder(self, idx=0):
+        return f"{self.tokenizer.im_id_start}{idx}{self.tokenizer.im_id_end}"
+
+    def get_slice_image_placeholder(self, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
+        max_slice_nums = self.image_processor.max_slice_nums if max_slice_nums is None else int(max_slice_nums)
+        assert max_slice_nums > 0
+        grid = self.image_processor.get_sliced_grid(image_size=image_size, max_slice_nums=max_slice_nums)
+
+        image_placeholder = (
+            self.tokenizer.im_start
+            + self.tokenizer.unk * self.image_processor.image_feature_size
+            + self.tokenizer.im_end
+        )
+        use_image_id = self.image_processor.use_image_id if use_image_id is None else bool(use_image_id)
+        if use_image_id:
+            final_placeholder = self.get_image_id_placeholder(image_idx) + image_placeholder
+        else:
+            final_placeholder = image_placeholder
+
+        if self.image_processor.slice_mode:
+            final_placeholder = final_placeholder + self.get_grid_placeholder(grid=grid)
+        return final_placeholder
+
     def _convert(
         self, input_str, max_inp_length: Optional[int] = None
     ):
@@ -160,7 +204,7 @@ class MiniCPM_V_4Processor(ProcessorMixin):
             final_text = ""
             for i in range(len(image_tags)):
                 final_text = final_text + text_chunks[i] + \
-                    self.image_processor.get_slice_image_placeholder(
+                    self.get_slice_image_placeholder(
                         image_sizes[index][i],
                         i,
                         max_slice_nums,
