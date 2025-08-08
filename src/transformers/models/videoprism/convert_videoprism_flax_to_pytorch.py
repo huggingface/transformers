@@ -27,7 +27,7 @@ import torch
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
 
-from transformers import VideoPrismConfig,
+from transformers import VideoPrismConfig
 from transformers.image_utils import PILImageResampling
 
 

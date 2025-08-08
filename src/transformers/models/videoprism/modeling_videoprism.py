@@ -410,6 +410,7 @@ class VideoPrismLayer(GradientCheckpointingLayer):
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.attention = VideoPrismAttention(config)
         self.intermediate = VideoPrismIntermediate(config)
         self.output = VideoPrismOutput(config)
@@ -418,8 +419,12 @@ class VideoPrismLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         with torch.no_grad():
-            self.layernorm_before.weight += nn.Parameter(torch.ones(768))
-            self.layernorm_after.weight += nn.Parameter(torch.ones(768))
+            self.layernorm_before.weight += nn.Parameter(
+                torch.ones(self.config.hidden_size)
+            )  # ? part of the original implementation, not sure why, could be an erorr, but is necessay for matching the logits
+            self.layernorm_after.weight += nn.Parameter(
+                torch.ones(self.config.hidden_size)
+            )  # ? part of the original implementation, not sure why, could be an erorr, but is necessay for matching the logits
         self_attention_outputs = self.attention(
             # in VideoPrism, layernorm is applied before self-attention
             self.layernorm_before(hidden_states),
@@ -610,7 +615,7 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
 
         with torch.no_grad():
             self.layernorm1.weight += nn.Parameter(
-                torch.ones(768)
+                torch.ones(self.config.hidden_size)
             )  #! part of the original implementation, not sure why, could an erorr, but is necessay for matching the logits
         features = self.layernorm1(spatial_sequence_output)  # ? shape (B * T, 256, 768)
 
@@ -629,7 +634,7 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
         temporal_sequence_output = temporal_encoder_outputs[0]
 
         with torch.no_grad():
-            self.layernorm2.weight += nn.Parameter(torch.ones(768))
+            self.layernorm2.weight += nn.Parameter(torch.ones(self.config.hidden_size))
 
         features = self.layernorm2(temporal_sequence_output)  # ? shape is (256, 16, 768)
 
