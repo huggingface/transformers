@@ -47,7 +47,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
 ```
 
 </hfoption>
@@ -81,6 +81,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 ```
 
 </hfoption>
+</hfoptions>
 
 ## Notes
 
