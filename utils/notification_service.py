@@ -80,6 +80,9 @@ def handle_test_results(test_results):
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
+
+    print(expressions)
+
     time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
 
     for i, expression in enumerate(expressions):
@@ -194,6 +197,9 @@ class Message:
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
         time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
+
+        print(time_spent)
+
         total_secs = 0
 
         for time in time_spent:
@@ -1221,7 +1227,11 @@ if __name__ == "__main__":
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
                 matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
+
                 failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
+                print(matrix_name)
+                print(time_spent)
+
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
@@ -1356,6 +1366,8 @@ if __name__ == "__main__":
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
+            print(time_spent)
+
             additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
