@@ -118,10 +118,9 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["pixel_values"].ndim, 5)
 
 
-
 @require_vision
 @require_read_token
-@unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
+# @unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorSingleTileVanillaImageTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
@@ -129,9 +128,7 @@ class PerceptionLMProcessorSingleTileVanillaImageTest(ProcessorTesterMixin, unit
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = PerceptionLMImageProcessorFast(
-            tile_size=448, max_num_tiles=1, vision_input_type="vanilla"
-        )
+        image_processor = PerceptionLMImageProcessorFast(tile_size=448, max_num_tiles=1, vision_input_type="vanilla")
         video_processor = PerceptionLMVideoProcessor()
         tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
@@ -160,7 +157,6 @@ class PerceptionLMProcessorSingleTileVanillaImageTest(ProcessorTesterMixin, unit
             "patch_size": 14,
             "pooling_ratio": 2,
         }  # fmt: skip
-      
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
