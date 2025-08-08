@@ -69,7 +69,6 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertEqual(obj[key], value)
                 self.assertEqual(getattr(processor, key, None), value)
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
     def test_chat_template_is_saved(self):
         processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
         processor_dict_loaded = json.loads(processor_loaded.to_json_string())
