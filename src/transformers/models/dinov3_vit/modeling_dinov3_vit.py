@@ -109,24 +109,17 @@ class DINOv3ViTEmbeddings(nn.Module):
 
 
 class DINOv3ViTRopePositionEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: DINOv3ViTConfig,
-    ):
+    inv_freq: torch.Tensor
+    
+    def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
         assert config.hidden_size % (4 * config.num_attention_heads) == 0
-        both_periods = config.pos_embed_rope_min_period is not None and config.pos_embed_rope_max_period is not None
-        if (config.pos_embed_rope_base is None and not both_periods) or (
-            config.pos_embed_rope_base is not None and both_periods
-        ):
-            raise ValueError("Either `base` or `min_period`+`max_period` must be provided.")
 
-        D_head = config.hidden_size // config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.base = config.pos_embed_rope_base
-        self.min_period = config.pos_embed_rope_min_period
-        self.max_period = config.pos_embed_rope_max_period
-        self.D_head = D_head
-        self.normalize_coords = config.pos_embed_rope_normalize_coords
+        self.head_dim = head_dim
+        
+        # augmentations
         self.shift_coords = config.pos_embed_rope_shift_coords
         self.jitter_coords = config.pos_embed_rope_jitter_coords
         self.rescale_coords = config.pos_embed_rope_rescale_coords
@@ -134,13 +127,13 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         # Needs persistent=True because we do teacher.load_state_dict(student.state_dict()) to initialize the teacher
         self.dtype = dtype_dict[config.pos_embed_rope_dtype]  # Don't rely on self.periods.dtype
         self.register_buffer(
-            "periods",
-            torch.empty(D_head // 4, device=config.device, dtype=self.dtype),
+            "inv_freq",
+            torch.empty(head_dim // 4, device=config.device, dtype=self.dtype),
             persistent=True,
         )
 
     def forward(self, *, H: int, W: int) -> tuple[Tensor, Tensor]:
-        device = self.periods.device
+        device = self.inv_freq.device
         dtype = self.dtype
         dd = {"device": device, "dtype": dtype}
         coords_h = torch.arange(0.5, H, **dd) / H  # [H]
@@ -169,7 +162,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
             coords *= rescale_hw
 
         # Prepare angles and sin/cos
-        angles = 2 * math.pi * coords[:, :, None] / self.periods[None, None, :]  # [HW, 2, D//4]
+        angles = 2 * math.pi * coords[:, :, None] / self.inv_freq[None, None, :]  # [HW, 2, D//4]
         angles = angles.flatten(1, 2)  # [HW, D//2]
         angles = angles.tile(2)  # [HW, D]
         cos = torch.cos(angles)  # [HW, D]
@@ -546,19 +539,12 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
         elif isinstance(module, DINOv3ViTRopePositionEmbedding):
-            device = module.periods.device
+            device = module.inv_freq.device
             dtype = module.dtype
-            if module.base is not None:
-                periods = module.base ** (
-                    2 * torch.arange(module.D_head // 4, device=device, dtype=dtype) / (module.D_head // 2)
-                )  # [D//4]
-            else:
-                base = module.max_period / module.min_period
-                exponents = torch.linspace(0, 1, module.D_head // 4, device=device, dtype=dtype)  # [D//4] range [0, 1]
-                periods = base**exponents  # range [1, max_period / min_period]
-                periods = periods / base  # range [min_period / max_period, 1]
-                periods = periods * module.max_period  # range [min_period, max_period]
-            module.periods.data = periods
+            periods = module.base ** (
+                2 * torch.arange(module.head_dim // 4, device=device, dtype=dtype) / (module.head_dim // 2)
+            )  # [D//4]
+            module.inv_freq.data = periods
         elif isinstance(module, DINOv3ViTLayerScale):
             module.gamma.data.fill_(self.config.layerscale_value)
 
