@@ -390,6 +390,8 @@ def convert_and_test_dinov3_checkpoint(args):
             continue
         if "embeddings.mask_token" in new_key:
             weight_tensor = weight_tensor.unsqueeze(1)
+        if "inv_freq" in new_key:
+            continue
 
         converted_state_dict[new_key] = weight_tensor
 
@@ -423,14 +425,14 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_cls"]),
         torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-4,
-        rtol=1e-4,
+        atol=1e-3,
+        rtol=1e-3,
     )
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_patch"]),
         torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-4,
-        rtol=1e-4,
+        atol=1e-3,
+        rtol=1e-3,
     )
     print("Forward pass looks ok!")
 

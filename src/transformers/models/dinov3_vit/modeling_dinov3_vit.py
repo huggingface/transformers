@@ -117,19 +117,9 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.pos_embed_rope_base
         self.head_dim = config.hidden_size // config.num_attention_heads
-        
-        # augmentations
-        self.shift_coords = config.pos_embed_rope_shift_coords
-        self.jitter_coords = config.pos_embed_rope_jitter_coords
-        self.rescale_coords = config.pos_embed_rope_rescale_coords
 
-        # Needs persistent=True because we do teacher.load_state_dict(student.state_dict()) to initialize the teacher
-        self.dtype = dtype_dict[config.pos_embed_rope_dtype]  # Don't rely on self.periods.dtype
-        self.register_buffer(
-            "inv_freq",
-            torch.empty(self.head_dim // 4, device=config.device, dtype=self.dtype),
-            persistent=True,
-        )
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def augment_coords_(self, coords: torch.Tensor) -> torch.Tensor:
 
@@ -157,7 +147,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
 
     def forward(self, *, H: int, W: int) -> tuple[Tensor, Tensor]:
         device = self.inv_freq.device
-        dtype = self.dtype
+        dtype = torch.float32
         dd = {"device": device, "dtype": dtype}
         coords_h = torch.arange(0.5, H, **dd) / H  # [H]
         coords_w = torch.arange(0.5, W, **dd) / W  # [W]
@@ -169,7 +159,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
             coords = self.augment_coords_(coords)
 
         # Prepare angles and sin/cos
-        angles = 2 * math.pi * coords[:, :, None] / self.inv_freq[None, None, :]  # [HW, 2, D//4]
+        angles = 2 * math.pi * coords[:, :, None] * self.inv_freq[None, None, :]  # [HW, 2, D//4]
         angles = angles.flatten(1, 2)  # [HW, D//2]
         angles = angles.tile(2)  # [HW, D]
         cos = torch.cos(angles)  # [HW, D]
@@ -545,13 +535,6 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
-            device = module.inv_freq.device
-            dtype = module.dtype
-            periods = module.base ** (
-                2 * torch.arange(module.head_dim // 4, device=device, dtype=dtype) / (module.head_dim // 2)
-            )  # [D//4]
-            module.inv_freq.data = periods
         elif isinstance(module, DINOv3ViTLayerScale):
             module.gamma.data.fill_(self.config.layerscale_value)
 
@@ -591,14 +574,14 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
 
         num_patches_height = self.config.image_size // self.config.patch_size
         num_patches_width = self.config.image_size // self.config.patch_size
-        rope_sincos = self.rope_embeddings(H=num_patches_height, W=num_patches_width)
+        position_embeddings = self.rope_embeddings(H=num_patches_height, W=num_patches_width)
 
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             layer_outputs = layer_module(
                 hidden_states,
-                layer_head_mask,
-                position_embeddings=rope_sincos,
+                head_mask=layer_head_mask,
+                position_embeddings=position_embeddings,
             )
             hidden_states = layer_outputs[0]
 
