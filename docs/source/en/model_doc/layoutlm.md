@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,51 +15,120 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2019-12-31 and added to Hugging Face Transformers on 2020-11-16.*
 
-# LayoutLM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    </div>
 </div>
 
-<a id='Overview'></a>
 
-## Overview
 
-The LayoutLM model was proposed in the paper [LayoutLM: Pre-training of Text and Layout for Document Image
-Understanding](https://huggingface.co/papers/1912.13318) by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, and
-Ming Zhou. It's a simple but effective pretraining method of text and layout for document image understanding and
-information extraction tasks, such as form understanding and receipt understanding. It obtains state-of-the-art results
-on several downstream tasks:
+# LayoutLM
 
-- form understanding: the [FUNSD](https://guillaumejaume.github.io/FUNSD/) dataset (a collection of 199 annotated
-  forms comprising more than 30,000 words).
-- receipt understanding: the [SROIE](https://rrc.cvc.uab.es/?ch=13) dataset (a collection of 626 receipts for
-  training and 347 receipts for testing).
-- document image classification: the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset (a collection of
-  400,000 images belonging to one of 16 classes).
+[LayoutLM](https://huggingface.co/papers/1912.13318) is a model that basically reads documents the same way we would do — not just by looking at the text alone, but by paying attention to where it is on the page and layout. 
 
-The abstract from the paper is the following:
+E.g., if you're looking at a receipt, you know the price is next to the "Total" label because of its position. LayoutLM learns this exact kind of spatial relationship. It takes a standard model like [BERT](https://huggingface.co/docs/transformers/v4.53.3/en/model_doc/bert) for text embedding, but adds two more things: it feeds the model not just the text, but also 1. the location of every single word in the document (2-D position embedding via bounding boxes for each word) and 2. the whole document as an image (image embedding of scanned document images). 
 
-*Pre-training techniques have been verified successfully in a variety of NLP tasks in recent years. Despite the
-widespread use of pretraining models for NLP applications, they almost exclusively focus on text-level manipulation,
-while neglecting layout and style information that is vital for document image understanding. In this paper, we propose
-the LayoutLM to jointly model interactions between text and layout information across scanned document images, which is
-beneficial for a great number of real-world document image understanding tasks such as information extraction from
-scanned documents. Furthermore, we also leverage image features to incorporate words' visual information into LayoutLM.
-To the best of our knowledge, this is the first time that text and layout are jointly learned in a single framework for
-document-level pretraining. It achieves new state-of-the-art results in several downstream tasks, including form
-understanding (from 70.72 to 79.27), receipt understanding (from 94.02 to 95.24) and document image classification
-(from 93.07 to 94.42).*
+It's also pre-trained using two unique approaches:
 
-## Usage tips
+- **Masked Visual-Language Model (MVLM)**: It's like a fill-in-the-blanks test. The model sees a document with some words blacked out, and it has to guess what's missing by looking at the other words and their positions on the page.
 
-- In addition to *input_ids*, [`~transformers.LayoutLMModel.forward`] also expects the input `bbox`, which are
-  the bounding boxes (i.e. 2D-positions) of the input tokens. These can be obtained using an external OCR engine such
-  as Google's [Tesseract](https://github.com/tesseract-ocr/tesseract) (there's a [Python wrapper](https://pypi.org/project/pytesseract/) available). Each bounding box should be in (x0, y0, x1, y1) format, where
-  (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1) represents the
-  position of the lower right corner. Note that one first needs to normalize the bounding boxes to be on a 0-1000
-  scale. To normalize, you can use the following function:
+- **Multi-label Document Classification (MDC)**: It also learns to categorize entire documents (like "this is a tax form" or "this is a resume"). This helps it get a better overall understanding of the document's structure and purpose.
+
+So, in a nutshell, it's a model that understands both the words and the layout, making it a great tool for reading and understanding documents.
+
+You can find all the original LayoutLM checkpoints under the [LayoutLM](https://huggingface.co/collections/microsoft/layoutlm-6564539601de72cb631d0902) collection.
+
+> [!TIP]
+> This model was contributed by [microsoft](https://github.com/microsoft).
+>
+> Click on the LayoutLM models in the right sidebar for more examples of how to apply LayoutLM to different vision and language tasks.
+
+The example below demonstrates how to use the model with the ([`Pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.Pipeline) or) [`AutoModel`](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModel) class. 
+
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+Note, that the original LayoutLM version cannot be readily used with the [`Pipeline`] class unlike later versions such as [**LayoutLMv3**](https://huggingface.co/docs/transformers/en/model_doc/layoutlmv3). 
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+from datasets import load_dataset
+
+# Load a sample dataset to get an example
+dataset = load_dataset("nielsr/funsd")
+example = dataset["train"][0]
+words = example["words"] # provides already pre-processed inputs for demonstration purposes
+boxes = example["bboxes"] # provides already pre-processed inputs for demonstration purposes
+
+# Load model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", use_fast=False)
+model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
+
+# Process inputs
+encoding = tokenizer(words, boxes=boxes, is_split_into_words=True, return_tensors="pt")
+
+# Get predictions
+outputs = model(**encoding)
+
+print(outputs.logits.shape) # (1, 148, 7) - batch_size, sequence_length, num_labels
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+For the original LayoutLM version, `transformers-cli` usage is not readily applicable unlike later versions such as [**LayoutLMv3**](https://huggingface.co/docs/transformers/en/model_doc/layoutlmv3). 
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. 
+
+The example below uses `TorchAoConfig` to only quantize the weights to `int8`.
+
+```python
+# pip install torchao accelerate
+import torch
+from transformers import TorchAoConfig, LayoutLMForTokenClassification, AutoTokenizer
+from datasets import load_dataset
+
+# Define the quantization configuration
+quantization_config = TorchAoConfig("int8_weight_only", group_size=128)
+
+# Load the model with 8-bit quantization
+model = LayoutLMForTokenClassification.from_pretrained(
+    "microsoft/layoutlm-base-uncased",
+    torch_dtype=torch.bfloat16,
+    quantization_config=quantization_config
+)
+
+# Load the tokenizer
+tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", use_fast=False)
+
+# Example input
+dataset = load_dataset("nielsr/funsd")
+example = dataset["train"][0]
+encoding = tokenizer(example["words"], boxes=example["bboxes"], is_split_into_words=True, return_tensors="pt")
+inputs = encoding
+
+# Perform inference
+outputs = model(**inputs)
+print(outputs)
+```
+
+## Notes
+
+- The original LayoutLM was not designed with a unified processing workflow. Instead, it expects you to pre-process text (`words`) and bounding boxes (`boxes`) via an external OCR engine, e.g. Google's Tesseract (there’s a [Python wrapper](https://pypi.org/project/pytesseract/) available) and provide them as additional inputs to the tokenizer. 
+For simplified demonstration purposes, the above code examples use example data from the `datasets` library, which come along with already pre-processed words and boxes. 
+
+- For more details and examples of usage refer to the links in the [Resources](#resources) section. 
+
+- **Bounding Boxes**: Bounding box coordinates should be in the format `(x_min, y_min, x_max, y_max)`. It's best practice to normalize these coordinates to a range like `[0, 1000]`. To normalize, you can use the following function:
 
 ```python
 def normalize_bbox(bbox, width, height):
@@ -71,8 +140,7 @@ def normalize_bbox(bbox, width, height):
     ]
 ```
 
-Here, `width` and `height` correspond to the width and height of the original document in which the token
-occurs. Those can be obtained using the Python Image Library (PIL) library for example, as follows:
+- `width` and `height` correspond to the width and height of the original document in which the token occurs. Those can be obtained using the Python Image Library (PIL) library for example, as follows:
 
 ```python
 from PIL import Image
@@ -83,10 +151,78 @@ image = Image.open(name_of_your_document).convert("RGB")
 width, height = image.size
 ```
 
+- **Tokenization**: The model uses the standard `BertTokenizer` to tokenize the text (, and you'll need to pass the bounding box information for each token). 
+
+- [**AttentionMaskVisualizer**](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) is not directly compatible with LayoutLM's multi-modal output (text and layout) and attention structure (as opposed to text-based models like BERT with standard attention mechanisms).  
+
+- The AutoProcessor in [**LayoutLMv3**](https://huggingface.co/docs/transformers/en/model_doc/layoutlmv3) greatly simplifies the workflow by integrating all mentioned steps into a single, user-friendly class. 
+
+### LayoutLMConfig
+
+[[autodoc]] LayoutLMConfig
+
+### LayoutLMTokenizer
+
+[[autodoc]] LayoutLMTokenizer
+    - __call__
+
+### LayoutLMTokenizerFast
+
+[[autodoc]] LayoutLMTokenizerFast
+    - __call__
+
+<frameworkcontent>
+<pt>
+
+### LayoutLMModel
+
+[[autodoc]] LayoutLMModel
+
+### LayoutLMForMaskedLM
+
+[[autodoc]] LayoutLMForMaskedLM
+
+### LayoutLMForSequenceClassification
+
+[[autodoc]] LayoutLMForSequenceClassification
+
+### LayoutLMForTokenClassification
+
+[[autodoc]] LayoutLMForTokenClassification
+
+### LayoutLMForQuestionAnswering
+
+[[autodoc]] LayoutLMForQuestionAnswering
+
+</pt>
+<tf>
+
+### TFLayoutLMModel
+
+[[autodoc]] TFLayoutLMModel
+
+### TFLayoutLMForMaskedLM
+
+[[autodoc]] TFLayoutLMForMaskedLM
+
+### TFLayoutLMForSequenceClassification
+
+[[autodoc]] TFLayoutLMForSequenceClassification
+
+### TFLayoutLMForTokenClassification
+
+[[autodoc]] TFLayoutLMForTokenClassification
+
+### TFLayoutLMForQuestionAnswering
+
+[[autodoc]] TFLayoutLMForQuestionAnswering
+
+</tf>
+</frameworkcontent>
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
 
 <PipelineTag pipeline="document-question-answering" />
 
@@ -113,69 +249,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 **Other resources**
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
+- [The official GitHub repository for LayoutLM](https://github.com/microsoft/unilm/tree/master/layoutlm)
+
 🚀 Deploy
 
 - A blog post on how to [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm).
-
-## LayoutLMConfig
-
-[[autodoc]] LayoutLMConfig
-
-## LayoutLMTokenizer
-
-[[autodoc]] LayoutLMTokenizer
-
-## LayoutLMTokenizerFast
-
-[[autodoc]] LayoutLMTokenizerFast
-
-<frameworkcontent>
-<pt>
-
-## LayoutLMModel
-
-[[autodoc]] LayoutLMModel
-
-## LayoutLMForMaskedLM
-
-[[autodoc]] LayoutLMForMaskedLM
-
-## LayoutLMForSequenceClassification
-
-[[autodoc]] LayoutLMForSequenceClassification
-
-## LayoutLMForTokenClassification
-
-[[autodoc]] LayoutLMForTokenClassification
-
-## LayoutLMForQuestionAnswering
-
-[[autodoc]] LayoutLMForQuestionAnswering
-
-</pt>
-<tf>
-
-## TFLayoutLMModel
-
-[[autodoc]] TFLayoutLMModel
-
-## TFLayoutLMForMaskedLM
-
-[[autodoc]] TFLayoutLMForMaskedLM
-
-## TFLayoutLMForSequenceClassification
-
-[[autodoc]] TFLayoutLMForSequenceClassification
-
-## TFLayoutLMForTokenClassification
-
-[[autodoc]] TFLayoutLMForTokenClassification
-
-## TFLayoutLMForQuestionAnswering
-
-[[autodoc]] TFLayoutLMForQuestionAnswering
-
-</tf>
-</frameworkcontent>
-
-
