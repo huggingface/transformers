@@ -61,6 +61,8 @@ logger = logging.get_logger(__name__)
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLm
 class StableLmRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: StableLmConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

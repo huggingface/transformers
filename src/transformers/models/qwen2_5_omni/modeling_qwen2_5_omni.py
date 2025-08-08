@@ -1057,6 +1057,8 @@ class Qwen2_5_VisionPatchEmbed(nn.Module):
 
 
 class Qwen2_5_VisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -1244,6 +1246,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -2499,6 +2503,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 # Using custom RoPE, will use LlamaRotaryEmbedding next version
 class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim, base=10000):
         super().__init__()
 

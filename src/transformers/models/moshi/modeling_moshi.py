@@ -273,6 +273,8 @@ class MoshiLinear(nn.Module):
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Moshi
 class MoshiRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: MoshiConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

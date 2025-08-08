@@ -195,6 +195,8 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     matrices which depend on their relative positions.
     """
 
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
@@ -1228,6 +1230,8 @@ class EvollaRMSNorm(nn.Module):
 
 
 class EvollaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -1452,7 +1456,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         msa_batch_mask: Optional[torch.Tensor] = None,
         query_attn_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)

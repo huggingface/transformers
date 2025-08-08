@@ -1142,6 +1142,8 @@ class Gemma3nTextAltUp(nn.Module):
 
 
 class Gemma3nTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Gemma3nTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
