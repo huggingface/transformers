@@ -22,7 +22,7 @@ Zero Redundancy Optimizer (ZeRO)로 구동되는 [DeepSpeed](https://github.com/
 
 <Tip>
 
-[`Trainer`]와 함께 DeepSpeed 사용에 대한 자세한 내용은 [DeepSpeed](../deepspeed) 가이드를 참조하세요.
+[`Trainer`]와 함께 DeepSpeed를 사용하는 방법에 대해서는 [DeepSpeed](../deepspeed) 가이드를 참조하세요.
 
 </Tip>
 
