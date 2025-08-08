@@ -141,7 +141,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
+        elif size is None:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
         self.size = size
 

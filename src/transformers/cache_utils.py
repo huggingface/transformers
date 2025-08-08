@@ -1112,7 +1112,7 @@ class Cache:
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
         sequence length.
         """
         if layer_idx < len(self.layers):
@@ -1124,7 +1124,7 @@ class Cache:
 
     def __iter__(self):
         """
-        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
         keys and values
         """
         for layer_idx in range(len(self)):
@@ -1132,7 +1132,7 @@ class Cache:
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
         to the number of layers in the model.
         """
         # Best effort BC support for old-style caches like Mambas, Falcon, HybridChunked that rely on __len__
@@ -1742,7 +1742,7 @@ class EncoderDecoderCache(Cache):
 
     def __iter__(self):
         """
-        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
         keys and values
         """
         for layer_idx in range(len(self)):
@@ -1755,7 +1755,7 @@ class EncoderDecoderCache(Cache):
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
         sequence length.
         """
         if layer_idx < len(self):
@@ -1770,7 +1770,7 @@ class EncoderDecoderCache(Cache):
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.self_attention_cache)

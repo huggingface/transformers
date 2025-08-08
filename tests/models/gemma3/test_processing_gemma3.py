@@ -58,7 +58,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.boi_token
 
-    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
