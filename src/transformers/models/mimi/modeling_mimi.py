@@ -280,7 +280,7 @@ class MimiConv1d(nn.Module):
         """
         length = hidden_states.shape[-1]
         padding_left, padding_right = paddings
-        if not mode == "reflect":
+        if mode != "reflect":
             return nn.functional.pad(hidden_states, paddings, mode, value)
 
         max_pad = max(padding_left, padding_right)
@@ -503,6 +503,8 @@ class MimiLayerScale(nn.Module):
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mimi
 class MimiRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: MimiConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -888,7 +890,7 @@ class MimiSdpaAttention(MimiAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = causal_mask is None and q_len > 1
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,

@@ -49,6 +49,8 @@ class DeepseekV3RMSNorm(nn.Module):
 
 
 class DeepseekV3RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: DeepseekV3Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -463,7 +465,7 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention

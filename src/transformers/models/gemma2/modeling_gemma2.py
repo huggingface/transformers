@@ -39,7 +39,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_gemma2 import Gemma2Config
 
@@ -252,7 +251,6 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("last_cache_position", version="4.53.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -299,6 +297,8 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Gemma2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

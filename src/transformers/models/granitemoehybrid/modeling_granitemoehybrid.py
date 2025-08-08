@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, TypedDict, Union
 
 import torch
 import torch.nn.functional as F
@@ -34,6 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -918,6 +919,31 @@ class GraniteMoeHybridMLP(nn.Module):
         return hidden_states
 
 
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
+
+
 class GraniteMoeHybridRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -1125,7 +1151,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1149,8 +1175,8 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs.Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -1161,6 +1187,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
                 cache_position=cache_position,
                 cache_params=past_key_value,
                 attention_mask=attention_mask,
+                **kwargs,
             )
             # No attention weights for state space layers
             self_attn_weights = None
@@ -1228,6 +1255,8 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
 
 
 class GraniteMoeHybridRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GraniteMoeHybridConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -1303,6 +1332,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1374,6 +1404,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -1608,8 +1639,8 @@ def load_balancing_loss_func(
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
             attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
+            .expand((num_hidden_layers, batch_size, sequence_length, routing_weights.shape[1]))
+            .reshape(-1, routing_weights.shape[1])
             .to(compute_device)
         )
 
@@ -1618,7 +1649,11 @@ def load_balancing_loss_func(
             router_per_expert_attention_mask, dim=0
         )
 
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    device_index = routing_weights.device.index if routing_weights.device.index is not None else 0
+    rank = routing_weights.shape[1] * int(device_index)
+    overall_loss = torch.sum(
+        tokens_per_expert[:, rank : rank + routing_weights.shape[1]] * router_prob_per_expert.unsqueeze(0)
+    )
     return overall_loss * num_experts
 
 
@@ -1706,6 +1741,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             output_router_logits=output_router_logits,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         # Only compute necessary logits
