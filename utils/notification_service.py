@@ -1225,7 +1225,7 @@ if __name__ == "__main__":
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["time_spent"] += time_spent[:-1] + ", "
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -1360,7 +1360,7 @@ if __name__ == "__main__":
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
             additional_results[key]["skipped"] += skipped
-            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+            additional_results[key]["time_spent"] += time_spent[:-1] + ", "
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True

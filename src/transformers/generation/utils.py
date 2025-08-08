@@ -1798,7 +1798,8 @@ class GenerationMixin(ContinuousMixin):
         if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
             past_length = 0
-            if not isinstance(cache, Cache):
+            # Support for BC tuple cache format
+            if isinstance(cache, tuple):
                 past_length = cache[0][0].shape[2]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()
@@ -1808,87 +1809,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["cache_position"] = cache_position
         return model_kwargs
 
-    def _get_layer_device_map_for_cache_init(self) -> Optional[dict[int, Union[str, int]]]:
-        """
-        Returns the device map for each decoder layer, to allocate the cache on the right device.
-        Inspired from `dispatch_model` in accelerate.
-        """
-        execution_device_map = None
-
-        if hasattr(self, "hf_device_map"):
-            if set(self.hf_device_map.values()) == {"cpu"} or set(self.hf_device_map.values()) == {"cpu", "disk"}:
-                main_device = "cpu"
-            else:
-                main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
-            execution_device_map = {
-                name: main_device if device in ["cpu", "disk"] else device
-                for name, device in self.hf_device_map.items()
-            }
-
-        # No `execution_device_map` -> rely on `self.device` to allocate the cache
-        if execution_device_map is None:
-            return None
-
-        # Single device for all layers
-        num_hidden_layers = self.config.get_text_config().num_hidden_layers
-        if len(execution_device_map) == 1 and "" in execution_device_map:
-            return dict.fromkeys(range(num_hidden_layers), execution_device_map[""])
-
-        # Multiple devices in `execution_device_map` -> we need to map decoder layers to the correct device.
-        layer_device_map = {}
-        # Case 1: The model has a `get_decoder` method, we can use it to find the decoder name.
-        if hasattr(self, "get_decoder"):
-            decoder_name = None
-            for name, module in self.named_modules():
-                if module is self.get_decoder():
-                    decoder_name = name
-                    break
-            if decoder_name is None:
-                raise RuntimeError(
-                    "`model.get_decoder()` is not returning a named module of the model. This is unexpected, please "
-                    "open an issue on GitHub."
-                )
-
-            decoder_mapped_modules = [
-                module_name for module_name in execution_device_map if decoder_name in module_name
-            ]
-            # The decoder name may be present in `execution_device_map` in two forms:
-            # a) each layer has a device mapping
-            if len(decoder_mapped_modules) >= num_hidden_layers:
-                for idx in range(num_hidden_layers):
-                    for module_name in decoder_mapped_modules:
-                        if f".{idx}." in f"{module_name}.":
-                            layer_device_map[idx] = execution_device_map[module_name]
-                            break
-
-            # b) the whole module is mapped to a single device. If the decoder name is NOT present in the device map,
-            # then the mapping is done in a parent module
-            else:
-                while True:
-                    if decoder_name in execution_device_map:
-                        layer_device_map = dict.fromkeys(range(num_hidden_layers), execution_device_map[decoder_name])
-                        break
-                    elif "." in decoder_name:
-                        decoder_name = decoder_name.rsplit(".", 1)[0]  # gets the name of the parent module
-                    else:
-                        raise RuntimeError(f"Decoder name {decoder_name} not found in execution device map")
-
-        # Case 2: Legacy code path: assume the decoder layers are named as `(...).X` (X being the layer index)
-        else:
-            for layer in execution_device_map:
-                for idx in range(num_hidden_layers):
-                    if f".{idx}." in f"{layer}.":
-                        layer_device_map[idx] = execution_device_map[layer]
-                        break
-
-        for idx in range(num_hidden_layers):
-            if idx not in layer_device_map:
-                raise RuntimeError(f"layer {idx} has not been mapped to a device.")
-        return layer_device_map
-
-    def _get_cache(
-        self, cache_implementation: str, batch_size: int, max_cache_len: int, device: torch.device, model_kwargs
-    ) -> Cache:
+    def _get_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache or uses a different batch size.
@@ -1926,23 +1847,10 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            if hasattr(self.config, "_pre_quantization_dtype"):
-                cache_dtype = self.config._pre_quantization_dtype
-            else:
-                cache_dtype = self.dtype
-
-            layer_device_map = self._get_layer_device_map_for_cache_init()
             cache_kwargs = {
-                "config": self.config.get_text_config(),
-                "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
-                "dtype": cache_dtype,
-                "device": device,
-                "layer_device_map": layer_device_map,
+                "config": self.config.get_text_config(),
             }
-            if cache_implementation in ["static", "hybrid", "offloaded_static"]:
-                cache_kwargs.update({"tp_size": self.tp_size})
-
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1978,7 +1886,6 @@ class GenerationMixin(ContinuousMixin):
         assistant_model: "PreTrainedModel",
         batch_size: int,
         max_cache_length: int,
-        device: torch.device,
     ) -> bool:
         """
         Prepares the cache for generation (if applicable), given `generate`'s parameterization. If a cache is
@@ -2051,7 +1958,6 @@ class GenerationMixin(ContinuousMixin):
                     cache_implementation=generation_config.cache_implementation,
                     batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
                     max_cache_len=max_cache_length,
-                    device=device,
                     model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
@@ -2473,7 +2379,7 @@ class GenerationMixin(ContinuousMixin):
         ):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
         )
 
         # 8. determine generation mode
