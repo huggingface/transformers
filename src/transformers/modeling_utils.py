@@ -2721,7 +2721,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
+        # Accept HF kernel references in the form:
+        #   <namespace>/<repo_name>[@<revision>][:<kernel_name>]
+        #
+        # - <namespace> and <repo_name> are any non-"/" and non-":" sequences.
+        # - "@<revision>" is optional (branch, tag, or commit-ish), e.g. "@main", "@v1.2.0", "@abc123".
+        # - ":<kernel_name>" is optional and selects a function inside the kernel repo.
+        # - Both options can appear together and in this order only: @revision first, then :kernel_name.
+        # - We intentionally allow a leading "<wrapper>|" prefix (e.g., "flash|...") because the code
+        #   strips it before loading; '|' is not excluded in the character classes here.
+        #
+        # Examples that match:
+        #   "org/model"
+        #   "org/model@main"
+        #   "org/model:custom_kernel"
+        #   "org/model@v1.2.3:custom_kernel"
+        if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
