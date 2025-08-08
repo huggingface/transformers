@@ -75,7 +75,7 @@ class Glm4DecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -223,7 +223,7 @@ class Glm4Attention(nn.Module):
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

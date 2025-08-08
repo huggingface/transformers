@@ -140,7 +140,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
         self.input_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

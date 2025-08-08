@@ -382,7 +382,7 @@ class GraniteMoeSharedAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -448,7 +448,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         self.residual_multiplier = config.residual_multiplier
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

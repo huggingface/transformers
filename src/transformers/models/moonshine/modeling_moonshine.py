@@ -206,7 +206,7 @@ class MoonshineAttention(nn.Module):
         else:
             self.head_dim_padding = 0
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -348,7 +348,7 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -408,7 +408,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -542,7 +542,7 @@ class NllbMoeAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -741,7 +741,7 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
         self.ff_layer_norm = nn.LayerNorm(config.d_model)
         self.ff_dropout = nn.Dropout(config.activation_dropout)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -378,7 +378,7 @@ class GPTSanJapaneseAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -515,7 +515,7 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         )
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -597,7 +597,7 @@ class GPTSanJapaneseBlock(nn.Module):
         self.self_attn = GPTSanJapaneseLayerSelfAttention(config)
         self.feed_forward = GPTSanJapaneseLayerDenseFF(config) if ext_layer else GPTSanJapaneseLayerSparseFF(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],

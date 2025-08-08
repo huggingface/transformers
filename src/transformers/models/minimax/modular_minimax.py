@@ -279,7 +279,7 @@ class MiniMaxLightningAttention(nn.Module):
 
         return query_decay, key_decay, diagonal_decay
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -405,7 +405,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
             self.attn_alpha_factor = config.full_attn_alpha_factor
             self.attn_beta_factor = config.full_attn_beta_factor
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

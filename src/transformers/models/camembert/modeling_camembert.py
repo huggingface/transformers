@@ -168,7 +168,7 @@ class CamembertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -280,7 +280,7 @@ class CamembertSdpaSelfAttention(CamembertSelfAttention):
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from CamembertSelfAttention
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -436,7 +436,7 @@ class CamembertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -508,7 +508,7 @@ class CamembertLayer(GradientCheckpointingLayer):
         self.intermediate = CamembertIntermediate(config)
         self.output = CamembertOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

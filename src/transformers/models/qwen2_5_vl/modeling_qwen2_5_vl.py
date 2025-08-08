@@ -658,7 +658,7 @@ class Qwen2_5_VLAttention(nn.Module):
 
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -729,7 +729,7 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

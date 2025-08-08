@@ -301,7 +301,7 @@ class TapasSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,

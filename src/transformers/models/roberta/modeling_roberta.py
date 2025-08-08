@@ -167,7 +167,7 @@ class RobertaSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -279,7 +279,7 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from RobertaSelfAttention
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -435,7 +435,7 @@ class RobertaAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -507,7 +507,7 @@ class RobertaLayer(GradientCheckpointingLayer):
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

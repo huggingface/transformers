@@ -635,7 +635,7 @@ class Idefics2PerceiverAttention(nn.Module):
 
         self.is_causal = False
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
@@ -725,7 +725,7 @@ class Idefics2PerceiverLayer(nn.Module):
             hidden_act=config.hidden_act,
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,

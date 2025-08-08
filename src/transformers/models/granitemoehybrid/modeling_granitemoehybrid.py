@@ -172,7 +172,7 @@ class GraniteMoeHybridAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1143,7 +1143,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

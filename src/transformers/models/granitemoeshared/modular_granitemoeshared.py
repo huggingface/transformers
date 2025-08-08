@@ -91,7 +91,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -396,7 +396,7 @@ class Zamba2Attention(nn.Module):
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -988,7 +988,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1050,7 +1050,7 @@ class Zamba2MambaDecoderLayer(nn.Module):
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1121,7 +1121,7 @@ class Zamba2HybridLayer(nn.Module):
         self.mamba_decoder = mamba
         self.shared_transformer = shared_transformer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

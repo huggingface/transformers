@@ -152,7 +152,7 @@ class GitSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -286,7 +286,7 @@ class GitAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -348,7 +348,7 @@ class GitLayer(GradientCheckpointingLayer):
         self.intermediate = GitIntermediate(config)
         self.output = GitOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

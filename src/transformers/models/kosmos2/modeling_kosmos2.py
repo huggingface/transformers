@@ -710,7 +710,7 @@ class KosmosTextAttention(nn.Module):
         if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -850,7 +850,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         self.ffn = Kosmos2TextFFN(config)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

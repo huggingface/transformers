@@ -299,7 +299,7 @@ class Gemma3Attention(nn.Module):
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -362,7 +362,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

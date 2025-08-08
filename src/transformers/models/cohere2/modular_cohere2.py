@@ -298,7 +298,7 @@ class Cohere2Attention(CohereAttention, nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -349,7 +349,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
         super().__init__(config, layer_idx)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

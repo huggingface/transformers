@@ -267,7 +267,7 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],
@@ -395,7 +395,7 @@ class GPT2Block(GradientCheckpointingLayer):
 
         self.mlp = GPT2MLP(inner_dim, config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],

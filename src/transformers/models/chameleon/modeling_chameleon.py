@@ -312,7 +312,7 @@ class ChameleonAttention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -381,7 +381,7 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -454,7 +454,7 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

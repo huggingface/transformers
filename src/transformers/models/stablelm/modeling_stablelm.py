@@ -221,7 +221,7 @@ class StableLmAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -309,7 +309,7 @@ class StableLmAttention(nn.Module):
 
 
 class StableLmSdpaAttention(StableLmAttention):
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -432,7 +432,7 @@ class StableLmFlashAttention2(StableLmAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

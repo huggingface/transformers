@@ -166,7 +166,7 @@ class RobertaPreLayerNormSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -312,7 +312,7 @@ class RobertaPreLayerNormAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -386,7 +386,7 @@ class RobertaPreLayerNormLayer(GradientCheckpointingLayer):
         self.intermediate = RobertaPreLayerNormIntermediate(config)
         self.output = RobertaPreLayerNormOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

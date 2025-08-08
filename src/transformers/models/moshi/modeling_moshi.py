@@ -432,7 +432,7 @@ class MoshiAttention(nn.Module):
             self.rope_theta = config.rope_theta
             self.rotary_emb = MoshiRotaryEmbedding(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -514,7 +514,7 @@ class MoshiFlashAttention2(MoshiAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -630,7 +630,7 @@ class MoshiSdpaAttention(MoshiAttention):
     """
 
     # Adapted from MoshiAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -740,7 +740,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
 
         self._attn_implementation = config._attn_implementation
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

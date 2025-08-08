@@ -87,7 +87,7 @@ class MptAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -248,7 +248,7 @@ class MptPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     @staticmethod
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def _convert_to_mpt_cache(
         past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]],
     ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:

@@ -192,7 +192,7 @@ class Gemma2Attention(nn.Module):
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -253,7 +253,7 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

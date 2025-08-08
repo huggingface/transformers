@@ -901,7 +901,7 @@ class SeamlessM4Tv2Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1094,7 +1094,7 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         self.ffn_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ffn_dropout = nn.Dropout(config.activation_dropout)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

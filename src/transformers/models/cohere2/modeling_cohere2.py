@@ -196,7 +196,7 @@ class Cohere2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -267,7 +267,7 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

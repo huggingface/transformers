@@ -241,7 +241,7 @@ class Lfm2Attention(LlamaAttention):
         del self.o_proj
         del self.attention_dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -307,7 +307,7 @@ class Lfm2ShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
@@ -342,7 +342,7 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y.transpose(-1, -2).contiguous())
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def slow_forward(
         self,
         x: torch.Tensor,
@@ -381,7 +381,7 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -407,7 +407,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

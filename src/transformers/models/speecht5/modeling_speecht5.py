@@ -877,7 +877,7 @@ class SpeechT5Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1117,7 +1117,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = SpeechT5FeedForward(config, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

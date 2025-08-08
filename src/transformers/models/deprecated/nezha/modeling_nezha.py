@@ -243,7 +243,7 @@ class NezhaSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -388,7 +388,7 @@ class NezhaAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -457,7 +457,7 @@ class NezhaLayer(GradientCheckpointingLayer):
         self.intermediate = NezhaIntermediate(config)
         self.output = NezhaOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

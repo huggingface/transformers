@@ -137,7 +137,7 @@ class Qwen2Attention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -216,7 +216,7 @@ class Qwen2DecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

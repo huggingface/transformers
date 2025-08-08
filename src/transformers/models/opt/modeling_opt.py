@@ -139,7 +139,7 @@ class OPTAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -221,7 +221,7 @@ class OPTDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

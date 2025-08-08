@@ -408,7 +408,7 @@ class MllamaTextCrossAttention(nn.Module):
         self.q_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MllamaTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -525,7 +525,7 @@ class MllamaTextSelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -608,7 +608,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
 
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -684,7 +684,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(1))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -429,7 +429,7 @@ class KyutaiSpeechToTextAttention(nn.Module):
             self.rope_theta = config.rope_theta
             self.rotary_emb = KyutaiSpeechToTextRotaryEmbedding(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -511,7 +511,7 @@ class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -627,7 +627,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
     """
 
     # Adapted from KyutaiSpeechToTextAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -737,7 +737,7 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
 
         self._attn_implementation = config._attn_implementation
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

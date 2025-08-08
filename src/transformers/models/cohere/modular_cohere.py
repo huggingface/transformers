@@ -146,7 +146,7 @@ class CohereAttention(LlamaAttention):
                 hidden_size=(config.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -207,7 +207,7 @@ class CohereDecoderLayer(GradientCheckpointingLayer):
         self.mlp = CohereMLP(config)
         self.input_layernorm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

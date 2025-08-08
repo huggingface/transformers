@@ -614,7 +614,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
 
         return context_layer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         query_states,
@@ -714,7 +714,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
                 protein_encoder_dim=config.hidden_size,
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

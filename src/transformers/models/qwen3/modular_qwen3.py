@@ -64,7 +64,7 @@ class Qwen3Attention(LlamaAttention):
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

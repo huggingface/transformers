@@ -269,7 +269,7 @@ class PhimoeAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -338,7 +338,7 @@ class PhimoeFlashAttention2(PhimoeAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -434,7 +434,7 @@ class PhimoeSdpaAttention(PhimoeAttention):
     """
 
     # Adapted from PhimoeAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -816,7 +816,7 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

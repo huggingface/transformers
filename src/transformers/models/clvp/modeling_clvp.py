@@ -299,7 +299,7 @@ class ClvpSelfAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -609,7 +609,7 @@ class ClvpDecoderLayer(nn.Module):
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: Optional[tuple[torch.FloatTensor]],

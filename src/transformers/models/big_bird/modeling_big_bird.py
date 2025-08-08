@@ -316,7 +316,7 @@ class BigBirdSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1340,7 +1340,7 @@ class BigBirdAttention(nn.Module):
         if not self.training:
             self.self.eval()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -1450,7 +1450,7 @@ class BigBirdLayer(GradientCheckpointingLayer):
         if self.add_cross_attention:
             self.crossattention.set_attention_type(value, layer_idx=layer_idx)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,

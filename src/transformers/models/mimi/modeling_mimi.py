@@ -644,7 +644,7 @@ class MimiAttention(nn.Module):
         self.rotary_emb = MimiRotaryEmbedding(config)
         self.sliding_window = config.sliding_window  # Ignore copy
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -721,7 +721,7 @@ class MimiFlashAttention2(MimiAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -832,7 +832,7 @@ class MimiSdpaAttention(MimiAttention):
     """
 
     # Adapted from MimiAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -933,7 +933,7 @@ class MimiTransformerLayer(GradientCheckpointingLayer):
         self.self_attn_layer_scale = MimiLayerScale(config)
         self.mlp_layer_scale = MimiLayerScale(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

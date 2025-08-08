@@ -119,7 +119,7 @@ class ErnieMSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -247,7 +247,7 @@ class ErnieMAttention(nn.Module):
         self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -292,7 +292,7 @@ class ErnieMEncoderLayer(nn.Module):
         else:
             self.activation = config.hidden_act
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

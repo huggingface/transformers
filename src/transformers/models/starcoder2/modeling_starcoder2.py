@@ -157,7 +157,7 @@ class Starcoder2Attention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -216,7 +216,7 @@ class Starcoder2DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

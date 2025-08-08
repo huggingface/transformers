@@ -1384,7 +1384,7 @@ class Phi4MultimodalAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.qkv_proj = nn.Linear(config.hidden_size, op_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1448,7 +1448,7 @@ class Phi4MultimodalDecoderLayer(GradientCheckpointingLayer):
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.57")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
