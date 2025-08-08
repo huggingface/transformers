@@ -49,16 +49,16 @@ def is_flash_attn_available():
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
-flash_fn = None
-flash_varlen_fn = None
-pad_fn = None
-unpad_fn = None
+_flash_fn = None
+_flash_varlen_fn = None
+_pad_fn = None
+_unpad_fn = None
 
-supports_dropout = None
-supports_sliding_window = None
-supports_determinism = None
-supports_softcap = None
-supports_s_aux = None
+_supports_dropout = None
+_supports_sliding_window = None
+_supports_determinism = None
+_supports_softcap = None
+_supports_s_aux = None
 
 
 def _lazy_imports(implementation: Optional[str]):
@@ -104,26 +104,32 @@ def lazy_import_flash_attention(implementation: Optional[str]):
     NOTE: For fullgraph, this needs to be called before compile while no fullgraph can
           can work without preloading. See `_check_and_adjust_attn_implementation` in `modeling_utils`.
     """
-    global flash_fn, flash_varlen_fn, pad_fn, unpad_fn
-    if any(k is None for k in [flash_fn, flash_varlen_fn, pad_fn, unpad_fn]):
-        flash_fn, flash_varlen_fn, pad_fn, unpad_fn = _lazy_imports(implementation)
+    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
+    if any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
 
     # Depending on version and kernel some features are not supported
-    global supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux
+    global _supports_dropout, _supports_sliding_window, _supports_determinism, _supports_softcap, _supports_s_aux
     if any(
         k is None
-        for k in [supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux]
+        for k in [
+            _supports_dropout,
+            _supports_sliding_window,
+            _supports_determinism,
+            _supports_softcap,
+            _supports_s_aux,
+        ]
     ):
-        fn_parameters = inspect.signature(flash_varlen_fn).parameters
-        supports_dropout = "dropout_p" in fn_parameters
-        supports_sliding_window = "window_size" in fn_parameters
-        supports_determinism = "deterministic" in fn_parameters
-        supports_softcap = "softcap" in fn_parameters
-        supports_s_aux = "s_aux" in fn_parameters  # attention sink (e.g. gpt oss)
+        fn_parameters = inspect.signature(_flash_varlen_fn).parameters
+        _supports_dropout = "dropout_p" in fn_parameters
+        _supports_sliding_window = "window_size" in fn_parameters
+        _supports_determinism = "deterministic" in fn_parameters
+        _supports_softcap = "softcap" in fn_parameters
+        _supports_s_aux = "s_aux" in fn_parameters  # attention sink (e.g. gpt oss)
 
     return (
-        (flash_fn, flash_varlen_fn, pad_fn, unpad_fn),
-        (supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux),
+        (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn),
+        (_supports_dropout, _supports_sliding_window, _supports_determinism, _supports_softcap, _supports_s_aux),
     )
 
 
