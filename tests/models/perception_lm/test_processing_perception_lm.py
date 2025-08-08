@@ -120,7 +120,7 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 @require_vision
 @require_read_token
-# @unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
+@unittest.skip("Fequires read token and gwe didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorSingleTileVanillaImageTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
