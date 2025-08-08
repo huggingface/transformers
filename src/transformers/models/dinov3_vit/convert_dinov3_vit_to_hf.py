@@ -388,10 +388,14 @@ def convert_and_test_dinov3_checkpoint(args):
 
     converted_state_dict = {}
     for key in original_keys:
-        if "bias_mask" in key or "attn.k_proj.bias" in key:
-            continue
         new_key = new_keys[key]
         weight_tensor = original_state_dict[key]
+
+        if "bias_mask" in key or "attn.k_proj.bias" in key:
+            continue
+        if "embeddings.mask_token" in new_key:
+            weight_tensor = weight_tensor.unsqueeze(1)
+
         converted_state_dict[new_key] = weight_tensor
 
     model.load_state_dict(converted_state_dict, strict=True)
