@@ -27,6 +27,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
@@ -130,13 +131,14 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
         self.input_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
@@ -150,7 +152,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
