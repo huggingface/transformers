@@ -37,12 +37,6 @@ from .configuration_dinov3_vit import DINOv3ViTConfig
 
 logger = logging.get_logger(__name__)
 
-dtype_dict = {
-    "fp32": torch.float32,
-    "fp16": torch.float16,
-    "bf16": torch.bfloat16,
-}
-
 
 # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings with Dinov2 -> DINOv3ViT
 class DINOv3ViTPatchEmbeddings(nn.Module):
