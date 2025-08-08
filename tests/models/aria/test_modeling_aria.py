@@ -137,8 +137,8 @@ class AriaVisionText2TextModelTester:
 
     def get_config(self):
         return AriaConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.to_dict(),
+            vision_config=self.vision_config.to_dict(),
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,

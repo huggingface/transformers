@@ -248,7 +248,7 @@ class Lfm2Attention(LlamaAttention):
         past_key_value: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

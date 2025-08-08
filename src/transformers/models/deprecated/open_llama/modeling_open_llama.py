@@ -68,6 +68,10 @@ class OpenLlamaRMSNorm(nn.Module):
 
 
 class OpenLlamaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+    cos_cached: torch.Tensor
+    sin_cached: torch.Tensor
+
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 

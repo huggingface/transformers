@@ -280,7 +280,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
-        truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
+        truncation = self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0
 
         word_to_chars_map = None
         is_split_into_words = preprocess_params["is_split_into_words"]

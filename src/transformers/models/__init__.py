@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -139,6 +140,7 @@ if TYPE_CHECKING:
     from .gpt_neo import *
     from .gpt_neox import *
     from .gpt_neox_japanese import *
+    from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *

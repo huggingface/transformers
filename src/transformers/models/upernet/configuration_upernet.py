@@ -136,5 +136,13 @@ class UperNetConfig(PretrainedConfig):
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
 
 __all__ = ["UperNetConfig"]

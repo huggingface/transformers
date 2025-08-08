@@ -10,26 +10,27 @@ from transformers.generation import GenerationConfig
 torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
-).eval()
+model = (
+    AutoModelForCausalLM.from_pretrained(
+        model_id,
+        attn_implementation="paged_attention|kernels-community/flash-attn",
+        torch_dtype=torch.bfloat16,
+    )
+    .eval()
+    .cuda()
+)
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
 generation_config = GenerationConfig(
     max_new_tokens=512,
+    # use_cuda_graph=False,
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
-    use_cache=False,
-    num_blocks=2048,
-    block_size=128,
-    do_sample=True,
-    max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
-    scheduler="prefill_first",
+    do_sample=False,
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
-
-# --- Example 1: Simple Version using generate_batch ---
+train_dataset = train_dataset.select(range(500))  # Use only 5 examples for the simple version
 print("--- Running CB Generation Example ---")
 
 
@@ -41,19 +42,21 @@ tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
 
 start_time_simple = time.time()
-# model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs", fullgraph=True)
+model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 batch_outputs = model.generate_batch(
     inputs=simple_batch_inputs,
     generation_config=generation_config,
 )
 end_time_simple = time.time()
-
+token_count = 0
 for request in batch_outputs:
     input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
     try:
         output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
+        token_count += len(batch_outputs[request].generated_tokens[1:])
     except Exception as e:
         print(f"Decoding failed for request {request}: {e}")
+        token_count += len(batch_outputs[request].generated_tokens[1:])
         output_text = tokenizer.decode(batch_outputs[request].generated_tokens[1:], skip_special_tokens=False)
     if len(output_text) > 0:
         print("-" * 20)
@@ -65,7 +68,9 @@ print("-" * 20)
 print("--- Finished CB Generation Example ---\n\n")
 
 
-print(f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds")
+print(
+    f"CB generation took: {end_time_simple - start_time_simple:.2f} seconds for {token_count} tokens. {token_count / (end_time_simple - start_time_simple)}tok/s"
+)
 
 
 # train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version

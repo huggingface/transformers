@@ -136,7 +136,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     """
 
     # define default BEiT configuration
-    has_lm_head = False if "rvlcdip" in checkpoint_url else True
+    has_lm_head = "rvlcdip" not in checkpoint_url
     config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=has_lm_head)
 
     # size of the architecture

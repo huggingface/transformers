@@ -594,7 +594,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # Start: Index of the first character of the answer in the context string
                 # End: Index of the character following the last character of the answer in the context string
                 # Answer: Plain text of the answer
-                question_first = bool(self.tokenizer.padding_side == "right")
+                question_first = self.tokenizer.padding_side == "right"
                 enc = output["encoding"]
 
                 # Encoding was *not* padded, input_ids *might*.

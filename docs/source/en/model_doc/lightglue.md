@@ -107,7 +107,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
     ```py
     # Easy visualization using the built-in plotting method
-    processor.plot_keypoint_matching(images, processed_outputs)
+    processor.visualize_keypoint_matching(images, processed_outputs)
     ```
 
 <div class="flex justify-center">
@@ -128,7 +128,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 
 - preprocess
 - post_process_keypoint_matching
-- plot_keypoint_matching
+- visualize_keypoint_matching
 
 <frameworkcontent>
 <pt>

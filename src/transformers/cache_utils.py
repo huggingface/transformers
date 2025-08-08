@@ -1164,7 +1164,7 @@ class Cache:
         while len(self.layers) <= layer_idx:
             kwargs = self.layer_init_kwargs.copy()
             if self.layer_init_kwargs.get("layer_device_map", None) is not None:
-                kwargs["device"] = kwargs.pop("layer_device_map")[layer_idx]
+                kwargs["device"] = kwargs.pop("layer_device_map")[len(self.layers)]
 
             new_layer_class = (
                 self.layer_classes[len(self.layers)] if isinstance(self.layer_classes, list) else self.layer_classes

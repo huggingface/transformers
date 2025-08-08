@@ -151,14 +151,16 @@ class LlamaIntegrationTest(unittest.TestCase):
             {
             ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
             ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
-            ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
-         })
+            ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
+            ("rocm", (9, 4)): torch.tensor([[-6.5094, -4.1329, -4.9754, -3.5042,  0.8082, -2.9443,  1.2830, -3.3539]]),
+        })
 
-        expected_mean = expected_means.get_expectation()
+        expected_mean = expected_means.get_expectation().to(torch_device)
+        actual_mean = out.logits.float().mean(-1)
         self.assertTrue(
             torch.allclose(
-                expected_mean.to(torch_device),
-                out.logits.float().mean(-1),
+                expected_mean,
+                actual_mean,
                 atol=1e-2,
                 rtol=1e-2
             )
@@ -169,18 +171,13 @@ class LlamaIntegrationTest(unittest.TestCase):
             {
             ("xpu", 3): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
             ("cuda", 7): torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]),
-            ("cuda", 8): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]])
+            ("cuda", 8): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
+            ("rocm", (9, 4)): torch.tensor([[-12.5000,  -7.0625,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9375,  -6.0312,  -7.0312,  -1.8594,   1.8438, -8.5000]])
         })
         # fmt: on
-        expected_slice = expected_slices.get_expectation()
-        self.assertTrue(
-            torch.allclose(
-                expected_slice.to(torch_device),
-                out.logits[0, 0, :15].float(),
-                atol=1e-2,
-                rtol=1e-2,
-            )
-        )
+        expected_slice = expected_slices.get_expectation().to(torch_device)
+        actual_slice = out.logits[0, 0, :15].float()
+        self.assertTrue(torch.allclose(expected_slice, actual_slice, atol=1e-2, rtol=1e-2))
 
     @slow
     def test_model_7b_logits(self):
@@ -353,7 +350,10 @@ class LlamaIntegrationTest(unittest.TestCase):
             from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
             exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-            exported_program = exportable_module.export()
+            exported_program = exportable_module.export(
+                input_ids=prompt_token_ids,
+                cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
+            )
             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
             )

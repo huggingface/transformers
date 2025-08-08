@@ -301,8 +301,8 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         """
         min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
         max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
-        patch_size = images_kwargs["patch_size"] if "patch_size" in images_kwargs else self.patch_size
-        merge_size = images_kwargs["merge_size"] if "merge_size" in images_kwargs else self.merge_size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

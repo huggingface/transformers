@@ -197,8 +197,8 @@ class RobertaSelfAttention(nn.Module):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
+            key_layer = curr_past_key_value.layers[self.layer_idx].keys
+            value_layer = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_layer = self.key(current_states)
             key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
@@ -328,8 +328,8 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_value.key_cache[self.layer_idx]
-            value_layer = curr_past_key_value.value_cache[self.layer_idx]
+            key_layer = curr_past_key_value.layers[self.layer_idx].keys
+            value_layer = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_layer = (
                 self.key(current_states)
@@ -364,9 +364,7 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
         # a causal mask in case tgt_len == 1.
-        is_causal = (
-            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
-        )
+        is_causal = self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,

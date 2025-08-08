@@ -89,9 +89,9 @@ class DeepseekVLModelTester:
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
+        self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = 0
 
     def get_config(self):
         return DeepseekVLConfig(
@@ -115,6 +115,7 @@ class DeepseekVLModelTester:
             ]
         )
         # fill image_tokens
+        input_ids[input_ids == self.num_image_tokens] = config.text_config.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values

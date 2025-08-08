@@ -189,6 +189,8 @@ class HybridMambaAttentionDynamicCache(Cache):
 
 
 class BambaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: BambaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

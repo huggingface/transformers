@@ -111,6 +111,7 @@ Some vision models also support video inputs. The message format is very similar
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
+- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
 
 > [!WARNING]
 > Loading a video from `"url"` is only supported by the PyAV or Decord backends.
@@ -132,6 +133,52 @@ messages = [
       "content": [
             {"type": "video", "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"},
             {"type": "text", "text": "What do you see in this video?"},
+        ],
+    },
+]
+```
+
+### Example: Passing decoded video objects
+```python
+import numpy as np
+
+video_object1 = np.random.randint(0, 255, size=(16, 224, 224, 3), dtype=np.uint8),
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": video_object1},
+            {"type": "text", "text": "What do you see in this video?"}
+        ],
+    },
+]
+```
+You can also use existing (`"load_video()"`) function to load a video, edit the video in memory and pass it in the messages.
+```python
+
+# Make sure a video backend library (pyav, decord, or torchvision) is available.
+from transformers.video_utils import load_video
+
+# load a video file in memory for testing
+video_object2, _ = load_video(
+    "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4"
+)
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": video_object2},
+            {"type": "text", "text": "What do you see in this video?"}
         ],
     },
 ]

@@ -253,7 +253,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
                 first_column = self.inner_table[0][0]
                 if last_values[0] != values[first_column]:
                     # write new line
-                    self.inner_table.append([values[c] if c in values else "No Log" for c in columns])
+                    self.inner_table.append([values.get(c, "No Log") for c in columns])
                 else:
                     # update last line
                     new_values = values

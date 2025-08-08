@@ -249,7 +249,7 @@ class MobileNetV1ModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-4.1739, -1.1233, 3.1205],
-                ("cuda", 8): [-4.1725, -1.1238, 3.1191],
+                ("cuda", 8): [-4.1739, -1.1233, 3.1205],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

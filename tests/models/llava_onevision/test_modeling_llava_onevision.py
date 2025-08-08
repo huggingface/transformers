@@ -61,6 +61,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         parent,
         ignore_index=-100,
         image_token_index=1,
+        video_token_index=2,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="full",
@@ -108,6 +109,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.parent = parent
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -134,6 +136,7 @@ class LlavaOnevisionVisionText2TextModelTester:
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
+            video_token_index=self.video_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,

@@ -222,7 +222,7 @@ def main():
 
         spm_path = os.path.join(args.tokenizer_checkpoint)
         write_tokenizer(spm_path, args.output_dir, args.push_to_hub)
-    if not args.model_size == "tokenizer_only":
+    if args.model_size != "tokenizer_only":
         config = CONFIG_MAPPING[args.model_size]
         dtype = getattr(torch, args.dtype)
         write_model(

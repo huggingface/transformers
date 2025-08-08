@@ -906,6 +906,30 @@ class JanusModel(JanusPreTrainedModel):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -929,18 +953,12 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            if input_ids is None:
-                image_attention_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                image_attention_mask = image_attention_mask.all(-1)
-            else:
-                image_attention_mask = input_ids == self.config.image_token_id
-
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values)
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_attention_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
         lm_output = self.language_model(
@@ -1419,6 +1437,7 @@ class JanusImageProcessor(BlipImageProcessor):
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
+        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1430,6 +1449,10 @@ class JanusImageProcessor(BlipImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
+            size (`dict[str, int]` or `int`):
+                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -1448,6 +1471,7 @@ class JanusImageProcessor(BlipImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -1479,7 +1503,7 @@ class JanusImageProcessor(BlipImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
+            background_color=background_color,
             input_data_format=input_data_format,
         )
         return image

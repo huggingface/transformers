@@ -408,7 +408,7 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image pairs to plot. Same as `EfficientLoFTRImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            outputs (List[Dict[str, torch.Tensor]]]):
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
 
         Returns:

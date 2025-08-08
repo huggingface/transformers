@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_av_available, is_torch_available, is_vision_available
 
 
 global_rng = random.Random()
@@ -43,7 +43,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
 
 MODALITY_INPUT_DATA = {
     "images": [
@@ -59,6 +58,13 @@ MODALITY_INPUT_DATA = {
         "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
     ],
 }
+
+if is_av_available():
+    from transformers.video_utils import load_video
+
+    # load a video file in memory for testing
+    video, _ = load_video("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4")
+    MODALITY_INPUT_DATA["videos"].append(video)
 
 
 def prepare_image_inputs():
@@ -931,7 +937,7 @@ class ProcessorTesterMixin:
         )
 
     @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
+    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
@@ -985,43 +991,43 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
 
-        # Load with `video_fps` arg
-        video_fps = 1
+        # Load with `fps` arg
+        fps = 1
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            fps=fps,
             return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), video_fps * 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
 
         # Whan `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        video_fps = 1
+        fps = 1
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             do_sample_frames=False,
-            video_fps=video_fps,
+            fps=fps,
             return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
 
-        # Load with `video_fps` and `num_frames` args, should raise an error
+        # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                video_fps=video_fps,
+                fps=fps,
                 num_frames=num_frames,
             )
 

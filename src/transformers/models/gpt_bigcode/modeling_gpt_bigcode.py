@@ -205,8 +205,8 @@ class GPTBigCodeAttention(nn.Module):
                 )
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions
-                key = curr_past_key_value.key_cache[self.layer_idx]
-                value = curr_past_key_value.value_cache[self.layer_idx]
+                key = curr_past_key_value.layers[self.layer_idx].keys
+                value = curr_past_key_value.layers[self.layer_idx].values
             else:
                 query = self.q_attn(hidden_states).view(*input_shape, -1, self.head_dim).transpose(1, 2)
                 key, value = self.c_attn(encoder_hidden_states).split((self.head_dim, self.head_dim), dim=-1)

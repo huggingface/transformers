@@ -146,7 +146,7 @@ To get an even better understanding of the data, visualize an example in the dat
 >>> annotations = cppe5["train"][2]["objects"]
 >>> draw = ImageDraw.Draw(image)
 
->>> categories = cppe5["train"].features["objects"].feature["category"].names
+>>> categories = cppe5["train"].features["objects"]["category"].feature.names
 
 >>> id2label = {index: x for index, x in enumerate(categories, start=0)}
 >>> label2id = {v: k for k, v in id2label.items()}

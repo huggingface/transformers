@@ -128,7 +128,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
-    "kernels>=0.6.1,<0.7",
+    "kernels>=0.6.1,<=0.9",
     "librosa",
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
@@ -137,7 +137,7 @@ _deps = [
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
-    "openai",
+    "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
@@ -463,7 +463,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.55.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.56.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

@@ -141,6 +141,7 @@ class ConfigTester:
                 # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
                 sub_config_loaded_dict = sub_config_loaded.to_dict()
                 sub_config_loaded_dict.pop("transformers_version", None)
+                general_config_dict[sub_config_key].pop("transformers_version", None)
                 self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
 
                 # Verify that the loaded config type is same as in the general config

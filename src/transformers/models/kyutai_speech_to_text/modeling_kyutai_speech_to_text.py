@@ -267,6 +267,8 @@ class KyutaiSpeechToTextLinear(nn.Module):
 
 
 class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: KyutaiSpeechToTextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -690,7 +692,7 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = causal_mask is None and q_len > 1
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,

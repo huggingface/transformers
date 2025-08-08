@@ -237,6 +237,20 @@ class HfQuantizer(ABC):
         """
         return self._process_model_after_weight_loading(model, **kwargs)
 
+    def remove_quantization_config(self, model):
+        """
+        Remove the quantization config from the model.
+        """
+        if hasattr(model, "hf_quantizer"):
+            del model.hf_quantizer
+        if hasattr(model.config, "quantization_config"):
+            del model.config.quantization_config
+        if hasattr(model.config, "_pre_quantization_dtype"):
+            del model.config._pre_quantization_dtype
+        if hasattr(model, "quantization_method"):
+            del model.quantization_method
+        model.is_quantized = False
+
     def dequantize(self, model):
         """
         Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
@@ -268,6 +282,12 @@ class HfQuantizer(ABC):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
+
+    def update_param_name(self, param_name: str) -> str:
+        """
+        Override this method if you want to adjust the `param_name`.
+        """
+        return param_name
 
     @staticmethod
     def get_modules_to_not_convert(

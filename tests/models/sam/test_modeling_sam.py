@@ -779,7 +779,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-12.7729, -12.3665, -12.6061],
-                ("cuda", 8): [-12.7657, -12.3683, -12.5983],
+                ("cuda", 8): [-12.7731, -12.3667, -12.6063],
             }
         )
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)

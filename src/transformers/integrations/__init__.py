@@ -119,6 +119,14 @@ _import_structure = {
         "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
+    "mxfp4": [
+        "Mxfp4GptOssExperts",
+        "convert_moe_packed_tensors",
+        "dequantize",
+        "load_and_swizzle_mxfp4",
+        "quantize_to_mxfp4",
+        "replace_with_mxfp4_linear",
+    ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
@@ -254,6 +262,13 @@ if TYPE_CHECKING:
         run_hp_search_ray,
         run_hp_search_sigopt,
         run_hp_search_wandb,
+    )
+    from .mxfp4 import (
+        Mxfp4GptOssExperts,
+        dequantize,
+        load_and_swizzle_mxfp4,
+        quantize_to_mxfp4,
+        replace_with_mxfp4_linear,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

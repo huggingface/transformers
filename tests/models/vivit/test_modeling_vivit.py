@@ -358,7 +358,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.9498, 2.7971, -1.4049, 0.1024, -1.8353],
-                ("cuda", 8): [-0.9502, 2.7967, -1.4046, 0.1027, -1.8345],
+                ("cuda", 8): [-0.9498, 2.7971, -1.4049, 0.1025, -1.8353],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

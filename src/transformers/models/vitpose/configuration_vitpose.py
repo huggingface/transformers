@@ -122,5 +122,13 @@ class VitPoseConfig(PretrainedConfig):
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
 
 __all__ = ["VitPoseConfig"]

@@ -195,6 +195,8 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     matrices which depend on their relative positions.
     """
 
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
@@ -1228,6 +1230,8 @@ class EvollaRMSNorm(nn.Module):
 
 
 class EvollaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -1442,7 +1446,6 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         protein_kv_states: Optional[torch.Tensor] = None,
@@ -1453,7 +1456,7 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
         msa_batch_mask: Optional[torch.Tensor] = None,
         query_attn_mask: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -1497,7 +1500,11 @@ class EvollaPreTrainedModel(PreTrainedModel):
     config: EvollaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["EvollaDecoderLayer"]
+    _no_split_modules = [
+        "EvollaDecoderLayer",
+        "EvollaSequenceCompressorResampler",
+        "EvollaSequenceAlignerCrossAttention",
+    ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1512,20 +1519,8 @@ class EvollaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, EvollaRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, EvollaSequenceAlignerCrossAttention):
+        super()._init_weights(module)
+        if isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()
             module.attention_norm.weight.data.fill_(1.0)
@@ -1594,15 +1589,6 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_batch_mask (torch.Tensor):
             The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummpy input for now.
         """
-        # If not provided `protein_feats`, use the `protein_encoder` to get the protein features
-        if protein_input_ids is not None and protein_attention_mask is not None:
-            protein_outputs = self.protein_encoder(
-                input_ids=protein_input_ids,
-                attention_mask=protein_attention_mask,
-            )
-            protein_feats = protein_outputs.sequence_compressor_output
-            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1620,6 +1606,17 @@ class EvollaModel(EvollaPreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
+
+        protein_feats = None
+        protein_batch_mask = None
+        # If provided, actually compute them
+        if protein_input_ids is not None and protein_attention_mask is not None:
+            protein_outputs = self.protein_encoder(
+                input_ids=protein_input_ids,
+                attention_mask=protein_attention_mask,
+            )
+            protein_feats = protein_outputs.sequence_compressor_output
+            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
 
         causal_mask = create_causal_mask(
             config=self.config,

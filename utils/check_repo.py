@@ -1193,7 +1193,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
-    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING.get(m, m) for m in model_types]
 
     errors = []
     for m in model_docs:

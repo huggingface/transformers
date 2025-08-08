@@ -148,7 +148,7 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_resize_embeddings = False
     test_head_masking = False
     # `strict=True/False` are both failing with torch 2.7, see #38677
-    test_torch_exportable = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)

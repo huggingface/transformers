@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     import PIL
+    from PIL import Image, ImageDraw
 
 logger = logging.get_logger(__name__)
 
@@ -405,6 +406,69 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->SuperGlue
+    def visualize_keypoint_matching(
+        self,
+        images: ImageInput,
+        keypoint_matching_output: list[dict[str, torch.Tensor]],
+    ) -> list["Image.Image"]:
+        """
+        Plots the image pairs side by side with the detected keypoints as well as the matching between them.
+
+        Args:
+            images (`ImageInput`):
+                Image pairs to plot. Same as `SuperGlueImageProcessor.preprocess`. Expects either a list of 2
+                images or a list of list of 2 images list with pixel values ranging from 0 to 255.
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
+                A post processed keypoint matching output
+
+        Returns:
+            `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
+            keypoints as well as the matching between them.
+        """
+        images = validate_and_format_image_pairs(images)
+        images = [to_numpy_array(image) for image in images]
+        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+
+        results = []
+        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
+            height0, width0 = image_pair[0].shape[:2]
+            height1, width1 = image_pair[1].shape[:2]
+            plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
+            plot_image[:height0, :width0] = image_pair[0]
+            plot_image[:height1, width0:] = image_pair[1]
+
+            plot_image_pil = Image.fromarray(plot_image)
+            draw = ImageDraw.Draw(plot_image_pil)
+
+            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
+            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
+            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
+            ):
+                color = self._get_color(matching_score)
+                draw.line(
+                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
+                    fill=color,
+                    width=3,
+                )
+                draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
+                draw.ellipse(
+                    (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),
+                    fill="black",
+                )
+
+            results.append(plot_image_pil)
+        return results
+
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
+    def _get_color(self, score):
+        """Maps a score to a color."""
+        r = int(255 * (1 - score))
+        g = int(255 * score)
+        b = 0
+        return (r, g, b)
 
 
 __all__ = ["SuperGlueImageProcessor"]

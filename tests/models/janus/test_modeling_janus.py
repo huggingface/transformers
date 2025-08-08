@@ -89,7 +89,7 @@ class JanusVisionText2TextModelTester:
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
-            "num_image_tokens": 4,
+            "num_image_tokens": 16,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,

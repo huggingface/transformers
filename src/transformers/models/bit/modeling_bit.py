@@ -252,7 +252,7 @@ class BitEmbeddings(nn.Module):
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
-        if not config.layer_type == "preactivation":
+        if config.layer_type != "preactivation":
             self.norm = BitGroupNormActivation(config, num_channels=config.embedding_size)
         else:
             self.norm = nn.Identity()

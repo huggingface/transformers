@@ -615,7 +615,7 @@ class Trainer:
         # Bnb Quantized models doesn't support `.to` operation.
         if (
             self.place_model_on_device
-            and not getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+            and getattr(model, "quantization_method", None) != QuantizationMethod.BITS_AND_BYTES
         ):
             self._move_model_to_device(model, args.device)
 
@@ -783,15 +783,17 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        if _is_peft_model(self.model) and self.args.label_names is None:
-            logger.warning(
-                f"No label_names provided for model class `{self.model.__class__.__name__}`."
-                " Since `PeftModel` hides base models input arguments, if label_names is not given, label_names can't be set automatically within `Trainer`."
-                " Note that empty label_names list will be used instead."
-            )
-        default_label_names = find_labels(self.model.__class__)
+
+        model_to_inspect = self.model
+        if _is_peft_model(self.model):
+            if hasattr(self.model, "get_base_model"):
+                model_to_inspect = self.model.get_base_model()
+            else:
+                # PeftMixedModel do not provide a `get_base_model` method
+                model_to_inspect = self.model.base_model.model
+        default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        self.can_return_loss = can_return_loss(self.model.__class__)
+        self.can_return_loss = can_return_loss(model_to_inspect.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # Internal variables to help with automatic batch size reduction
@@ -1032,17 +1034,16 @@ class Trainer:
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
-        dataloader = DataLoader(dataset, **dataloader_params)
+        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # Accelerator.free_memory() will destroy the references, so
-        # we need to store the non-prepared version for eval dataloaders.
+        # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
             if hasattr(self, "_eval_dataloaders"):
                 self._eval_dataloaders[dataloader_key] = dataloader
             else:
                 self._eval_dataloaders = {dataloader_key: dataloader}
 
-        return self.accelerator.prepare(dataloader)
+        return dataloader
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -1130,7 +1131,7 @@ class Trainer:
             and dataloader_key in self._eval_dataloaders
             and self.args.dataloader_persistent_workers
         ):
-            return self.accelerator.prepare(self._eval_dataloaders[dataloader_key])
+            return self._eval_dataloaders[dataloader_key]
 
         eval_dataset = (
             self.eval_dataset[eval_dataset]
@@ -2363,7 +2364,7 @@ class Trainer:
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
-        use_accelerator_prepare = True if model is self.model else False
+        use_accelerator_prepare = model is self.model
 
         if use_accelerator_prepare and self.is_fsdp_enabled:
             # In case of auto_find_batch_size=True
@@ -4621,7 +4622,7 @@ class Trainer:
         return_loss = inputs.get("return_loss")
         if return_loss is None:
             return_loss = self.can_return_loss
-        loss_without_labels = True if len(self.label_names) == 0 and return_loss else False
+        loss_without_labels = len(self.label_names) == 0 and return_loss
 
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
