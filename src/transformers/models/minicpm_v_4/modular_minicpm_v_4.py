@@ -32,8 +32,6 @@ from PIL import Image
 from torch import Tensor, nn
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
 
-from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...generation.streamers import TextIteratorStreamer
@@ -41,6 +39,7 @@ from ...integrations import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...models.siglip.configuration_siglip import SiglipVisionConfig
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -2110,4 +2109,4 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-__all__ = ["MiniCPM_V_4Model", "MiniCPM_V_4PreTrainedModel"]
+__all__ = ["MiniCPM_V_4Config", "MiniCPM_V_4Model", "MiniCPM_V_4PreTrainedModel"]
