@@ -266,7 +266,6 @@ class Glm4vMoeTextConfig(PretrainedConfig):
         topk_group=1,
         first_k_dense_replace=1,
         norm_topk_prob=True,
-        use_qk_norm=False,
         **kwargs,
     ):
         super().__init__(
@@ -306,7 +305,6 @@ class Glm4vMoeTextConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.use_qk_norm = use_qk_norm
 
 
 class Glm4vMoeConfig(PretrainedConfig):
