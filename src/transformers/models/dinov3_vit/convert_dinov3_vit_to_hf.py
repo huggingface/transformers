@@ -39,17 +39,17 @@ HUB_CHECKPOINTS = {
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"cls_token":               r"embeddings.cls_token",
-    r"mask_token":              r"embeddings.mask_token",
-    r"storage_tokens":          r"embeddings.register_tokens",
-    r"patch_embed.proj":        r"embeddings.patch_embeddings.projection",
-    r"periods":                 r"inv_freq",
-    r"rope_embed":              r"rope_embeddings",
-    r"blocks.(\d+).attn.proj":  r"layer.\1.attention.o_proj",
-    r"blocks.(\d+).attn.":      r"layer.\1.attention.",
-    r"blocks.(\d+).ls(\d+)":    r"layer.\1.layer_scale\2",
-    r"blocks.(\d+).mlp":        r"layer.\1.mlp",
-    r"blocks.(\d+).norm":       r"layer.\1.norm",
+    r"cls_token":                   r"embeddings.cls_token",
+    r"mask_token":                  r"embeddings.mask_token",
+    r"storage_tokens":              r"embeddings.register_tokens",
+    r"patch_embed.proj":            r"embeddings.patch_embeddings.projection",
+    r"periods":                     r"inv_freq",
+    r"rope_embed":                  r"rope_embeddings",
+    r"blocks.(\d+).attn.proj":      r"layer.\1.attention.o_proj",
+    r"blocks.(\d+).attn.":          r"layer.\1.attention.",
+    r"blocks.(\d+).ls(\d+).gamma":  r"layer.\1.layer_scale\2.lambda1",
+    r"blocks.(\d+).mlp":            r"layer.\1.mlp",
+    r"blocks.(\d+).norm":           r"layer.\1.norm",
 }
 # fmt: on
 

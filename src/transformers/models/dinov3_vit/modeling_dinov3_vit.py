@@ -331,17 +331,14 @@ class DINOv3ViTAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2LayerScale with Dinov2->DINOv3ViT
 class DINOv3ViTLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.gamma = nn.Parameter(torch.empty(config.hidden_size))
-        self.init_values = config.layerscale_value
-
-    def init_weights(self):
-        nn.init.constant_(self.gamma, self.init_values)
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state * self.gamma
+        return hidden_state * self.lambda1
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -513,8 +510,6 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-        elif isinstance(module, DINOv3ViTLayerScale):
-            module.gamma.data.fill_(self.config.layerscale_value)
 
 
 @auto_docstring
