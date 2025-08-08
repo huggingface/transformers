@@ -3,8 +3,8 @@
 URL: https://github.com/facebookresearch/dinov3/tree/main
 """
 
+import os
 import argparse
-from typing import Optional
 import torch
 
 import random
@@ -12,7 +12,7 @@ import numpy as np
 from torchvision import transforms
 import requests
 from PIL import Image
-from transformers import DINOv3ViTConfig, DINOv3ViTModel
+from transformers import DINOv3ViTConfig, DINOv3ViTModel, DINOv3ViTImageProcessorFast
 from huggingface_hub import hf_hub_download
 
 HUB_MODELS = {
@@ -34,7 +34,7 @@ HUB_CHECKPOINTS = {
 }
 
 
-def get_dinov3_config(model_name: str) -> Optional[DINOv3ViTConfig]:
+def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
     # size of the architecture
     if model_name == "vits":
         return DINOv3ViTConfig(
@@ -149,7 +149,6 @@ def get_dinov3_config(model_name: str) -> Optional[DINOv3ViTConfig]:
     else:
         raise ValueError("Model not supported")
 
-
 def convert_dinov3_vit_to_hf_vit(original_dinov3_state_dict, config: DINOv3ViTConfig):
     embed_dim = config.hidden_size
     hf_dinov3_state_dict = {}
@@ -204,7 +203,7 @@ def prepare_img():
     return image
 
 
-def make_transform(resize_size: int = 224):
+def get_transform(resize_size: int = 224):
     to_tensor = transforms.ToTensor()
     resize = transforms.Resize((resize_size, resize_size), antialias=True)
     normalize = transforms.Normalize(
@@ -213,6 +212,12 @@ def make_transform(resize_size: int = 224):
     )
     return transforms.Compose([to_tensor, resize, normalize])
 
+def get_image_processor(resize_size: int = 224):
+    return DINOv3ViTImageProcessorFast(
+        do_resize=True,
+        size={"height": resize_size, "width": resize_size},
+        resample=2,  # BILINEAR
+    )
 
 def set_deterministic(seed=42):
     random.seed(seed)
@@ -230,7 +235,7 @@ set_deterministic(seed=seed)
 
 
 @torch.no_grad()
-def convert_and_test_dinov3_checkpoint(model_name):
+def convert_and_test_dinov3_checkpoint(args):
     expected_outputs = {
         "vits_cls": [
             0.4635618329048157,
@@ -317,6 +322,7 @@ def convert_and_test_dinov3_checkpoint(model_name):
             -0.026546532288193703,
         ],
     }
+    model_name = args.model_name
     config = get_dinov3_config(model_name)
     print(config)
 
@@ -330,35 +336,47 @@ def convert_and_test_dinov3_checkpoint(model_name):
     model.load_state_dict(hf_state_dict, strict=True)
     model = model.eval()
 
-    image_preprocessor = make_transform()
-    # load image
-    images = [image_preprocessor(prepare_img())]
-    image_tensor = torch.stack(images, dim=0)
-    with torch.inference_mode():
-        with torch.autocast("cuda", dtype=torch.float):
-            model_output = model(image_tensor)
+    transform = get_transform()
+    image_processor = get_image_processor()
+    image = prepare_img()
+
+    # check preprocessing
+    original_pixel_values = transform(image).unsqueeze(0) # add batch dimension
+    inputs = image_processor(image, return_tensors="pt")
+
+    torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
+    print("Preprocessing looks ok!")
+    
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
+        model_output = model(**inputs)
 
     last_layer_class_token = model_output.pooler_output
-    last_layer_patch_tokens = model_output.last_hidden_state[
-        :, config.num_register_tokens + 1 :
-    ]
+    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1:]
+
     actual_outputs = {}
     actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
     actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
-    print(actual_outputs[f"{model_name}_cls"], expected_outputs[f"{model_name}_cls"])
+
+    print("Actual:  ", actual_outputs[f"{model_name}_cls"])
+    print("Expected:", expected_outputs[f"{model_name}_cls"])
+
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_cls"]),
         torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-3,
-        rtol=1e-3,
+        atol=1e-4, rtol=1e-4,
     )
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_patch"]),
         torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-3,
-        rtol=1e-3,
+        atol=1e-4, rtol=1e-4,
     )
-    print("Looks ok!")
+    print("Forward pass looks ok!")
+
+    save_dir = os.path.join(args.save_dir, model_name)
+    os.makedirs(save_dir, exist_ok=True)
+    model.save_pretrained(save_dir)
+    image_processor.save_pretrained(save_dir)
+    print(f"Model saved to {save_dir}")
 
 
 if __name__ == "__main__":
@@ -371,5 +389,11 @@ if __name__ == "__main__":
         choices=["vits", "vitsplus", "vitb", "vitl", "vithplus", "vit7b"],
         help="Name of the model you'd like to convert.",
     )
+    parser.add_argument(
+        "--save-dir",
+        default="converted_models",
+        type=str,
+        help="Directory to save the converted model.",
+    )
     args = parser.parse_args()
-    convert_and_test_dinov3_checkpoint(args.model_name)
+    convert_and_test_dinov3_checkpoint(args)
