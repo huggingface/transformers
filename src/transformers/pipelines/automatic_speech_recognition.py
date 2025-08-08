@@ -343,6 +343,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if return_language is not None:
             if self.type != "seq2seq_whisper":
                 raise ValueError("Only Whisper can return language for now.")
+            forward_params["return_language"] = return_language
             postprocess_params["return_language"] = return_language
 
         if getattr(self, "assistant_model", None) is not None:
@@ -499,7 +500,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
+    def _forward(self, model_inputs, return_timestamps=False, return_language=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         num_frames = model_inputs.pop("num_frames", None)
@@ -528,6 +529,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
+                    if return_language:
+                        generate_kwargs["keep_special_tokens"] = 2
 
             # User-defined `generation_config` passed to the pipeline call take precedence
             if "generation_config" not in generate_kwargs:
