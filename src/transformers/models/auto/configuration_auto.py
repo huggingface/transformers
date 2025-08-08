@@ -81,6 +81,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("codegen", "CodeGenConfig"),
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
+        ("cohere2_vision", "Cohere2VisionConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
         ("conditional_detr", "ConditionalDetrConfig"),
@@ -171,6 +172,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gpt_neo", "GPTNeoConfig"),
         ("gpt_neox", "GPTNeoXConfig"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
+        ("gpt_oss", "GptOssConfig"),
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
@@ -243,6 +245,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mixtral", "MixtralConfig"),
         ("mlcd", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
+        ("mm-grounding-dino", "MMGroundingDinoConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
@@ -476,6 +479,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("codegen", "CodeGen"),
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
+        ("cohere2_vision", "Cohere2Vision"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
         ("conditional_detr", "Conditional DETR"),
@@ -576,6 +580,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gpt_neo", "GPT Neo"),
         ("gpt_neox", "GPT NeoX"),
         ("gpt_neox_japanese", "GPT NeoX Japanese"),
+        ("gpt_oss", "GptOss"),
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
@@ -657,6 +662,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mlcd", "MLCD"),
         ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
+        ("mm-grounding-dino", "MM Grounding DINO"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
@@ -976,10 +982,10 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self) -> list[type[PretrainedConfig]]:
-        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
+        return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
     def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
-        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
+        return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
     def __iter__(self) -> Iterator[str]:
         return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
@@ -991,7 +997,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys() and not exist_ok:
+        if key in self._mapping and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
@@ -1232,7 +1238,7 @@ class AutoConfig:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )

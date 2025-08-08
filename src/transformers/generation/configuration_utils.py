@@ -614,10 +614,7 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (
-                isinstance(self.watermarking_config, WatermarkingConfig)
-                or isinstance(self.watermarking_config, SynthIDTextWatermarkingConfig)
-            ):
+            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
                 minor_issues["watermarking_config"] = (
                     "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
                     "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
@@ -847,7 +844,7 @@ class GenerationConfig(PushToHubMixin):
                 "Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -1110,7 +1107,7 @@ class GenerationConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
@@ -1247,7 +1244,7 @@ class GenerationConfig(PushToHubMixin):
         if decoder_config is not model_config:
             default_generation_config = GenerationConfig()
             decoder_config_dict = decoder_config.to_dict()
-            for attr in generation_config.to_dict().keys():
+            for attr in generation_config.to_dict():
                 is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
                 if attr in decoder_config_dict and is_unset:
                     setattr(generation_config, attr, decoder_config_dict[attr])
