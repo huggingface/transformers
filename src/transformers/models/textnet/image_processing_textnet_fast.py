@@ -15,7 +15,7 @@
 """Fast Image processor class for TextNet."""
 
 import enum
-from typing import Optional
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
@@ -29,8 +29,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
-
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available, TensorType
 
 if is_torch_available():
     import torch
@@ -53,16 +52,6 @@ class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 @auto_docstring
 class TextNetImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -79,77 +68,123 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
+    
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+    
+    def resize(
+        self,
+        image: "torch.Tensor",
+        size: SizeDict,
+        interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
+        size_divisor: int = 32,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """
+        Resize an image to `(size["height"], size["width"])`.
+
+        Args:
+            image (`torch.Tensor`):
+                Image to resize.
+            size (`SizeDict`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            size_divisor (`int`, *optional*, defaults to 32):
+                Ensures height and width are rounded to a multiple of this value after resizing.
+
+        Returns:
+            `torch.Tensor`: The resized image.
+        """
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        if size.shortest_edge and size.longest_edge:
+            # Resize the image so that the shortest edge or the longest edge is of the given size
+            # while maintaining the aspect ratio of the original image.
+            new_size = get_size_with_aspect_ratio(
+                image.size()[-2:],
+                size.shortest_edge,
+                size.longest_edge,
+            )
+        elif size.shortest_edge:
+            new_size = get_resize_output_image_size(
+                image,
+                size=size.shortest_edge,
+                default_to_square=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        elif size.max_height and size.max_width:
+            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
+        elif size.height and size.width:
+            new_size = (size.height, size.width)
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+                f" {size}."
+            )
+        
+        # ensure height and width are divisible by size_divisor
+        height, width = new_size
+        if height % size_divisor != 0:
+            height += size_divisor - (height % size_divisor)
+        if width % size_divisor != 0:
+            width += size_divisor - (width % size_divisor)
+        new_size = (height, width)
+
+        # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
+        # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
+        # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
+        if torch.compiler.is_compiling() and is_rocm_platform():
+            return self.compile_friendly_resize(image, new_size, interpolation, antialias)
+        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
         size_divisor: int,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
-        if do_resize:
-            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-            resized_images_grouped = {}
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, size_divisor=size_divisor)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-            for shape, stacked_images in grouped_images.items():
-                if size.shortest_edge:
-                    new_size = get_resize_output_image_size(
-                        stacked_images[0],
-                        size=size.shortest_edge,
-                        default_to_square=False,
-                        input_data_format=ChannelDimension.FIRST,
-                    )
-                else:
-                    raise ValueError(f"Size must contain 'shortest_edge' key. Got {size}.")
-                # ensure height and width are divisible by size_divisor
-                height, width = new_size
-                if height % size_divisor != 0:
-                    height += size_divisor - (height % size_divisor)
-                if width % size_divisor != 0:
-                    width += size_divisor - (width % size_divisor)
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
 
-                new_size_dict = SizeDict(height=height, width=width)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-                stacked_images = self.resize(image=stacked_images, size=new_size_dict, interpolation=interpolation)
-                resized_images_grouped[shape] = stacked_images
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-            images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # set do_resize to False since we have already resized the images
-        return super()._preprocess(
-            images=images,
-            do_resize=False,
-            size=size,
-            interpolation=interpolation,
-            disable_grouping=disable_grouping,
-            **kwargs,
-        )
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-    def to_dict(self) -> dict:
-        """
-        Return a dict that will yield the same config as the slow processor.
-
-        This ensures serialization compatibility between slow and fast versions by:
-        1. Using the slow processor name in image_processor_type
-        2. Converting resample from enum to int value
-        """
-        config = super().to_dict()
-
-        # Use slow processor name for compatibility
-        config["image_processor_type"] = "TextNetImageProcessor"
-
-        # Convert enum to int for resample
-        if isinstance(config.get("resample"), enum.Enum):
-            config["resample"] = config["resample"].value
-
-        return config
+    
 
 
 __all__ = ["TextNetImageProcessorFast"]
