@@ -98,6 +98,8 @@ class ModernBertDecoderConfig(PretrainedConfig):
         layer_types (`list`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
+        reference_compile (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
 
     Examples:
 

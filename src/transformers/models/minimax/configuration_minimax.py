@@ -76,6 +76,7 @@ class MiniMaxConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
+        rope_theta (`<fill_type>`, *optional*, defaults to 1000000.0): <fill_docstring>
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -109,6 +110,7 @@ class MiniMaxConfig(PretrainedConfig):
             Weight for residual value in residual connection after MLP.
         mlp_beta_factor (`float`, *optional*, defaults to 1):
             Weight for hidden state value in residual connection after MLP.
+        rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
     >>> from transformers import MiniMaxModel, MiniMaxConfig
