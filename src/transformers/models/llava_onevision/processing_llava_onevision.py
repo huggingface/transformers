@@ -214,15 +214,16 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         prompt_strings = []
         max_num_vision_tokens = 0
         for sample in text:
+            num_images = next(batch_num_images)     # should consume iterable
             if special_token in sample:
-                is_multi_image = next(batch_num_images) != 1
+                is_multi_image = num_images != 1
             else:
                 is_multi_image = False
             while special_token in sample:
+                original_size = next(image_sizes)   # should consume iterable
                 if is_multi_image:
                     num_image_tokens = self.num_image_tokens + 1  # one for image_newline
                 else:
-                    original_size = next(image_sizes)
                     if not isinstance(original_size, (list, tuple)):
                         # cast to list to avoid numerical precision errors when calculating unpadding
                         original_size = original_size.tolist()

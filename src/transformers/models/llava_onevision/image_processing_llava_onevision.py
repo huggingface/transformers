@@ -680,8 +680,10 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
-            # if the first element is a list, we assume that all elements are lists
+        if isinstance(images, (tuple, list)) and any(isinstance(image, (tuple, list)) for image in images):
+            for i, image in enumerate(images):
+                if not isinstance(image, (tuple, list)):
+                    images[i] = [image]
             batch_num_images = [len(x) for x in images]
         elif isinstance(images, (tuple, list)):
             # treat this as a single-image case for backward compatibility
