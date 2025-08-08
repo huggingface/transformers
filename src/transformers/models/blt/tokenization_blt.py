@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for Blt."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging

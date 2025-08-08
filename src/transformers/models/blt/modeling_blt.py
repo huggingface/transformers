@@ -238,11 +238,10 @@ def eager_attention_forward(
 
 
 def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -374,7 +373,6 @@ class BltCrossAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -455,7 +453,6 @@ class BltLocalEncoder(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -496,7 +493,6 @@ class BltLocalEncoder(nn.Module):
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
                     attention_mask=encoder_attention_mask,
-                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
                 patch_embeds = patch_embeds + cross_attention_output
@@ -569,7 +565,6 @@ class BltLocalDecoder(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size = inputs_embeds.shape[0]
@@ -598,7 +593,6 @@ class BltLocalDecoder(nn.Module):
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
                     attention_mask=encoder_attention_mask,
-                    full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
                 hidden_states = hidden_states + cross_attention_output
@@ -655,9 +649,13 @@ class BltGlobalTransformer(nn.Module):
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
+    _no_split_modules = [
+        "BltVisionEncoderLayer",
+        "BltCrossAttentionDecoderLayer",
+        "BltSelfAttentionDecoderLayer",
+    ]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -669,8 +667,6 @@ class BltPreTrainedModel(PreTrainedModel):
         "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
         "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
     }
-
-    _supports_static_cache = False  # static cache cannot have different shapes for each layer
 
     def _update_causal_mask(
         self,
@@ -881,7 +877,6 @@ def _prepare_patch_cross_attention_mask(
     Returns:
         Tuple[torch.Tensor, torch.Tensor]:
             - cross_attention_mask: 4D tensor [batch_size, 1, q_len, kv_len]
-            - full_text_row_masked_out_mask: 4D tensor indicating fully masked rows
     """
     batch_size, seq_len = patch_ids.shape
     device = patch_ids.device
@@ -931,15 +926,6 @@ def _prepare_patch_cross_attention_mask(
     cross_attention_mask = inverted_cross_attn_mask.masked_fill(
         inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
     )
-
-    # Apply full-row bias (following mllama pattern exactly)
-    # Return 4D tensor of shape [B, H, S1, 1] where value is 0 if a full row in cross attn mask's
-    # last dimension contains negative infinity values, otherwise it's 1
-    negative_inf_value = torch.finfo(dtype).min
-    full_text_row_masked_out_mask = (
-        (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
-    )
-    cross_attention_mask *= full_text_row_masked_out_mask
 
     return cross_attention_mask
 
@@ -1086,8 +1072,6 @@ class BltModel(BltPreTrainedModel):
         cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
             patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
         )
-        # Remove full_text_row_masked_out_mask from kwargs if present to avoid multiple values error
-        kwargs.pop("full_text_row_masked_out_mask", None)
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
             inputs_embeds=encoder_embeds,
@@ -1221,10 +1205,10 @@ class BltPatcher(BltPreTrainedModel):
             )
 
             for i, layer in enumerate(self.layers):
-                layer_outputs = layer(
+                hidden_states = hidden_states.view(-1, hidden_states.size(-2), hidden_states.size(-1))
+                hidden_states = layer(
                     hidden_states, position_embeddings=position_embeddings, attention_mask=causal_mask
                 )
-                hidden_states = layer_outputs[0]
 
             logits = self.lm_head(self.norm(hidden_states))
             logits = logits.reshape(-1, logits.shape[-1])[: split.numel() - pad_size, :]
