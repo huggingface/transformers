@@ -45,7 +45,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="ibm-ai-platform/Bamba-9B-v2",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -60,7 +60,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
-model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
 
 output = model.generate(**input_ids)

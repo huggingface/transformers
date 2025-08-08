@@ -45,7 +45,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="google/vit-base-patch16-224",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -66,7 +66,7 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/vit-base-patch16-224",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

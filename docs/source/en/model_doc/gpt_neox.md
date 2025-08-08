@@ -87,7 +87,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 ```python
 >>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 ...
 ```
 
@@ -113,7 +113,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```python
 from transformers import GPTNeoXForCausalLM
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
 

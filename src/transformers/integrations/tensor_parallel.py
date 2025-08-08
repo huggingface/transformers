@@ -138,7 +138,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
-str_to_torch_dtype = {
+str_to_dtype = {
     "BOOL": torch.bool,
     "U8": torch.uint8,
     "I8": torch.int8,
@@ -218,7 +218,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     if casted:
         return tensor
     else:
-        return tensor.to(str_to_torch_dtype[slice_dtype])
+        return tensor.to(str_to_dtype[slice_dtype])
 
 
 def repack_weights(

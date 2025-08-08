@@ -46,7 +46,7 @@ from transformers import pipeline
 pipe = pipeline(
     "text2text-generation",
     model="google/t5gemma-2b-2b-prefixlm-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device="cuda",  # replace with "mps" to run on a Mac device
 )
 
@@ -70,7 +70,7 @@ tokenizer = AutoTokenizer.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2b-2b-prefixlm-it",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 messages = [

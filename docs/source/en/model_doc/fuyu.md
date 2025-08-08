@@ -30,10 +30,10 @@ By treating image tokens like text tokens and using a special image-newline char
 
 <Tip warning={true}>
 
-The `Fuyu` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `torch_dtype = 'float16'` which will be
+The `Fuyu` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `dtype = 'float16'` which will be
 used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
 
-The `dtype` of the online weights is mostly irrelevant, unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`). Users should specify the `torch_dtype` they want, and if they don't it will be `torch.float32`.
+The `dtype` of the online weights is mostly irrelevant, unless you are using `dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`). Users should specify the `dtype` they want, and if they don't it will be `torch.float32`.
 
 Finetuning the model in `float16` is not recommended and known to produce `nan`, as such the model should be fine-tuned in `bfloat16`.
 

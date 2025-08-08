@@ -280,7 +280,7 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `torch_dtype=torch.float16`을 지정해야 합니다.
+fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `dtype=torch.float16`을 지정해야 합니다.
 
 ZeRO-3의 또 다른 고려 사항은 여러 개의 GPU를 사용하는 경우 현재 실행 중인 레이어의 매개변수가 아닌 한 단일 GPU에 모든 매개변수가 없다는 것입니다. 사전 훈련된 모델 가중치를 [`~PreTrainedModel.from_pretrained`]에 로드하는 등 모든 레이어의 모든 매개변수에 한 번에 액세스하려면 한 번에 하나의 레이어를 로드하고 즉시 모든 GPU에 파티셔닝합니다. 이는 매우 큰 모델의 경우 메모리 제한으로 인해 하나의 GPU에 가중치를 로드한 다음 다른 GPU에 분산할 수 없기 때문입니다.
 

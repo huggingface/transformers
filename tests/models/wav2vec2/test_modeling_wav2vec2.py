@@ -1990,7 +1990,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", dtype=torch.bfloat16
         )
         model_fa.to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
@@ -2012,7 +2012,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @mark.flash_attn_test
     def test_inference_ctc_fa2_batched(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
-            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+            "facebook/wav2vec2-base-960h", attn_implementation="flash_attention_2", dtype=torch.bfloat16
         )
         model_fa.to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)

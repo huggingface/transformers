@@ -100,12 +100,12 @@ Use [`~PreTrainedModel.from_pretrained`] to load the weights and configuration f
 When you load a model, configure the following parameters to ensure the model is optimally loaded.
 
 - `device_map="auto"` automatically allocates the model weights to your fastest device first, which is typically the GPU.
-- `torch_dtype="auto"` directly initializes the model weights in the data type they're stored in, which can help avoid loading the weights twice (PyTorch loads weights in `torch.float32` by default).
+- `dtype="auto"` directly initializes the model weights in the data type they're stored in, which can help avoid loading the weights twice (PyTorch loads weights in `torch.float32` by default).
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 ```
 

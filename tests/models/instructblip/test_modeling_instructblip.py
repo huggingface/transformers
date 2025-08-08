@@ -759,7 +759,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
@@ -794,7 +794,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
         processor.image_processor.size = {"height": 500, "width": 500}
 

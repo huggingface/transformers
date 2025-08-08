@@ -44,7 +44,7 @@ pipeline = pipeline(
     "image-to-text",
     model="rhymes-ai/Aria",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -62,7 +62,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="sdpa"
 )
 
@@ -108,7 +108,7 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoProcessor
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria-sequential_mlp",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

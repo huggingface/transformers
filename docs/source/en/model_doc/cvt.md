@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/cvt-13",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0 
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -62,7 +62,7 @@ from transformers import AutoModelForImageClassification, AutoImageProcessor
 image_processor = AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 model = AutoModelForImageClassification.from_pretrained(
     "microsoft/cvt-13",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 

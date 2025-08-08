@@ -179,14 +179,14 @@ class ConfigTester:
         config = self.config_class(**kwargs)
         wrong_values = []
         for key, value in config_common_kwargs.items():
-            if key == "torch_dtype":
+            if key == "dtype":
                 if not is_torch_available():
                     continue
                 else:
                     import torch
 
-                    if config.torch_dtype != torch.float16:
-                        wrong_values.append(("torch_dtype", config.torch_dtype, torch.float16))
+                    if config.dtype != torch.float16:
+                        wrong_values.append(("dtype", config.dtype, torch.float16))
             elif getattr(config, key) != value:
                 wrong_values.append((key, getattr(config, key), value))
 

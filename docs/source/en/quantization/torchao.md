@@ -105,7 +105,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -133,7 +133,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -164,7 +164,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="cuda",
     quantization_config=quantization_config
 )
@@ -197,7 +197,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -232,7 +232,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -263,7 +263,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="cuda",
     quantization_config=quantization_config
 )
@@ -296,7 +296,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -327,7 +327,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -360,7 +360,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="cpu",
     quantization_config=quantization_config
 )
@@ -391,7 +391,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="cpu",
     quantization_config=quantization_config
 )
@@ -422,7 +422,7 @@ config = Int4WeightOnlyConfig(group_size=128)
 # set default to int4 (for linears), and skip quantizing `model.layers.0.self_attn.q_proj`
 quant_config = ModuleFqnToConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
 quantization_config = TorchAoConfig(quant_type=quant_config)
-quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16, quantization_config=quantization_config)
 # lm_head is not quantized and model.layers.0.self_attn.q_proj is not quantized
 print("quantized model:", quantized_model)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -459,7 +459,7 @@ quant_config = ModuleFqnToConfig({"_default": linear_config, "model.decoder.embe
 # set `include_embedding` to True in order to include embedding in quantization
 # when `include_embedding` is True, we'll remove input embedding from `modules_not_to_convert` as well
 quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
-quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", dtype=torch.bfloat16, quantization_config=quantization_config)
 print("quantized model:", quantized_model)
 # make sure embedding is quantized
 print("embed_tokens weight:", quantized_model.model.decoder.embed_tokens.weight)
@@ -493,7 +493,7 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 quantization_config = TorchAoConfig("autoquant", min_sqnr=None)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -552,7 +552,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="cpu",
     quantization_config=quantization_config
 )
@@ -564,7 +564,7 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     output_dir,
     device_map="auto",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
@@ -588,7 +588,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B-Instruct",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="cpu",
     quantization_config=quantization_config
 )
@@ -600,7 +600,7 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     output_dir,
     device_map="cpu",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
@@ -660,7 +660,7 @@ def benchmark_fn(func: Callable, *args, **kwargs) -> float:
 MAX_NEW_TOKENS = 1000
 print("int4wo-128 model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 
-bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.bfloat16)
+bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.bfloat16)
 output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static") # auto-compile
 print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 ```

@@ -51,7 +51,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
@@ -67,7 +67,7 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     attn_implementation="sdpa",
     device_map="auto"
 )

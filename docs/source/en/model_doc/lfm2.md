@@ -44,7 +44,7 @@ model_id = "LiquidAI/LFM2-1.2B"
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype="bfloat16",
+    dtype="bfloat16",
 )
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 

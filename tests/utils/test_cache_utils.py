@@ -187,7 +187,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # Load once and reuse across tests
         cls.tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct", padding_side="left")
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", torch_dtype=torch.float16
+            "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", dtype=torch.float16
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
 
@@ -344,7 +344,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
         """Hard test for base cache implementation -- minor numerical fluctuations will cause this test to fail"""
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B", padding_side="left")
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B", device_map="auto", torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B", device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
         set_seed(0)
@@ -390,7 +390,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(
             "Qwen/Qwen3-4B",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
             device_map="auto",
         )
@@ -426,7 +426,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         """Tests that OffloadedCache uses less memory than the default DynamicCache"""
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", dtype=torch.float16)
         device = model.device
 
         if not is_torch_greater_or_equal("2.7", accept_dev=True) and device.type == "xpu":
@@ -463,7 +463,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # lazy init of cache layers
         model_name = "microsoft/Phi-3-mini-4k-instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, torch_dtype=torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map=torch_device, dtype=torch.bfloat16)
 
         prompt_cache = StaticCache(config=model.config, max_cache_len=1024)
 
@@ -560,7 +560,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype="bfloat16",
+            dtype="bfloat16",
             device_map=device_map,
         )
         inputs = tokenizer("Today is a beautiful day!", return_tensors="pt").to(0)
@@ -574,7 +574,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
         model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
-        pipe = pipeline("text-generation", model=model_id, torch_dtype=torch.bfloat16)
+        pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
         pipe.model.config.sliding_window = (
             256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
         )
@@ -748,7 +748,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

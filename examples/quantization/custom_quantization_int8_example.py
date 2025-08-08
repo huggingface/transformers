@@ -232,7 +232,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
 # Example usage
 if __name__ == "__main__":
     model_int8 = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3.2-1B", quantization_config=Int8SymmetricConfig(), torch_dtype=torch.float, device_map="cpu"
+        "meta-llama/Llama-3.2-1B", quantization_config=Int8SymmetricConfig(), dtype=torch.float, device_map="cpu"
     )
 
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")

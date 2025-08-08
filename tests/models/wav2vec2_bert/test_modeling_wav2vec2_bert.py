@@ -234,7 +234,7 @@ class Wav2Vec2BertModelTester:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = Wav2Vec2BertModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+            model = Wav2Vec2BertModel.from_pretrained(tmpdirname, dtype=torch.float16)
 
         model.to(torch_device)
         model.eval()

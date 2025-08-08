@@ -42,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(  
     task="fill-mask",  
     model="facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device=0  
 )  
 pipeline("Bonjour, je suis un modèle <mask>.")  
@@ -60,7 +60,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )  
 model = AutoModelForMaskedLM.from_pretrained(  
     "facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device_map="auto",  
     attn_implementation="sdpa"  
 )  
@@ -100,7 +100,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-xl",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa",
     quantization_config=quantization_config

@@ -45,7 +45,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation",
     model="csebuetnlp/mT5_multilingual_XLSum",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("""Plants are remarkable organisms that produce their own food using a method called photosynthesis.
@@ -65,7 +65,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "csebuetnlp/mT5_multilingual_XLSum",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
 )
 
@@ -103,7 +103,7 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "csebuetnlp/mT5_multilingual_XLSum",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

@@ -257,19 +257,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_torch_dtype
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_dtype
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.float16` due to "
+                "Overriding dtype=%s with `dtype=torch.float16` due to "
                 "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.float16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.float16 to remove this warning.",
+                dtype,
             )
-            torch_dtype = torch.float16
-        return torch_dtype
+            dtype = torch.float16
+        return dtype
 
     def update_device_map(self, device_map):
         if device_map is None:

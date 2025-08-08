@@ -355,7 +355,7 @@ class OlmoIntegrationTest(unittest.TestCase):
         model = OlmoForCausalLM.from_pretrained(
             olmo_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

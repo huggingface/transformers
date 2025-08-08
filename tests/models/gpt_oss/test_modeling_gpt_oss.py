@@ -201,7 +201,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     model_id = f"/fsx/vb/new-oai/gpt-oss-{model_size}-trfs"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype="auto",
+        dtype="auto",
         tp_plan="auto",  # distributed inference
         use_kernels=kernels,
     ).to(torch_device)
@@ -256,7 +256,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
@@ -424,7 +424,7 @@ if __name__ == "__main__":
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation="eager",
         )
@@ -490,7 +490,7 @@ I am a language model, not a human being"""
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation="eager",
         )

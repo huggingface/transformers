@@ -66,7 +66,7 @@ model_id = "CohereLabs/aya-vision-8b"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", torch_dtype=torch.float16
+    model_id, device_map="auto", dtype=torch.float16
 )
 
 # Format message with the aya-vision chat template
@@ -152,7 +152,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", dtype=torch.float16
     )
     
     messages = [
@@ -198,7 +198,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", dtype=torch.float16
     )
     
     batch_messages = [

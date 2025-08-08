@@ -490,7 +490,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_bf16(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -519,7 +519,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -579,7 +579,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         crop_config = {
             "images_kwargs": {
@@ -620,7 +620,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         crop_config = {
             "images_kwargs": {
                 "do_pan_and_scan": True,
@@ -686,7 +686,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_multiimage(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -725,7 +725,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
@@ -752,7 +752,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -796,7 +796,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window

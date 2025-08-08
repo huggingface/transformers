@@ -259,7 +259,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         See #33586 for more
         """
         model = Phi3ForCausalLM.from_pretrained(
-            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
+            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, dtype=torch.bfloat16
         )
         tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
 
@@ -387,7 +387,7 @@ class Phi3IntegrationTest(unittest.TestCase):
             model_id,
             config=config,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

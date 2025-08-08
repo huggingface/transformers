@@ -1012,8 +1012,8 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
 
     def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
         # half-precision loading to limit GPU usage
-        model1 = class1.from_pretrained(self.repo_id, torch_dtype=torch.float16).to(torch_device)
-        model2 = class2.from_pretrained(self.repo_id, torch_dtype=torch.float16).to(torch_device)
+        model1 = class1.from_pretrained(self.repo_id, dtype=torch.float16).to(torch_device)
+        model2 = class2.from_pretrained(self.repo_id, dtype=torch.float16).to(torch_device)
 
         set_seed(0)
         output_1 = model1.generate(**inputs, **class1_kwargs)

@@ -214,7 +214,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         >>> import requests
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vip-llava-7b-hf", device_map="auto", torch_dtype=torch.float16)
+        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vip-llava-7b-hf", device_map="auto", dtype=torch.float16)
         >>> processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
         >>> prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n{}###Assistant:"

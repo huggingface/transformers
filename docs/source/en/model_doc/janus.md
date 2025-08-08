@@ -64,8 +64,8 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
-model = JanusForConditionalGeneration.from_pretrained(model_id,
-        torch_dtype=torch.bfloat16,
+model = JanusForConditionalGeneration.from_pretrained(model_id,     
+        dtype=torch.bfloat16,
         device_map="auto")
 
 inputs = processor.apply_chat_template(
@@ -127,7 +127,7 @@ messages = [
 # Load model and processor
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, dtype=torch.bfloat16, device_map="auto"
 )
 
 inputs = processor.apply_chat_template(
@@ -159,7 +159,7 @@ from transformers import JanusForConditionalGeneration, JanusProcessor
 model_id = "deepseek-community/Janus-Pro-1B"
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto")
 
 messages = [

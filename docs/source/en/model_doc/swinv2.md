@@ -39,7 +39,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/swinv2-tiny-patch4-window8-256",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")

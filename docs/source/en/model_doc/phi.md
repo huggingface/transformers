@@ -40,7 +40,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, torch_dtype=torch.bfloat16)
+pipeline = pipeline(task="text-generation", model="microsoft/phi-1.5", device=0, dtype=torch.bfloat16)
 pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n"""''')")
 
 ```
@@ -54,7 +54,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 input_ids = tokenizer('''def print_prime(n):
    """
@@ -85,7 +85,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
+model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", dtype=torch.float16, device_map="auto", attn_implementation="sdpa", quantization_config=bnb_config)
 
 input_ids = tokenizer('''def print_prime(n):
    """
@@ -107,7 +107,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
     model = AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-1",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True,
         attn_implementation="sdpa")

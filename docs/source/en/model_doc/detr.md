@@ -43,7 +43,7 @@ import torch
 pipeline = pipeline(
     "object-detection", 
     model="facebook/detr-resnet-50",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map=0
 )
 

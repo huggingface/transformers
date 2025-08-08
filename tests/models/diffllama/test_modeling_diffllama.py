@@ -488,7 +488,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model.save_pretrained(tmp_dir)
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
                 ).to("cuda")
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
@@ -513,14 +513,14 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -595,7 +595,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "kajuma/DiffLlama-0.3B-handcut", pad_token="</s>", padding_side="right"
         )
         model = DiffLlamaForCausalLM.from_pretrained(
-            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, torch_dtype=torch.float16
+            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -632,7 +632,7 @@ class Mask4DTestHard(unittest.TestCase):
         model_name = "kajuma/DiffLlama-0.3B-handcut"
         self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"

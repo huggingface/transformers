@@ -56,7 +56,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3n-e4b",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -73,7 +73,7 @@ from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
 model = Gemma3nForConditionalGeneration.from_pretrained(
     "google/gemma-3n-e4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

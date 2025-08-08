@@ -301,11 +301,11 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # Ignore copy
@@ -381,11 +381,11 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # Ignore copy
@@ -954,12 +954,12 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                     attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # Ignore copy
@@ -1070,7 +1070,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation={"decoder": "sdpa", "audio_encoder": None, "text_encoder": None},
                 )
                 model.to(torch_device)
@@ -1102,12 +1102,12 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                     attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # Ignore copy

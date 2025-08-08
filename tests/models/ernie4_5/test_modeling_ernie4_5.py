@@ -103,7 +103,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         model = Ernie4_5ForCausalLM.from_pretrained(
             "baidu/ERNIE-4.5-0.3B-PT",
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
 
         prompt = "Hey, are you conscious? Can you talk to me?"

@@ -42,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation",
     model="google/byt5-small",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("translate English to French: The weather is nice today")
@@ -60,7 +60,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-small",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -95,7 +95,7 @@ quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-xl",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

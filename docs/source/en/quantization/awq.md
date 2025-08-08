@@ -49,7 +49,7 @@ Identify an AWQ-quantized model by checking the `quant_method` key in the models
 }
 ```
 
-Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This automatically sets the other weights to fp16 by default for performance reasons. Use the `torch_dtype` parameter to load these other weights in a different format.
+Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This automatically sets the other weights to fp16 by default for performance reasons. Use the `dtype` parameter to load these other weights in a different format.
 
 If the model is loaded on the CPU, use the `device_map` parameter to move it to a GPU.
 
@@ -59,7 +59,7 @@ import torch
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
-  torch_dtype=torch.float32,
+  dtype=torch.float32,
   device_map="cuda:0"
 )
 ```

@@ -39,7 +39,7 @@ torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, torch_dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
 
 # 2. load audio samples
 ds = load_dataset(
@@ -72,7 +72,7 @@ torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, torch_dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
 
 # 2. load audio samples
 ds = load_dataset(
