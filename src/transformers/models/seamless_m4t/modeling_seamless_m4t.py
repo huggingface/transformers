@@ -1989,7 +1989,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         "text_encoder",
         "text_decoder",
     ]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(
         self,

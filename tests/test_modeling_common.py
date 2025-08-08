@@ -48,6 +48,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.modeling_utils import _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -2572,7 +2573,7 @@ class ModelTesterMixin:
             copied_config.get_text_config().tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
-            tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
+            tied_weight_keys = _get_tied_weight_keys(model_tied)
             # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
             # does not tie them
             if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
