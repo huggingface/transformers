@@ -87,11 +87,10 @@ class Ovis2VisionText2TextModelTester:
             "hidden_act": "silu",
             "qkv_bias": False,
             "hidden_stride": 2,
-            "num_visual_indicator_tokens": 5,
             "tokenize_function": "softmax",
         },
         image_token_id=1,
-        visual_indicator_token_ids=[2, 3, 4, 5, 6],
+        visual_indicator_token_ids=[],
         vocab_size=99,
         hidden_size=64,
         ignore_id=-100,
@@ -144,10 +143,8 @@ class Ovis2VisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
 
-        safe_start = max(config.visual_indicator_token_ids) + 1
-        vocab_range = config.text_config.vocab_size - safe_start
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_range) + safe_start
+        vocab_range = self.vocab_size - 2
+        input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_range) + 2
         input_ids[:, : self.image_seq_length] = config.image_token_id
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
