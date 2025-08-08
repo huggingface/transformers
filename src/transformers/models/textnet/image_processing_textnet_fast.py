@@ -14,12 +14,16 @@
 # limitations under the License.
 """Fast Image processor class for TextNet."""
 
-import enum
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
-from ...image_transforms import get_resize_output_image_size, group_images_by_shape, reorder_images
+from ...image_transforms import (
+    get_resize_output_image_size,
+    get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -27,9 +31,18 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size_for_max_height_width,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available, TensorType
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+from ...utils.import_utils import is_rocm_platform
+
 
 if is_torch_available():
     import torch
@@ -68,11 +81,11 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
-    
+
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-    
+
     def resize(
         self,
         image: "torch.Tensor",
@@ -123,7 +136,7 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        
+
         # ensure height and width are divisible by size_divisor
         height, width = new_size
         if height % size_divisor != 0:
@@ -162,7 +175,9 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, size_divisor=size_divisor)
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, interpolation=interpolation, size_divisor=size_divisor
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -183,8 +198,6 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
-    
 
 
 __all__ = ["TextNetImageProcessorFast"]
