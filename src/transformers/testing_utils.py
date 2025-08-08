@@ -170,7 +170,6 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
-    is_triton_kernels_availalble,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -469,13 +468,6 @@ def require_triton(min_version: str = TRITON_MIN_VERSION):
         )
 
     return decorator
-
-
-def require_triton_kernels(test_case):
-    """
-    Decorator marking a test that requires triton_kernels. These tests are skipped when triton_kernels isn't installed.
-    """
-    return unittest.skipUnless(is_triton_kernels_availalble(), "test requires triton_kernels")(test_case)
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
@@ -2876,7 +2868,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -3036,7 +3028,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
