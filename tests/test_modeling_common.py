@@ -3822,6 +3822,10 @@ class ModelTesterMixin:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             if config.model_type in ["sam"]:
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
+            if config.model_type in ["owlvit", "owlv2"]:
+                self.skipTest(
+                    reason="OwlViT/V2 models currently (transformers==4.55.0) use attention_mask inputs in attention"
+                )
 
             model = model_class(config)
 
