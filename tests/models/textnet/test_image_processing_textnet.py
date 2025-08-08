@@ -98,7 +98,6 @@ class TextNetImageProcessingTester:
 class TextNetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = TextNetImageProcessor if is_vision_available() else None
     fast_image_processing_class = TextNetImageProcessorFast if is_torchvision_available() else None
-    image_processor_list = [image_processing_class, fast_image_processing_class]
 
     def setUp(self):
         super().setUp()
