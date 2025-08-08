@@ -238,10 +238,11 @@ def eager_attention_forward(
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    # Split and rotate. Note that this function is different from e.g. Llama.
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
+    return rot_x
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -453,7 +454,7 @@ class BltLocalEncoder(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cross_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         num_patches: Optional[int] = None,
         patch_ids: Optional[torch.Tensor] = None,
@@ -494,7 +495,7 @@ class BltLocalEncoder(nn.Module):
                 cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
-                    attention_mask=cross_attention_mask,
+                    attention_mask=encoder_attention_mask,
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
@@ -567,7 +568,7 @@ class BltLocalDecoder(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        cross_attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -596,7 +597,7 @@ class BltLocalDecoder(nn.Module):
                 cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
-                    attention_mask=cross_attention_mask,
+                    attention_mask=encoder_attention_mask,
                     full_text_row_masked_out_mask=full_text_row_masked_out_mask,
                     **kwargs,
                 )
@@ -656,11 +657,7 @@ class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "BltVisionEncoderLayer",
-        "BltCrossAttentionDecoderLayer",
-        "BltSelfAttentionDecoderLayer",
-    ]
+    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -1099,9 +1096,10 @@ class BltModel(BltPreTrainedModel):
             position_ids=position_ids,
             past_key_values=None,
             cache_position=None,
-            cross_attention_mask=cross_attn_mask_enc,
+            encoder_attention_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
+            **kwargs,
         )
         global_hidden_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
         global_cache_position = torch.arange(0, global_hidden_states.shape[1], device=global_hidden_states.device)
@@ -1140,7 +1138,8 @@ class BltModel(BltPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             cache_position=cache_position,
-            cross_attention_mask=cross_attn_mask_dec,
+            encoder_attention_mask=cross_attn_mask_dec,
+            **kwargs,
         )
         return BaseModelOutputWithPast(
             last_hidden_state=output,
@@ -1321,7 +1320,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
-    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     def __init__(self, config: BltConfig):
         super().__init__(config.get_text_config())
