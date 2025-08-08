@@ -474,11 +474,11 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
+        >>> from transformers import HGNetV2Config, HGNetV2Backbone
         >>> import torch
 
-        >>> config = RTDetrResNetConfig()
-        >>> model = RTDetrResNetBackbone(config)
+        >>> config = HGNetV2Config()
+        >>> model = HGNetV2Backbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 224, 224)
 

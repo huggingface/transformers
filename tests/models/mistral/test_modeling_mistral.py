@@ -320,8 +320,8 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
-        forward_function = model.forward
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
+        forward_function = model.__call__
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
@@ -330,7 +330,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
         # Sliding Window Cache + compile
         torch._dynamo.reset()
-        model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
         )

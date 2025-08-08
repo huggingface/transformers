@@ -195,7 +195,7 @@ def is_local_dist_rank_0():
     return (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", -1)) == 0
+        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
 
 
@@ -954,7 +954,7 @@ def load_shard_file(args):
             or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
         )
     ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -4663,7 +4663,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
                 "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
                 "If your plan is to load the model on each device, you should set device_map={"

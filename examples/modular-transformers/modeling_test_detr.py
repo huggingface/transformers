@@ -803,7 +803,7 @@ class TestDetrDecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class TestDetrPreTrainedModel(PreTrainedModel):
-    config_class = TestDetrConfig
+    config: TestDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

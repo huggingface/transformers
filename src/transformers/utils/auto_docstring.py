@@ -365,13 +365,6 @@ class ModelArgs:
         "shape": None,
     }
 
-    past_key_value = {
-        "description": """
-    deprecated in favor of `past_key_values`
-    """,
-        "shape": None,
-    }
-
     inputs_embeds = {
         "description": """
     Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This

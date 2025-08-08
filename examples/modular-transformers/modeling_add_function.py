@@ -10,6 +10,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...utils.deprecation import deprecate_kwarg
+
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -62,5 +64,6 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(self) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

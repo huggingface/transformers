@@ -206,6 +206,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quanto_greater,
     is_quark_available,
     is_qutlass_available,
     is_rich_available,

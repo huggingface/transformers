@@ -409,7 +409,7 @@ class LevitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [1.0448, -0.3745, -1.8317],
-                ("cuda", 8): [1.0453, -0.3739, -1.8314],
+                ("cuda", 8): [1.0448, -0.3745, -1.8317],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

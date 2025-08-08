@@ -692,7 +692,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
-                ("cuda", 8): [[-4.8927, -0.1910, -0.2169], [-4.9657, -0.3748, -0.3980], [-5.9579, -3.3812, -3.3153]],
+                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)

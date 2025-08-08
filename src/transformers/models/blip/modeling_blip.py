@@ -438,7 +438,7 @@ class BlipPreTrainedModel(PreTrainedModel):
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
-    _skip_keys_device_placement = ["past_key_value"]
+    _skip_keys_device_placement = ["past_key_values"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

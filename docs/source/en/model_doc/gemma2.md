@@ -138,8 +138,7 @@ visualizer("You are an assistant. Make sure you print me")
 
     inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
     max_generated_length = inputs.input_ids.shape[1] + 10
-    past_key_values = HybridCache(config=model.config, max_batch_size=1,
-    max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+    past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
     outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     ```
 

@@ -2796,6 +2796,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 # Using custom RoPE, will use LlamaRotaryEmbedding next version
 class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim, base=10000):
         super().__init__()
 

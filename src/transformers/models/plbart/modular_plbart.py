@@ -381,7 +381,7 @@ class PLBartModel(PLBartPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
