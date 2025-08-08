@@ -652,10 +652,11 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
-                ("cuda", 7): torch.tensor([-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359], dtype=torch.float16),
-                ("cuda", 8): torch.tensor([-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438], dtype=torch.float16),
-                ("rocm", (9, 5)): torch.tensor([ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438], dtype=torch.float16),
+                ("xpu", 3): [-9.8750, -0.5703, 1.4297, -10.3125, -10.3125],
+                ("cuda", 7): [-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359],
+                ("cuda", 8): [-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438],
+                ("rocm", (9, 4)): [ -9.8750,  -0.4885,   1.4668, -10.3359, -10.3359],
+                ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)

@@ -1086,13 +1086,15 @@ TYPE_TO_FILE_TYPE = {
 }
 
 
-def find_file_type(class_name: str) -> str:
+def find_file_type(class_name: str, model_name: str) -> str:
     """Based on a class name, find the file type corresponding to the class.
     If the class name is `LlamaConfig` it will return `configuration`.
     The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
     """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
-    match = re.search(rf"({match_pattern})$", class_name)
+    # We remove the model name to avoid ambiguity, e.g. for `Sam2VideoProcessor`,
+    # removing `Sam2Video` ensures we match `Processor` instead of `VideoProcessor`.
+    match = re.search(rf"({match_pattern})$", class_name.replace(get_cased_name(model_name), ""))
     if match:
         file_type = TYPE_TO_FILE_TYPE[match.group(1)]
     else:
@@ -1175,7 +1177,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     return usual_import_nodes + protected_import_nodes
 
 
-def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
+def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
     """Split the `__all__` assignment found in the modular between each corresponding files."""
     all_all_per_file = {}
     assign_node = node.body[0]
@@ -1186,7 +1188,7 @@ def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
             if isinstance(element.value, cst.SimpleString):
                 # Remove quotes and add the string to the elements list
                 class_name = element.value.value
-                file = find_file_type(element.value.evaluated_value)
+                file = find_file_type(element.value.evaluated_value, model_name)
                 all_all_to_add[file] += [class_name]
         for file, new_alls in all_all_to_add.items():
             new_node = assign_node.with_changes(
@@ -1275,7 +1277,7 @@ class ModularFileMapper(ModuleMapper):
                 assigned_variable = node.body[0].targets[0].target.value
                 # __all__ is treated differently and not added to general assignments
                 if assigned_variable == "__all__":
-                    self.all_all_to_add = split_all_assignment(node)
+                    self.all_all_to_add = split_all_assignment(node, self.model_name)
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
@@ -1531,7 +1533,7 @@ def check_dependencies_and_create_import_node(
     corrected_dependencies = new_dependencies.copy()
     new_imports = {}
     for class_name in class_dependencies:
-        class_file_type = find_file_type(class_name)
+        class_file_type = find_file_type(class_name, new_name)
         # In this case, we need to remove it from the dependencies and create a new import instead
         if class_file_type != file_type:
             corrected_dependencies.remove(class_name)
@@ -1554,7 +1556,7 @@ def get_class_node_and_dependencies(
     ]
     super_class = model_specific_bases[0] if len(model_specific_bases) == 1 else None
 
-    file_type = find_file_type(class_name)
+    file_type = find_file_type(class_name, modular_mapper.model_name)
     file_to_update = files[file_type]
     model_name = modular_mapper.model_name
 
