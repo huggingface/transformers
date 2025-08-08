@@ -29,6 +29,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import requires
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -70,7 +71,6 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
-        
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
@@ -78,7 +78,9 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation, antialias=True)
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, interpolation=interpolation, antialias=True
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 

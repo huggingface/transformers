@@ -98,9 +98,7 @@ class DINOv3ViTModelTester:
         self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size, self.image_size]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -172,9 +170,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DINOv3ViTModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -192,9 +188,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     n_elements_to_skip_on_each_side = int(n_elements * 0.025)
                     data_to_check = torch.sort(data).values
                     if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[
-                            n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side
-                        ]
+                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
                     self.assertIn(
                         ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -261,11 +255,7 @@ def prepare_img():
 class DINOv3ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("facebook/dinov3-base")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/dinov3-base") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
@@ -281,9 +271,7 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
 
         # verify the last hidden states
         # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
-        num_patches = (
-            image_processor.crop_size["height"] // model.config.patch_size
-        ) ** 2
+        num_patches = (image_processor.crop_size["height"] // model.config.patch_size) ** 2
         expected_seq_length = num_patches + 1 + model.config.num_register_tokens
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
@@ -296,6 +284,4 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

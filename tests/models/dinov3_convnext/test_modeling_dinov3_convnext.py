@@ -19,7 +19,6 @@ from transformers import DINOv3ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -75,9 +74,7 @@ class DINOv3ConvNextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size, self.image_size]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -130,11 +127,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     """
 
     all_model_classes = (DINOv3ConvNextModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-feature-extraction": DINOv3ConvNextModel}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-feature-extraction": DINOv3ConvNextModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False
@@ -181,11 +174,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = (
-                outputs.encoder_hidden_states
-                if config.is_encoder_decoder
-                else outputs.hidden_states
-            )
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages)
@@ -226,8 +215,4 @@ def prepare_img():
 class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
