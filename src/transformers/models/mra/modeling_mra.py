@@ -555,32 +555,39 @@ class MraSelfAttention(nn.Module):
         self.initial_prior_first_n_blocks = config.initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = config.initial_prior_diagonal_n_blocks
 
-    def transpose_for_scores(self, layer):
-        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        layer = layer.view(*new_layer_shape)
-        return layer.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, attention_mask=None):
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        batch_size, num_heads, seq_len, head_dim = query_layer.size()
+        batch_size, seq_len, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # revert changes made by get_extended_attention_mask
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = (
-            attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len).int()
+            attention_mask.squeeze()
+            .repeat(1, self.num_attention_heads, 1)
+            .reshape(batch_size * self.num_attention_heads, seq_len)
+            .int()
         )
 
         # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
         # smaller than this are padded with zeros.
         gpu_warp_size = 32
 
-        if head_dim < gpu_warp_size:
-            pad_size = batch_size, num_heads, seq_len, gpu_warp_size - head_dim
+        if self.attention_head_size < gpu_warp_size:
+            pad_size = batch_size, self.num_attention_heads, seq_len, gpu_warp_size - self.attention_head_size
 
             query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device)], dim=-1)
             key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device)], dim=-1)
@@ -597,10 +604,10 @@ class MraSelfAttention(nn.Module):
             initial_prior_diagonal_n_blocks=self.initial_prior_diagonal_n_blocks,
         )
 
-        if head_dim < gpu_warp_size:
-            context_layer = context_layer[:, :, :, :head_dim]
+        if self.attention_head_size < gpu_warp_size:
+            context_layer = context_layer[:, :, :, : self.attention_head_size]
 
-        context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
+        context_layer = context_layer.reshape(batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -810,25 +817,28 @@ class MraOnlyMLMHead(nn.Module):
 @auto_docstring
 # Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
-    config_class = MraConfig
+    config: MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MraLMPredictionHead):
+            module.bias.data.zero_()
 
 
 @auto_docstring

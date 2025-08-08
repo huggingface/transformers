@@ -24,6 +24,7 @@ from typing import Any, Optional, Union
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
 from . import __version__
@@ -321,7 +322,7 @@ def infer_metric_tags_from_eval_results(eval_results):
     if eval_results is None:
         return {}
     result = {}
-    for key in eval_results.keys():
+    for key in eval_results:
         if key.lower().replace(" ", "_") in METRIC_TAGS:
             result[key.lower().replace(" ", "_")] = key
         elif key.lower() == "rouge1":
@@ -385,7 +386,12 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError):
+            except (
+                requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError,
+                HFValidationError,
+                OfflineModeIsEnabled,
+            ):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -833,7 +839,7 @@ def make_markdown_table(lines):
     """
     if lines is None or len(lines) == 0:
         return ""
-    col_widths = {key: len(str(key)) for key in lines[0].keys()}
+    col_widths = {key: len(str(key)) for key in lines[0]}
     for line in lines:
         for key, value in line.items():
             if col_widths[key] < len(_maybe_round(value)):

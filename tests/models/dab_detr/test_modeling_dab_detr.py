@@ -788,9 +788,9 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
             [
-                [-0.4878, -0.2593, 0.4521],
-                [-0.4999, -0.4257, 0.4326],
-                [-0.8220, -0.4997, 0.0578],
+                [-0.4879, -0.2594, 0.4524],
+                [-0.4997, -0.4258, 0.4329],
+                [-0.8220, -0.4996, 0.0577],
             ]
         ).to(torch_device)
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4)

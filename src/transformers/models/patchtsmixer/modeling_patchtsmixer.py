@@ -29,7 +29,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 
@@ -304,12 +303,10 @@ class PatchTSMixerAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -684,7 +681,7 @@ class PatchTSMixerLinearHead(nn.Module):
 @auto_docstring
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
-    config_class = PatchTSMixerConfig
+    config: PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False

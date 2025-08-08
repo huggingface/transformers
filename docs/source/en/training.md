@@ -74,7 +74,7 @@ model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-bas
 ```
 
 > [!TIP]
-> The message above is a reminder that the models pretrained head is discarded and replaced with a randomly initialized classification head. The randomly initialized head needs to be fine-tuned on your specific task to output meanginful predictions.
+> The message above is a reminder that the models pretrained head is discarded and replaced with a randomly initialized classification head. The randomly initialized head needs to be fine-tuned on your specific task to output meaningful predictions.
 
 With the model loaded, set up your training hyperparameters in [`TrainingArguments`]. Hyperparameters are variables that control the training process - such as the learning rate, batch size, number of epochs - which in turn impacts model performance. Selecting the correct hyperparameters is important and you should experiment with them to find the best configuration for your task.
 

@@ -422,6 +422,11 @@ class ImageTextToTextPipeline(Pipeline):
         input_ids = (
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
         )  # for decoder-only models
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}

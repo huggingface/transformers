@@ -93,6 +93,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
 
+
     def update_tp_plan(self, config):
         additional_plan = {
             "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",

@@ -12,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio] >= 1.12.0",
+#     "torch >= 1.5",
+#     "torchaudio",
+#     "accelerate >= 0.12.0",
+#     "librosa",
+# ]
+# ///
+
 """Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
 
 import argparse

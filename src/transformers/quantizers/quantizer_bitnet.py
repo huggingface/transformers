@@ -62,7 +62,7 @@ class BitNetHfQuantizer(HfQuantizer):
             )
             return
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded a BitNet model on CPU and have a CUDA device available, make sure to set "

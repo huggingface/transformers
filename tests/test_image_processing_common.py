@@ -19,6 +19,7 @@ import pathlib
 import tempfile
 import time
 import warnings
+from copy import deepcopy
 
 import numpy as np
 import requests
@@ -559,6 +560,43 @@ class ImageProcessingTestMixin:
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
 
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest(
+                "Only testing fast image processor, as most slow processors break this test and are to be deprecated"
+            )
+
+        image_processing_class = self.fast_image_processing_class
+        image_processor_1 = image_processing_class()
+        image_processor_2 = image_processing_class()
+        if not (hasattr(image_processor_1, "size") and isinstance(image_processor_1.size, dict)) or not (
+            hasattr(image_processor_1, "image_mean") and isinstance(image_processor_1.image_mean, list)
+        ):
+            self.skipTest(
+                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
+            )
+
+        original_size_2 = deepcopy(image_processor_2.size)
+        for key in image_processor_1.size:
+            image_processor_1.size[key] = -1
+        modified_copied_size_1 = deepcopy(image_processor_1.size)
+
+        original_image_mean_2 = deepcopy(image_processor_2.image_mean)
+        image_processor_1.image_mean[0] = -1
+        modified_copied_image_mean_1 = deepcopy(image_processor_1.image_mean)
+
+        # check that the original attributes of the second instance are not affected
+        self.assertEqual(image_processor_2.size, original_size_2)
+        self.assertEqual(image_processor_2.image_mean, original_image_mean_2)
+
+        for key in image_processor_2.size:
+            image_processor_2.size[key] = -2
+        image_processor_2.image_mean[0] = -2
+
+        # check that the modified attributes of the first instance are not affected by the second instance
+        self.assertEqual(image_processor_1.size, modified_copied_size_1)
+        self.assertEqual(image_processor_1.image_mean, modified_copied_image_mean_1)
+
     @slow
     @require_torch_accelerator
     @require_vision
@@ -575,7 +613,6 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
-        print(output_eager.pixel_values.dtype, output_compiled.pixel_values.dtype)
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )

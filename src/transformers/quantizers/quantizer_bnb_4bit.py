@@ -102,14 +102,14 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if (
             device_map is not None
             and isinstance(device_map, dict)
             and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
         ):
             device_map_without_lm_head = {
-                key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
+                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
             if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
                 pass
