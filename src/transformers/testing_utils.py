@@ -2868,7 +2868,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -3028,7 +3028,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
