@@ -223,7 +223,9 @@ class MixtralRMSNorm(MistralRMSNorm):
 
 
 class MixtralAttention(MistralAttention):
-    pass
+    def __init__(self, config: MixtralConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
 
 class MixtralDecoderLayer(GradientCheckpointingLayer):

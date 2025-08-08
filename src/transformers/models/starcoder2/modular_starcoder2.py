@@ -77,6 +77,7 @@ class Starcoder2Attention(MistralAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+        del self.sliding_window
 
     def forward(
         self,
@@ -134,6 +135,7 @@ class Starcoder2DecoderLayer(MistralDecoderLayer):
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
+        del self.attention_type
 
 
 class Starcoder2RotaryEmbedding(MistralRotaryEmbedding):
