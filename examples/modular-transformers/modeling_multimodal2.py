@@ -493,7 +493,7 @@ class Multimodal2VisionTransformer(nn.Module):
 
 @auto_docstring
 class Multimodal2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Multimodal2Config
+    config: Multimodal2Config
     base_model_prefix = "multimodal2_vision"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -512,7 +512,7 @@ MULTIMODAL2_VISION_START_DOCSTRING = "doc"
 
 @add_start_docstrings("New doc", MULTIMODAL2_VISION_START_DOCSTRING)
 class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
-    config_class = Multimodal2VisionConfig
+    config: Multimodal2VisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["Multimodal2VisionEncoderLayer"]
 
