@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
@@ -47,6 +48,7 @@ if is_torch_available():
         AutoTokenizer,
         Cache,
         DynamicCache,
+        EncoderDecoderCache,
         Gemma2Config,
         GenerationConfig,
         HQQQuantizedCacheProcessor,
@@ -60,7 +62,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.integrations.executorch import export_with_cache
 
 
 TEST_CACHE_IMPLEMENTATIONS = [
@@ -616,7 +618,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
+        ep = export_with_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -663,7 +665,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
+        ep = export_with_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -743,7 +745,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
-    def test_static_cache_exportability(self):
+    def test_static_cache_exportability_for_executorch(self):
         """
         Tests that static cache works with `torch.export()`
         """
@@ -949,6 +951,66 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
+
+    def test_static_cache_unflatten_flatten(self):
+        static_cache = StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len)
+        flat, _spec = torch.utils._pytree.tree_flatten(static_cache)
+        self.assertIsInstance(flat, list)
+        restored_cache = torch.utils._pytree.tree_unflatten(flat, _spec)
+        self.assertEqual(len(static_cache.layers), len(restored_cache.layers))
+        for i in range(len(static_cache.layers)):
+            self.assertEqual(static_cache.layers[i].keys.tolist(), restored_cache.layers[i].keys.tolist())
+            self.assertEqual(static_cache.layers[i].values.tolist(), restored_cache.layers[i].values.tolist())
+
+    def test_encoder_decoder_cache_unflatten_flatten(self):
+        c1 = DynamicCache()
+        c2 = DynamicCache()
+        c1.update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 0)
+        c2.update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 0)
+        ec_cache = EncoderDecoderCache(c1, c2)
+        flat, _spec = torch.utils._pytree.tree_flatten(ec_cache)
+        self.assertIsInstance(flat, list)
+        restored_cache = torch.utils._pytree.tree_unflatten(flat, _spec)
+        for att in ["self_attention_cache", "cross_attention_cache"]:
+            expected_cache = getattr(ec_cache, att)
+            rt_cache = getattr(restored_cache, att)
+            self.assertEqual(len(expected_cache.layers), len(rt_cache.layers))
+            for i in range(len(expected_cache.layers)):
+                self.assertEqual(expected_cache.layers[i].keys.tolist(), rt_cache.layers[i].keys.tolist())
+                self.assertEqual(expected_cache.layers[i].values.tolist(), rt_cache.layers[i].values.tolist())
+
+    @require_torch_greater_or_equal("2.8")
+    def test_static_cache_generic_exportability(self):
+        class Model(torch.nn.Module):
+            def forward(self, cache: StaticCache):
+                return cache.layers[0].keys.sum(axis=2) + cache.layers[0].values.sum(axis=2)
+
+        model = Model()
+        inputs = (StaticCache(config=self.config, max_batch_size=1, max_cache_len=self.max_cache_len),)
+        inputs[0].layers[0].keys = torch.randn((2, 2, 2, 2))
+        inputs[0].layers[0].values = torch.randn((2, 2, 2, 2))
+        expected = model(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        shape = {0: DYN, 1: DYN, 2: DYN, 3: DYN}
+        ep = torch.export.export(model, inputs, dynamic_shapes=([[shape], [shape]],))
+        values = ep.module()(*inputs)
+        self.assertTrue(torch.allclose(expected, values))
+
+    def test_dynamic_cache_generic_exportability(self):
+        class Model(torch.nn.Module):
+            def forward(self, cache: DynamicCache):
+                return cache.layers[0].keys.sum(axis=2) + cache.layers[0].values.sum(axis=2)
+
+        model = Model()
+        inputs = (DynamicCache(),)
+        inputs[0].update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 0)
+        inputs[0].update(torch.randn((2, 2, 2, 2)), torch.randn((2, 2, 2, 2)), 1)
+        expected = model(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        shape = {0: DYN, 1: DYN, 2: DYN, 3: DYN}
+        ep = torch.export.export(model, inputs, dynamic_shapes=([[shape, shape], [shape, shape]],))
+        values = ep.module()(*inputs)
+        self.assertTrue(torch.allclose(expected, values))
 
     def test_sliding_window_cache(self):
         """Test SlidingWindowCache with manually prefilled states and hardcoded assertions.
