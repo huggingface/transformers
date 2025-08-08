@@ -26,7 +26,6 @@ import torch.utils.checkpoint
 from transformers.models.maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
 from transformers.models.sam.image_processing_sam_fast import SamImageProcessorFast
 from transformers.models.sam.modeling_sam import (
-    SamAttention,
     SamLayerNorm,
     SamMaskDecoder,
     SamMaskEmbedding,
@@ -77,12 +76,12 @@ from .configuration_sam2 import (
 
 if is_torch_available():
     import torch
-    from torch.nn import functional as F_t
+    from torch.nn import functional as F
 
-if is_torchvision_available() and is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
+if is_torchvision_v2_available():
+    pass
 elif is_torchvision_available():
-    from torchvision.transforms import functional as F
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -280,7 +279,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            interpolated_mask = F_t.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
@@ -909,8 +908,75 @@ class Sam2PromptEncoder(SamPromptEncoder):
         return corner_embedding
 
 
-class Sam2Attention(SamAttention):
-    pass
+class Sam2Attention(nn.Module):
+    """
+    SAM2's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
+
+    def __init__(self, config, downsample_rate=None):
+        super().__init__()
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.internal_dim = config.hidden_size // downsample_rate
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.internal_dim // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_similarity: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Input projections
+        batch_size, point_batch_size = query.shape[:2]
+        query = (
+            self.q_proj(query)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        key = (
+            self.k_proj(key)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        value = (
+            self.v_proj(value)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask=attention_similarity,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=self.scaling,
+            is_causal=self.is_causal,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
 class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
@@ -1340,34 +1406,15 @@ class Sam2Model(SamModel):
         ... )
         ```
         """
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
-                " got {}.".format(input_boxes.shape),
-            )
+        if not ((pixel_values is None) ^ (image_embeddings is None)):
+            raise ValueError("Exactly one of pixel_values or image_embeddings must be provided.")
         if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
+            if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
                     "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
+                        input_points.shape[1], input_boxes.shape[1]
                     )
                 )
-        else:
-            point_batch_size = 1
-            box_batch_size = 1
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
@@ -1406,16 +1453,9 @@ class Sam2Model(SamModel):
         if input_points is None and input_boxes is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(
-                batch_size,
-                point_batch_size,
-                1,
-                2,
-                dtype=image_embeddings[-1].dtype,
-                device=image_embeddings[-1].device,
+                batch_size, 1, 1, 2, dtype=image_embeddings[-1].dtype, device=image_embeddings[-1].device
             )
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
+            input_labels = -torch.ones(batch_size, 1, 1, dtype=torch.int32, device=image_embeddings[-1].device)
 
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed

@@ -132,6 +132,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "obj_ptr": "object_pointer",
     ".norm": ".layer_norm",
     "trunk.": "",
+    "out_proj": "o_proj",
 }
 
 
@@ -142,7 +143,7 @@ def replace_keys(state_dict):
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
     output_vision_encoder_mlps_pattern = r"vision_encoder.backbone.blocks.(\d+).mlp.layers.(\d+).*"
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
-    output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
+    output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
     output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
 
@@ -192,7 +193,7 @@ def replace_keys(state_dict):
 
         # memory_encoder.out_proj.weight -> memory_encoder.projection.weight
         if re.match(output_memory_encoder_projection_pattern, key):
-            key = key.replace(".out_proj.", ".projection.")
+            key = key.replace(".o_proj.", ".projection.")
 
         if re.match(output_object_pointer_proj_pattern, key):
             layer_nb = int(re.match(output_object_pointer_proj_pattern, key).group(1))

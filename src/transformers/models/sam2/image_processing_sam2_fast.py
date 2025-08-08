@@ -25,6 +25,7 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
@@ -41,16 +42,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
 )
 
 
-if is_torch_available():
-    from torch.nn import functional as F_t
-
-if is_torchvision_available() and is_torchvision_v2_available():
+if is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
 elif is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
@@ -698,7 +695,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            interpolated_mask = F_t.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)

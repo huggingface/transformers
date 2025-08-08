@@ -128,6 +128,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "obj_ptr": "object_pointer",
     ".norm": ".layer_norm",
     "trunk.": "",
+    "out_proj": "o_proj",
 }
 
 
@@ -138,7 +139,7 @@ def replace_keys(state_dict):
     output_mask_decoder_score_head_pattern = r"mask_decoder.pred_obj_score_head.layers.(\d+).*"
     output_vision_encoder_mlps_pattern = r"vision_encoder.backbone.blocks.(\d+).mlp.layers.(\d+).*"
     output_vision_encoder_neck_pattern = r"vision_encoder.neck.convs.(\d+).conv"
-    output_memory_encoder_projection_pattern = r"memory_encoder.out_proj.*"
+    output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
 
     # Stack the point embed module list:
@@ -188,7 +189,7 @@ def replace_keys(state_dict):
 
         # memory_encoder.out_proj.weight -> memory_encoder.projection.weight
         if re.match(output_memory_encoder_projection_pattern, key):
-            key = key.replace(".out_proj.", ".projection.")
+            key = key.replace(".o_proj.", ".projection.")
 
         if re.match(output_object_pointer_proj_pattern, key):
             layer_nb = int(re.match(output_object_pointer_proj_pattern, key).group(1))
@@ -251,6 +252,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     # commented scores are from original sam2.1 model with Sam2Processor input, changes might be from bfloat16
     if model_name == "sam2.1_hiera_tiny":
         # [0.03112793 0.96484375 0.10253906]
+        print(scores)
         assert torch.allclose(scores, torch.tensor([0.0316, 0.9647, 0.1029]).cuda(), atol=1e-3)
     elif model_name == "sam2.1_hiera_small":
         # [0.96484375 0.1484375  0.04614258]

@@ -873,54 +873,45 @@ class Sam2Attention(nn.Module):
 
     def __init__(self, config, downsample_rate=None):
         super().__init__()
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
         self.config = config
         self.hidden_size = config.hidden_size
-
-        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
-
         self.internal_dim = config.hidden_size // downsample_rate
         self.num_attention_heads = config.num_attention_heads
-        if self.internal_dim % config.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
+        self.head_dim = self.internal_dim // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
     def forward(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_similarity: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Sam2Attention
+        batch_size, point_batch_size = query.shape[:2]
+        query = (
+            self.q_proj(query)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        key = (
+            self.k_proj(key)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        value = (
+            self.v_proj(value)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -937,8 +928,10 @@ class Sam2Attention(nn.Module):
             **kwargs,
         )
 
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
@@ -1528,34 +1521,15 @@ class Sam2Model(Sam2PreTrainedModel):
         ... )
         ```
         """
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
-                " got {}.".format(input_boxes.shape),
-            )
+        if not ((pixel_values is None) ^ (image_embeddings is None)):
+            raise ValueError("Exactly one of pixel_values or image_embeddings must be provided.")
         if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
+            if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
                     "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
+                        input_points.shape[1], input_boxes.shape[1]
                     )
                 )
-        else:
-            point_batch_size = 1
-            box_batch_size = 1
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
@@ -1594,16 +1568,9 @@ class Sam2Model(Sam2PreTrainedModel):
         if input_points is None and input_boxes is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(
-                batch_size,
-                point_batch_size,
-                1,
-                2,
-                dtype=image_embeddings[-1].dtype,
-                device=image_embeddings[-1].device,
+                batch_size, 1, 1, 2, dtype=image_embeddings[-1].dtype, device=image_embeddings[-1].device
             )
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
+            input_labels = -torch.ones(batch_size, 1, 1, dtype=torch.int32, device=image_embeddings[-1].device)
 
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed

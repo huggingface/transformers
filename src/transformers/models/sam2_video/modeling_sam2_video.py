@@ -383,54 +383,45 @@ class Sam2VideoAttention(nn.Module):
 
     def __init__(self, config, downsample_rate=None):
         super().__init__()
+        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
         self.config = config
         self.hidden_size = config.hidden_size
-
-        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
-
         self.internal_dim = config.hidden_size // downsample_rate
         self.num_attention_heads = config.num_attention_heads
-        if self.internal_dim % config.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // config.num_attention_heads) ** -0.5
+        self.head_dim = self.internal_dim // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-        self.is_causal = False
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
     def forward(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_similarity: Optional[Tensor] = None,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_similarity: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # Sam2VideoAttention
+        batch_size, point_batch_size = query.shape[:2]
+        query = (
+            self.q_proj(query)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        key = (
+            self.k_proj(key)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        value = (
+            self.v_proj(value)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -447,8 +438,10 @@ class Sam2VideoAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
 
@@ -695,9 +688,9 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         return self.pos_embeddings
 
 
-def rotate_half(x):
+def rotate_pairwise(x):
     """
-    Rotates half the hidden dims of the input.
+    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -736,7 +729,7 @@ def apply_rotary_pos_emb_2d(
         Rotated (q, k) tensors
     """
     q_embed = q.float()  # force upscale to float32 as in the original implementation
-    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
+    q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
     if k.shape[-2] == 0:
         # Handle case where keys might be empty due to dropout
         return q_embed.type_as(q), k
@@ -753,7 +746,7 @@ def apply_rotary_pos_emb_2d(
 
     # Apply rotary embedding to keys
     k_embed = k.float()  # force upscale to float32 as in the original implementation
-    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
+    k_embed = (k_embed * cos_k) + (rotate_pairwise(k_embed) * sin_k)
     return q_embed.type_as(q), k_embed.type_as(k)
 
 
@@ -771,37 +764,25 @@ class Sam2VideoRoPEAttention(nn.Module):
         self.hidden_size = config.memory_attention_hidden_size
         self.internal_dim = self.hidden_size // config.memory_attention_downsample_rate
         self.num_attention_heads = config.memory_attention_num_attention_heads
-        if self.internal_dim % self.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-        self.scaling = (self.internal_dim // self.num_attention_heads) ** -0.5
+        self.head_dim = self.internal_dim // config.memory_attention_num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
 
         self.kv_in_dim = kv_in_dim if kv_in_dim is not None else self.hidden_size
 
         self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
         self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
         self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
+        self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
-        self.is_causal = False
-
-        head_dim = self.internal_dim // self.num_attention_heads
-        feat_sizes = config.memory_attention_rope_feat_sizes
         self.rotary_emb = Sam2VideoVisionRotaryEmbedding(
-            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=config.memory_attention_rope_theta
+            dim=self.head_dim,
+            end_x=config.memory_attention_rope_feat_sizes[0],
+            end_y=config.memory_attention_rope_feat_sizes[1],
+            theta=config.memory_attention_rope_theta,
         )
         self.rope_k_repeat = rope_k_repeat
-        self.feat_sizes = feat_sizes
         self.dropout_p = config.memory_attention_rope_dropout
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
     def forward(
         self,
@@ -812,19 +793,25 @@ class Sam2VideoRoPEAttention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tensor:
         # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
+        batch_size, point_batch_size = query.shape[:2]
+        query = (
+            self.q_proj(query)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        key = (
+            self.k_proj(key)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        value = (
+            self.v_proj(value)
+            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+            .transpose(1, 2)
+        )
 
         # get position embeddings (always the same as fixed feature shape)
         cos, sin = self.rotary_emb()
-
         # Apply rotary position encoding, excluding some keys if specified
         if num_k_exclude_rope > 0:
             # Split keys into rope and non-rope parts
@@ -847,7 +834,7 @@ class Sam2VideoRoPEAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
             query,
             key,
@@ -858,9 +845,11 @@ class Sam2VideoRoPEAttention(nn.Module):
             is_causal=self.is_causal,
             **kwargs,
         )
-        attn_output = self._recombine_heads(attn_output, point_batch_size)
-        attn_output = self.out_proj(attn_output)
-        return attn_output
+        attn_output = attn_output.reshape(
+            batch_size, point_batch_size, -1, self.num_attention_heads * self.head_dim
+        ).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Sam2VideoMemoryAttentionLayer(nn.Module):
@@ -893,12 +882,12 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
     ) -> torch.Tensor:
         # Self-Attention
         query = self.layer_norm1(queries)
-        query = self.self_attn(query=query, key=query, value=query)
+        query, _ = self.self_attn(query=query, key=query, value=query)
         queries = queries + self.dropout1(query)
 
         # Cross-Attention
         query = self.layer_norm2(queries)
-        query = self.cross_attn_image(
+        query, _ = self.cross_attn_image(
             query=query,
             key=keys + key_point_embedding,
             value=keys,
@@ -1998,34 +1987,23 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         """
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape [`batch_size`, `point_batch_size`, `point_per_mask`, `2`].",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape [`batch_size`, `nb_boxes`, `4`].",
-                " got {}.".format(input_boxes.shape),
-            )
+        if not ((pixel_values is None) ^ (image_embeddings is None)):
+            raise ValueError("Exactly one of pixel_values or image_embeddings must be provided.")
         if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
+            if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
                     "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
+                        input_points.shape[1], input_boxes.shape[1]
                     )
                 )
+        elif input_points is not None:
+            num_objects = input_points.shape[1]
+        elif input_boxes is not None:
+            num_objects = input_boxes.shape[1]
+        elif input_masks is not None:
+            num_objects = input_masks.shape[1]
         else:
-            point_batch_size = 1
-            box_batch_size = 1
+            num_objects = 1
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
@@ -2064,16 +2042,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         if input_points is None and input_boxes is None:
             # If no points are provide, pad with an empty point (with label -1)
             input_points = torch.zeros(
-                batch_size,
-                point_batch_size,
-                1,
-                2,
-                dtype=image_embeddings[-1].dtype,
-                device=image_embeddings[-1].device,
+                batch_size, 1, 1, 2, dtype=image_embeddings[-1].dtype, device=image_embeddings[-1].device
             )
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
+            input_labels = -torch.ones(batch_size, 1, 1, dtype=torch.int32, device=image_embeddings[-1].device)
 
         if input_masks is not None:
             # If mask_inputs is provided, downsize it into low-res mask input if needed
@@ -2131,11 +2102,11 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             # take the best mask prediction (with the highest IoU estimation)
             best_iou_inds = torch.argmax(iou_scores, dim=-1)
             batch_inds = torch.arange(batch_size, device=high_res_multimasks.device)
-            point_batch_inds = torch.arange(point_batch_size, device=high_res_multimasks.device)
-            low_res_masks = low_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
-            high_res_masks = high_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
+            object_batch_inds = torch.arange(num_objects, device=high_res_multimasks.device)
+            low_res_masks = low_res_multimasks[batch_inds, object_batch_inds, best_iou_inds]
+            high_res_masks = high_res_multimasks[batch_inds, object_batch_inds, best_iou_inds]
             if sam_output_tokens.size(2) > 1:
-                sam_output_token = sam_output_tokens[batch_inds, point_batch_inds, best_iou_inds]
+                sam_output_token = sam_output_tokens[batch_inds, object_batch_inds, best_iou_inds]
         else:
             low_res_masks, high_res_masks = low_res_multimasks[:, :, 0], high_res_multimasks[:, :, 0]
 

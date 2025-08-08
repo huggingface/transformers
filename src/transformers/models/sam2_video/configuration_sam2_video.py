@@ -276,7 +276,7 @@ class Sam2VideoConfig(PretrainedConfig):
     >>> config = Sam2Config(vision_config, prompt_encoder_config, mask_decoder_config)
     ```"""
 
-    model_type = "sam2"
+    model_type = "sam2_video"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
