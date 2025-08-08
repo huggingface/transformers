@@ -452,3 +452,24 @@ jobs:
         with:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
+
+  send_results:
+    name: Slack Report
+    needs: [
+      setup,
+      run_models_gpu,
+    ]
+    if: ${{ always() }}
+    uses: ./.github/workflows/slack-report.yml
+    with:
+      job: ${{ inputs.job }}
+      # This would be `skipped` if `setup` is skipped.
+      setup_status: ${{ needs.setup.result }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      # This would be an empty string if `setup` is skipped.
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
+      ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
+
+    secrets: inherit
