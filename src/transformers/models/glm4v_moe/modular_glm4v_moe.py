@@ -24,8 +24,8 @@ from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4.modeling_glm4 import Glm4Attention
+from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
