@@ -43,6 +43,11 @@ def flash_attn_supports_top_left_mask():
     return is_npu_fa2_top_left_aligned_causal_mask()
 
 
+# TODO Deprecate when all models have the attention interface
+def is_flash_attn_available():
+    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
+
+
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
 flash_fn = None
 flash_varlen_fn = None
@@ -56,13 +61,9 @@ supports_softcap = None
 supports_s_aux = None
 
 
-def is_flash_attn_available():
-    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
-
-
 def _lazy_imports(implementation: Optional[str]):
     """
-    Lazy loads the respective flash attention implementation.
+    Lazy loads the respective flash attention implementations.
 
     Return:
         flash_attn_func: The base flash attention function.
@@ -97,7 +98,12 @@ def _lazy_imports(implementation: Optional[str]):
 
 
 def lazy_import_flash_attention(implementation: Optional[str]):
-    """Lazy loading flash attention and returning the respective functions + flags back"""
+    """
+    Lazy loading flash attention and returning the respective functions + flags back
+
+    NOTE: For fullgraph, this needs to be called before compile while no fullgraph can
+          can work without preloading. See `_check_and_adjust_attn_implementation` in `modeling_utils`.
+    """
     global flash_fn, flash_varlen_fn, pad_fn, unpad_fn
     if any(k is None for k in [flash_fn, flash_varlen_fn, pad_fn, unpad_fn]):
         flash_fn, flash_varlen_fn, pad_fn, unpad_fn = _lazy_imports(implementation)
