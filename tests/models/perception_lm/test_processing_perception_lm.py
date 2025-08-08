@@ -115,6 +115,79 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+        self.assertEqual(inputs["pixel_values"].ndim, 5)
+
+
+
+@require_vision
+@require_read_token
+@unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
+class PerceptionLMProcessorSingleTileVanillaImageTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = PerceptionLMProcessor
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
+
+        image_processor = PerceptionLMImageProcessorFast(
+            tile_size=448, max_num_tiles=1, vision_input_type="vanilla"
+        )
+        video_processor = PerceptionLMVideoProcessor()
+        tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = PerceptionLMProcessor(
+            image_processor=image_processor, video_processor=video_processor, tokenizer=tokenizer, **processor_kwargs
+        )
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token_id = processor.image_token_id
+        cls.video_token_id = processor.video_token_id
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": CHAT_TEMPLATE,
+            "patch_size": 14,
+            "pooling_ratio": 2,
+        }  # fmt: skip
+      
+
+    def test_image_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        # Important to check with non square image
+        image = torch.randn((1, 3, 450, 500))
+        #  1 tile
+        #  448/patch_size/pooling_ratio = 16 => 16*16 tokens per tile
+        expected_image_tokens = 16 * 16 * 1
+        image_token_index = processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)
+        self.assertEqual(inputs["pixel_values"].ndim, 5)
 
 
 CHAT_TEMPLATE = (
