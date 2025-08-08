@@ -1564,7 +1564,7 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]],
+        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]]
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
         if past_key_values is None:
