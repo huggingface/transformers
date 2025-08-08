@@ -43,6 +43,7 @@ from ...models.modernbert.modeling_modernbert import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_modernbert_decoder import ModernBertDecoderConfig
 
@@ -112,6 +113,7 @@ class ModernBertDecoderAttention(nn.Module):
         self.out_drop = nn.Dropout(config.attention_dropout)
 
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.rotary_emb = ModernBertRotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
 
     def forward(
         self,
@@ -120,6 +122,7 @@ class ModernBertDecoderAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -129,7 +132,17 @@ class ModernBertDecoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -173,6 +186,8 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
 
+    @deprecate_kwarg("position_embeddings_global", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_local", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -182,6 +197,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -200,6 +216,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             past_key_value=past_key_value,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -290,9 +307,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.gradient_checkpointing = False
 
-        self.global_rotary_emb = ModernBertRotaryEmbedding(config=config)
-        self.local_rotary_emb = ModernBertRotaryEmbedding(config=config)
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -358,15 +372,9 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings_global = self.global_rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.local_rotary_emb(hidden_states, position_ids)
-
         for idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 past_key_value=past_key_values,
                 use_cache=use_cache,

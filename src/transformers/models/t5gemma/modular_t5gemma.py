@@ -237,7 +237,7 @@ class T5GemmaMLP(Gemma2MLP):
 
 class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
     def __init__(self, config, device=None, layer_type=None):
-        super().__init__(config, device)
+        super().__init__(config, device, layer_type)
 
 
 class T5GemmaSelfAttention(Gemma2Attention):
@@ -367,7 +367,7 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -406,7 +406,7 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
@@ -556,7 +556,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.norm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
@@ -612,7 +611,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
@@ -621,9 +619,8 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings,
-                self_attn_mask_mapping[layer_module.attention_type],
-                position_ids,
+                attentino_mask=self_attn_mask_mapping[layer_module.attention_type],
+                position_ids=position_ids,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

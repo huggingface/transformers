@@ -662,7 +662,7 @@ class MimiAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.is_causal = True
         self.scaling = 1 / math.sqrt(config.head_dim)
 

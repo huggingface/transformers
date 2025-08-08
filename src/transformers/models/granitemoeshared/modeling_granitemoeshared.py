@@ -467,11 +467,12 @@ class GraniteMoeSharedAttention(nn.Module):
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # None or rope embeddings
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if self.config.position_embedding_type == "rope":
             if position_embeddings is None:
@@ -508,7 +509,7 @@ class GraniteMoeSharedAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.view(bsz, q_len, -1)
+        attn_output = attn_output.view(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights

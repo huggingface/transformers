@@ -516,7 +516,7 @@ class MllamaTextSelfAttention(nn.Module):
         self.head_dim = config.hidden_size // self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.rope_theta = config.rope_theta
+
         self.layer_idx = layer_idx
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)

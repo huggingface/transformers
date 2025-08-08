@@ -227,7 +227,6 @@ class Qwen2VLTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -240,7 +239,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
         sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:

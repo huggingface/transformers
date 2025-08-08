@@ -1250,8 +1250,8 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = rope_scaling_dict["rope_type"]
+        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = self.rope_scaling_dict["rope_type"]
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -1395,9 +1395,10 @@ class Qwen2_5OmniAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
-        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
+        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
@@ -1433,7 +1434,7 @@ class Qwen2_5OmniAttention(nn.Module):
             )
             cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+            query_states, key_states, cos, sin, self.rotary_emb.rope_scaling_dict["mrope_section"]
         )
 
         if past_key_value is not None:
@@ -1682,7 +1683,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=text_position_ids,
+                position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -2229,7 +2230,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=text_position_ids,
+                position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,

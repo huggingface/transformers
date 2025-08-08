@@ -16,7 +16,7 @@
 """PyTorch Phimoe model."""
 
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -32,7 +32,7 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, extract_rope_scaling_dict_from_config
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_phimoe import PhimoeConfig
@@ -139,27 +139,70 @@ def load_balancing_loss_func(
 
 
 class PhimoeRotaryEmbedding(nn.Module):
-    def __init__(
+    def __init__(self, config: PhimoeConfig, device=None, layer_type=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = self.rope_scaling_dict["rope_type"]
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        self.short_mscale = self.rope_scaling_dict.get("short_mscale", None)  # Diff with Llama
+        self.long_mscale = self.rope_scaling_dict.get("long_mscale", None)
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+        self.config = config
+
+    def compute_default_rope_parameters(
         self,
         config: Optional[PhimoeConfig] = None,
-    ):
-        super().__init__()
-
-        self.config = config
-        if config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            self.short_mscale = config.rope_scaling.get("short_mscale")
-            self.long_mscale = config.rope_scaling.get("long_mscale")
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
+            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
         else:
-            self.rope_type = "default"
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            rope_scaling_dict = config.rope_scaling_dict
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     def forward(self, x, seq_len=None):
         mscale = None
-        if self.config.rope_scaling and seq_len:
+        if self.short_mscale is not None and self.long_mscale is not None and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.rope_scaling_dict["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
@@ -243,7 +286,7 @@ class PhimoeAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
 

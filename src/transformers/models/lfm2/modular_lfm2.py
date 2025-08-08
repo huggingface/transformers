@@ -238,6 +238,7 @@ class Lfm2Attention(LlamaAttention):
         self.out_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
+        self.rotary_emb = Lfm2RotaryEmbedding(config=config, layer_type=config.layer_types[self.layer_idx])
         del self.o_proj
         del self.attention_dropout
 

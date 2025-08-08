@@ -418,7 +418,8 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_global", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_local", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,

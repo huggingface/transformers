@@ -21,8 +21,9 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from transformers.models.modernbert.configuration_modernbert import ModernBertConfig
+
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -38,13 +39,14 @@ from ...models.modernbert.modeling_modernbert import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 
 
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(PretrainedConfig):
+class ModernBertDecoderConfig(ModernBertConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -89,8 +91,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
             Classification token id.
         sep_token_id (`int`, *optional*, defaults to 50282):
             Separation token id.
-        global_rope_theta (`float`, *optional*, defaults to 160000.0):
-            The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -117,8 +117,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
             the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        local_rope_theta (`float`, *optional*, defaults to 160000.0):
-            The base period of the local RoPE embeddings. If not specified, defaults to 160000.0
         layer_types (`list`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
@@ -160,7 +158,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         bos_token_id=50281,
         cls_token_id=50281,
         sep_token_id=50282,
-        global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
         embedding_dropout=0.0,
@@ -173,8 +170,9 @@ class ModernBertDecoderConfig(PretrainedConfig):
         use_cache=True,
         local_attention=128,
         global_attn_every_n_layers=3,
-        local_rope_theta=160000.0,
         layer_types=None,
+        reference_compile=False,
+        rope_scaling=None,
         **kwargs,
     ):
         super().__init__(
@@ -185,43 +183,12 @@ class ModernBertDecoderConfig(PretrainedConfig):
             sep_token_id=sep_token_id,
             **kwargs,
         )
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.norm_eps = norm_eps
-        self.norm_bias = norm_bias
-        self.global_rope_theta = global_rope_theta
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.embedding_dropout = embedding_dropout
-        self.mlp_bias = mlp_bias
-        self.mlp_dropout = mlp_dropout
-        self.decoder_bias = decoder_bias
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-        self.classifier_activation = classifier_activation
-        self.use_cache = use_cache
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.local_rope_theta = local_rope_theta
-        # for consistency with ModernBert
-        self.reference_compile = False
-
-        # Set up layer_types for standardized layer type detection
-        self.layer_types = layer_types
-        if self.layer_types is None:
-            # Create layer_types based on the alternating pattern
-            self.layer_types = []
-            for layer_id in range(num_hidden_layers):
-                if layer_id % global_attn_every_n_layers != 0:
-                    self.layer_types.append("sliding_attention")
-                else:
-                    self.layer_types.append("full_attention")
+        del self.classifier_pooling
+        del self.deterministic_flash_attn
+        del self.sparse_prediction
+        del self.sparse_pred_ignore_index
+        del self.repad_logits_with_grad
+        del self.local_attention
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
@@ -289,6 +256,7 @@ class ModernBertDecoderAttention(nn.Module):
         self.out_drop = nn.Dropout(config.attention_dropout)
 
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.rotary_emb = ModernBertRotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
 
     def forward(
         self,
@@ -297,6 +265,7 @@ class ModernBertDecoderAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -306,7 +275,17 @@ class ModernBertDecoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -350,6 +329,8 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
 
+    @deprecate_kwarg("position_embeddings_global", version="4.60.0")
+    @deprecate_kwarg("position_embeddings_local", version="4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -359,6 +340,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -377,6 +359,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             past_key_value=past_key_value,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -467,9 +450,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.gradient_checkpointing = False
 
-        self.global_rotary_emb = ModernBertRotaryEmbedding(config=config)
-        self.local_rotary_emb = ModernBertRotaryEmbedding(config=config)
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -535,15 +515,9 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings_global = self.global_rotary_emb(hidden_states, position_ids)
-        position_embeddings_local = self.local_rotary_emb(hidden_states, position_ids)
-
         for idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings_global=position_embeddings_global,
-                position_embeddings_local=position_embeddings_local,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 past_key_value=past_key_values,
                 use_cache=use_cache,

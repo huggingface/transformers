@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
+from ...modeling_rope_utils import dynamic_rope_update, extract_rope_scaling_dict_from_config
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -91,23 +91,19 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronRotaryEmbedding(nn.Module):
     # Ignore copy
-    def __init__(
-        self,
-        config: NemotronConfig,
-        device=None,
-    ):
+    def __init__(self, config: NemotronConfig, device=None, layer_type=None):
         super().__init__()
 
-        self.rope_type = "default"
+        super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        self.rope_type = "default"  # Diff with Llama
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device, layer_type=layer_type)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+        self.config = config
 
     def compute_default_rope_parameters(
         self,
@@ -253,7 +249,7 @@ class NemotronAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.partial_rotary_factor = config.partial_rotary_factor
         self.is_causal = True
         self.rotary_emb = NemotronRotaryEmbedding(config=config)

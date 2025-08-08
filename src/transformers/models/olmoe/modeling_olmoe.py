@@ -330,7 +330,7 @@ class OlmoeAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+        self.scaling = self.head_dim**-0.5
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:

@@ -14,6 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class Lfm2Config(PretrainedConfig):
@@ -65,8 +66,8 @@ class Lfm2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
+        rope_scaling (`dict`, *optional*):
+            RoPE scaling dict
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the conv layers.
         conv_L_cache (`int`, *optional*, defaults to 3):
@@ -114,7 +115,7 @@ class Lfm2Config(PretrainedConfig):
         bos_token_id: int = 1,
         eos_token_id: int = 2,
         tie_word_embeddings: bool = True,
-        rope_theta: float = 1000000.0,
+        rope_scaling=None,
         conv_bias: bool = False,
         conv_L_cache: int = 3,
         block_multiple_of: int = 256,
@@ -127,7 +128,6 @@ class Lfm2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.rope_theta = kwargs.get("theta", rope_theta)  # to fit original config keys
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.norm_eps = norm_eps
@@ -151,6 +151,17 @@ class Lfm2Config(PretrainedConfig):
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "conv": None}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(

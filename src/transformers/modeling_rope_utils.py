@@ -488,13 +488,14 @@ def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Opt
         rope_scaling_dict = {"full_attention": rope_scaling_dict}
 
     for dictionary in rope_scaling_dict.values():
-        # BC: "rope_type" was originally "type"
-        rope_type = dictionary.get("rope_type", dictionary.get("type", None))
-        # BC: "rope_theta" was originally saved in config
-        dictionary["rope_theta"] = dictionary.get("rope_theta", getattr(config, "rope_theta", None))
-        required_keys = {"rope_type", "rope_theta"}
-        received_keys = set(dictionary.keys())
-        _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        if dictionary is not None:
+            # BC: "rope_type" was originally "type"
+            rope_type = dictionary.get("rope_type", dictionary.get("type", None))
+            # BC: "rope_theta" was originally saved in config
+            dictionary["rope_theta"] = dictionary.get("rope_theta", getattr(config, "rope_theta", None))
+            required_keys = {"rope_type", "rope_theta"}
+            received_keys = set(dictionary.keys())
+            _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
 
 def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):

@@ -461,7 +461,6 @@ class KyutaiSpeechToTextAttention(nn.Module):
         # rotary embeddings are not used in the depth decoder
         self.rotary_emb = None
         if use_rope:
-            self.rope_theta = config.rope_theta
             self.rotary_emb = KyutaiSpeechToTextRotaryEmbedding(config)
 
     # copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward

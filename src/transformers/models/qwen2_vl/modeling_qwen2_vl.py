@@ -114,8 +114,8 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = rope_scaling_dict["rope_type"]
+        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = self.rope_scaling_dict["rope_type"]
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -590,7 +590,7 @@ class Qwen2VLAttention(nn.Module):
             )
             cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+            query_states, key_states, cos, sin, self.rotary_emb.rope_scaling_dict["mrope_section"]
         )
 
         if past_key_value is not None:
@@ -935,7 +935,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_ids=text_position_ids,
+                position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,

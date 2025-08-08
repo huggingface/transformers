@@ -462,8 +462,8 @@ class DiaDecoder(DiaPreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states,
-                attention_mask,
-                encoder_hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 cache_position=cache_position,

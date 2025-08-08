@@ -1514,6 +1514,7 @@ class Phi4MultimodalAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=getattr(self.config, "sliding_window", None),
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -1748,8 +1749,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1758,7 +1757,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

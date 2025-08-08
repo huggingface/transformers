@@ -232,7 +232,7 @@ class FalconAttention(nn.Module):
         self.split_size = self.hidden_size
         self.hidden_dropout = config.hidden_dropout
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+
         self.is_causal = True
         self._use_sdpa = config._attn_implementation == "sdpa"
         self.layer_idx = layer_idx

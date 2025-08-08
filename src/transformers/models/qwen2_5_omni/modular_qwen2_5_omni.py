@@ -291,8 +291,6 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
@@ -398,7 +396,6 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         rms_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=1000000.0,
         rope_scaling=None,
         use_sliding_window=False,
         sliding_window=32768,
@@ -430,17 +427,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
-
-        if self.rope_scaling is None:
-            self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -451,6 +438,17 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 1000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta, "mrope_section": [16, 24, 24]}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta, "mrope_section": [16, 24, 24]}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -2064,7 +2062,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
     def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None, layer_type=None):
-        super().__init__(config, device)
+        super().__init__(config, device, layer_type)
 
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
@@ -2095,9 +2093,10 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        layer_type = config.layer_types[layer_idx]
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
-        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
+        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config, layer_type=layer_type)
 
 
 class Qwen2MLP(Qwen2_5_VLMLP):

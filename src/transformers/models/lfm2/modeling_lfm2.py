@@ -395,7 +395,7 @@ class Lfm2Attention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.rotary_emb = Lfm2RotaryEmbedding(config=config)
+        self.rotary_emb = Lfm2RotaryEmbedding(config=config, layer_type=config.layer_types[self.layer_idx])
         self.out_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)

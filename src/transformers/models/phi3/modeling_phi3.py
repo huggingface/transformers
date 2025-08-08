@@ -290,6 +290,7 @@ class Phi3Attention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=getattr(self.config, "sliding_window", None),
+            position_ids=position_ids,
             **kwargs,
         )
 
