@@ -437,6 +437,30 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class Glm4vMoePreTrainedModel(PreTrainedModel):
+    config: Glm4vMoeConfig
+    base_model_prefix = ""
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": Glm4vMoeTextDecoderLayer,
+        "attentions": Glm4vMoeTextAttention,
+    }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Glm4vMoeTextTopkRouter):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+
 class Glm4vMoeisionMlp(nn.Module):
     def __init__(self, config, bias: bool = False):
         super().__init__()
@@ -785,24 +809,6 @@ class Glm4vMoeModelOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
-
-
-@auto_docstring
-class Glm4vMoePreTrainedModel(PreTrainedModel):
-    config: Glm4vMoeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Glm4vMoeTextDecoderLayer,
-        "attentions": Glm4vMoeTextAttention,
-    }
 
 
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):

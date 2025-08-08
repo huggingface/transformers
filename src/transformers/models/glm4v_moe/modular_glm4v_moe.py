@@ -30,6 +30,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
     Glm4MoeMLP,
     Glm4MoeMoE,
+    Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
     Glm4MoeTopkRouter,
     eager_attention_forward,
@@ -442,6 +443,18 @@ class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
         super().__init__(config, layer_idx)
 
 
+class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
+    config: Glm4vMoeConfig
+    base_model_prefix = ""
+    _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
+    _skip_keys_device_placement = "past_key_values"
+
+    _can_record_outputs = {
+        "hidden_states": Glm4vMoeTextDecoderLayer,
+        "attentions": Glm4vMoeTextAttention,
+    }
+
+
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
@@ -451,6 +464,6 @@ __all__ = [
     "Glm4vMoeTextConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
-    "Glm4vMoePreTrainedModel",  # noqa: F822
+    "Glm4vMoePreTrainedModel",
     "Glm4vMoeTextModel",  # noqa: F822
 ]
