@@ -230,7 +230,8 @@ class Exaone4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        layer_type = config.layer_types[layer_idx]
+        self.is_sliding = layer_type == "sliding_attention"
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -239,7 +240,7 @@ class Exaone4Attention(nn.Module):
 
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.rotary_emb = Exaone4RotaryEmbedding(config=config)
+        self.rotary_emb = Exaone4RotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

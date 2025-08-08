@@ -366,11 +366,12 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -382,6 +383,7 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
             past_key_value=past_key_value,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -450,6 +452,7 @@ class Cohere2Model(Gemma2Model):
                 past_key_value=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_ids=position_ids,
                 **kwargs,
             )
 

@@ -218,8 +218,8 @@ class SmolLM3Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_emb = SmolLM3RotaryEmbedding(config=config)
 
+        self.rotary_emb = SmolLM3RotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
         self.use_rope = config.no_rope_layers[layer_idx]
         self.sliding_window = (
             config.sliding_window

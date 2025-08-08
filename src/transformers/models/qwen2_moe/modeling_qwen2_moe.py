@@ -346,7 +346,7 @@ class Qwen2MoeAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+        self.scaling = self.head_dim**-0.5
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
 
@@ -410,7 +410,6 @@ class Qwen2MoeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,  # main diff with Llama
             position_ids=position_ids,
             **kwargs,
         )

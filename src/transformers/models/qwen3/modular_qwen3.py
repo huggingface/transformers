@@ -30,6 +30,7 @@ from ..llama.modeling_llama import (
     LlamaAttention,
 )
 from ..qwen2.modeling_qwen2 import (
+    LlamaRotaryEmbedding,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
@@ -54,12 +55,18 @@ class Qwen3MLP(GemmaMLP):
     pass
 
 
+class Qwen3RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
 class Qwen3Attention(LlamaAttention):
     def __init__(self, config: Qwen3Config, layer_idx: int):
+        layer_type = config.layer_types[layer_idx]
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.rotary_emb = Qwen3RotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

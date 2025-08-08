@@ -214,6 +214,7 @@ class Dots1Attention(nn.Module):
 
     def __init__(self, config: Dots1Config, layer_idx: int):
         super().__init__()
+        layer_type = config.layer_types[layer_idx]
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -234,10 +235,10 @@ class Dots1Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_emb = Dots1RotaryEmbedding(config=config)
+        self.rotary_emb = Dots1RotaryEmbedding(config=config, layer_type=layer_type)
         self.q_norm = Dots1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Dots1RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

@@ -1730,7 +1730,7 @@ def apply_rotary_pos_emb(
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         layer_type = config.layer_types[layer_idx]
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
+        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
         self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         # Find the index of the last sliding or full layer before sharing starts (or None if no sharing)
         self.kv_shared_layer_index = (

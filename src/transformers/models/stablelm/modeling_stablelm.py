@@ -282,7 +282,7 @@ class StableLmAttention(nn.Module):
                 self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
             )
 
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.attention_dropout = config.attention_dropout
         self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")

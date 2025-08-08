@@ -33,6 +33,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -254,8 +255,7 @@ class SmolLM3Config(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "rope_theta", 2000000.0)
-        rope_local_base_freq = getattr(self, "rope_theta", 2000000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
             full_attention_rope.update(**rope_scaling)
@@ -265,10 +265,15 @@ class SmolLM3Config(PretrainedConfig):
         rope_config_validation(self)
 
 
+class SmolLM3RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
 class SmolLM3Attention(LlamaAttention):
     def __init__(self, config: SmolLM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
+        self.rotary_emb = SmolLM3RotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
         self.use_rope = config.no_rope_layers[layer_idx]
         self.sliding_window = (
             config.sliding_window

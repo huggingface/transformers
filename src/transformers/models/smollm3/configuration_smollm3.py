@@ -235,8 +235,7 @@ class SmolLM3Config(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "rope_theta", 2000000.0)
-        rope_local_base_freq = getattr(self, "rope_theta", 2000000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
             full_attention_rope.update(**rope_scaling)

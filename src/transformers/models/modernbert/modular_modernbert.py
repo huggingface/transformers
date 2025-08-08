@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import extract_rope_scaling_dict_from_config, rope_config_validation
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
@@ -711,22 +711,22 @@ class ModernBertAttention(nn.Module):
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.head_dim * self.num_heads
         self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
+        layer_type = config.layer_types[layer_id]
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
-            rope_theta = config.global_rope_theta if config.local_rope_theta is None else config.local_rope_theta
             max_position_embeddings = config.local_attention
         else:
             self.local_attention = (-1, -1)
             max_position_embeddings = config.max_position_embeddings
-            rope_theta = config.global_rope_theta
 
         if config._attn_implementation == "flash_attention_2":
+            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+            rope_theta = rope_scaling_dict["rope_theta"]
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            layer_type = config.layer_types[layer_id]
             self.rotary_emb = ModernBertRotaryEmbedding(config=config, layer_type=layer_type)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)

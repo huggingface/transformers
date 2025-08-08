@@ -20,6 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import rope_config_validation
 
 
 class MiniMaxConfig(PretrainedConfig):
@@ -75,8 +76,6 @@ class MiniMaxConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -176,6 +175,7 @@ class MiniMaxConfig(PretrainedConfig):
         linear_attn_beta_factor=1,
         mlp_alpha_factor=1,
         mlp_beta_factor=1,
+        rope_scaling=None,
         **kwargs,
     ):
         super().__init__(
@@ -225,6 +225,18 @@ class MiniMaxConfig(PretrainedConfig):
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "linear_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 __all__ = ["MiniMaxConfig"]

@@ -28,6 +28,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -43,6 +44,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRMSNorm,
+    MixtralRotaryEmbedding,
     MixtralSparseMoeBlock,
 )
 
@@ -103,8 +105,6 @@ class MiniMaxConfig(MixtralConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -162,6 +162,7 @@ class MiniMaxConfig(MixtralConfig):
         linear_attn_beta_factor=1,
         mlp_alpha_factor=1,
         mlp_beta_factor=1,
+        rope_scaling=None,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -179,6 +180,18 @@ class MiniMaxConfig(MixtralConfig):
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = super_kwargs.get("rope_theta", 1000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "linear_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -378,8 +391,14 @@ class MiniMaxLightningAttention(nn.Module):
         return attn_output, attn_weights_inter
 
 
-class MiniMaxAttention(MixtralAttention):
+class MiniMaxRotaryEmbedding(MixtralRotaryEmbedding):
     pass
+
+
+class MiniMaxAttention(MixtralAttention):
+    def __init__(self, config: MiniMaxConfig, layer_idx: int):
+        super().__init__()
+        self.rotary_emb = MiniMaxRotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
 
 
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
@@ -408,7 +427,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,

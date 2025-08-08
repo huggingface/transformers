@@ -65,6 +65,7 @@ class BitNetAttention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -74,7 +75,17 @@ class BitNetAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -95,6 +106,7 @@ class BitNetAttention(LlamaAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
 

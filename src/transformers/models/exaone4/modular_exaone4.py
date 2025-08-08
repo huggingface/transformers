@@ -29,6 +29,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
@@ -105,8 +106,6 @@ class Exaone4Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -211,7 +210,6 @@ class Exaone4Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         attention_dropout=0.0,
         sliding_window=4096,
@@ -231,8 +229,6 @@ class Exaone4Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
 
@@ -249,6 +245,18 @@ class Exaone4Config(PretrainedConfig):
         if "sliding_window" in self.layer_types:
             self._attn_implementation = "hybrid"
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
@@ -278,7 +286,8 @@ class Exaone4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
-        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        layer_type = config.layer_types[layer_idx]
+        self.is_sliding = layer_type == "sliding_attention"
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -287,7 +296,7 @@ class Exaone4Attention(nn.Module):
 
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.rotary_emb = Exaone4RotaryEmbedding(config=config)
+        self.rotary_emb = Exaone4RotaryEmbedding(config=config, layer_type=layer_type)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

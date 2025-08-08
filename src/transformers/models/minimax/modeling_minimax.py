@@ -427,7 +427,7 @@ class MiniMaxAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rotary_emb = MiniMaxRotaryEmbedding(config=config)
+        self.rotary_emb = MiniMaxRotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(
@@ -598,7 +598,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[tuple[torch.Tensor]] = None,
