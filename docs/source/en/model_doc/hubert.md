@@ -25,14 +25,16 @@ rendered properly in your Markdown viewer.
 
 # HuBERT
 
-[HuBERT](https://huggingface.co/papers/2106.07447) is a self-supervised speech model that learns to understand audio by first clustering audio patterns (called "hidden units") and then predicting those. Think of it like fill-in-the-blank for audio. This makes it really good at learning from raw speech without needing lots of transcriptions, and it performs well on tasks like automatic speech recognition.
+[HuBERT](https://huggingface.co/papers/2106.07447) is a self-supervised speech model to cluster aligned target labels for BERT-like prediction loss and applying the prediction loss only over masked regions to force the model to learn both acoustic and language modeling over continuous inputs. It addresses the challenges of multiple sound units per utterance, no lexicon during pre-training, and variable-length sound units without explicit segmentation.
 
 You can find all the original HuBERT checkpoints under the [HuBERT](https://huggingface.co/collections/facebook/hubert-651fca95d57549832161e6b6) collection.
 
 > [!TIP]
 > This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+>
+> Click on the HuBERT models in the right sidebar for more examples of how to apply HuBERT to different audio tasks.
 
-The example below demonstrates how to perform Automatic Speech Recognition (ASR) with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to automatically transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,15 +43,14 @@ The example below demonstrates how to perform Automatic Speech Recognition (ASR)
 import torch
 from transformers import pipeline
 
-asr = pipeline(
+pipeline = pipeline(
     task="automatic-speech-recognition",
     model="facebook/hubert-large-ls960-ft",
     torch_dtype=torch.float16,
     device=0
 )
 
-result = asr("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-print(result["text"])
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 ```
 
 </hfoption>
@@ -57,110 +58,56 @@ print(result["text"])
 
 ```python
 import torch
-from transformers import AutoProcessor, HubertForCTC
+from transformers import AutoProcessor, AutoModelForCTC
 from datasets import load_dataset
 
-# Load and sort dataset
 dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
 sampling_rate = dataset.features["audio"].sampling_rate
 
-# Load model and processor
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = HubertForCTC.from_pretrained("facebook/hubert-base-ls960")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
-# Process audio input and run inference
 inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_ids = torch.argmax(logits, dim=-1)
 
-# Transcribe speech
 transcription = processor.batch_decode(predicted_ids)
 print(transcription[0])
 ```
 
 </hfoption>
-
-<!-- Not Applicable -->
-<hfoption id="transformers-cli">
-</hfoption>
-
 </hfoptions>
-
-## Flash Attention 2
-
-Flash Attention 2 is a highly optimized version of the model that can significantly reduce inference time and memory usage on compatible hardware.
-
-### Installation
-
-Check to see if your hardware supports Flash Attention 2 by reviewing the [official compatibility list](https://github.com/Dao-AILab/flash-attention#installation-and-features). 
-If your hardware is compatible, install the latest version with:
-
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-If your hardware is not compatible, you can still use attention kernel optimizations through [Better Transformer](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
-
-### Usage
-
-You can enable Flash Attention 2 by setting the attn_implementation argument to "flash_attention_2" when loading the model:
-
-```python
-from transformers import HubertModel
-import torch
-
-model = HubertModel.from_pretrained(
-    "facebook/hubert-large-ls960-ft",
-    torch_dtype=torch.float16,
-    attn_implementation="flash_attention_2"
-).to("cuda")
-```
-
-> [!NOTE]
-> Flash Attention 2 currently only works with PyTorch models and requires CUDA-compatible hardware with Ampere or newer GPUs.
 
 ## Quantization
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision.
 Refer to the [Quantization](https://huggingface.co/docs/transformers/en/quantization/overview) overview for more available quantization backends.
 
-The example below uses [PyTorch Dynamic Quantization](https://pytorch.org/docs/stable/quantization.html#dynamic-quantization) to only quantize the weights to 8-bit integers (int8).
+The example below uses the [`bitsandbytes`](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) backend in Transformers with the [`BitsAndBytesConfig`] to load the model in 8-bit precision.
 
 ```python
-import torch
-from transformers import HubertForCTC
+from transformers import HubertForCTC, BitsAndBytesConfig
 
-# Load the pretrained model
-model = HubertForCTC.from_pretrained("facebook/hubert-base-ls960")
-
-# Apply dynamic quantization to Linear layers
-quantized_model = torch.quantization.quantize_dynamic(
-    model,              # the original model
-    {torch.nn.Linear},  # specify layers to quantize
-    dtype=torch.qint8   # 8-bit integer weights
+bnb_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+    llm_int8_threshold=6.0
 )
 
-# Save or use the quantized model
-quantized_model.eval()
+model = HubertForCTC.from_pretrained(
+    "facebook/hubert-xlarge-ll60k",
+    quantization_config=bnb_config,
+    device_map="auto"
+)
 ```
 
 ## Notes
 
-- HuBERT models expect raw audio input as a 1D float array, sampled at 16kHz.
-- These models are typically fine-tuned using CTC (Connectionist Temporal Classification), 
-  so the output must be decoded using a tokenizer like [`Wav2Vec2CTCTokenizer`] or via [`AutoProcessor`], which wraps all preprocessing steps.
-- If you want to use a `head_mask`, use the model with `attn_implementation="eager"`:
+- HuBERT models expect raw audio input as a 1D float array sampled at 16kHz.
+- If you want to use a `head_mask`, use the model with `attn_implementation="eager"`.
   ```python
   model = HubertModel.from_pretrained("facebook/hubert-base-ls960", attn_implementation="eager")
   ```
-
-## Resources
-
-- [Audio classification task guide](https://huggingface.co/docs/transformers/main/en/tasks/audio_classification)
-- [Automatic speech recognition task guide](https://huggingface.co/docs/transformers/main/en/tasks/asr)
-- [HuBERT research paper](https://arxiv.org/abs/2106.07447)
-- [Original HuBERT model on Hugging Face Hub](https://huggingface.co/facebook/hubert-base-ls960)
 
 ## HubertConfig
 
