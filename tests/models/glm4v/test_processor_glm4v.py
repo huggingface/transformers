@@ -29,8 +29,6 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import Glm4vProcessor
 
-    if is_torchvision_available():
-        pass
 
 if is_torch_available():
     import torch
