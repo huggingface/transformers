@@ -3,17 +3,19 @@
 URL: https://github.com/facebookresearch/dinov3/tree/main
 """
 
-import os
 import argparse
-import torch
-
+import os
 import random
+
 import numpy as np
-from torchvision import transforms
 import requests
-from PIL import Image
-from transformers import DINOv3ViTConfig, DINOv3ViTModel, DINOv3ViTImageProcessorFast
+import torch
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from torchvision import transforms
+
+from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel
+
 
 HUB_MODELS = {
     "vits": "facebook/dinov3-vits16-pretrain-lvd1689m",
@@ -149,6 +151,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
     else:
         raise ValueError("Model not supported")
 
+
 def convert_dinov3_vit_to_hf_vit(original_dinov3_state_dict, config: DINOv3ViTConfig):
     embed_dim = config.hidden_size
     hf_dinov3_state_dict = {}
@@ -212,12 +215,14 @@ def get_transform(resize_size: int = 224):
     )
     return transforms.Compose([to_tensor, resize, normalize])
 
+
 def get_image_processor(resize_size: int = 224):
     return DINOv3ViTImageProcessorFast(
         do_resize=True,
         size={"height": resize_size, "width": resize_size},
         resample=2,  # BILINEAR
     )
+
 
 def set_deterministic(seed=42):
     random.seed(seed)
@@ -327,9 +332,7 @@ def convert_and_test_dinov3_checkpoint(args):
     print(config)
 
     model = DINOv3ViTModel(config).eval()
-    state_dict_path = hf_hub_download(
-        repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name]
-    )
+    state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
     original_state_dict = torch.load(state_dict_path)
 
     hf_state_dict = convert_dinov3_vit_to_hf_vit(original_state_dict, config)
@@ -341,17 +344,17 @@ def convert_and_test_dinov3_checkpoint(args):
     image = prepare_img()
 
     # check preprocessing
-    original_pixel_values = transform(image).unsqueeze(0) # add batch dimension
+    original_pixel_values = transform(image).unsqueeze(0)  # add batch dimension
     inputs = image_processor(image, return_tensors="pt")
 
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
-    
+
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
         model_output = model(**inputs)
 
     last_layer_class_token = model_output.pooler_output
-    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1:]
+    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
 
     actual_outputs = {}
     actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
@@ -363,12 +366,14 @@ def convert_and_test_dinov3_checkpoint(args):
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_cls"]),
         torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-4, rtol=1e-4,
+        atol=1e-4,
+        rtol=1e-4,
     )
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_patch"]),
         torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-4, rtol=1e-4,
+        atol=1e-4,
+        rtol=1e-4,
     )
     print("Forward pass looks ok!")
 

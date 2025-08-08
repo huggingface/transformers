@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ConvNeXT model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -92,9 +92,7 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.num_stages = num_stages
-        self.hidden_sizes = (
-            [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
-        )
+        self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
         self.depths = [3, 3, 9, 3] if depths is None else depths
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
