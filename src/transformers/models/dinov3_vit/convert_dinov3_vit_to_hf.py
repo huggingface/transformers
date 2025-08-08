@@ -44,6 +44,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"storage_tokens":          r"embeddings.register_tokens",
     r"patch_embed.proj":        r"embeddings.patch_embeddings.proj",
     r"rope_embed":              r"rope_embeddings",
+    r"blocks.(\d+).attn.proj":  r"layer.\1.attention.o_proj",
     r"blocks.(\d+).attn.":      r"layer.\1.attention.",
     r"blocks.(\d+).ls(\d+)":    r"layer.\1.layer_scale\2",
     r"blocks.(\d+).mlp":        r"layer.\1.mlp",
@@ -75,9 +76,9 @@ def split_qkv(state_dict: dict):
     for key in keys:
         qkv = state_dict.pop(key)
         q, k, v = torch.chunk(qkv, 3, dim=0)
-        state_dict[key.replace("qkv", "query")] = q
-        state_dict[key.replace("qkv", "key")] = k
-        state_dict[key.replace("qkv", "value")] = v
+        state_dict[key.replace("qkv", "q_proj")] = q
+        state_dict[key.replace("qkv", "k_proj")] = k
+        state_dict[key.replace("qkv", "v_proj")] = v
     return state_dict
 
 
@@ -195,6 +196,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
         )
     else:
         raise ValueError("Model not supported")
+
 
 # TODO: remove this function
 # def convert_dinov3_vit_to_hf_vit(original_dinov3_state_dict, config: DINOv3ViTConfig):
@@ -386,7 +388,7 @@ def convert_and_test_dinov3_checkpoint(args):
 
     converted_state_dict = {}
     for key in original_keys:
-        if "bias_mask" in key or "attn.key.bias" in key:
+        if "bias_mask" in key or "attn.k_proj.bias" in key:
             continue
         new_key = new_keys[key]
         weight_tensor = original_state_dict[key]

@@ -116,6 +116,10 @@ class DINOv3ViTConfig(PretrainedConfig):
         image_size=224,
         patch_size=14,
         num_channels=3,
+        query_bias=True,
+        key_bias=False,
+        value_bias=True,
+        output_bias=True,
         qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
@@ -137,6 +141,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         pos_embed_rope_rescale_coords=None,
         pos_embed_rope_dtype="fp32",
         device=None,
+        attention_dropout=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -153,6 +158,12 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+
+        self.query_bias = query_bias
+        self.key_bias = key_bias
+        self.value_bias = value_bias
+        self.output_bias = output_bias
+
         self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
@@ -178,6 +189,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.pos_embed_rope_rescale_coords = pos_embed_rope_rescale_coords
         self.pos_embed_rope_dtype = pos_embed_rope_dtype
         self.device = device
+        self.attention_dropout = attention_dropout
 
 
 __all__ = ["DINOv3ViTConfig"]
