@@ -91,10 +91,10 @@ class DINOv3ViTConfig(PretrainedConfig):
     >>> from transformers import DINOv3Config, DINOv3Model
 
     >>> # Initializing a DINOv3 DINOv3-base-patch16-224 style configuration
-    >>> configuration = DINOv3Config()
+    >>> configuration = DINOv3ViTConfig()
 
     >>> # Initializing a model (with random weights) from the DINOv3-base-patch16-224 style configuration
-    >>> model = DINOv3Model(configuration)
+    >>> model = DINOv3ViTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
