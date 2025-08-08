@@ -96,6 +96,7 @@ class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`")
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 

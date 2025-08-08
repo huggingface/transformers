@@ -16,6 +16,8 @@
 import inspect
 import unittest
 
+import pytest
+
 from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
@@ -193,6 +195,7 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @pytest.mark.torch_export_test
     def test_torch_export(self):
         # Dense architecture
         super().test_torch_export()

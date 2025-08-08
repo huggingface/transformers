@@ -239,6 +239,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

@@ -394,6 +394,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
+    @pytest.mark.torch_export_test
     @slow
     @require_read_token
     def test_export_static_cache(self):

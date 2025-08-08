@@ -231,6 +231,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

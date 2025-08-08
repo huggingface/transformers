@@ -195,6 +195,7 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Compile not yet supported in idefics3 models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -379,6 +380,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @unittest.skip(reason="Compile not yet supported in Idefics3 models end-to-end")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

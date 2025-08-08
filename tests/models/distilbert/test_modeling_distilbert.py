@@ -422,6 +422,7 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:

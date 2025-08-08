@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -327,6 +328,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

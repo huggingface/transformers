@@ -16,6 +16,7 @@ import importlib.metadata
 import tempfile
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import (
@@ -996,6 +997,7 @@ class Bnb8bitCompile(unittest.TestCase):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile(self):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
