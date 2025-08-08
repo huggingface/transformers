@@ -55,8 +55,6 @@ class Ovis2VisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        vision_feature_layer=-1,
-        vision_feature_select_strategy="full",
         seq_length=7,
         text_config={
             "model_type": "qwen2",
@@ -70,7 +68,6 @@ class Ovis2VisionText2TextModelTester:
             "num_key_value_heads": 4,
             "intermediate_size": 54,
             "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
             "max_position_embeddings": 580,
             "initializer_range": 0.02,
             "num_labels": 3,
@@ -90,26 +87,21 @@ class Ovis2VisionText2TextModelTester:
             "hidden_act": "silu",
             "qkv_bias": False,
             "hidden_stride": 2,
-            "vision_feature_select_strategy": "full",
             "num_visual_indicator_tokens": 5,
             "tokenize_function": "softmax",
         },
         image_token_id=1,
         visual_indicator_token_ids=[2, 3, 4, 5, 6],
         vocab_size=99,
-        sliding_window=256,
         hidden_size=64,
         ignore_id=-100,
     ):
         self.parent = parent
-        self.vision_feature_layer = vision_feature_layer
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
         self.visual_indicator_token_ids = visual_indicator_token_ids
         self.vocab_size = vocab_size
-        self.sliding_window = sliding_window
         self.hidden_size = hidden_size
         self.image_seq_length = (
             vision_config["image_size"] // (vision_config["patch_size"] * vision_config["hidden_stride"])
@@ -132,7 +124,6 @@ class Ovis2VisionText2TextModelTester:
             image_token_id=self.image_token_id,
             visual_indicator_token_ids=self.visual_indicator_token_ids,
             vocab_size=self.vocab_size,
-            sliding_window=self.sliding_window,
             hidden_size=self.hidden_size,
         )
 
@@ -158,6 +149,7 @@ class Ovis2VisionText2TextModelTester:
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_range) + safe_start
         input_ids[:, : self.image_seq_length] = config.image_token_id
+        print(input_ids)
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
@@ -171,33 +163,6 @@ class Ovis2VisionText2TextModelTester:
             "labels": labels,
         }
         return config, inputs_dict
-
-    def create_and_check_ovis2_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = Ovis2ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_ovis2_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
-        config.torch_dtype = torch.float16
-        model = Ovis2ForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
 
 
 @require_torch
