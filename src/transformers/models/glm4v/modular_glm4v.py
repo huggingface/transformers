@@ -1198,10 +1198,10 @@ class Glm4vModel(Qwen2_5_VLModel):
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+            special_vision_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_vision_mask = special_image_mask.all(-1)
+            special_vision_mask = special_vision_mask.all(-1)
         else:
             special_vision_mask = input_ids == self.config.image_token_id
 
@@ -1212,13 +1212,13 @@ class Glm4vModel(Qwen2_5_VLModel):
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
             )
 
-        n_video_tokens = special_video_mask.sum()
+        n_video_tokens = special_vision_mask.sum()
         if video_features is not None and inputs_embeds[special_vision_mask].numel() != video_features.numel():
             raise ValueError(
                 f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
-        return special_image_mask, special_video_mask
+        return special_vision_mask
 
     @auto_docstring
     @can_return_tuple
