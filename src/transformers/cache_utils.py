@@ -35,6 +35,7 @@ class CacheLayerMixin(ABC):
 
     def __init__(self):
         self.keys, self.values = None, None
+        self.cumulative_length = 0
 
     @abstractmethod
     def update(
@@ -45,13 +46,14 @@ class CacheLayerMixin(ABC):
     def lazy_initialization(self, key_states: torch.Tensor): ...
 
     @abstractmethod
-    def get_seq_length(self, cache_position=None) -> int: ...
-
-    @abstractmethod
     def get_max_cache_shape(self) -> int: ...
 
     @abstractmethod
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]: ...
+
+    def get_seq_length(self) -> int:
+        """Return the number of tokens that were already procesed."""
+        return self.cumulative_length
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -70,15 +72,13 @@ class CacheLayerMixin(ABC):
         if self.keys is not None:
             self.keys.zero_()
             self.values.zero_()
+        self.cumulative_length = 0
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Reorders this layer's cache for beam search."""
-        if self.keys.numel():
-            device = self.keys.device
-            self.keys = self.keys.index_select(0, beam_idx.to(device))
-        if self.values.numel():
-            device = self.values.device
-            self.values = self.values.index_select(0, beam_idx.to(device))
+        if self.keys is not None and self.keys.numel():
+            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
+            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
 
 class DynamicLayer(CacheLayerMixin):
@@ -120,25 +120,15 @@ class DynamicLayer(CacheLayerMixin):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
+        self.cumulative_length += key_states.shape[-2]
+
         self.keys = torch.cat([self.keys, key_states], dim=-2)
         self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
 
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        if self.keys is None or self.keys.numel() == 0:
-            return 0
-        return self.keys.shape[-2]
-
     def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        """Reorders the cache for beam search, given the selected beam indices."""
-        if self.keys is not None and self.keys.numel():
-            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
-            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
     def crop(self, max_length: int) -> None:
         """
@@ -192,10 +182,76 @@ class DynamicLayer(CacheLayerMixin):
         """
         layer = cls()
         layer.dtype, layer.device = keys.dtype, keys.device
+        layer.cumulative_length = keys.shape[-2]
         layer.keys = keys
         layer.values = values
         return layer
 
+
+class DynamicSlidingWindowLayer(DynamicLayer):
+    """
+    A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
+    """
+    is_sliding = True
+
+    def __init__(self, sliding_window: int):
+        super().__init__()
+        self.sliding_window = sliding_window
+        self.cumulative_length = 0
+
+    def get_max_cache_shape(self) -> int:
+        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
+        return self.sliding_window
+    
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*):
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicLayer`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        # Lazy initialization
+        if self.keys is None:
+            self.lazy_initialization(key_states)
+
+        self.cumulative_length += key_states.shape[-2]
+
+        # Compute the full states
+        full_key_states = torch.cat([self.keys, key_states], dim=-2)
+        full_value_states = torch.cat([self.values, value_states], dim=-2)
+        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
+        self.keys = full_key_states[:, :, -self.sliding_window + 1, :]
+        self.values = full_value_states[:, :, -self.sliding_window + 1, :]
+
+        # Return the full states
+        return full_key_states, full_value_states
+    
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        query_length = cache_position.shape[0]
+        first_cache_position = cache_position[0]
+
+        kv_offset = torch.clamp(first_cache_position - self.max_cache_len + 1, min=0)
+
+        if self.get_seq_length() >= self.sliding_window:
+            kv_length = self.sliding_window - 1 + query_length
+        else:
+            kv_length = self.get_seq_length() + query_length
+
+        return kv_length, kv_offset
 
 class StaticLayer(CacheLayerMixin):
     """
@@ -273,6 +329,8 @@ class StaticLayer(CacheLayerMixin):
         if self.keys is None:
             self.lazy_initialization(key_states)
 
+        self.cumulative_length += key_states.shape[-2]
+
         # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
         # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
@@ -293,22 +351,6 @@ class StaticLayer(CacheLayerMixin):
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
-
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        if cache_position is not None:
-            return int(cache_position[-1] + 1)
-        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
-        # limit the check to the first batch member and head dimension.
-        seq_length = (self.keys[0, 0].any(dim=-1)).sum() if self.keys is not None else 0
-        return seq_length
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        """Reorders the cache for beam search, given the selected beam indices."""
-        dev = self.keys.device
-        beam_idx_dev = beam_idx.to(dev)
-        self.keys = self.keys.index_select(0, beam_idx_dev)
-        self.values = self.values.index_select(0, beam_idx_dev)
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -336,7 +378,6 @@ class SlidingWindowLayer(StaticLayer):
         """
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
-        self.cumulative_length = 0
 
     def update(
         self,
@@ -406,14 +447,6 @@ class SlidingWindowLayer(StaticLayer):
         # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
         kv_length = max(query_length, self.max_cache_len)
         return kv_length, kv_offset
-
-    def reset(self) -> None:
-        super().reset()
-        self.cumulative_length = 0
-
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length
 
 
 class ChunkedSlidingLayer(SlidingWindowLayer):
