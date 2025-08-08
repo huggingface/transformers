@@ -1,141 +1,214 @@
 <!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with  the License. You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on  an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the  specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be  rendered properly in your Markdown viewer.
 
 -->
 
+
+
 # MobileViT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+
+<div style="float: left;">
+    <div class="flex flex-wrap space-x-2">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+
 </div>
 
-## Overview
+[MobileViT](https://huggingface.co/papers/2110.02178) proposed by Sachin Mehta and Mohammad Rastegari aims to combine best of both worlds, the Convolutional Neural Networks ([CNNs]( https://huggingface.co/learn/computer-vision-course/en/unit2/cnns/introduction)) and VisionTransformers ([ViTs](https://huggingface.co/docs/transformers/en/model_doc/vit)), to make a model which is both powerful and lightweight in the sense that it can be used for mobile vision tasks.
 
-The MobileViT model was proposed in [MobileViT: Light-weight, General-purpose, and Mobile-friendly Vision Transformer](https://huggingface.co/papers/2110.02178) by Sachin Mehta and Mohammad Rastegari. MobileViT introduces a new layer that replaces local processing in convolutions with global processing using transformers.
+So, the CNNs are very good at learning the local patterns such as edges, textures, etc. While the transformers are great at seeing the larger picture, trying to understand the relation of different parts of an image no matter how far they are. MobileViT block combines both these ideas, the core global representation is learnt  with transformers as convolution. It leverages the same building block as convolutions but replacing the local processing with deeper global processing. Since the Transformer mimics the convolution, we still get the image-specific knowledge that the CNNs are good at.
 
-The abstract from the paper is the following:
+**What makes MobileViT lightweight?** 
+Most of the models that uses Transformers for vision would first divide the images into several patches which are further flattened and converted into vectors. This causes in the loss of structural properties of an image, which isn't the case for CNNs. Now, this causes the Transformer models to go bigger and deeper to learn visual representations. 
+But MobileViT uses both convolutions and transformers in a way that the resultant block has convolution-like properties while simultaneously allowing for global interactions. This allows us to design a more shallow and narrow models, which are light-weight.
 
-*Light-weight convolutional neural networks (CNNs) are the de-facto for mobile vision tasks. Their spatial inductive biases allow them to learn representations with fewer parameters across different vision tasks. However, these networks are spatially local. To learn global representations, self-attention-based vision trans-formers (ViTs) have been adopted. Unlike CNNs, ViTs are heavy-weight. In this paper, we ask the following question: is it possible to combine the strengths of CNNs and ViTs to build a light-weight and low latency network for mobile vision tasks? Towards this end, we introduce MobileViT, a light-weight and general-purpose vision transformer for mobile devices. MobileViT presents a different perspective for the global processing of information with transformers, i.e., transformers as convolutions. Our results show that MobileViT significantly outperforms CNN- and ViT-based networks across different tasks and datasets. On the ImageNet-1k dataset, MobileViT achieves top-1 accuracy of 78.4% with about 6 million parameters, which is 3.2% and 6.2% more accurate than MobileNetv3 (CNN-based) and DeIT (ViT-based) for a similar number of parameters. On the MS-COCO object detection task, MobileViT is 5.7% more accurate than MobileNetv3 for a similar number of parameters.*
+![enter image description here](https://user-images.githubusercontent.com/67839539/136470152-2573529e-1a24-4494-821d-70eb4647a51d.png)
 
-This model was contributed by [matthijs](https://huggingface.co/Matthijs). The TensorFlow version of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
 
-## Usage tips
+You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple) collection.
 
-- MobileViT is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map. You can follow [this tutorial](https://keras.io/examples/vision/mobilevit) for a lightweight introduction.
-- One can use [`MobileViTImageProcessor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
-- The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes).
-- The segmentation model uses a [DeepLabV3](https://huggingface.co/papers/1706.05587) head. The available semantic segmentation checkpoints are pre-trained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
-- As the name suggests MobileViT was designed to be performant and efficient on mobile phones. The TensorFlow versions of the MobileViT models are fully compatible with [TensorFlow Lite](https://www.tensorflow.org/lite).
 
-  You can use the following code to convert a MobileViT checkpoint (be it image classification or semantic segmentation) to generate a
-  TensorFlow Lite model:
+> [!TIP]
+> - This model was contributed by [Matthijs](https://huggingface.co/Matthijs).
+> - Use [`MobileViTImageProcessor`](https://huggingface.co/docs/transformers/main/en/model_doc/mobilevit#transformers.MobileViTImageProcessor) to preprocess images.
+> - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
+> - The **classification models** are pretrained on [**ImageNet-1k**](https://huggingface.co/datasets/imagenet-1k) (ILSVRC 2012).
+> - The **segmentation models** use a [**DeepLabV3**](https://huggingface.co/papers/1706.05587) head and are pretrained on [**PASCAL VOC**](http://host.robots.ox.ac.uk/pascal/VOC/).
+> - TensorFlow versions are compatible with **TensorFlow Lite**, making them ideal for edge/mobile deployment.
+
+
+Click on the MobileViT models in the right sidebar for more examples of how to apply Model name to different vision tasks.
+
+The example below demonstrates how to  [Convert Mobile ViT image classification checkpoint to a TensorFlow Lite Model] using the  [`TFMobileViTForImageClassification`] class:
+
+<hfoptions id = "usage">
+<hfoption id="AutoModel">
 
 ```py
+
 from transformers import TFMobileViTForImageClassification
 import tensorflow as tf
 
-
+  
 model_ckpt = "apple/mobilevit-xx-small"
 model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
+
+  
 
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [
-    tf.lite.OpsSet.TFLITE_BUILTINS,
-    tf.lite.OpsSet.SELECT_TF_OPS,
-]
+								tf.lite.OpsSet.TFLITE_BUILTINS,
+								tf.lite.OpsSet.SELECT_TF_OPS,
+								]
+
 tflite_model = converter.convert()
 tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
-with open(tflite_filename, "wb") as f:
-    f.write(tflite_model)
+
+with  open(tflite_filename, "wb") as f:
+f.write(tflite_model)
+
 ```
 
-  The resulting model will be just **about an MB** making it a good fit for mobile applications where resources and network
-  bandwidth can be constrained.
+</hfoption>
+</hfoptions>
+
+
+
+
+## Notes
+
+- **MobileViT** was designed to be performant and efficient on **mobile devices**.
+- It combines the **inductive biases of CNNs** with the **global context modelling of Transformers**.
+- Does **not** operate on sequential data, it's purely designed for image tasks.
+- Feature maps are used directly instead of token embeddings.
+
+
+
 
 ## Resources
+- Primary Source: [MobileViT: Light-weight, General-purpose, and Mobile-friendly Vision Transformer] (https://arxiv.org/pdf/2110.02178).
+- Apple machine learning research: [PyTorch Implementation](https://github.com/apple/ml-cvnets).
+- You can follow [this keras tutorial](https://keras.io/examples/vision/mobilevit) for a lightweight introduction.
+- See also: [Image classification task guide](../tasks/image_classification).
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MobileViT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`MobileViTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-**Semantic segmentation**
-- [Semantic segmentation task guide](../tasks/semantic_segmentation)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-## MobileViTConfig
-
-[[autodoc]] MobileViTConfig
-
+  
 ## MobileViTFeatureExtractor
 
+  
+
 [[autodoc]] MobileViTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
+
+- __call__
+
+- post_process_semantic_segmentation
+
+  
 
 ## MobileViTImageProcessor
 
+  
+
 [[autodoc]] MobileViTImageProcessor
-    - preprocess
-    - post_process_semantic_segmentation
+
+- preprocess
+
+- post_process_semantic_segmentation
+
+  
 
 ## MobileViTImageProcessorFast
 
+  
+
 [[autodoc]] MobileViTImageProcessorFast
-    - preprocess
-    - post_process_semantic_segmentation
+
+- preprocess
+
+- post_process_semantic_segmentation
+
+  
 
 <frameworkcontent>
+
 <pt>
+
+  
 
 ## MobileViTModel
 
+  
+
 [[autodoc]] MobileViTModel
-    - forward
+
+- forward
+
+  
 
 ## MobileViTForImageClassification
 
+  
+
 [[autodoc]] MobileViTForImageClassification
-    - forward
+
+- forward
+
+  
 
 ## MobileViTForSemanticSegmentation
 
+  
+
 [[autodoc]] MobileViTForSemanticSegmentation
-    - forward
+
+- forward
+
+  
 
 </pt>
+
 <tf>
+
+  
 
 ## TFMobileViTModel
 
+  
+
 [[autodoc]] TFMobileViTModel
-    - call
+
+- call
+
+  
 
 ## TFMobileViTForImageClassification
 
+  
+
 [[autodoc]] TFMobileViTForImageClassification
-    - call
+
+- call
+
+  
 
 ## TFMobileViTForSemanticSegmentation
 
+  
+
 [[autodoc]] TFMobileViTForSemanticSegmentation
-    - call
+
+- call
+
+  
 
 </tf>
+
 </frameworkcontent>
