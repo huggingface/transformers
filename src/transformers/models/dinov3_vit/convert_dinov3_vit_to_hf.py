@@ -81,6 +81,7 @@ def get_dinov3_config(model_name: str) -> Optional[DINOv3ViTConfig]:
             num_attention_heads=12,
             mask_k_bias=True,
             qkv_bias=True,
+            proj_bias=True,
             num_register_tokens=4,
             layerscale_value=1.0,
             mlp_ratio=4,
@@ -213,109 +214,109 @@ def make_transform(resize_size: int = 224):
     return transforms.Compose([to_tensor, resize, normalize])
 
 
+def set_deterministic(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+
+
+seed = 42  # any number
+set_deterministic(seed=seed)
+
+
 @torch.no_grad()
 def convert_and_test_dinov3_checkpoint(model_name):
-
     expected_outputs = {
         "vits_cls": [
-            0.47379571199417114,
-            -0.41561394929885864,
-            0.41169291734695435,
-            -0.12478338927030563,
-            -0.2959742844104767,
+            0.4635618329048157,
+            -0.41560935974121094,
+            0.40823689103126526,
+            -0.12661336362361908,
+            -0.28663691878318787,
         ],
         "vits_patch": [
-            -0.03959187492728233,
-            -0.25311151146888733,
-            -0.015847790986299515,
-            -0.45699289441108704,
-            0.5675609707832336,
+            -0.03875422105193138,
+            -0.2508954405784607,
+            -0.01639290526509285,
+            -0.4554736316204071,
+            0.5715821981430054,
         ],
         "vitsplus_cls": [
-            -0.4748912751674652,
-            -1.3652222156524658,
-            -0.32735151052474976,
-            0.3742392957210541,
-            -0.7740300893783569,
+            -0.47134941816329956,
+            -1.365778923034668,
+            -0.3179832398891449,
+            0.37721940875053406,
+            -0.769085705280304,
         ],
         "vitsplus_patch": [
-            0.14932650327682495,
-            -0.3805270791053772,
-            -0.4004722833633423,
-            -0.15717053413391113,
-            -0.5877845287322998,
+            0.14455188810825348,
+            -0.3881174623966217,
+            -0.39343395829200745,
+            -0.1576954871416092,
+            -0.6003801226615906,
         ],
         "vitb_cls": [
-            1.048130750656128,
-            -0.16398264467716217,
-            -0.3483588695526123,
-            -0.07031229883432388,
-            -0.018643084913492203,
+            1.0346431732177734,
+            -0.18060928583145142,
+            -0.3410182595252991,
+            -0.0663769543170929,
+            -0.011383970268070698,
         ],
         "vitb_patch": [
-            -0.0795423611998558,
-            -0.45527052879333496,
-            -0.7357183694839478,
-            -0.4356740117073059,
-            -0.14763328433036804,
+            -0.08252374082803726,
+            -0.45627278089523315,
+            -0.7280299663543701,
+            -0.4306802451610565,
+            -0.15288019180297852,
         ],
         "vitl_cls": [
-            0.4834900200366974,
-            -0.587904155254364,
-            0.476875901222229,
-            0.5853531360626221,
-            0.9454823136329651,
+            0.4845271110534668,
+            -0.5822147130966187,
+            0.4806361198425293,
+            0.5920403599739075,
+            0.9451664686203003,
         ],
         "vitl_patch": [
-            -0.21309036016464233,
-            -0.49482738971710205,
-            -0.2584819495677948,
-            0.1072424128651619,
-            0.14616338908672333,
+            -0.2113673835992813,
+            -0.490863561630249,
+            -0.2571314871311188,
+            0.10176393389701843,
+            0.1545112431049347,
         ],
         "vithplus_cls": [
-            -0.06420943140983582,
-            -0.1494205743074417,
-            -0.618586540222168,
-            0.6363415122032166,
-            0.15246111154556274,
+            -0.0645759105682373,
+            -0.14886680245399475,
+            -0.6215243935585022,
+            0.6348787546157837,
+            0.1526956558227539,
         ],
         "vithplus_patch": [
-            -0.09335622191429138,
-            0.28375640511512756,
-            -0.049649134278297424,
-            0.4244541823863983,
-            0.0950070321559906,
+            -0.09381738305091858,
+            0.287407249212265,
+            -0.05003691464662552,
+            0.4280431866645813,
+            0.09456184506416321,
         ],
         "vit7b_cls": [
-            0.27555006742477417,
-            -0.2604803442955017,
-            0.06795521825551987,
-            0.05062410980463028,
-            -0.15915830433368683,
+            0.2754395306110382,
+            -0.261353999376297,
+            0.0677720308303833,
+            0.049936190247535706,
+            -0.15874707698822021,
         ],
         "vit7b_patch": [
-            0.04416150599718094,
-            -0.05306466668844223,
-            0.0719609260559082,
-            -0.06456729769706726,
-            -0.026268284767866135,
+            0.04444204643368721,
+            -0.05254213139414787,
+            0.07077747583389282,
+            -0.0651116818189621,
+            -0.026546532288193703,
         ],
     }
-
-    def set_deterministic(seed=42):
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.enabled = False
-
-    seed = 42  # any number
-    set_deterministic(seed=seed)
-
     config = get_dinov3_config(model_name)
     print(config)
 
@@ -334,7 +335,7 @@ def convert_and_test_dinov3_checkpoint(model_name):
     images = [image_preprocessor(prepare_img())]
     image_tensor = torch.stack(images, dim=0)
     with torch.inference_mode():
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.autocast("cuda", dtype=torch.float):
             model_output = model(image_tensor)
 
     last_layer_class_token = model_output.pooler_output
@@ -348,14 +349,14 @@ def convert_and_test_dinov3_checkpoint(model_name):
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_cls"]),
         torch.Tensor(expected_outputs[f"{model_name}_cls"]),
-        atol=1e-2,
-        rtol=1e-2,
+        atol=1e-3,
+        rtol=1e-3,
     )
     torch.testing.assert_close(
         torch.Tensor(actual_outputs[f"{model_name}_patch"]),
         torch.Tensor(expected_outputs[f"{model_name}_patch"]),
-        atol=1e-2,
-        rtol=1e-2,
+        atol=1e-3,
+        rtol=1e-3,
     )
     print("Looks ok!")
 
