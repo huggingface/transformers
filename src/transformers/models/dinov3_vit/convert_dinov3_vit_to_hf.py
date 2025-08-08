@@ -94,15 +94,9 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=1536,
             num_hidden_layers=12,
             num_attention_heads=6,
-            qkv_bias=True,
             proj_bias=True,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=False,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     elif model_name == "vitsplus":
         return DINOv3ViTConfig(
@@ -111,14 +105,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=1536,
             num_hidden_layers=12,
             num_attention_heads=6,
-            qkv_bias=True,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=True,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     elif model_name == "vitb":
         return DINOv3ViTConfig(
@@ -127,15 +115,9 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=3072,
             num_hidden_layers=12,
             num_attention_heads=12,
-            qkv_bias=True,
             proj_bias=True,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=False,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     elif model_name == "vitl":
         return DINOv3ViTConfig(
@@ -144,14 +126,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=4096,
             num_hidden_layers=24,
             num_attention_heads=16,
-            qkv_bias=True,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=False,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     elif model_name == "vithplus":
         return DINOv3ViTConfig(
@@ -160,14 +136,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=5120,
             num_hidden_layers=32,
             num_attention_heads=20,
-            qkv_bias=True,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=True,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     elif model_name == "vit7b":
         return DINOv3ViTConfig(
@@ -176,14 +146,10 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             intermediate_size=8192,
             num_hidden_layers=40,
             num_attention_heads=32,
-            qkv_bias=False,
+            query_bias=False,
+            value_bias=False,
             num_register_tokens=4,
-            layerscale_value=1.0,
             use_swiglu_ffn=True,
-            layer_norm_eps=1e-5,
-            pos_embed_rope_base=100,
-            pos_embed_rope_rescale_coords=2,
-            pos_embed_rope_dtype="fp32",
         )
     else:
         raise ValueError("Model not supported")
@@ -323,7 +289,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model-name",
-        default="vitsplus",
+        default="vits",
         type=str,
         choices=["vits", "vitsplus", "vitb", "vitl", "vithplus", "vit7b"],
         help="Name of the model you'd like to convert.",

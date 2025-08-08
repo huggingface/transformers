@@ -135,7 +135,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         super().__init__()
 
         self.config = config
-        self.base = config.pos_embed_rope_base
+        self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_patches_h = config.image_size // config.patch_size
         self.num_patches_w = config.image_size // config.patch_size
@@ -280,7 +280,7 @@ class DINOv3ViTAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.output_bias)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
 
     def forward(
         self,
@@ -369,6 +369,7 @@ class DINOv3ViTDropPath(nn.Module):
 
     def extra_repr(self) -> str:
         return f"p={self.drop_prob}"
+
 
 # Copied from transformers.models.arcee.modeling_arcee.ArceeMLP with Arcee->DINOv3ViT
 class DINOv3ViTMLP(nn.Module):

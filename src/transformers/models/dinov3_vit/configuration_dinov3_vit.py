@@ -104,41 +104,37 @@ class DINOv3ViTConfig(PretrainedConfig):
 
     def __init__(
         self,
+        patch_size=16,
         hidden_size=384,
         intermediate_size=1536,
         num_hidden_layers=12,
         num_attention_heads=6,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
+        attention_dropout=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        rope_theta=100.0,
         image_size=224,
-        patch_size=14,
         num_channels=3,
         query_bias=True,
         key_bias=False,
         value_bias=True,
-        output_bias=True,
+        proj_bias: bool = True,
         mlp_bias=True,
-        qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
-        swiglu_align_to=64,
+        num_register_tokens: int = 0,
+        # backbone related parameters
         out_features=None,
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
-        proj_bias: bool = True,
-        num_register_tokens: int = 0,
-        pos_embed_rope_base=100.0,
+        # train augs
         pos_embed_rope_shift_coords=None,
         pos_embed_rope_jitter_coords=None,
-        pos_embed_rope_rescale_coords=None,
-        pos_embed_rope_dtype="fp32",
-        device=None,
-        attention_dropout=0.0,
+        pos_embed_rope_rescale_coords=2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -149,24 +145,24 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-
-        self.query_bias = query_bias
-        self.key_bias = key_bias
-        self.value_bias = value_bias
-        self.output_bias = output_bias
-        self.mlp_bias = mlp_bias
-
-        self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
-        self.swiglu_align_to = swiglu_align_to
+        self.rope_theta = rope_theta
+        self.query_bias = query_bias
+        self.key_bias = key_bias
+        self.value_bias = value_bias
+        self.proj_bias = proj_bias
+        self.mlp_bias = mlp_bias
+        self.num_register_tokens = num_register_tokens
+
+        # backbone related parameters
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features,
@@ -175,15 +171,11 @@ class DINOv3ViTConfig(PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
-        self.num_register_tokens = num_register_tokens
-        self.proj_bias = proj_bias
-        self.pos_embed_rope_base = pos_embed_rope_base
+
+        # train augs
         self.pos_embed_rope_shift_coords = pos_embed_rope_shift_coords
         self.pos_embed_rope_jitter_coords = pos_embed_rope_jitter_coords
         self.pos_embed_rope_rescale_coords = pos_embed_rope_rescale_coords
-        self.pos_embed_rope_dtype = pos_embed_rope_dtype
-        self.device = device
-        self.attention_dropout = attention_dropout
 
 
 __all__ = ["DINOv3ViTConfig"]
