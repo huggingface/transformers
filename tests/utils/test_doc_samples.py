@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Union
 
 import transformers
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 
 logger = logging.getLogger()
@@ -27,7 +27,6 @@ logger = logging.getLogger()
 
 @unittest.skip(reason="Temporarily disable the doc tests.")
 @require_torch
-@require_tf
 @slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(

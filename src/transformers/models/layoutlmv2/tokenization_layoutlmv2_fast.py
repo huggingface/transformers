@@ -18,7 +18,7 @@ and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from tokenizers import normalizers
 
@@ -155,10 +155,10 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -308,13 +308,13 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -365,7 +365,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
@@ -378,8 +378,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -445,13 +445,13 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -519,7 +519,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
         sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0].keys():
+        for key in tokens_and_encodings[0][0]:
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
             sanitized_tokens[key] = stack
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
@@ -604,8 +604,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -670,7 +670,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -781,30 +781,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format: :: 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second
-        sequence | If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

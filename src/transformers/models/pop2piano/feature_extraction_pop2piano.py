@@ -15,7 +15,7 @@
 """Feature extractor class for Pop2Piano"""
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy
 import numpy as np
@@ -343,8 +343,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        sampling_rate: Union[int, List[int]],
+        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        sampling_rate: Union[int, list[int]],
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
         return_attention_mask: Optional[bool] = False,
@@ -377,7 +377,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         """
 
         requires_backends(self, ["librosa"])
-        is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
+        is_batched = isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list))
         if is_batched:
             # This enables the user to process files of different sampling_rate at same time
             if not isinstance(sampling_rate, list):

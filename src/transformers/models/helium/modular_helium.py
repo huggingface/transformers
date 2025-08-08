@@ -21,21 +21,9 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...utils import logging
-from ..gemma.modeling_gemma import (
-    GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
-)
-from ..granite.modeling_granite import (
-    GraniteAttention,
-)
-from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaMLP,
-    LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
-)
+from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
+from ..granite.modeling_granite import GraniteAttention
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding
 from .configuration_helium import HeliumConfig
 
 
@@ -142,24 +130,15 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 class HeliumForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config: HeliumConfig):
-        super().__init__(config)
-        self.model = HeliumModel(config)
-        self.post_init()
+    pass
 
 
 __all__ = [

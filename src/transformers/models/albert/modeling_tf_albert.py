@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -164,10 +163,10 @@ class TFAlbertEmbeddings(keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -253,7 +252,7 @@ class TFAlbertAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(inputs=input_tensor)
         mixed_key_layer = self.key(inputs=input_tensor)
@@ -350,7 +349,7 @@ class TFAlbertLayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
@@ -403,7 +402,7 @@ class TFAlbertLayerGroup(keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         layer_hidden_states = () if output_hidden_states else None
         layer_attentions = () if output_attentions else None
 
@@ -466,7 +465,7 @@ class TFAlbertTransformer(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
         hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
         all_attentions = () if output_attentions else None
         all_hidden_states = (hidden_states,) if output_hidden_states else None
@@ -563,7 +562,7 @@ class TFAlbertMLMHead(keras.layers.Layer):
         self.decoder.weight = value
         self.decoder.vocab_size = shape_list(value)[0]
 
-    def get_bias(self) -> Dict[str, tf.Variable]:
+    def get_bias(self) -> dict[str, tf.Variable]:
         return {"bias": self.bias, "decoder_bias": self.decoder_bias}
 
     def set_bias(self, value: tf.Variable):
@@ -629,11 +628,11 @@ class TFAlbertMainLayer(keras.layers.Layer):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -749,11 +748,11 @@ class TFAlbertForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[tf.Tensor] = None
-    prediction_logits: Optional[tf.Tensor] = None
-    sop_logits: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    loss: tf.Tensor | None = None
+    prediction_logits: tf.Tensor | None = None
+    sop_logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 ALBERT_START_DOCSTRING = r"""
@@ -879,11 +878,11 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithPooling | tuple[tf.Tensor]:
         outputs = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -942,13 +941,13 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         sentence_order_label: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFAlbertForPreTrainingOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFAlbertForPreTrainingOutput | tuple[tf.Tensor]:
         r"""
         Return:
 
@@ -1070,12 +1069,12 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1193,12 +1192,12 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1290,12 +1289,12 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1382,13 +1381,13 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1485,12 +1484,12 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         position_ids: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFMultipleChoiceModelOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`

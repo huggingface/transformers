@@ -52,7 +52,7 @@ class UdopConfig(PretrainedConfig):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation.
-        relative_bias_args (`List[dict]`, *optional*, defaults to `[{'type': '1d'}, {'type': 'horizontal'}, {'type': 'vertical'}]`):
+        relative_bias_args (`list[dict]`, *optional*, defaults to `[{'type': '1d'}, {'type': 'horizontal'}, {'type': 'vertical'}]`):
             A list of dictionaries containing the arguments for the relative bias layers.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.

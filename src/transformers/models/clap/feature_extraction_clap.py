@@ -15,7 +15,7 @@
 """Feature extractor class for CLAP."""
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -136,12 +136,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, except for the
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, except for the
             mel filter banks, which do not need to be saved or printed as they are too long.
         """
         output = copy.deepcopy(self.__dict__)
@@ -259,7 +259,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
@@ -271,7 +271,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -349,7 +349,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             rand_idx = np.random.randint(0, len(input_mel))
             is_longer[rand_idx] = True
 
-        if isinstance(input_mel[0], List):
+        if isinstance(input_mel[0], list):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
         # is_longer is a list of bool

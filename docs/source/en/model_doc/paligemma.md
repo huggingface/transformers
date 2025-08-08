@@ -174,6 +174,10 @@ visualizer("<img> What is in this image?")
 
 [[autodoc]] PaliGemmaProcessor
 
+## PaliGemmaModel
+
+[[autodoc]] PaliGemmaModel
+
 ## PaliGemmaForConditionalGeneration
 
 [[autodoc]] PaliGemmaForConditionalGeneration

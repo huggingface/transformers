@@ -51,19 +51,19 @@ class AlbertModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
-        vocab_size=99,
-        embedding_size=16,
-        hidden_size=36,
+        vocab_size=32,
+        embedding_size=8,
+        hidden_size=12,
         num_hidden_layers=2,
         # this needs to be the same as `num_hidden_layers`!
         num_hidden_groups=2,
-        num_attention_heads=6,
-        intermediate_size=37,
+        num_attention_heads=4,
+        intermediate_size=16,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
+        max_position_embeddings=8,
+        type_vocab_size=2,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
@@ -121,6 +121,7 @@ class AlbertModelTester:
     def get_config(self):
         return AlbertConfig(
             vocab_size=self.vocab_size,
+            embedding_size=self.embedding_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -132,6 +133,7 @@ class AlbertModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             num_hidden_groups=self.num_hidden_groups,
+            inner_group_num=1,
         )
 
     def create_and_check_model(

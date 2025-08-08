@@ -14,8 +14,7 @@
 # limitations under the License.
 """PyTorch GPTSANJapanese model."""
 
-import copy
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -49,7 +48,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
 
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
     It encourages router logits to remain small in an effort to improve stability.
 
     Args:
@@ -69,7 +68,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -142,8 +141,8 @@ class GPTSanJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    This router uses the same mechanism as in Switch Transformer (https://huggingface.co/papers/2101.03961) and V-MoE
+    (https://huggingface.co/papers/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
     token is processed by an expert**, or that each expert receives at least one token.
 
@@ -158,7 +157,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -174,7 +173,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
                 This is used later for computing router z-loss.
         """
         # float32 is used to ensure stability. See the discussion of "selective precision" in
-        # https://arxiv.org/abs/2101.03961.
+        # https://huggingface.co/papers/2101.03961.
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
@@ -199,7 +198,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
             self.classifier = self.classifier.to(self.dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple:
+    def forward(self, hidden_states: torch.Tensor) -> tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
@@ -213,7 +212,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
         Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
+            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
@@ -382,11 +381,11 @@ class GPTSanJapaneseAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -516,13 +515,13 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+    ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
         r"""
         Self-attention and normalize block.
 
@@ -555,7 +554,7 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         Returns:
-            Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
+            tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -597,14 +596,14 @@ class GPTSanJapaneseBlock(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        past_key_value: Optional[tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         output_router_tuple: Optional[bool] = False,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+    ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
         r"""
         GPTSAN transformer block.
 
@@ -638,7 +637,7 @@ class GPTSanJapaneseBlock(nn.Module):
             output_router_tuple:
                 output experts router logits and expert id.
         Returns:
-            Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
+            tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
         atten_out = self.self_attn(
             hidden_states=hidden_states,
@@ -673,7 +672,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GPTSanJapaneseConfig
+    config: GPTSanJapaneseConfig
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]
@@ -849,7 +848,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
-        self.config = copy.deepcopy(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.last_project = nn.Linear(config.d_model, config.d_model, bias=True)
         self.act = ACT2FN["swish"]
@@ -873,9 +871,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
@@ -886,7 +881,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -896,7 +891,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         return_dict: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         num_precontext: Optional[torch.LongTensor] = None,
-    ) -> Union[MoEModelOutputWithPastAndCrossAttentions, Tuple[torch.FloatTensor]]:
+    ) -> Union[MoEModelOutputWithPastAndCrossAttentions, tuple[torch.FloatTensor]]:
         r"""
         num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
             length of `hybrid` input tokens in the input. Tokens up to this length refer to both front and back like
@@ -919,7 +914,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         num_batch = input_ids.shape[0]
         pasts_or_spout_value = None
         if past_key_values is not None:
-            num_pasts_contexts = past_key_values[0][0].shape[2]
+            num_pasts_contexts = past_key_values.get_seq_length()
         elif self.config.d_spout and spout is not None:
             # `spout` is a special input vector specific to GPTSAN
             # This controls the output by projecting embedded information such as the class of sentences during learning.
@@ -1112,7 +1107,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1122,7 +1117,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         return_dict: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MoECausalLMOutputWithPast]:
+    ) -> Union[tuple[torch.FloatTensor], MoECausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification loss. Indices should be in `[-100, 0, ...,
@@ -1268,8 +1263,8 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
         token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[Union[List, torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        spout: Optional[Union[list, torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         **kwargs,
     ):
         if isinstance(spout, list):
@@ -1316,12 +1311,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
 
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []

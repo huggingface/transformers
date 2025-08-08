@@ -765,18 +765,6 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         return tf_inputs_dict
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
     )

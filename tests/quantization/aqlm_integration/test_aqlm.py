@@ -22,6 +22,7 @@ from packaging import version
 
 from transformers import AqlmConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_aqlm,
     require_torch_gpu,
@@ -81,8 +82,6 @@ class AqlmTest(unittest.TestCase):
 
     EXPECTED_OUTPUT = "Hello my name is Katie. I am a 20 year old college student. I am a very outgoing person. I love to have fun and be active. I"
 
-    device_map = "cuda"
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
@@ -92,12 +91,12 @@ class AqlmTest(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            device_map=cls.device_map,
+            device_map=torch_device,
         )
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -170,7 +169,7 @@ class AqlmTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 

@@ -139,7 +139,7 @@ task_to_pipeline_and_spec_mapping = {
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
-for task, task_info in pipeline_test_mapping.items():
+for task_info in pipeline_test_mapping.values():
     test = task_info["test"]
     task_info["mapping"] = {
         "pt": getattr(test, "model_mapping", None),
@@ -280,13 +280,13 @@ class PipelineTesterMixin:
                 A model repository id on the Hub.
             model_architecture (`type`):
                 A subclass of `PretrainedModel` or `PretrainedModel`.
-            tokenizer_names (`List[str]`):
+            tokenizer_names (`list[str]`):
                 A list of names of a subclasses of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
-            image_processor_names (`List[str]`):
+            image_processor_names (`list[str]`):
                 A list of names of subclasses of `BaseImageProcessor`.
-            feature_extractor_names (`List[str]`):
+            feature_extractor_names (`list[str]`):
                 A list of names of subclasses of `FeatureExtractionMixin`.
-            processor_names (`List[str]`):
+            processor_names (`list[str]`):
                 A list of names of subclasses of `ProcessorMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.

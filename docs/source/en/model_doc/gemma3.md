@@ -254,6 +254,10 @@ visualizer("<img>What is shown in this image?")
 [[autodoc]] Gemma3TextModel
     - forward
 
+## Gemma3Model
+
+[[autodoc]] Gemma3Model
+
 ## Gemma3ForCausalLM
 
 [[autodoc]] Gemma3ForCausalLM
@@ -262,4 +266,9 @@ visualizer("<img>What is shown in this image?")
 ## Gemma3ForConditionalGeneration
 
 [[autodoc]] Gemma3ForConditionalGeneration
+    - forward
+
+## Gemma3ForSequenceClassification
+
+[[autodoc]] Gemma3ForSequenceClassification
     - forward

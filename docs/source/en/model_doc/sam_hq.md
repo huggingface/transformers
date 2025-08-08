@@ -2,7 +2,7 @@
 
 ## Overview
 
-SAM-HQ (High-Quality Segment Anything Model) was proposed in [Segment Anything in High Quality](https://arxiv.org/pdf/2306.01567.pdf) by Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu.
+SAM-HQ (High-Quality Segment Anything Model) was proposed in [Segment Anything in High Quality](https://huggingface.co/papers/2306.01567) by Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu.
 
 The model is an enhancement to the original SAM model that produces significantly higher quality segmentation masks while maintaining SAM's original promptable design, efficiency, and zero-shot generalizability.
 
@@ -43,8 +43,8 @@ import requests
 from transformers import SamHQModel, SamHQProcessor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b").to(device)
-processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -69,8 +69,8 @@ import requests
 from transformers import SamHQModel, SamHQProcessor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b").to(device)
-processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")

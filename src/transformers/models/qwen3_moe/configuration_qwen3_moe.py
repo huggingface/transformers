@@ -26,7 +26,7 @@ class Qwen3MoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3MoeModel`]. It is used to instantiate a
     Qwen3MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [Qwen/Qwen3-MoE-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
+    with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -49,8 +49,9 @@ class Qwen3MoeConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
+
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -91,11 +92,11 @@ class Qwen3MoeConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -109,8 +110,6 @@ class Qwen3MoeConfig(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -128,7 +127,7 @@ class Qwen3MoeConfig(PretrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
-        mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
+        mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen3MoeMLP rather than Qwen3MoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
@@ -155,6 +154,9 @@ class Qwen3MoeConfig(PretrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.*.gate_proj": "colwise",
+        "layers.*.mlp.experts.*.up_proj": "colwise",
+        "layers.*.mlp.experts.*.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -184,7 +186,6 @@ class Qwen3MoeConfig(PretrainedConfig):
         attention_bias=False,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=28,
         attention_dropout=0.0,
         decoder_sparse_step=1,
         moe_intermediate_size=768,
@@ -204,7 +205,6 @@ class Qwen3MoeConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act

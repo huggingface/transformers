@@ -17,7 +17,7 @@ Processor class for IDEFICS2.
 """
 
 from itertools import accumulate
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -26,7 +26,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
@@ -85,7 +84,6 @@ class Idefics2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -128,8 +126,8 @@ class Idefics2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
@@ -165,10 +163,10 @@ class Idefics2Processor(ProcessorMixin):
         ```
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -182,8 +180,6 @@ class Idefics2Processor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,

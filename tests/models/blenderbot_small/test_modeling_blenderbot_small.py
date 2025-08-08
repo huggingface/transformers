@@ -366,7 +366,7 @@ class BlenderbotSmallStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -509,9 +509,9 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -562,4 +562,8 @@ class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTest
 
     @unittest.skip(reason="decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        return
+
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
         return

@@ -127,7 +127,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    use_fast = False if model_id == "liuhaotian/llava-v1.6-34b" else True
+    use_fast = model_id != "liuhaotian/llava-v1.6-34b"
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
@@ -175,15 +175,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
         model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
             tuple(
-                (
-                    dist.sample()
-                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
-                )
+                dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
             dim=0,
         )
 

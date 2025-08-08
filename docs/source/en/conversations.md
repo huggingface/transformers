@@ -25,9 +25,9 @@ Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_
 
 This guide shows you how to quickly start chatting with Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
-## transformers CLI
+## chat CLI
 
-Chat with a model directly from the command line as shown below. It launches an interactive session with a model. Enter `clear` to reset the conversation, `exit` to terminate the session, and `help` to display all the command options.
+After you've [installed Transformers](./installation), chat with a model directly from the command line as shown below. It launches an interactive session with a model, with a few base commands listed at the start of the session.
 
 ```bash
 transformers chat Qwen/Qwen2.5-0.5B-Instruct
@@ -37,13 +37,20 @@ transformers chat Qwen/Qwen2.5-0.5B-Instruct
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers-chat-cli.png"/>
 </div>
 
+You can launch the CLI with arbitrary `generate` flags, with the format `arg_1=value_1 arg_2=value_2 ...`
+
+```bash
+transformers chat Qwen/Qwen2.5-0.5B-Instruct do_sample=False max_new_tokens=10
+```
+
 For a full list of options, run the command below.
 
 ```bash
 transformers chat -h
 ```
 
-The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating).
+The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
+
 
 ## TextGenerationPipeline
 
@@ -151,4 +158,4 @@ The easiest solution for improving generation speed is to either quantize a mode
 You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token per `forward` pass. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
-> Parameters may not be active for every generated token in MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe.md), and [DBRX](./model_doc/dbrx). As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because parameters become activated with each new speculated token.
+> Parameters may not be active for every generated token in MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [DBRX](./model_doc/dbrx). As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because parameters become activated with each new speculated token.

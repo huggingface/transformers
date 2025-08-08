@@ -103,6 +103,10 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 
 [[autodoc]] FuyuConfig
 
+## FuyuModel
+
+[[autodoc]] FuyuModel
+
 ## FuyuForCausalLM
 
 [[autodoc]] FuyuForCausalLM

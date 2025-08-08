@@ -408,8 +408,10 @@ class AlignModelTester:
         return config, input_ids, token_type_ids, input_mask, pixel_values
 
     def get_config(self):
-        return AlignConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return AlignConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
@@ -461,6 +463,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -557,8 +562,8 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

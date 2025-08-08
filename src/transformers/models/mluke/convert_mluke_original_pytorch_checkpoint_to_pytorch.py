@@ -100,7 +100,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     state_dict.pop("lm_head.decoder.weight")
     state_dict.pop("lm_head.decoder.bias")
     state_dict_for_hugging_face = OrderedDict()
-    for key, value in state_dict.items():
+    for key in state_dict:
         if not (key.startswith("lm_head") or key.startswith("entity_predictions")):
             state_dict_for_hugging_face[f"luke.{key}"] = state_dict[key]
         else:
@@ -179,7 +179,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     assert [e for e in multilingual_predicted_entities if e.startswith("en:")][0] == "en:Japan"
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 
