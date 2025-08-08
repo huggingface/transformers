@@ -1185,6 +1185,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
         ("gpt_neo", "GPTNeoForSequenceClassification"),
         ("gpt_neox", "GPTNeoXForSequenceClassification"),
+        ("gpt_oss", "GptOssForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("helium", "HeliumForSequenceClassification"),
         ("ibert", "IBertForSequenceClassification"),
