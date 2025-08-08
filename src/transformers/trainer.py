@@ -2552,6 +2552,26 @@ class Trainer:
                             input_tokens = inputs[main_input_name].numel()
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
                             self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+
+                    if self.args.include_num_input_image_tokens_seen:
+                        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+                        if main_input_name not in inputs:
+                            logger.warning(
+                                "Tried to track the number of tokens seen, however the current model is "
+                                "not configured properly to know what item is the input. To fix this, add "
+                                "a `main_input_name` attribute to the model class you are using."
+                            )
+                        elif not hasattr(self.processing_class, "image_token_id"):
+                            logger.warning(
+                                "Tried to track the number of image tokens seen, however the current model is "
+                                "not configured properly to know what tokens are images tokens. To fix this, add "
+                                "a `image_token_id` attribute to the processing class you are using."
+                            )
+                        else:
+                            num_image_tokens = (inputs[main_input_name] == self.processing_class.image_token_id).sum()
+                            additional_num_image_tokens = self.accelerator.gather(num_image_tokens).sum().item()
+                            self.state.num_input_image_tokens_seen += additional_num_image_tokens
+
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
                         rng_to_sync = False
@@ -3694,6 +3714,12 @@ class Trainer:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 logs.update(speed_metrics("train", start_time, num_tokens=self.state.num_input_tokens_seen))
+        if self.args.include_num_input_image_tokens_seen:
+            logs["num_input_image_tokens_seen"] = self.state.num_input_image_tokens_seen
+            if start_time is not None:
+                logs.update(
+                    speed_metrics("train", start_time, num_image_tokens=self.state.num_input_image_tokens_seen)
+                )
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
