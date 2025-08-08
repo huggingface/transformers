@@ -3521,7 +3521,9 @@ class ModelTesterMixin:
 
                 model.set_attn_implementation("sdpa")
                 logits = (
-                    outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
                     outputs_fa.hidden_states[-1]
@@ -3556,7 +3558,9 @@ class ModelTesterMixin:
 
                 model.set_attn_implementation("sdpa")
                 logits = (
-                    outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
                     outputs_fa.hidden_states[-1]
@@ -3580,8 +3584,7 @@ class ModelTesterMixin:
     @slow
     @is_flaky()
     @unittest.skip(
-        reason=
-        "Does not work with certain models such as encoder-decoder models and hence also their decoder variants."
+        reason="Does not work with certain models such as encoder-decoder models and hence also their decoder variants."
         "Skipping for now."
     )
     def test_flash_attn_kernels_inference_equivalence(self):
@@ -4718,6 +4721,7 @@ class ModelTesterMixin:
         (There are many more examples especially now that the `kernels` library is
         supported)
         """
+
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
