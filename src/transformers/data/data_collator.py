@@ -21,8 +21,7 @@ from typing import Any, Callable, NewType, Optional, Union
 
 import numpy as np
 
-from ..models.bert import BertTokenizer, BertTokenizerFast
-from ..tokenization_utils_base import LARGE_INTEGER, PreTrainedTokenizerBase
+from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
 
 
@@ -797,7 +796,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         return batch
 
     def torch_mask_tokens(
-            self, inputs: Any, special_tokens_mask: Optional[Any] = None, offset_mapping: Optional[Any] = None
+        self, inputs: Any, special_tokens_mask: Optional[Any] = None, offset_mapping: Optional[Any] = None
     ) -> tuple[Any, Any]:
         """
         Prepare masked tokens inputs/labels for masked language modeling.
@@ -811,10 +810,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             special_tokens_mask = [
                 self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
             ]
-        
+
         if self.whole_word_mask:
             word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
-                tolist(offset_mapping), tolist(special_tokens_mask)
+                to_numpy(offset_mapping), to_numpy(special_tokens_mask)
             )
             no_mask_mask = torch.tensor(no_mask_mask, dtype=torch.bool)
         else:
@@ -827,7 +826,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         probability_matrix.masked_fill_(no_mask_mask, value=0.0)
         masked_indices = torch.bernoulli(probability_matrix, generator=self.generator).bool()
         if self.whole_word_mask:
-            masked_indices = self._whole_word_mask(word_ids, masked_indices)
+            masked_indices = torch.BoolTensor(self._whole_word_mask(word_ids, masked_indices))
 
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
@@ -906,9 +905,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             special_tokens_mask = [
                 self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
             ]
-        
+
         if self.whole_word_mask:
-            word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(tolist(offset_mapping), tolist(special_tokens_mask))
+            word_ids, no_mask_mask = self._calc_word_ids_and_prob_mask(
+                to_numpy(offset_mapping), to_numpy(special_tokens_mask)
+            )
             no_mask_mask = np.array(no_mask_mask, dtype=bool)
         else:
             no_mask_mask = (
@@ -970,61 +971,52 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
-    
+
     @staticmethod
     def _calc_word_ids_and_prob_mask(
-        offsets: list[list[tuple[int, int]]], special_tokens_mask: list[list[int]]
-    ) -> tuple[list[list[int]], list[list[int]]]:
+        offsets: np.ndarray[np.ndarray[tuple[int, int]]], special_tokens_mask: np.ndarray[np.ndarray[int]]
+    ) -> tuple[np.ndarray[np.ndarray[int]], np.ndarray[np.ndarray[int]]]:
         """
         Map tokens to word ids and create mask of tokens to not mask.
         Tokens that are part of the same word will have the same word id and we will only
         set a mask probability for the first token of each word.
         """
 
-        batch_word_ids = []
-        batch_prob_mask = [[1] * len(o) for o in offsets]  # Initialize with 1s, meaning no tokens can be masked
+        token_starts = offsets[:, :, 0]
+        token_ends = offsets[:, :, 1]
 
-        for seq_idx, offset in enumerate(offsets):
-            word_ids = []
-            current_word_id = 0
-            prev_token_end = None
+        prev_token_ends = np.roll(token_ends, 1, axis=1)
+        prev_token_ends[:, 0] = -1  # First token has no previous token
 
-            for token_idx, (token_start, token_end) in enumerate(offset):
-                if special_tokens_mask[seq_idx][token_idx] == 1:
-                    word_ids.append(-1)
-                    prev_token_end = None
-                    continue
+        prev_token_special = np.roll(special_tokens_mask, 1, axis=1)
+        prev_token_special[:, 0] = 0
 
-                if (prev_token_end is None) or (prev_token_end != token_start):
-                    current_word_id += 1
-                    batch_prob_mask[seq_idx][token_idx] = 0  # This token can be masked
+        # Not special token AND (gap from previous or previous token was special)
+        special_tokens_mask = special_tokens_mask.astype(bool)
+        is_new_word = (~special_tokens_mask) & ((token_starts != prev_token_ends) | (prev_token_special == 1))
 
-                word_ids.append(current_word_id)
-                prev_token_end = token_end
+        word_ids = np.cumsum(is_new_word, axis=1)
+        word_ids[special_tokens_mask] = -1
 
-            batch_word_ids.append(word_ids)
+        prob_mask = (~is_new_word).astype(int)
 
-        return batch_word_ids, batch_prob_mask
+        return word_ids, prob_mask
 
     @staticmethod
-    def _whole_word_mask(word_ids: list[list[int]], mask: Any) -> Any:
+    def _whole_word_mask(word_ids: np.ndarray[np.ndarray[int]], mask: Any) -> Any:
         """
         Mask whole words based on word ids and mask.
         """
-        for seq_idx, (word_ids, mask_values) in enumerate(zip(word_ids, mask)):
-            for word_idx, id in enumerate(word_ids):
-                # Skip first word
-                if word_idx == 0:
-                    continue
+        mask = to_numpy(mask)
 
-                # If the current token is the same as the previous token's word id 
-                # and the previous token is masked, then mask the current token too
-                if (id == word_ids[word_idx - 1]) and (mask_values[word_idx - 1]):
-                    # Previous token for same word is masked, so this one should be too
-                    mask[seq_idx][word_idx] = True
+        valid_ids = word_ids != -1
 
-        return mask
-    
+        # Create 3D mask where [batch, token_i, token_j] is True if token_i and token_j are the same word
+        same_word = (word_ids[:, :, None] == word_ids[:, None, :]) & valid_ids[:, :, None] & valid_ids[:, None, :]
+
+        # For each token, set True if any token in the same word is masked
+        return np.any(same_word & mask[:, None, :], axis=2)
+
 
 @dataclass
 class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
@@ -1052,6 +1044,17 @@ def tolist(x) -> list[Any]:
     elif hasattr(x, "numpy"):
         x = x.numpy()
     return x.tolist()
+
+
+def to_numpy(x) -> np.ndarray[Any]:
+    if isinstance(x, np.ndarray):
+        return x
+    elif hasattr(x, "numpy"):
+        return x.numpy()
+    elif hasattr(x, "detach"):
+        return x.detach().cpu().numpy()
+    else:
+        return np.array(x)
 
 
 @dataclass
