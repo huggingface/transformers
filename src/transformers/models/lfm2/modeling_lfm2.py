@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -122,7 +122,7 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache(DynamicCache):
+class Lfm2HybridConvCache:
     """
     Attention and conv cache for Lfm2.
 
@@ -254,15 +254,11 @@ class Lfm2HybridConvCache(DynamicCache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
+    def __len__(self) -> int:
+        return len(self.key_cache)
+
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("Lfm2HybridConvCache does not have a legacy cache equivalent.")
 
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):

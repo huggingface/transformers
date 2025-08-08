@@ -42,7 +42,6 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
-from ...cache_utils import DynamicLayer
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -115,7 +114,6 @@ class HybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
     """
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
-        HybridMambaAttentionDynamicCache.__init__(layer_classes=DynamicLayer)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv
