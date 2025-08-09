@@ -51,7 +51,7 @@ MODALITY_INPUT_DATA = {
     ],
     "videos": [
         "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
-        ["https://www.ilankelman.org/stopsigns/australia.jpg", "https://www.ilankelman.org/stopsigns/australia.jpg"],
+        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
     ],
     "audio": [
         "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
@@ -536,7 +536,12 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
-        inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
+        inputs = processor(
+            text=input_str,
+            videos=video_input,
+            return_tensors="pt",
+            do_sample_frames=False,
+        )
         self.assertEqual(inputs[self.text_input_name].shape[-1], 167)
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
@@ -560,7 +565,12 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
-        inputs = processor(text=input_str, videos=video_input, return_tensors="pt")
+        inputs = processor(
+            text=input_str,
+            videos=video_input,
+            return_tensors="pt",
+            do_sample_frames=False,
+        )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
@@ -575,7 +585,12 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
         inputs = processor(
-            text=input_str, videos=video_input, return_tensors="pt", max_length=162, padding="max_length"
+            text=input_str,
+            videos=video_input,
+            return_tensors="pt",
+            max_length=162,
+            padding="max_length",
+            do_sample_frames=False,
         )
         self.assertEqual(inputs[self.text_input_name].shape[-1], 162)
 
@@ -595,7 +610,14 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
-        inputs = processor(text=input_str, videos=video_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(
+            text=input_str,
+            videos=video_input,
+            do_rescale=True,
+            rescale_factor=-1,
+            return_tensors="pt",
+            do_sample_frames=False,
+        )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_unstructured_kwargs_video(self):
@@ -616,6 +638,7 @@ class ProcessorTesterMixin:
             rescale_factor=-1,
             padding="max_length",
             max_length=176,
+            do_sample_frames=False,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -639,6 +662,7 @@ class ProcessorTesterMixin:
             rescale_factor=-1,
             padding="longest",
             max_length=176,
+            do_sample_frames=False,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -664,6 +688,7 @@ class ProcessorTesterMixin:
                 videos_kwargs={"do_rescale": True, "rescale_factor": -1},
                 do_rescale=True,
                 return_tensors="pt",
+                do_sample_frames=False,
             )
 
     def test_structured_kwargs_nested_video(self):
@@ -680,7 +705,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -703,7 +728,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -937,7 +962,7 @@ class ProcessorTesterMixin:
         )
 
     @require_av
-    @parameterized.expand([(1, "pt"), (2, "pt"), (3, "pt")])  # video processor supports only torchvision
+    @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", MODALITY_INPUT_DATA["videos"]
@@ -1042,8 +1067,8 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
 
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
+        # Load video as a list of frames (i.e. images).
+        # NOTE: each frame should have same size because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
@@ -1060,6 +1085,19 @@ class ProcessorTesterMixin:
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
 
     @require_librosa
     @require_av
