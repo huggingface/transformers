@@ -176,14 +176,12 @@ def list_repo_templates(
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (HTTPError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        except (HTTPError, requests.exceptions.ConnectionError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
     try:
-        snapshot_dir = snapshot_download(
-            repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
-        )
+        snapshot_dir = snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True)
     except LocalEntryNotFoundError:  # No local repo means no local files
         return []
     templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
