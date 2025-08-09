@@ -40,7 +40,7 @@ alt="drawing" width="600"/>
 
 - [`GroundingDinoProcessor`]를 사용하여 모델을 위한 이미지-텍스트 쌍을 준비할 수 있습니다.
 - 텍스트에서 클래스를 구분할 때는 마침표를 사용하세요. 예: "a cat. a dog."
-- 여러 클래스를 사용할 때(예: `"a cat. a dog."`), [`GroundingDinoProcessor`]의 `post_process_grounded_object_detection`을 사용해 출력을 후처리해야 합니다. `post_process_object_detection`에서 반환되는 라벨은 prob > threshold인 모델 차원의 인덱스를 나타내기 때문입니다.
+- 여러 클래스를 사용할 때(예: `"a cat. a dog."`), [`GroundingDinoProcessor`]의 `post_process_grounded_object_detection`을 사용해 출력을 후처리해야 합니다. `post_process_object_detection`에서 반환되는 레이블은 prob > threshold인 모델 차원의 인덱스를 나타내기 때문입니다.
 
 다음은 제로샷 객체 탐지에 모델을 사용하는 방법입니다:
 
