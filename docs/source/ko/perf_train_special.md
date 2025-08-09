@@ -28,4 +28,4 @@ Apple 실리콘(M 시리즈)은 통합 메모리 아키텍처를 기반으로 �
 
 ## 자료[[resources]]
 
-MPS 백엔드에 대한 자세한 내용은 [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) 블로그 글에서 확인하실 수 있습니다.</file>
+MPS 백엔드에 대한 자세한 내용은 [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) 블로그 글에서 확인하실 수 있습니다.
