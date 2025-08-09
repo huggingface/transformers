@@ -26,14 +26,14 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Dia is an opensource text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
-It can generate highly realistic dialogue from transcript including nonverbal communications such as laughter and coughing.
+Dia is an open-source text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
+It can generate highly realistic dialogue from transcript including non-verbal communications such as laughter and coughing.
 Furthermore, emotion and tone control is also possible via audio conditioning (voice cloning).
 
 **Model Architecture:**
 Dia is an encoder-decoder transformer based on the original transformer architecture. However, some more modern features such as
 rotational positional embeddings (RoPE) are also included. For its text portion (encoder), a byte tokenizer is utilized while
-for the audio portion (decoder), a pretrained codec model [DAC](./dac.md) is used - DAC encodes speech into discrete codebook
+for the audio portion (decoder), a pretrained codec model [DAC](./dac) is used - DAC encodes speech into discrete codebook
 tokens and decodes them back into audio.
 
 ## Usage Tips
@@ -44,7 +44,7 @@ tokens and decodes them back into audio.
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
@@ -66,7 +66,7 @@ from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))
@@ -93,7 +93,7 @@ from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
 torch_device = "cuda"
-model_checkpoint = "buttercrab/dia-v1-1.6b"
+model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))

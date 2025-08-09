@@ -21,17 +21,18 @@ from torch import nn
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
-    KwargsForCausalLM,
     LlavaNextVideoCausalLMOutputWithPast,
     LlavaNextVideoForConditionalGeneration,
     LlavaNextVideoModel,
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
+    TransformersKwargs,
     get_anyres_image_grid_shape,
     image_size_to_num_patches,
     unpad_image,
 )
 
+from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -49,7 +50,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
@@ -485,7 +485,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -499,16 +499,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
@@ -548,24 +540,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 batch_num_images=batch_num_images,
             )
             image_features = torch.cat(image_features, dim=0)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Video are simply embedded and further pooled to decrease seq len
@@ -579,25 +557,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
             )
             video_features = torch.cat((video_features, image_newline), dim=1)
-            video_features = video_features.flatten(0, 1)
-
-            if input_ids is None:
-                special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_video_mask = special_video_mask.all(-1)
-            else:
-                special_video_mask = input_ids == self.config.video_token_id
-
-            n_video_tokens = (special_video_mask).sum()
-            special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
-                n_video_features = video_features.shape[0]
-                raise ValueError(
-                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
@@ -635,7 +598,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
@@ -648,19 +611,11 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, frames, num_channels, image_size, image_size)):
-            The tensors corresponding to the input videos. Pixel values can be obtained using
-            [`LlavaNextVideoProcessor`]. See [`LlavaNextVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
-            [`LlavaNextVideoProcessor`] for processing videos.
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):

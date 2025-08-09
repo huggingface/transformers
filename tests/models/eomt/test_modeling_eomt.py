@@ -17,12 +17,13 @@ import unittest
 
 import requests
 
-from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation
+from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation, pipeline
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -100,8 +101,9 @@ class EomtForUniversalSegmentationTester:
 
 
 @require_torch
-class EomtForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
+class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EomtForUniversalSegmentation,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-segmentation": EomtForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
@@ -340,7 +342,6 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = processor(images=image, return_tensors="pt").to(model.device)
-        patch_offsets = inputs.pop("patch_offsets", None)
 
         with torch.inference_mode():
             outputs = model(**inputs)
@@ -348,11 +349,9 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
 
-        preds = processor.post_process_semantic_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])], patch_offsets=patch_offsets
-        )
+        preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
 
-        self.assertTrue(preds.shape[1:] == (image.size[1], image.size[0]))
+        self.assertTrue(preds.shape == (image.size[1], image.size[0]))
 
         # fmt: off
         EXPECTED_SLICE = torch.tensor([
@@ -369,7 +368,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         ], device=model.device)
         # fmt: on
 
-        output_slice = preds[0, :10, :10]
+        output_slice = preds[:10, :10]
         torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow
@@ -387,9 +386,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        preds = processor.post_process_panoptic_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])]
-        )[0]
+        preds = processor.post_process_panoptic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
         # fmt: off
@@ -438,9 +435,7 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 81))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        preds = processor.post_process_instance_segmentation(
-            outputs, original_image_sizes=[(image.size[1], image.size[0])]
-        )[0]
+        preds = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
         # fmt: off
@@ -473,3 +468,15 @@ class EomtForUniversalSegmentationIntegrationTest(unittest.TestCase):
             self.assertEqual(actual["id"], expected["id"])
             self.assertEqual(actual["label_id"], expected["label_id"])
             self.assertAlmostEqual(actual["score"], expected["score"], delta=1e-3)
+
+    @slow
+    def test_segmentation_pipeline(self):
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        pipe = pipeline(model=self.model_id, subtask="panoptic", device=torch_device)
+        output = pipe(image)
+
+        EXPECTED_OUTPUT_LABELS = ["cat", "cat", "couch", "remote", "remote"]
+
+        output_labels = [segment["label"] for segment in output]
+        self.assertEqual(output_labels, EXPECTED_OUTPUT_LABELS)

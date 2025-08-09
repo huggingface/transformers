@@ -472,7 +472,7 @@ class DacEncoder(nn.Module):
 
 @auto_docstring
 class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
-    config_class = DacConfig
+    config: DacConfig
     base_model_prefix = "dac"
     main_input_name = "input_values"
 
@@ -480,6 +480,12 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
         if isinstance(module, nn.Conv1d):
             nn.init.trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
+        elif isinstance(module, Snake1d):
+            module.alpha.data.fill_(1.0)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

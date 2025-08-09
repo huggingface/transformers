@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -331,7 +330,7 @@ class TFEsmSelfAttention(keras.layers.Layer):
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
         past_key_value: tuple[tuple[tf.Tensor]] | None = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
         training: bool = False,
     ) -> tuple[tf.Tensor]:
         mixed_query_layer = self.query(hidden_states)
@@ -934,13 +933,13 @@ class TFEsmMainLayer(keras.layers.Layer):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions | tuple[tf.Tensor]:
         if not self.config.is_decoder:
             use_cache = False
 
@@ -1117,13 +1116,13 @@ class TFEsmModel(TFEsmPreTrainedModel):
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, tuple[tf.Tensor]]:
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions | tuple[tf.Tensor]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1222,11 +1221,11 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
         encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFMaskedLMOutput, tuple[tf.Tensor]]:
+    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1370,11 +1369,11 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFSequenceClassifierOutput, tuple[tf.Tensor]]:
+    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1457,11 +1456,11 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFTokenClassifierOutput, tuple[tf.Tensor]]:
+    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.

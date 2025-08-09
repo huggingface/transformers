@@ -59,12 +59,14 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    TRITON_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
@@ -89,6 +91,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
+    is_fp_quant_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
@@ -104,13 +107,16 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -123,6 +129,7 @@ from .utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_quark_available,
+    is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -130,7 +137,6 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -152,6 +158,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -162,6 +169,7 @@ from .utils import (
     is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
+    is_triton_available,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -379,6 +387,14 @@ def require_apollo_torch(test_case):
     return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
+def require_torch_optimi(test_case):
+    """
+    Decorator marking a test that requires torch-optimi. These tests are skipped when torch-optimi isn't installed.
+    https://github.com/jxnl/torch-optimi
+    """
+    return unittest.skipUnless(is_torch_optimi_available(), "test requires torch-optimi")(test_case)
+
+
 def require_lomo(test_case):
     """
     Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
@@ -439,6 +455,19 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_triton(min_version: str = TRITON_MIN_VERSION):
+    """
+    Decorator marking a test that requires triton. These tests are skipped when triton isn't installed.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_triton_available(min_version), f"test requires triton version >= {min_version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
@@ -576,6 +605,16 @@ def require_flash_attn(test_case):
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
 
 
+def require_kernels(test_case):
+    """
+    Decorator marking a test that requires Flash Attention.
+
+    These tests are skipped when Flash Attention isn't installed.
+
+    """
+    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
+
+
 def require_flash_attn_3(test_case):
     """
     Decorator marking a test that requires Flash Attention 3.
@@ -656,7 +695,7 @@ def require_torchcodec(test_case):
     These tests are skipped when Torchcodec isn't installed.
 
     """
-    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchvision")(test_case)
+    return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
 
 
 def require_torch_or_tf(test_case):
@@ -1093,6 +1132,11 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_mps(test_case):
+    """Decorator marking a test that requires CUDA and PyTorch."""
+    return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
@@ -1248,6 +1292,16 @@ def require_swanlab(test_case):
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
 
 
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
+
+
 def require_wandb(test_case):
     """
     Decorator marking a test that requires wandb.
@@ -1266,16 +1320,6 @@ def require_clearml(test_case):
 
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
-
-
-def require_soundfile(test_case):
-    """
-    Decorator marking a test that requires soundfile
-
-    These tests are skipped when soundfile isn't installed.
-
-    """
-    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1440,6 +1484,20 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fp_quant(test_case):
+    """
+    Decorator marking a test that requires fp_quant and qutlass
+    """
+    return unittest.skipUnless(is_fp_quant_available(), "test requires fp_quant")(test_case)
+
+
+def require_qutlass(test_case):
+    """
+    Decorator marking a test that requires qutlass
+    """
+    return unittest.skipUnless(is_qutlass_available(), "test requires qutlass")(test_case)
+
+
 def require_phonemizer(test_case):
     """
     Decorator marking a test that requires phonemizer
@@ -1535,6 +1593,20 @@ def require_speech(test_case):
     Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
     """
     return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_openai(test_case):
+    """
+    Decorator marking a test that requires openai
+    """
+    return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_mistral_common(test_case):
+    """
+    Decorator marking a test that requires mistral-common. These tests are skipped when mistral-common isn't available.
+    """
+    return unittest.skipUnless(is_mistral_common_available(), "test requires mistral-common")(test_case)
 
 
 def get_gpu_count():
@@ -2796,7 +2868,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -2956,7 +3028,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3247,7 +3319,7 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
     missing_keys = []
     unexpected_keys = []
     all_field_names = {field.name for field in fields(hub_spec)}
-    matching_keys = sorted([key for key in output.keys() if key in all_field_names])
+    matching_keys = sorted([key for key in output if key in all_field_names])
 
     # Fields with a MISSING default are required and must be in the output
     for field in fields(hub_spec):
@@ -3338,17 +3410,25 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return [(unpack_device_properties(k), v) for k, v in self.data.items()]
 
     @staticmethod
-    def is_default(properties: DeviceProperties) -> bool:
-        return all(p is None for p in properties)
+    def is_default(expectation_key: PackedDeviceProperties) -> bool:
+        """
+        This function returns True if the expectation_key is the Default expectation (None, None).
+        When an Expectation dict contains a Default value, it is generally because the test existed before Expectations.
+        When we modify a test to use Expectations for a specific hardware, we don't want to affect the tests on other
+        hardwares. Thus we set the previous value as the Default expectation with key (None, None) and add a value for
+        the specific hardware with key (hardware_type, (major, minor)).
+        """
+        return all(p is None for p in expectation_key)
 
     @staticmethod
     def score(properties: DeviceProperties, other: DeviceProperties) -> float:
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
         Rules are as follows:
-            * Matching `type` adds one point, semi-matching `type` adds half a point (e.g. cuda and rocm).
+            * Matching `type` adds one point, semi-matching `type` adds 0.1 point (e.g. cuda and rocm).
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
-            * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
+            * The Default expectation (None, None) is worth 0.5 point, which is better than semi-matching. More on this
+            in the `is_default` function.
         """
         device_type, major, minor = properties
         other_device_type, other_major, other_minor = other
@@ -3361,13 +3441,13 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
                 score += 1
                 if minor is not None and minor == other_minor:
                     score += 1
-        # Semi-matching device type
+        # Semi-matching device type, which carries less importance than the default expectation
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
-            score = 0.5
+            score = 0.1
 
         # Default expectation
         if Expectations.is_default(other):
-            score = 0.1
+            score = 0.5
 
         return score
 

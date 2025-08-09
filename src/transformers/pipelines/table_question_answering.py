@@ -122,6 +122,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
     default_input_names = "table,query"
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -139,8 +143,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
             mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
         self.check_model_type(mapping)
 
-        self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
-            getattr(self.model.config, "num_aggregation_labels", None)
+        self.aggregate = getattr(self.model.config, "aggregation_labels", None) and getattr(
+            self.model.config, "num_aggregation_labels", None
         )
         self.type = "tapas" if hasattr(self.model.config, "aggregation_labels") else None
 

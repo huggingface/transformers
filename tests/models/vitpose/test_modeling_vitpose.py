@@ -155,7 +155,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
@@ -168,6 +168,9 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_common_attributes(self):

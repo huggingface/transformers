@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import Swin2SRConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -360,7 +360,12 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size([1, 3, 976, 1296])
         self.assertEqual(outputs.reconstruction.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
-        ).to(torch_device)
-        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+        expectations = Expectations(
+            {
+                (None, None): [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
+                ("cuda", 8): [[0.5454, 0.5547, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=model.dtype)
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)

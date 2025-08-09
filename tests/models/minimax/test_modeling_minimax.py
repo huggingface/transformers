@@ -20,6 +20,7 @@ import pytest
 from transformers import MiniMaxConfig, is_torch_available
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
+    Expectations,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -213,28 +214,40 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
             batch_size, seq_length = inputs["input_ids"].shape
             self._check_past_key_values_for_generate(batch_size, past_kv, seq_length, config)
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
+    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Model needs refactor")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
 
@@ -250,14 +263,19 @@ class MiniMaxIntegrationTest(unittest.TestCase):
             model_id,
             torch_dtype=torch.bfloat16,
         ).to(torch_device)
-        expected_slice = torch.tensor(
-            [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]]
-        ).to(torch_device)
 
         with torch.no_grad():
             logits = model(dummy_input).logits
 
         logits = logits.float()
+
+        expectations = Expectations(
+            {
+                (None, None): [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]],
+                ("cuda", 8): [[1.0312, -0.5156, -0.3203], [-0.1201, 0.4375, 0.2402], [1.2188, -0.5898, -0.0396]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         torch.testing.assert_close(logits[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)

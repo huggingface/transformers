@@ -93,11 +93,8 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    max_batch_size=1,
     # If you plan to reuse the cache, make sure the cache length is large enough for all cases
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
-    device=model.device,
-    dtype=model.dtype
 )
 outputs = model.generate(**input_ids, past_key_values=past_key_values)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -159,7 +156,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
-        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+        config=model.config, max_cache_len=4096
     )
     cache_position = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(
@@ -341,7 +338,7 @@ A known issue with transformer models is that the self-attention mechanism grows
 
 FlashAttention and [FlashAttention-2](./perf_infer_gpu_one#flashattention-2) break up the attention computation into smaller chunks and reduces the number of intermediate read/write operations to the GPU memory to speed up inference. FlashAttention-2 improves on the original FlashAttention algorithm by also parallelizing over sequence length dimension and better partitioning work on the hardware to reduce synchronization and communication overhead.
 
-To use FlashAttention-2, set [attn_implementation](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.PreTrainedModel.from_pretrained.attn_implementation) to `"flash_attention_2"` in [`~PreTrainedModel.from_pretrained`].
+To use FlashAttention-2, set [attn_implementation](https://hf.co/docs/transformers/main/en/main_classes/text_generation#transformers.PreTrainedModel.from_pretrained.attn_implementation) to `"flash_attention_2"` in [`~PreTrainedModel.from_pretrained`] or set with `model.set_attention_implementation("flash_attention_2")` to dynamically update the [attention interface](./attention_interface) after the model is loaded.
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -353,6 +350,14 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
+
+# Change the model's attention dynamically after loading
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-2b",
+    quantization_config=quant_config,
+    torch_dtype=torch.bfloat16
+)
+model.set_attention_implementation("flash_attention_2")
 ```
 
 ### PyTorch scaled dot product attention
@@ -360,7 +365,7 @@ model = AutoModelForCausalLM.from_pretrained(
 Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and PyTorch's C++ implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the PyTorch C++ implementation.
 
 > [!TIP]
-> SDPA automaticallysupports FlashAttention-2 as long as you have the latest PyTorch version installed.
+> SDPA automatically supports FlashAttention-2 as long as you have the latest PyTorch version installed.
 
 Use the [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) context manager to explicitly enable or disable any of the four attention algorithms. For example, use `SDPBackend.FLASH_ATTENTION` to enable FlashAttention.
 

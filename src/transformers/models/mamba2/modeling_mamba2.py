@@ -713,7 +713,7 @@ class Mamba2Block(GradientCheckpointingLayer):
 
 @auto_docstring
 class Mamba2PreTrainedModel(PreTrainedModel):
-    config_class = Mamba2Config
+    config: Mamba2Config
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
@@ -721,9 +721,15 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
+        std = self.config.initializer_range
         if isinstance(module, Mamba2Mixer):
+            # S4D real initialization. These are not discretized!
+            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
+            A = torch.arange(1, self.config.num_heads + 1)
+            module.A_log.copy_(torch.log(A))
             module.A_log._no_weight_decay = True
             module.D._no_weight_decay = True
+            module.D.data.fill_(1.0)
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
@@ -733,33 +739,39 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                module.dt_bias.copy_(inv_dt)
+            module.dt_bias.copy_(inv_dt)
             module.dt_bias._no_reinit = True
 
+            nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
+            if module.conv1d.bias is not None:
+                if not getattr(module.conv1d.bias, "_no_reinit", False):
+                    nn.init.zeros_(module.conv1d.bias)
+            nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
+
+            if self.config.rescale_prenorm_residual:
+                # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
+                #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
+                #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
+                #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
+                #
+                # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
+                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
+                # We need to reinit p since this code could be called multiple times
+                # Having just p *= scale would repeatedly scale it down
+                p = module.out_proj.weight
+                p /= math.sqrt(self.config.num_hidden_layers)
+
         if isinstance(module, nn.Linear):
+            if not getattr(module.weight, "_no_reinit", False):
+                nn.init.normal_(module.weight, std=std)
             if module.bias is not None:
                 if not getattr(module.bias, "_no_reinit", False):
                     nn.init.zeros_(module.bias)
+        elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
+            module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=self.config.initializer_range)
-
-        if self.config.rescale_prenorm_residual:
-            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-            #
-            # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-            for name, p in module.named_parameters():
-                if name in ["out_proj.weight"]:
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
-                    nn.init.kaiming_uniform_(p, a=math.sqrt(5))
-                    with torch.no_grad():
-                        p /= math.sqrt(self.config.num_hidden_layers)
+            nn.init.normal_(module.weight, std=std)
 
 
 @dataclass
@@ -935,12 +947,6 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
@@ -958,38 +964,33 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-
-        if use_cache:
-            # `cache_position` should have been initialized in `generate`
-            if cache_position is None:
-                raise ValueError(
-                    "`cache_position` should not be None as it should have been initialized in "
-                    "`model.generate`, you are responsible for passing in a valid `cache_position` if "
-                    "you are calling `prepare_inputs_for_generation` directly with `use_cache=True`"
-                )
-            if cache_position[0] > 0:
-                input_ids = input_ids[:, -1][..., None]
-
-                if attention_mask is not None:
-                    attention_mask = None
+        model_inputs = {"input_ids": input_ids.contiguous()}
+        if use_cache and cache_params is None:
+            # we initialize the `cache_position` to full size of `conv_states` at prefill stage
+            # considering padding will be applied when input length is shorter, and truncation
+            # will be applied when it is longer, so it will be equivalent to always have it match
+            # the length of `cache_params.conv_states`, which is `config.conv_kernel`
+            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
+            if inputs_embeds is not None:
+                model_inputs = {"inputs_embeds": inputs_embeds}
+                max_batch_size = inputs_embeds.size(0)
             else:
-                # we initialize the `cache_position` to full size of `conv_states` at prefill stage
-                # considering padding will be applied when input length is shorter, and truncation
-                # will be applied when it is longer, so it will be equivalent to always have it match
-                # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-                cache_position = torch.arange(0, self.config.conv_kernel, device=input_ids.device)
+                max_batch_size = input_ids.size(0)
+            cache_params = Mamba2Cache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
 
-        if inputs_embeds is not None and cache_params is None:
+        if use_cache and cache_position[0] > 0:
+            model_inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1).contiguous()
+            attention_mask = None
+
+        if not use_cache and inputs_embeds is not None:
             model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
             {
-                "attention_mask": attention_mask,
                 "cache_params": cache_params,
                 "use_cache": use_cache,
                 "cache_position": cache_position,
+                "attention_mask": attention_mask,
             }
         )
         return model_inputs

@@ -14,9 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-from typing import Optional
-
-import torch
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -27,23 +25,44 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
+    SizeDict,
     is_torch_tensor,
-    make_list_of_images,
     pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 class MobileVitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
         Whether to flip the color channels from RGB to BGR or vice versa.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
     """
 
     do_flip_channel_order: Optional[bool]
+    do_reduce_labels: Optional[bool]
 
 
 @auto_docstring
@@ -58,27 +77,100 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     do_convert_rgb = None
     do_flip_channel_order = True
+    do_reduce_labels = False
     valid_kwargs = MobileVitFastImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
+    def reduce_label(self, labels: list["torch.Tensor"]):
+        for idx in range(len(labels)):
+            label = labels[idx]
+            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
+            label = label - 1
+            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
+            labels[idx] = label
+
+        return label
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        batch_feature = self._preprocess(images, **images_kwargs)
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_rescale": False,
+                    "do_flip_channel_order": False,
+                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
+                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                }
+            )
+
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            ).pixel_values
+            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+
+        return batch_feature
+
     def _preprocess(
         self,
-        images,
+        images: list["torch.Tensor"],
+        do_reduce_labels: bool,
         do_resize: bool,
-        size: Optional[dict],
-        interpolation: Optional[str],
+        size: Optional[SizeDict],
+        interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_center_crop: bool,
-        crop_size: Optional[dict],
+        crop_size: Optional[SizeDict],
         do_flip_channel_order: bool,
         disable_grouping: bool,
-        return_tensors: Optional[str],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
-    ):
+    ) -> BatchFeature:
         processed_images = []
+
+        if do_reduce_labels:
+            images = self.reduce_label(images)
 
         # Group images by shape for more efficient batch processing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -117,96 +209,24 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         # Stack all processed images if return_tensors is specified
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return processed_images
-
-    def _preprocess_segmentation_maps(
-        self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_rescale"] = False
-        kwargs["do_flip_channel_order"] = False
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images,
-        segmentation_maps=None,
-        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        segmentation_maps (`ImageInput`, *optional*):
-            The segmentation maps to preprocess.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        images = self._preprocess(
-            images=images,
-            **kwargs,
-        )
-
-        if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_segmentation_maps(
-                segmentation_maps=segmentation_maps,
-                **kwargs,
-            )
-            return BatchFeature(data={"pixel_values": images, "labels": segmentation_maps})
-
-        return BatchFeature(data={"pixel_values": images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+        """
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
+            outputs ([`MobileNetV2ForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
+        Returns:
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+        """
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

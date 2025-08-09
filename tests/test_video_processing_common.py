@@ -18,6 +18,7 @@ import json
 import os
 import tempfile
 import warnings
+from copy import deepcopy
 
 import numpy as np
 from packaging import version
@@ -176,10 +177,12 @@ class VideoProcessingTestMixin:
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
         video_processor = self.fast_video_processing_class(**self.video_processor_dict)
-        output_eager = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_eager = video_processor(video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt")
 
         video_processor = torch.compile(video_processor, mode="reduce-overhead")
-        output_compiled = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+        output_compiled = video_processor(
+            video_inputs, device=torch_device, do_sample_frames=False, return_tensors="pt"
+        )
 
         torch.testing.assert_close(
             output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4
@@ -446,3 +449,40 @@ class VideoProcessingTestMixin:
 
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
+
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        if self.fast_video_processing_class is None:
+            self.skipTest(
+                "Only testing fast video processor, as most slow processors break this test and are to be deprecated"
+            )
+
+        video_processing_class = self.fast_video_processing_class
+        video_processor_1 = video_processing_class()
+        video_processor_2 = video_processing_class()
+        if not (hasattr(video_processor_1, "size") and isinstance(video_processor_1.size, dict)) or not (
+            hasattr(video_processor_1, "image_mean") and isinstance(video_processor_1.image_mean, list)
+        ):
+            self.skipTest(
+                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
+            )
+
+        original_size_2 = deepcopy(video_processor_2.size)
+        for key in video_processor_1.size:
+            video_processor_1.size[key] = -1
+        modified_copied_size_1 = deepcopy(video_processor_1.size)
+
+        original_image_mean_2 = deepcopy(video_processor_2.image_mean)
+        video_processor_1.image_mean[0] = -1
+        modified_copied_image_mean_1 = deepcopy(video_processor_1.image_mean)
+
+        # check that the original attributes of the second instance are not affected
+        self.assertEqual(video_processor_2.size, original_size_2)
+        self.assertEqual(video_processor_2.image_mean, original_image_mean_2)
+
+        for key in video_processor_2.size:
+            video_processor_2.size[key] = -2
+        video_processor_2.image_mean[0] = -2
+
+        # check that the modified attributes of the first instance are not affected by the second instance
+        self.assertEqual(video_processor_1.size, modified_copied_size_1)
+        self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)

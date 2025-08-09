@@ -141,7 +141,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
+        elif size is None:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
         self.size = size
 
@@ -449,16 +449,16 @@ class Glm4vImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            t=self.temporal_patch_size,
+            num_frames=self.temporal_patch_size,
             height=height,
             width=width,
             factor=factor,
-            t_factor=self.temporal_patch_size,
+            temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w

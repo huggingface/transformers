@@ -412,7 +412,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
+        r"""
         Examples:
 
         ```python

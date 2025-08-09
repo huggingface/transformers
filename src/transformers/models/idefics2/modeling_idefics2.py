@@ -30,7 +30,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -50,7 +51,7 @@ class Idefics2BaseModelOutputWithPast(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the model.
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
         `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
@@ -84,7 +85,7 @@ class Idefics2CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
         `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
@@ -147,8 +148,11 @@ class Idefics2VisionEmbeddings(nn.Module):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
-            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=position_ids.dtype)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=position_ids.dtype)
+
+            fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
+            fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
 
             bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
             bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -451,15 +455,15 @@ class Idefics2Encoder(nn.Module):
 
 @auto_docstring
 class Idefics2PreTrainedModel(PreTrainedModel):
-    config_class = Idefics2Config
+    config: Idefics2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_cache_class = True
+
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -492,9 +496,9 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     """
 )
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
-    config_class = Idefics2VisionConfig
+    config: Idefics2VisionConfig
     _supports_sdpa = True
-    _supports_flash_attention_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config: Idefics2VisionConfig):
@@ -631,13 +635,14 @@ class Idefics2PerceiverAttention(nn.Module):
 
         self.is_causal = False
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -649,9 +654,9 @@ class Idefics2PerceiverAttention(nn.Module):
             context (`torch.Tensor`): Tensor of shape [bsz, seq, embed_dim] representing long-form context to resample.
             attention_mask (`torch.Tensor`, *optional*): Tensor of shape [bsz, 1, seq, n_latents] representing attention mask.
             position_ids (`torch.LongTensor`, *optional*): Tensor of shape [bsz, seq] representing position indices of each input token.
-            past_key_value (`tuple[torch.Tensor]`, *optional*): Tuple of tensors containing cached key and value states.
+            past_key_values (`tuple[torch.Tensor]`, *optional*): Tuple of tensors containing cached key and value states.
             output_attentions (`bool`, *optional*, defaults to `False`): Whether to return attention weights.
-            use_cache (`bool`, *optional*, defaults to `False`): Whether to use past_key_value for caching.
+            use_cache (`bool`, *optional*, defaults to `False`): Whether to use past_key_values for caching.
         """
         bsz, q_len, _ = latents.size()
         kv_seq_len = q_len + context.size()[1]
@@ -666,10 +671,10 @@ class Idefics2PerceiverAttention(nn.Module):
         keys = keys.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         values = values.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
+        past_key_values = getattr(self, "past_key_values", past_key_values)
 
-        if past_key_value is not None:
-            keys, values = past_key_value.update(keys, values, self.layer_idx)
+        if past_key_values is not None:
+            keys, values = past_key_values.update(keys, values, self.layer_idx)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -698,7 +703,7 @@ class Idefics2PerceiverAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, past_key_values
 
 
 class Idefics2PerceiverLayer(nn.Module):
@@ -720,13 +725,14 @@ class Idefics2PerceiverLayer(nn.Module):
             hidden_act=config.hidden_act,
         )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         latents: torch.Tensor,
         context: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
@@ -743,7 +749,7 @@ class Idefics2PerceiverLayer(nn.Module):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
         residual = latents
 
@@ -779,7 +785,7 @@ class Idefics2PerceiverLayer(nn.Module):
     """
 )
 class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
-    config_class = Idefics2PerceiverConfig
+    config: Idefics2PerceiverConfig
     _supports_sdpa = True
     _supports_flash_attention_2 = True
     _supports_flex_attn = True
@@ -831,7 +837,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
                 context,
                 attention_mask=attention_mask,
                 position_ids=None,
-                past_key_value=None,
+                past_key_values=None,
                 output_attentions=False,
                 use_cache=False,
             )
@@ -1010,7 +1016,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
@@ -1049,7 +1055,11 @@ class Idefics2Model(Idefics2PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if use_cache and not isinstance(past_key_values, Cache):
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         if inputs_embeds is None:
@@ -1092,9 +1102,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
@@ -1140,12 +1147,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
         return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
 
@@ -1156,7 +1157,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.BoolTensor] = None,
@@ -1168,7 +1169,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Idefics2CausalLMOutputWithPast]:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

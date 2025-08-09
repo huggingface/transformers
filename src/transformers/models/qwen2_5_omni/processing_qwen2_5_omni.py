@@ -31,7 +31,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[int]] = None
+    fps: Optional[list[Union[int, float]]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
@@ -93,8 +93,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "Qwen2VLImageProcessor"
-    video_processor_class = "Qwen2VLVideoProcessor"
+    image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
@@ -172,7 +172,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_lengths = iter([])
 
         if images is not None:
-            images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
@@ -180,7 +180,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         if videos is not None:
             videos = make_batched_videos(videos)
-            videos_inputs = self.video_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             fps = [fps] * len(videos)
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
@@ -332,8 +332,11 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        is_batched = False
         if isinstance(conversations[0], dict):
             conversations = [conversations]
+            is_batched = True
+
         for conversation in conversations:
             if (
                 conversation[0]["role"] != "system"
@@ -344,6 +347,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                     "System prompt modified, audio output may not work as expected. "
                     + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
                 )
+        if is_batched:
+            conversations = conversations[0]
+
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
     @property

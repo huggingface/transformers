@@ -290,6 +290,14 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Paloigemma position ids are 1 indexed")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     def test_attention_mask_with_token_types(self):
         """Test that attention masking works correctly both with and without token type IDs."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -545,7 +553,8 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 ("rocm", (9, 5)): "detect shoe\n<loc0051><loc0309><loc0708><loc0644> shoe",
-                ("cuda", None): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
+                (None, None): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
+                ("cuda", 8): "detect shoe\n<loc0045><loc0309><loc0708><loc0646> shoe",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
