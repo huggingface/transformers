@@ -703,7 +703,6 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring
 class GptOssForSequenceClassification(GenericForSequenceClassification, GptOssPreTrainedModel):
     pass
 
