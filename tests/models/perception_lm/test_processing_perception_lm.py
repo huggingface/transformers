@@ -117,7 +117,7 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(expected_image_tokens, image_tokens)
         self.assertEqual(inputs["pixel_values"].ndim, 5)
 
-    def test_vanilla_image_with_tiles_token_filling(self):
+    def test_vanilla_image_with_no_tiles_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
         processor.image_processor.vision_input_type = "vanilla"
         # Important to check with non square image
