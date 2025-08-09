@@ -56,3 +56,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GptOssForCausalLM
     - forward
+
+## GptOssForSequenceClassification
+
+[[autodoc]] GptOssForSequenceClassification
+    - forward

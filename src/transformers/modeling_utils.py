@@ -890,8 +890,11 @@ def _load_state_dict_into_meta_model(
                     param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
-                    # special case for GptOssForCausalLM, we wait for the param to be leave the meta device before casting it to cpu
-                    if model.__class__.__name__ == "GptOssForCausalLM" and value.device.type == "meta":
+                    # special case for GptOssForCausalLM and GptOssForSequenceClassification, we wait for the param to be leave the meta device before casting it to cpu
+                    if (
+                        model.__class__.__name__ in ["GptOssForCausalLM", "GptOssForSequenceClassification"]
+                        and value.device.type == "meta"
+                    ):
                         continue
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
