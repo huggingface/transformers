@@ -46,13 +46,7 @@ if is_torch_available():
         def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
             super().__init__()
             self.model = model
-            self.cache = StaticCache(
-                config=model.config,
-                max_batch_size=batch_size,
-                max_cache_len=max_seq_len,
-                device=self.model.device,
-                dtype=self.model.dtype,
-            )
+            self.cache = StaticCache(config=model.config, max_cache_len=max_seq_len)
 
         def forward(
             self,
@@ -417,7 +411,10 @@ class Phi3IntegrationTest(unittest.TestCase):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=prompt_token_ids,
+            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

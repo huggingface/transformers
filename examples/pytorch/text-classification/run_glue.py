@@ -63,7 +63,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.56.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -161,7 +161,7 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.task_name is not None:
             self.task_name = self.task_name.lower()
-            if self.task_name not in task_to_keys.keys():
+            if self.task_name not in task_to_keys:
                 raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
         elif self.dataset_name is not None:
             pass
@@ -335,7 +335,7 @@ def main():
             else:
                 raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
 
-        for key in data_files.keys():
+        for key in data_files:
             logger.info(f"load a local file for {key}: {data_files[key]}")
 
         if data_args.train_file.endswith(".csv"):

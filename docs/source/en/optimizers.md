@@ -138,7 +138,6 @@ args = TrainingArguments(
     per_device_train_batch_size=4,
 +   optim="adalomo",
     gradient_checkpointing=True,
-    gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
     learning_rate=2e-6,

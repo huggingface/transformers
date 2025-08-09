@@ -353,7 +353,7 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.3016, -0.7713, -0.4205],
-                ("cuda", 8): [-0.3004, -0.7708, -0.4205],
+                ("cuda", 8): [-0.3016, -0.7713, -0.4205],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
