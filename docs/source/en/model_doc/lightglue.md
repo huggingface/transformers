@@ -40,7 +40,7 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="image-classification",
+    task="keypoint-matching",
     model="ETH-CVG/lightglue_superpoint",
     threshold=0.2
 )

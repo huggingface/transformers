@@ -38,7 +38,7 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="image-classification",
+    task="keypoint-matching",
     model="zju-community/efficientloftr",
     threshold=0.2
 )
