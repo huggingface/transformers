@@ -1047,7 +1047,7 @@
         title: Emu3
       - local: in_translation
         title: FLAVA
-      - local: in_translation
+      - local: model_doc/gemma3
         title: Gemma3
       - local: in_translation
         title: Gemma3n
