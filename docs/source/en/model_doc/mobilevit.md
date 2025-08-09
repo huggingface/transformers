@@ -22,13 +22,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 </div>
 
-[MobileViT](https://huggingface.co/papers/2110.02178) proposed by Sachin Mehta and Mohammad Rastegari aims to combine best of both worlds, the Convolutional Neural Networks ([CNNs]( https://huggingface.co/learn/computer-vision-course/en/unit2/cnns/introduction)) and VisionTransformers ([ViTs](https://huggingface.co/docs/transformers/en/model_doc/vit)), to make a model which is both powerful and lightweight in the sense that it can be used for mobile vision tasks.
-
-So, the CNNs are very good at learning the local patterns such as edges, textures, etc. While the transformers are great at seeing the larger picture, trying to understand the relation of different parts of an image no matter how far they are. MobileViT block combines both these ideas, the core global representation is learnt  with transformers as convolution. It leverages the same building block as convolutions but replacing the local processing with deeper global processing. Since the Transformer mimics the convolution, we still get the image-specific knowledge that the CNNs are good at.
-
-**What makes MobileViT lightweight?** 
-Most of the models that uses Transformers for vision would first divide the images into several patches which are further flattened and converted into vectors. This causes in the loss of structural properties of an image, which isn't the case for CNNs. Now, this causes the Transformer models to go bigger and deeper to learn visual representations. 
-But MobileViT uses both convolutions and transformers in a way that the resultant block has convolution-like properties while simultaneously allowing for global interactions. This allows us to design a more shallow and narrow models, which are light-weight.
+[MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
 ![enter image description here](https://user-images.githubusercontent.com/67839539/136470152-2573529e-1a24-4494-821d-70eb4647a51d.png)
 
