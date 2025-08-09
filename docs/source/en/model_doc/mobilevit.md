@@ -26,6 +26,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 ![enter image description here](https://user-images.githubusercontent.com/67839539/136470152-2573529e-1a24-4494-821d-70eb4647a51d.png)
 
+<div class="flex justify-center">
+   <img>
+</div>
+
 
 You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple/models?search=mobilevit) organization.
 
@@ -39,32 +43,62 @@ You can find all the original MobileViT checkpoints under the [Apple](https://hu
 
 The example below demonstrates how to  [Convert Mobile ViT image classification checkpoint to a TensorFlow Lite Model] using the  [`TFMobileViTForImageClassification`] class:
 
-<hfoptions id = "usage">
+The example below demonstrates how to do [Image Classification] with [`Pipeline`] and the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+
+from transformers import pipeline
+from datasets import load_dataset
+
+dataset = load_dataset("huggingface/cats-image")
+
+#initialize an image classification pipeline
+classifier = pipeline("image-classification", model = "apple/mobilevit-small")
+
+
+#run inference on each image in dataset:
+for i in dataset["test"]:
+	preds = classifier(i["image"])
+	print(f"Prediction: {preds}\n")
+```
+
+</hfoption>
+
 <hfoption id="AutoModel">
 
-```py
+```python
 
-from transformers import TFMobileViTForImageClassification
-import tensorflow as tf
+import torch
+from datasets import load_dataset
+from transformers import AutoImageProcessor, MobileViTForImageClassification
 
-  
-model_ckpt = "apple/mobilevit-xx-small"
-model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
 
-  
+dataset = load_dataset("huggingface/cats-image")
+img = dataset["test"]["image"][0]
 
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.target_spec.supported_ops = [
-								tf.lite.OpsSet.TFLITE_BUILTINS,
-								tf.lite.OpsSet.SELECT_TF_OPS,
-								]
+# Load processor and model
+processor = AutoImageProcessor.from_pretrained("apple/mobilevit-small")
+model = MobileViTForImageClassification.from_pretrained(
+    								"apple/mobilevit-small")
 
-tflite_model = converter.convert()
-tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
 
-with  open(tflite_filename, "wb") as f:
-f.write(tflite_model)
+#Preprocess
+inputs = processor(images = img, return_tensors="pt")
+inputs = {k: v.to(device) for k, v in inputs.items()}
+
+#Forward Pass
+with torch.no_grad():
+    outputs = model(**inputs)
+
+#Get Predicted label
+logits = outputs.logits
+predicted_class = logits.argmax(-1).item()
+print(model.config.id2label[predicted_class])
 
 ```
 
@@ -76,19 +110,20 @@ f.write(tflite_model)
 
 ## Notes
 
-- **MobileViT** was designed to be performant and efficient on **mobile devices**.
-- It combines the **inductive biases of CNNs** with the **global context modelling of Transformers**.
 - Does **not** operate on sequential data, it's purely designed for image tasks.
 - Feature maps are used directly instead of token embeddings.
+- Use [`MobileViTImageProcessor`](https://huggingface.co/docs/transformers/main/en/model_doc/mobilevit#transformers.MobileViTImageProcessor) to preprocess images.
+- If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
+- The **classification models** are pretrained on [**ImageNet-1k**](https://huggingface.co/datasets/imagenet-1k) (ILSVRC 2012).
+- The **segmentation models** use a [**DeepLabV3**](https://huggingface.co/papers/1706.05587) head and are pretrained on [**PASCAL VOC**](http://host.robots.ox.ac.uk/pascal/VOC/).
+- TensorFlow versions are compatible with **TensorFlow Lite**, making them ideal for edge/mobile deployment.
+
 
 
 
 
 ## Resources
-- Primary Source: [MobileViT: Light-weight, General-purpose, and Mobile-friendly Vision Transformer] (https://arxiv.org/pdf/2110.02178).
-- Apple machine learning research: [PyTorch Implementation](https://github.com/apple/ml-cvnets).
-- You can follow [this keras tutorial](https://keras.io/examples/vision/mobilevit) for a lightweight introduction.
-- See also: [Image classification task guide](../tasks/image_classification).
+
 
   
 ## MobileViTFeatureExtractor
