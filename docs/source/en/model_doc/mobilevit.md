@@ -118,119 +118,64 @@ print(model.config.id2label[predicted_class])
 
 
 
-
-## Resources
-
-
   
+## MobileViTConfig
+
+[[autodoc]] MobileViTConfig
+
 ## MobileViTFeatureExtractor
 
-  
-
 [[autodoc]] MobileViTFeatureExtractor
-
-- __call__
-
-- post_process_semantic_segmentation
-
-  
+    - __call__
+    - post_process_semantic_segmentation
 
 ## MobileViTImageProcessor
 
-  
-
 [[autodoc]] MobileViTImageProcessor
-
-- preprocess
-
-- post_process_semantic_segmentation
-
-  
+    - preprocess
+    - post_process_semantic_segmentation
 
 ## MobileViTImageProcessorFast
 
-  
-
 [[autodoc]] MobileViTImageProcessorFast
-
-- preprocess
-
-- post_process_semantic_segmentation
-
-  
+    - preprocess
+    - post_process_semantic_segmentation
 
 <frameworkcontent>
-
 <pt>
-
-  
 
 ## MobileViTModel
 
-  
-
 [[autodoc]] MobileViTModel
-
-- forward
-
-  
+    - forward
 
 ## MobileViTForImageClassification
 
-  
-
 [[autodoc]] MobileViTForImageClassification
-
-- forward
-
-  
+    - forward
 
 ## MobileViTForSemanticSegmentation
 
-  
-
 [[autodoc]] MobileViTForSemanticSegmentation
-
-- forward
-
-  
+    - forward
 
 </pt>
-
 <tf>
-
-  
 
 ## TFMobileViTModel
 
-  
-
 [[autodoc]] TFMobileViTModel
-
-- call
-
-  
+    - call
 
 ## TFMobileViTForImageClassification
 
-  
-
 [[autodoc]] TFMobileViTForImageClassification
-
-- call
-
-  
+    - call
 
 ## TFMobileViTForSemanticSegmentation
 
-  
-
 [[autodoc]] TFMobileViTForSemanticSegmentation
-
-- call
-
-  
+    - call
 
 </tf>
-
 </frameworkcontent>
