@@ -31,12 +31,9 @@ You can find all the original MobileViT checkpoints under the [Apple](https://hu
 
 
 > [!TIP]
-> - This model was contributed by [Matthijs](https://huggingface.co/Matthijs).
-> - Use [`MobileViTImageProcessor`](https://huggingface.co/docs/transformers/main/en/model_doc/mobilevit#transformers.MobileViTImageProcessor) to preprocess images.
-> - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
-> - The **classification models** are pretrained on [**ImageNet-1k**](https://huggingface.co/datasets/imagenet-1k) (ILSVRC 2012).
-> - The **segmentation models** use a [**DeepLabV3**](https://huggingface.co/papers/1706.05587) head and are pretrained on [**PASCAL VOC**](http://host.robots.ox.ac.uk/pascal/VOC/).
-> - TensorFlow versions are compatible with **TensorFlow Lite**, making them ideal for edge/mobile deployment.
+> - This model was contributed by [matthijs](https://huggingface.co/Matthijs) and the TensorFlow version was contributed by [sayakpaul](https://huggingface.co/sayakpaul).
+>
+> Click on the MobileViT models in the right sidebar for more examples of how to apply MobileViT to different vision tasks.
 
 
 Click on the MobileViT models in the right sidebar for more examples of how to apply Model name to different vision tasks.
