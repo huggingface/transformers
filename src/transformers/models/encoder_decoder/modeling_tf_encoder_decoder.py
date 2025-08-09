@@ -597,7 +597,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
             output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
-            output = tuple([x for x in output if x is not None])
+            output = tuple(x for x in output if x is not None)
             return output
 
         return TFSeq2SeqLMOutput(
