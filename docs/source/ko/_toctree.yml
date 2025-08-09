@@ -414,8 +414,8 @@
       title: 모델 출력
     - local: main_classes/peft
       title: PEFT
-    - local: in_translation
-      title: (번역중) Pipelines
+    - local: main_classes/pipelines
+      title: 파이프라인
     - local: main_classes/tokenizer
       title: 토크나이저
     - local: main_classes/quantization
