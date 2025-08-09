@@ -84,6 +84,11 @@ def handle_test_results(test_results):
     print(expressions)
 
     time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    time_spent = expressions[-1]
+    if "=" in time_spent:
+        time_spent = expressions[-2]
+    if "(" in time_spent:
+        time_spent = expressions[-3]
 
     for i, expression in enumerate(expressions):
         if "failed" in expression:
@@ -196,8 +201,11 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
 
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend(r["time_spent"].split(", "))
         print(time_spent)
 
         total_secs = 0
