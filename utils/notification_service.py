@@ -205,20 +205,20 @@ class Message:
         time_spent = []
         for r in all_results:
             if len(r["time_spent"]):
-                time_spent.extend(r["time_spent"].split(", "))
+                time_spent.extend(r["time_spent"])
         print(time_spent)
 
-        total_secs = 0
+        total_secs = sum(time_spent)
 
-        for time in time_spent:
-            time_parts = time.split(":")
-
-            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-            if len(time_parts) == 1:
-                time_parts = [0, 0, time_parts[0]]
-
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-            total_secs += hours * 3600 + minutes * 60 + seconds
+        # for time in time_spent:
+        #     time_parts = time.split(":")
+        #
+        #     # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
+        #     if len(time_parts) == 1:
+        #         time_parts = [0, 0, time_parts[0]]
+        #
+        #     hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
+        #     total_secs += hours * 3600 + minutes * 60 + seconds
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -1211,7 +1211,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "failures": {},
             "job_link": {},
         }
@@ -1243,7 +1243,7 @@ if __name__ == "__main__":
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[:-1] + ", "
+                matrix_job_results[matrix_name]["time_spent"].append(float(time_spent[:-1]))
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -1348,7 +1348,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
@@ -1380,7 +1380,7 @@ if __name__ == "__main__":
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
             additional_results[key]["skipped"] += skipped
-            additional_results[key]["time_spent"] += time_spent[:-1] + ", "
+            additional_results[key]["time_spent"].append(float(time_spent[:-1]))
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True
@@ -1463,7 +1463,7 @@ if __name__ == "__main__":
         default_result = {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
             "success": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
