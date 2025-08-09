@@ -33,7 +33,7 @@ But MobileViT uses both convolutions and transformers in a way that the resultan
 ![enter image description here](https://user-images.githubusercontent.com/67839539/136470152-2573529e-1a24-4494-821d-70eb4647a51d.png)
 
 
-You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple) collection.
+You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple/models?search=mobilevit) organization.
 
 
 > [!TIP]
