@@ -295,6 +295,86 @@
     title: 커뮤니티 리소스
   - local: troubleshooting
     title: 문제 해결
+  - local: gguf
+    title: GGUF 파일들과의 상호 운용성
+  - local: modular_transformers
+    title: transformers에서의 모듈성
+  title: (번역중) 개발자 가이드
+- sections:
+  - local: in_translation
+    title: (번역중) Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: quantization/gptq
+    title: GPTQ
+  - local: quantization/awq
+    title: AWQ
+  - local: in_translation
+    title: (번역중) AQLM
+  - local: in_translation
+    title: (번역중) VPTQ
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/quark
+    title: Quark
+  - local: quantization/eetq
+    title: EETQ
+  - local: in_translation
+    title: (번역중) HQQ
+  - local: in_translation
+    title: (번역중) Optimum
+  - local: in_translation
+    title: (번역중) Contribute new quantization method
+  title: (번역중) 경량화 메소드
+- sections:
+  - local: in_translation
+    title: (번역중) Quantization
+  - local: llm_optims
+    title: LLM 추론 최적화
+  - local: cache_explanation
+    title: 어텐션 행렬 캐싱
+  - sections:
+    - local: in_translation
+      title: (번역중) Methods and tools for efficient training on a single GPU
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 훈련 진행하기
+    - local: deepspeed
+      title: DeepSpeed
+    - local: fsdp
+      title: 완전 분할 데이터 병렬 처리
+    - local: perf_train_cpu
+      title: CPU에서 훈련
+    - local: perf_train_cpu_many
+      title: 다중 CPU에서 훈련하기
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
+    title: (번역중) 효율적인 학습 기술들
+  - sections:
+    - local: perf_infer_cpu
+      title: CPU로 추론하기
+    - local: perf_infer_gpu_one
+      title: 하나의 GPU를 활용한 추론
+    title: 추론 최적화하기
+  - local: debugging
+    title: 디버깅
+  - local: in_translation
+    title: (번역중) Optimize inference using `torch.compile()`
+  title: (번역중) 성능 및 확장성
+- sections:
+    - local: contributing
+      title: 🤗 Transformers에 기여하는 방법
+    - local: add_new_model
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
+    - local: add_new_pipeline
+      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
+    - local: testing
+      title: 테스트
+    - local: pr_checks
+      title: Pull Request에 대한 검사
   title: 리소스
 - isExpanded: false
   sections:
