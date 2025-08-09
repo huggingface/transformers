@@ -15,7 +15,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 # MobileViT
 
 
-<div style="float: left;">
+<div style="float: right;">
     <div class="flex flex-wrap space-x-2">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
