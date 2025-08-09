@@ -146,7 +146,7 @@ print(assistant_response)
     - forward
 
 
-## JambaForCasualLM[[transformers.JambaForCausalLM]]
+## JambaForCausalLM[[transformers.JambaForCausalLM]]
 
 [[autodoc]] JambaForCausalLM
     - forward
