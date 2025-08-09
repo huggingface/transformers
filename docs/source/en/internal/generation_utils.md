@@ -426,15 +426,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - to_legacy_cache
     - from_legacy_cache
 
-[[autodoc]] MambaCache
-    - update_conv_state
-    - update_ssm_state
-    - reset
-
-[[autodoc]] CacheConfig
-
-[[autodoc]] QuantizedCacheConfig
-
 
 ## Watermark Utils
 
