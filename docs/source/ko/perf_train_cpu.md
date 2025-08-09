@@ -47,6 +47,6 @@ training_args = TrainingArguments(
 )
 ```
 
-## 자원[[resources]]  
+## 참고자료[[resources]]  
   
 Intel CPU에서의 학습에 대해 더 자세히 알아보고 싶다면, [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids) 블로그 게시물을 참고하세요.
