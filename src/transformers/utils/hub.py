@@ -181,7 +181,9 @@ def list_repo_templates(
 
     # check local files
     try:
-        snapshot_dir = snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True)
+        snapshot_dir = snapshot_download(
+            repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
+        )
     except LocalEntryNotFoundError:  # No local repo means no local files
         return []
     templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
