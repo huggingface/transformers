@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
   
 이 가이드는 Intel CPU에서 혼합 정밀도(mixed precision)를 사용하여 대규모 모델을 학습하는 방법에 중점을 둡니다. PyTorch 기반의 CPU 백엔드 학습에서는 AMP(Automatic Mixed Precision)가 자동으로 활성화됩니다. 
   
-[`Trainer`]에서 `--use_cpu`와 `--bf16` 매개변수를 추가하면, CPU에서 AMP 학습을 활성화할 수 있습니다. 아래 예시는 [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) 스크립트를 어떻게 사용하는지 보여줍니다.  
+[`Trainer`]에서 `--use_cpu`와 `--bf16` 매개변수를 추가하면, CPU에서 AMP 학습을 활성화할 수 있습니다. 아래 예시는 [run_qa.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) 스크립트를 사용한 예제입니다.
 
 ```bash
 python run_qa.py \
