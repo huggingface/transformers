@@ -40,9 +40,6 @@ You can find all the original MobileViT checkpoints under the [Apple](https://hu
 > Click on the MobileViT models in the right sidebar for more examples of how to apply MobileViT to different vision tasks.
 
 
-
-The example below demonstrates how to  [Convert Mobile ViT image classification checkpoint to a TensorFlow Lite Model] using the  [`TFMobileViTForImageClassification`] class:
-
 The example below demonstrates how to do [Image Classification] with [`Pipeline`] and the [`AutoModel`] class.
 
 <hfoptions id="usage">
