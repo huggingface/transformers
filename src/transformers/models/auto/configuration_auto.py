@@ -81,6 +81,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("codegen", "CodeGenConfig"),
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
+        ("cohere2_vision", "Cohere2VisionConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
         ("conditional_detr", "ConditionalDetrConfig"),
@@ -103,6 +104,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("decision_transformer", "DecisionTransformerConfig"),
         ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
+        ("deepseek_vl", "DeepseekVLConfig"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
         ("depth_anything", "DepthAnythingConfig"),
@@ -121,6 +124,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dpr", "DPRConfig"),
         ("dpt", "DPTConfig"),
         ("efficientformer", "EfficientFormerConfig"),
+        ("efficientloftr", "EfficientLoFTRConfig"),
         ("efficientnet", "EfficientNetConfig"),
         ("electra", "ElectraConfig"),
         ("emu3", "Emu3Config"),
@@ -128,8 +132,12 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("eomt", "EomtConfig"),
         ("ernie", "ErnieConfig"),
+        ("ernie4_5", "Ernie4_5Config"),
+        ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
+        ("evolla", "EvollaConfig"),
+        ("exaone4", "Exaone4Config"),
         ("falcon", "FalconConfig"),
         ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),
@@ -155,6 +163,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("glm4", "Glm4Config"),
         ("glm4_moe", "Glm4MoeConfig"),
         ("glm4v", "Glm4vConfig"),
+        ("glm4v_moe", "Glm4vMoeConfig"),
+        ("glm4v_moe_text", "Glm4vMoeTextConfig"),
         ("glm4v_text", "Glm4vTextConfig"),
         ("glpn", "GLPNConfig"),
         ("got_ocr2", "GotOcr2Config"),
@@ -164,6 +174,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gpt_neo", "GPTNeoConfig"),
         ("gpt_neox", "GPTNeoXConfig"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
+        ("gpt_oss", "GptOssConfig"),
         ("gptj", "GPTJConfig"),
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
@@ -236,6 +247,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mixtral", "MixtralConfig"),
         ("mlcd", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
+        ("mm-grounding-dino", "MMGroundingDinoConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
@@ -404,6 +416,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("xlm-roberta", "XLMRobertaConfig"),
         ("xlm-roberta-xl", "XLMRobertaXLConfig"),
         ("xlnet", "XLNetConfig"),
+        ("xlstm", "xLSTMConfig"),
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
@@ -468,6 +481,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("codegen", "CodeGen"),
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
+        ("cohere2_vision", "Cohere2Vision"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
         ("conditional_detr", "Conditional DETR"),
@@ -491,6 +505,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("decision_transformer", "Decision Transformer"),
         ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
+        ("deepseek_vl", "DeepseekVL"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybrid"),
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
@@ -513,6 +529,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("dpr", "DPR"),
         ("dpt", "DPT"),
         ("efficientformer", "EfficientFormer"),
+        ("efficientloftr", "EfficientLoFTR"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
         ("emu3", "Emu3"),
@@ -520,8 +537,12 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("encoder-decoder", "Encoder decoder"),
         ("eomt", "EoMT"),
         ("ernie", "ERNIE"),
+        ("ernie4_5", "Ernie4_5"),
+        ("ernie4_5_moe", "Ernie4_5_MoE"),
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
+        ("evolla", "Evolla"),
+        ("exaone4", "EXAONE-4.0"),
         ("falcon", "Falcon"),
         ("falcon3", "Falcon3"),
         ("falcon_h1", "FalconH1"),
@@ -550,6 +571,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4", "GLM4"),
         ("glm4_moe", "Glm4MoE"),
         ("glm4v", "GLM4V"),
+        ("glm4v_moe", "GLM4VMOE"),
+        ("glm4v_moe_text", "GLM4VMOE"),
         ("glm4v_text", "GLM4V"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
@@ -559,6 +582,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gpt_neo", "GPT Neo"),
         ("gpt_neox", "GPT NeoX"),
         ("gpt_neox_japanese", "GPT NeoX Japanese"),
+        ("gpt_oss", "GptOss"),
         ("gptj", "GPT-J"),
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
@@ -640,6 +664,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mlcd", "MLCD"),
         ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
+        ("mm-grounding-dino", "MM Grounding DINO"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
         ("mobilenet_v1", "MobileNetV1"),
@@ -820,6 +845,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("xlnet", "XLNet"),
         ("xls_r", "XLS-R"),
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
+        ("xlstm", "xLSTM"),
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
@@ -878,6 +904,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma3n_text", "gemma3n"),
         ("gemma3n_vision", "gemma3n"),
         ("glm4v_text", "glm4v"),
+        ("glm4v_moe_text", "glm4v_moe"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
         ("aimv2_vision_model", "aimv2"),
@@ -958,10 +985,10 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
     def values(self) -> list[type[PretrainedConfig]]:
-        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
+        return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
     def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
-        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
+        return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
     def __iter__(self) -> Iterator[str]:
         return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
@@ -973,7 +1000,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys() and not exist_ok:
+        if key in self._mapping and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
@@ -1214,7 +1241,7 @@ class AutoConfig:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )

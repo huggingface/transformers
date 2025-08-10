@@ -262,22 +262,8 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
-
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.ones_(module.weight)
-            nn.init.zeros_(module.bias)
-
-        elif isinstance(module, TimesFmRMSNorm):
-            nn.init.zeros_(module.weight)
-
-        elif isinstance(module, TimesFmAttention):
+        super()._init_weights(module)
+        if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
             nn.init.ones_(module.scaling)
 

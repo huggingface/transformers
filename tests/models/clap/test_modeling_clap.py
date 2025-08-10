@@ -459,8 +459,10 @@ class ClapModelTester:
         return config, input_ids, attention_mask, input_features
 
     def get_config(self):
-        return ClapConfig.from_text_audio_configs(
-            self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
+        return ClapConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            audio_config=self.audio_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_features):
@@ -592,8 +594,8 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
