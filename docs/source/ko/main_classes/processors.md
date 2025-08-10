@@ -56,7 +56,7 @@ Transformers 라이브러리에서 프로세서는 두 가지 의미로 사용�
 - [`~data.processors.utils.RteProcessor`]
 - [`~data.processors.utils.WnliProcessor`]
 
-또한, 다음 메소드를 사용하여 데이터 파일에서 값을 가져오고 [`~data.processors.utils.InputExample`] 목록으로 변환할 수 있습니다.
+또한, 아래의 메소드들을 사용하여 데이터 파일로부터 값을 가져와 [`~data.processors.utils.InputExample`] 목록으로 변환할 수 있습니다.
 
 [[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
