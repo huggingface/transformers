@@ -20,12 +20,14 @@ Processor class for Bagel.
 
 from typing import Union
 
+import torch
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-import torch
+
 
 logger = logging.get_logger(__name__)
 
@@ -38,7 +40,7 @@ DEFAULT_SYSTEM_PROMPT = (
 
 class BagelTextKwargs(TextKwargs, total=False):
     generation_mode: str
-    transforms_type: str # Cleanup later as it's image kwargs
+    transforms_type: str  # Cleanup later as it's image kwargs
 
 
 class BagelProcessorKwargs(ProcessingKwargs, total=False):
@@ -160,9 +162,7 @@ class BagelProcessor(ProcessorMixin):
             )["pixel_values"]
 
         image_related_token_ids = set(
-            self.tokenizer.convert_tokens_to_ids(
-                [self.image_start_token, self.image_end_token, self.image_token]
-            )
+            self.tokenizer.convert_tokens_to_ids([self.image_start_token, self.image_end_token, self.image_token])
         )
 
         # token_type_ids: 1 for image tokens, 0 for text ones

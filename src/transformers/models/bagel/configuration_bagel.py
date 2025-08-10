@@ -59,7 +59,7 @@ class BagelVQVAEConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_factor=0.2611,
         shift_factor=0.1159,
-        downsample = 8,
+        downsample=8,
         **kwargs,
     ):
         super().__init__(**kwargs)
