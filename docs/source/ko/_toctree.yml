@@ -661,8 +661,8 @@
       sections:
       - local: model_doc/timesformer
         title: TimeSformer
-      - local: in_translation
-        title: (번역중) VideoMAE
+      - local: model_doc/videomae
+        title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: (번역중) 비디오 모델
