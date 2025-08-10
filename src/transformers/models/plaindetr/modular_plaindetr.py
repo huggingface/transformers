@@ -7,8 +7,39 @@ from ..deformable_detr.modeling_deformable_detr import DeformableDetrSinePositio
 
 
 
+
 class PlainDetrSinePositionEmbedding(DeformableDetrSinePositionEmbedding):
-    pass
+    """
+    Plain-DETR's sine position embedding with the missing else condition.
+    
+    This fixes the missing normalization logic when self.normalize=False.
+    """
+    
+    def forward(self, pixel_values, pixel_mask):
+        if pixel_mask is None:
+            raise ValueError("No pixel mask provided")
+            
+        y_embed = pixel_mask.cumsum(1, dtype=pixel_values.dtype)
+        x_embed = pixel_mask.cumsum(2, dtype=pixel_values.dtype)
+        
+        if self.normalize:
+            eps = 1e-6
+            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+        else:
+            # This is the missing logic from HuggingFace DeformableDetr!
+            y_embed = (y_embed - 0.5) * self.scale
+            x_embed = (x_embed - 0.5) * self.scale
+
+        dim_t = torch.arange(self.embedding_dim, dtype=pixel_values.dtype, device=pixel_values.device)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        return pos
 
 class PlainDetrLearnedPositionEmbedding(DeformableDetrLearnedPositionEmbedding):
     pass
