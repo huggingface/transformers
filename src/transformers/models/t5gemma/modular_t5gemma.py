@@ -488,7 +488,7 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
-        Gemma2PreTrainedModel._init_weights(module)
+        Gemma2PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5

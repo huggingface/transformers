@@ -341,7 +341,7 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
