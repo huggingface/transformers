@@ -1,7 +1,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
@@ -101,34 +100,33 @@ class Qwen2Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class Qwen2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Qwen2RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.has_rms_norm = version.parse(get_torch_version()) >= version.parse("2.3.0")
+if version.parse(get_torch_version()) >= version.parse("2.3.0"):
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.has_rms_norm:
-            return F.rms_norm(
-                input=hidden_states,
-                normalized_shape=[hidden_states.shape[-1]],
-                weight=self.weight,
-                eps=self.variance_epsilon,
-            )
+    class Qwen2RMSNorm(nn.RMSNorm):
+        def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+            super().__init__(normalized_shape=hidden_size, eps=eps, elementwise_affine=True)
 
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+else:
 
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    @use_kernel_forward_from_hub("RMSNorm")
+    class Qwen2RMSNorm(nn.Module):
+        def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+            """
+            Qwen2RMSNorm is equivalent to T5LayerNorm
+            """
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(hidden_size))
+            self.variance_epsilon = eps
+
+        def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+            input_dtype = hidden_states.dtype
+            hidden_states = hidden_states.to(torch.float32)
+            variance = hidden_states.pow(2).mean(-1, keepdim=True)
+            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+            return self.weight * hidden_states.to(input_dtype)
+
+        def extra_repr(self):
+            return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Qwen2DecoderLayer(LlamaDecoderLayer):
