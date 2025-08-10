@@ -22,33 +22,33 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+## 개요[[overview]]
 
-The VideoMAE model was proposed in [VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training](https://huggingface.co/papers/2203.12602) by Zhan Tong, Yibing Song, Jue Wang, Limin Wang.
-VideoMAE extends masked auto encoders ([MAE](vit_mae)) to video, claiming state-of-the-art performance on several video classification benchmarks.
+VideoMAE 모델은 Zhan Tong, Yibing Song, Jue Wang, Limin Wang이 작성한 [VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training](https://huggingface.co/papers/2203.12602) 논문에서 제안되었습니다.
+VideoMAE는 마스크드 오토인코더([MAE](vit_mae))를 비디오로 확장하여 여러 비디오 분류 벤치마크에서 최고 수준의 성능을 달성했다고 주장합니다.
 
-The abstract from the paper is the following:
+논문의 초록은 다음과 같습니다:
 
-*Pre-training video transformers on extra large-scale datasets is generally required to achieve premier performance on relatively small datasets. In this paper, we show that video masked autoencoders (VideoMAE) are data-efficient learners for self-supervised video pre-training (SSVP). We are inspired by the recent ImageMAE and propose customized video tube masking and reconstruction. These simple designs turn out to be effective for overcoming information leakage caused by the temporal correlation during video reconstruction. We obtain three important findings on SSVP: (1) An extremely high proportion of masking ratio (i.e., 90% to 95%) still yields favorable performance of VideoMAE. The temporally redundant video content enables higher masking ratio than that of images. (2) VideoMAE achieves impressive results on very small datasets (i.e., around 3k-4k videos) without using any extra data. This is partially ascribed to the challenging task of video reconstruction to enforce high-level structure learning. (3) VideoMAE shows that data quality is more important than data quantity for SSVP. Domain shift between pre-training and target datasets are important issues in SSVP. Notably, our VideoMAE with the vanilla ViT backbone can achieve 83.9% on Kinects-400, 75.3% on Something-Something V2, 90.8% on UCF101, and 61.1% on HMDB51 without using any extra data.*
+*초대형 데이터셋에서 비디오 트랜스포머를 사전 학습하는 것은 일반적으로 상대적으로 작은 데이터셋에서 최고의 성능을 달성하는 데 필요합니다. 이 논문에서는 비디오 마스크드 오토인코더(VideoMAE)가 자기 지도 비디오 사전 학습(SSVP)을 위한 데이터 효율적인 학습자임을 보여줍니다. 우리는 최근의 ImageMAE에서 영감을 받아 맞춤형 비디오 튜브 마스킹과 재구성을 제안합니다. 이러한 간단한 설계는 비디오 재구성 중 시간적 상관관계로 인한 정보 누출을 극복하는 데 효과적인 것으로 나타났습니다. SSVP에 대해 세 가지 중요한 발견을 했습니다: (1) 극도로 높은 마스킹 비율(즉, 90%~95%)에서도 VideoMAE는 양호한 성능을 보입니다. 시간적으로 중복된 비디오 콘텐츠는 이미지보다 높은 마스킹 비율을 가능하게 합니다. (2) VideoMAE는 추가 데이터 없이 매우 작은 데이터셋(약 3k-4k 비디오)에서 인상적인 결과를 달성합니다. 이는 부분적으로 고수준 구조 학습을 강제하는 비디오 재구성의 도전적인 작업 때문입니다. (3) VideoMAE는 SSVP에서 데이터 양보다 데이터 품질이 더 중요함을 보여줍니다. 사전 학습과 대상 데이터셋 간의 도메인 이동은 SSVP에서 중요한 문제입니다. 특히, 바닐라 ViT 백본을 사용한 우리의 VideoMAE는 추가 데이터 없이 Kinetics-400에서 83.9%, Something-Something V2에서 75.3%, UCF101에서 90.8%, HMDB51에서 61.1%를 달성할 수 있습니다.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/videomae_architecture.jpeg"
 alt="drawing" width="600"/>
 
-<small> VideoMAE pre-training. Taken from the <a href="https://huggingface.co/papers/2203.12602">original paper</a>. </small>
+<small> VideoMAE 사전 학습. <a href="https://huggingface.co/papers/2203.12602">원본 논문</a>에서 발췌. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
+이 모델은 [nielsr](https://huggingface.co/nielsr)이 기여했습니다.
+원본 코드는 [여기](https://github.com/MCG-NJU/VideoMAE)에서 찾을 수 있습니다.
 
-## Using Scaled Dot Product Attention (SDPA)
+## Scaled Dot Product Attention (SDPA) 사용하기[[using-scaled-dot-product-attention-sdpa]]
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
+PyTorch는 `torch.nn.functional`의 일부로 네이티브 scaled dot-product attention (SDPA) 연산자를 포함합니다. 이 함수는 
+입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 
+[공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+페이지에서 자세한 정보를 확인하세요.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+SDPA는 구현이 가능한 경우 `torch>=2.1.1`에서 기본적으로 사용되지만, 
+`from_pretrained()`에서 `attn_implementation="sdpa"`를 설정하여 명시적으로 SDPA 사용을 요청할 수도 있습니다.
 
 ```
 from transformers import VideoMAEForVideoClassification
@@ -56,9 +56,9 @@ model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-fi
 ...
 ```
 
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+최상의 속도 향상을 위해 모델을 half-precision(예: `torch.float16` 또는 `torch.bfloat16`)으로 로드하는 것을 권장합니다.
 
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `MCG-NJU/videomae-base-finetuned-kinetics` model, we saw the following speedups during inference.
+로컬 벤치마크(A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04)에서 `float32`와 `MCG-NJU/videomae-base-finetuned-kinetics` 모델을 사용하여 추론 중 다음과 같은 속도 향상을 확인했습니다.
 
 |   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
 |--------------|-------------------------------------------|-------------------------------------------|------------------------------|
@@ -67,17 +67,15 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 |            4 |                                        43 |                                        32 |                      1.34 |
 |            8 |                                        84 |                                        60 |                      1.4  |
 
-## Resources
+## 리소스[[resources]]
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with VideoMAE. If
-you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll
-review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+VideoMAE를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시) 리소스 목록입니다.
+여기에 포함될 리소스를 제출하고 싶으시다면, Pull Request를 열어주시면 검토하겠습니다! 리소스는 기존 리소스를 복제하는 대신 이상적으로 새로운 것을 보여주어야 합니다.
 
-**Video classification**
-- [A notebook](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb) that shows how
-to fine-tune a VideoMAE model on a custom dataset.
-- [Video classification task guide](../tasks/video_classification)
-- [A 🤗 Space](https://huggingface.co/spaces/sayakpaul/video-classification-ucf101-subset) showing how to perform inference with a video classification model.
+**비디오 분류**
+- 사용자 정의 데이터셋에서 VideoMAE 모델을 미세 조정하는 방법을 보여주는 [노트북](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb).
+- [비디오 분류 작업 가이드](../tasks/video_classification)
+- 비디오 분류 모델로 추론을 수행하는 방법을 보여주는 [🤗 Space](https://huggingface.co/spaces/sayakpaul/video-classification-ucf101-subset).
 
 ## VideoMAEConfig
 
@@ -100,7 +98,7 @@ to fine-tune a VideoMAE model on a custom dataset.
 
 ## VideoMAEForPreTraining
 
-`VideoMAEForPreTraining` includes the decoder on top for self-supervised pre-training.
+`VideoMAEForPreTraining`은 자기 지도 사전 학습을 위한 디코더를 상단에 포함합니다.
 
 [[autodoc]] transformers.VideoMAEForPreTraining
     - forward
