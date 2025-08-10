@@ -5566,14 +5566,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys = hf_quantizer.update_missing_keys_after_loading(model_to_load, missing_keys, prefix)
 
         # Post-processing for tensor parallelism
-        if device_mesh is not None:
+        if device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
             # When using TP, the device map is a single device for all parameters
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
+                if buffer.device.type == "meta":
+                    model.to(tp_device)
+                    break
+                if buffer.device != tp_device and tp_device.type != "meta":
+                    buffer.data.copy_(buffer.to(tp_device))
 
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
