@@ -22,6 +22,7 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
+from packaging import version
 from torch import nn
 
 from ...activations import ACT2FN
@@ -38,20 +39,30 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
+from ...utils.import_utils import get_torch_version
 from .configuration_dots1 import Dots1Config
 
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Dots1RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Dots1RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.has_rms_norm = version.parse(get_torch_version()) >= version.parse("2.3.0")
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.has_rms_norm:
+            return F.rms_norm(
+                input=hidden_states,
+                normalized_shape=[hidden_states.shape[-1]],
+                weight=self.weight,
+                eps=self.variance_epsilon,
+            )
+
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
