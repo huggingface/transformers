@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# VideoMAE
+# VideoMAE[[videomae]]
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -29,7 +29,7 @@ VideoMAE는 마스크드 오토인코더([MAE](vit_mae))를 비디오로 확장�
 
 논문의 초록은 다음과 같습니다:
 
-*초대형 데이터셋에서 비디오 트랜스포머를 사전 학습하는 것은 일반적으로 상대적으로 작은 데이터셋에서 최고의 성능을 달성하는 데 필요합니다. 이 논문에서는 비디오 마스크드 오토인코더(VideoMAE)가 자기 지도 비디오 사전 학습(SSVP)을 위한 데이터 효율적인 학습자임을 보여줍니다. 우리는 최근의 ImageMAE에서 영감을 받아 맞춤형 비디오 튜브 마스킹과 재구성을 제안합니다. 이러한 간단한 설계는 비디오 재구성 중 시간적 상관관계로 인한 정보 누출을 극복하는 데 효과적인 것으로 나타났습니다. SSVP에 대해 세 가지 중요한 발견을 했습니다: (1) 극도로 높은 마스킹 비율(즉, 90%~95%)에서도 VideoMAE는 양호한 성능을 보입니다. 시간적으로 중복된 비디오 콘텐츠는 이미지보다 높은 마스킹 비율을 가능하게 합니다. (2) VideoMAE는 추가 데이터 없이 매우 작은 데이터셋(약 3k-4k 비디오)에서 인상적인 결과를 달성합니다. 이는 부분적으로 고수준 구조 학습을 강제하는 비디오 재구성의 도전적인 작업 때문입니다. (3) VideoMAE는 SSVP에서 데이터 양보다 데이터 품질이 더 중요함을 보여줍니다. 사전 학습과 대상 데이터셋 간의 도메인 이동은 SSVP에서 중요한 문제입니다. 특히, 바닐라 ViT 백본을 사용한 우리의 VideoMAE는 추가 데이터 없이 Kinetics-400에서 83.9%, Something-Something V2에서 75.3%, UCF101에서 90.8%, HMDB51에서 61.1%를 달성할 수 있습니다.*
+*대규모 데이터셋에서 비디오 트랜스포머를 사전 학습하는 것은 일반적으로 상대적으로 작은 데이터셋에서 최고의 성능을 달성하는 데 필요합니다. 이 논문에서는 비디오 마스크드 오토인코더(VideoMAE)가 자기 지도 비디오 사전 학습(SSVP)을 위한 데이터 효율적인 학습기임을 보여줍니다. 우리는 최근의 ImageMAE에서 영감을 받아 맞춤형 비디오 튜브 마스킹과 재구성을 제안합니다. 이러한 간단한 디자인은 비디오 재구성 중 시간적 상관관계로 인한 정보 누출을 극복하는 데 효과적인 것으로 나타났습니다. SSVP에 대해 세 가지 중요한 발견을 했습니다: (1) 극도로 높은 마스킹 비율(즉, 90%~95%)에서도 VideoMAE는 양호한 성능을 보입니다. 시간적으로 중복된 비디오 콘텐츠는 이미지보다 높은 마스킹 비율을 가능하게 합니다. (2) VideoMAE는 추가 데이터 없이 매우 작은 데이터셋(약 3k-4k 비디오)에서 인상적인 결과를 달성합니다. 이는 부분적으로 고수준 구조 학습을 강제하는 비디오 재구성의 도전적인 작업 때문입니다. (3) VideoMAE는 SSVP에서 데이터 양보다 데이터 품질이 더 중요함을 보여줍니다. 사전 학습과 대상 데이터셋 간의 도메인 이동은 SSVP에서 중요한 문제입니다. 특히, 바닐라 ViT 백본을 사용한 우리의 VideoMAE는 추가 데이터 없이 Kinetics-400에서 83.9%, Something-Something V2에서 75.3%, UCF101에서 90.8%, HMDB51에서 61.1%를 달성할 수 있습니다.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/videomae_architecture.jpeg"
 alt="drawing" width="600"/>
@@ -41,14 +41,14 @@ alt="drawing" width="600"/>
 
 ## Scaled Dot Product Attention (SDPA) 사용하기[[using-scaled-dot-product-attention-sdpa]]
 
-PyTorch는 `torch.nn.functional`의 일부로 네이티브 scaled dot-product attention (SDPA) 연산자를 포함합니다. 이 함수는 
-입력과 사용 중인 하드웨어에 따라 적용할 수 있는 여러 구현을 포함합니다. 
+PyTorch에는 `torch.nn.functional`의 일부로 네이티브 scaled dot-product attention (SDPA) 연산자가 포함되어 있습니다. 이 함수에는 
+입력 및 사용 중인 하드웨어에 따라 적용할 수 있는 여러 가지 구현이 포함되어 있습니다. 
 [공식 문서](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
 또는 [GPU 추론](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 페이지에서 자세한 정보를 확인하세요.
 
-SDPA는 구현이 가능한 경우 `torch>=2.1.1`에서 기본적으로 사용되지만, 
-`from_pretrained()`에서 `attn_implementation="sdpa"`를 설정하여 명시적으로 SDPA 사용을 요청할 수도 있습니다.
+구현이 가능한 경우 SDPA는 기본적으로 `torch>=2.1.1`에서 사용되지만, 
+`from_pretrained()`에서 `attn_implementation="sdpa"`를 설정하여 명시적으로 SDPA를 사용하도록 요청할 수도 있습니다.
 
 ```
 from transformers import VideoMAEForVideoClassification
@@ -70,40 +70,40 @@ model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-fi
 ## 리소스[[resources]]
 
 VideoMAE를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티(🌎로 표시) 리소스 목록입니다.
-여기에 포함될 리소스를 제출하고 싶으시다면, Pull Request를 열어주시면 검토하겠습니다! 리소스는 기존 리소스를 복제하는 대신 이상적으로 새로운 것을 보여주어야 합니다.
+여기에 포함될 리소스를 제출하고 싶으시다면, Pull Request를 열어주시면 검토하겠습니다! 리소스는 기존 리소스를 복제하는 대신 새로운 것을 보여주는 것이 이상적입니다.
 
 **비디오 분류**
 - 사용자 정의 데이터셋에서 VideoMAE 모델을 미세 조정하는 방법을 보여주는 [노트북](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb).
 - [비디오 분류 작업 가이드](../tasks/video_classification)
 - 비디오 분류 모델로 추론을 수행하는 방법을 보여주는 [🤗 Space](https://huggingface.co/spaces/sayakpaul/video-classification-ucf101-subset).
 
-## VideoMAEConfig
+## VideoMAEConfig[[transformers.VideoMAEConfig]]
 
 [[autodoc]] VideoMAEConfig
 
-## VideoMAEFeatureExtractor
+## VideoMAEFeatureExtractor[[transformers.VideoMAEFeatureExtractor]]
 
 [[autodoc]] VideoMAEFeatureExtractor
     - __call__
 
-## VideoMAEImageProcessor
+## VideoMAEImageProcessor[[transformers.VideoMAEImageProcessor]]
 
 [[autodoc]] VideoMAEImageProcessor
     - preprocess
 
-## VideoMAEModel
+## VideoMAEModel[[transformers.VideoMAEModel]]
 
 [[autodoc]] VideoMAEModel
     - forward
 
-## VideoMAEForPreTraining
+## VideoMAEForPreTraining[[transformers.VideoMAEForPreTraining]]
 
 `VideoMAEForPreTraining`은 자기 지도 사전 학습을 위한 디코더를 상단에 포함합니다.
 
 [[autodoc]] transformers.VideoMAEForPreTraining
     - forward
 
-## VideoMAEForVideoClassification
+## VideoMAEForVideoClassification[[transformers.VideoMAEForVideoClassification]]
 
 [[autodoc]] transformers.VideoMAEForVideoClassification
     - forward
