@@ -21,16 +21,16 @@ rendered properly in your Markdown viewer.
 DeepSeek-V3 모델은 [DeepSeek-V3 기술 보고서](https://huggingface.co/papers/2412.19437)에서 DeepSeek-AI 팀에 의해 제안되었습니다.
 
 논문의 초록은 다음과 같습니다.
-총 671B개의 파라미터(parameter)를 가지며 토큰당 37B개가 활성화되는 강력한 전문가 혼합(Mixture-of-Experts, MoE) 언어 모델인 DeepSeek-V3를 소개합니다. 효율적인 추론과 비용 효율적인 훈련을 달성하기 위해, DeepSeek-V3는 DeepSeek-V2에서 철저히 검증된 Multi-head Latent Attention(MLA) 및 DeepSeekMoE 아키텍처를 채택했습니다. 나아가 DeepSeek-V3는 로드 밸런싱을 위한 보조 손실 없는(auxiliary-loss-free) 전략을 개척하고, 더 강력한 성능을 위해 다중 토큰 예측 훈련 목표를 설정합니다. 저희는 14.8조 개의 다양하고 고품질인 토큰으로 DeepSeek-V3를 사전 훈련했으며, 그 잠재력을 완전히 활용하기 위해 지도 파인튜닝(Supervised Fine-Tuning) 및 강화 학습(Reinforcement Learning) 단계를 거쳤습니다. 종합적인 평가 결과, DeepSeek-V3는 다른 오픈 소스 모델들을 능가하며 선도적인 비공개 소스 모델들과 필적하는 성능을 달성했음을 보여줍니다. 뛰어난 성능에도 불구하고 DeepSeek-V3의 전체 훈련에는 278.8만 H800 GPU 시간만이 소요되었습니다. 또한, 훈련 과정이 매우 안정적입니다. 전체 훈련 과정 동안 복구 불가능한 손실 급증(loss spike)을 경험하거나 롤백을 수행한 적이 없습니다. 모델 체크포인트는 https://github.com/deepseek-ai/DeepSeek-V3 에서 확인할 수 있습니다.
+총 671B개의 파라미터를 가지며 토큰당 37B개가 활성화되는 강력한 전문가 혼합(MoE) 언어 모델인 DeepSeek-V3를 소개합니다. 효율적인 추론과 비용 효율적인 훈련을 달성하기 위해, DeepSeek-V3는 DeepSeek-V2에서 철저히 검증된 Multi-head Latent Attention(MLA) 및 DeepSeekMoE 아키텍처를 채택했습니다. 나아가 DeepSeek-V3는 로드 밸런싱을 위한 보조 손실 없는 전략을 개척하고, 더 강력한 성능을 위해 다중 토큰 예측 훈련 목표를 설정합니다. 저희는 14.8조 개의 다양하고 고품질인 토큰으로 DeepSeek-V3를 사전 훈련했으며, 그 잠재력을 완전히 활용하기 위해 지도 파인튜닝 및 강화 학습 단계를 거쳤습니다. 종합적인 평가 결과, DeepSeek-V3는 다른 오픈 소스 모델들을 능가하며 선도적인 비공개 소스 모델들과 필적하는 성능을 달성했음을 보여줍니다. 뛰어난 성능에도 불구하고 DeepSeek-V3의 전체 훈련에는 278.8만 H800 GPU 시간만이 소요되었습니다. 또한, 훈련 과정이 매우 안정적입니다. 전체 훈련 과정 동안 복구 불가능한 손실 급증을 경험하거나 롤백을 수행한 적이 없습니다. 모델 체크포인트는 https://github.com/deepseek-ai/DeepSeek-V3 에서 확인할 수 있습니다.
 
 ## 한계 및 기여 요청![[limitations-and-call-for-contribution!]]
 
 저희는 이 코드를 커뮤니티 기반으로 만들게 되어 매우 기쁘며, 여러분이 다음 사항들을 어떻게 최적화할 수 있는지 확인하고 싶습니다.
 
-- 현재 구현은 "기본적인(naive)" 어텐션 계산을 사용합니다. 따라서 실제 Multi-head Latent Attention (MLA) 가 아닙니다.
-- 현재 구현은 전문가(expert)들을 순회하는 루프를 사용합니다. 이는 교체되어야 하기에 `integrations/tensor_parallel`의 `get_packed_weights`를 사용하는 것을 제안합니다.
+- 현재 구현은 "기본적인" 어텐션 계산을 사용합니다. 따라서 실제 Multi-head Latent Attention (MLA) 가 아닙니다.
+- 현재 구현은 전문가들을 순회하는 루프를 사용합니다. 이는 교체되어야 하기에 `integrations/tensor_parallel`의 `get_packed_weights`를 사용하는 것을 제안합니다.
 - 현재 구현에서는 ROPE에 EleutherAI의 수식을 사용하지만, 원본 수식을 적용하면 더 효율적일 것입니다! (단, 기존 API는 그대로 준수해야 합니다)
-- generation config 또는 config shape의 문제일 것으로 추정되는 문제로 인해 정적 캐시(static cache)는 지원되지 않습니다.
+- generation config 또는 config shape의 문제일 것으로 추정되는 문제로 인해 정적 캐시는 지원되지 않습니다.
 
 ### 사용 팁[[usage-tips]]
 이 모델은 효율적인 추론과 비용 효율적인 훈련을 위해 Multi-head Latent Attention (MLA) 및 DeepSeekMoE 아키텍처를 사용합니다. 로드 밸런싱을 위한 보조 손실 없는 전략과 다중 토큰 예측 훈련 목표를 채택합니다. 이 모델은 14.8조 개의 토큰으로 사전 훈련되고 지도 파인튜닝 및 강화 학습 단계를 거친 후 다양한 언어 작업에 사용될 수 있습니다.
@@ -46,9 +46,9 @@ torch.manual_seed(30)
 tokenizer = AutoTokenizer.from_pretrained("deepseek-r1")
 
 chat = [
-  {"role": "user", "content": "Hello, how are you?"},
-  {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
-  {"role": "user", "content": "I'd like to show off how chat templating works!"},
+  {"role": "user", "content": "안녕하세요, 어떻게 지내세요?"},
+  {"role": "assistant", "content": "저는 잘 지내요. 오늘 무엇을 도와드릴까요?"},
+  {"role": "user", "content": "채팅 템플릿이 어떻게 작동하는지 보여주고 싶어요!"},
 ]
 
 
@@ -91,8 +91,8 @@ Hugging Face의 Transformers와 같은 프레임워크에서는 Jinja2 템플릿
 
 ### **1단계: 원본 대화 기록**
 다음과 같은 대화가 있다고 가정해 보겠습니다:
-- **사용자**: "안녕하세요, 잘 지내세요?"
-- **어시스턴트**: "네, 잘 지내요. 오늘 무엇을 도와드릴까요?"
+- **사용자**: "안녕하세요, 어떻게 지내세요?"
+- **어시스턴트**: "저는 잘 지내요. 오늘 무엇을 도와드릴까요?"
 - **사용자**: "채팅 템플릿이 어떻게 작동하는지 보여주고 싶어요!"
 
 ---
@@ -101,9 +101,9 @@ Hugging Face의 Transformers와 같은 프레임워크에서는 Jinja2 템플릿
 Hugging Face Transformers나 OpenAI 같은 프레임워크에서는 대화가 종종 `role`과 `content`를 가진 딕셔너리 리스트로 형식화됩니다.
 ```python
 messages = [
-    {"role": "user", "content": "Hello, how are you?"},
-    {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
-    {"role": "user", "content": "I'd like to show off how chat templating works!"},
+    {"role": "user", "content": "안녕하세요, 어떻게 지내세요?"},
+    {"role": "assistant", "content": "저는 잘 지내요. 오늘 무엇을 도와드릴까요?"},
+    {"role": "user", "content": "채팅 템플릿이 어떻게 작동하는지 보여주고 싶어요!"},
 ]
 ```
 
@@ -128,9 +128,9 @@ messages = [
 ### **4단계: 최종 템플릿 결과물**
 위 템플릿을 저희 `messages` 리스트에 적용하면 다음과 같은 결과가 생성됩니다:
 ```text
-<|user|>Hello, how are you?<|end|>
-<|assistant|>I'm doing great. How can I help you today?<|end|>
-<|user|>I'd like to show off how chat templating works!<|end|>
+<|user|>안녕하세요, 어떻게 지내세요?<|end|>
+<|assistant|>저는 잘 지내요. 오늘 무엇을 도와드릴까요?<|end|>
+<|user|>채팅 템플릿이 어떻게 작동하는지 보여주고 싶어요!<|end|>
 <|assistant|>
 ```
 
