@@ -36,15 +36,16 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
-from .configuration_ernie4_5_moe import Ernie4_5_MoEConfig
+from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Ernie4_5_MoERMSNorm(nn.Module):
+class Ernie4_5_MoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Ernie4_5_MoERMSNorm is equivalent to T5LayerNorm
+        Ernie4_5_MoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -61,7 +62,7 @@ class Ernie4_5_MoERMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Ernie4_5_MoEMLP(nn.Module):
+class Ernie4_5_MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -78,8 +79,10 @@ class Ernie4_5_MoEMLP(nn.Module):
         return down_proj
 
 
-class Ernie4_5_MoERotaryEmbedding(nn.Module):
-    def __init__(self, config: Ernie4_5_MoEConfig, device=None):
+class Ernie4_5_MoeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
@@ -194,10 +197,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Ernie4_5_MoEAttention(nn.Module):
+class Ernie4_5_MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Ernie4_5_MoEConfig, layer_idx: int):
+    def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -213,12 +216,13 @@ class Ernie4_5_MoEAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -232,10 +236,10 @@ class Ernie4_5_MoEAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -257,7 +261,7 @@ class Ernie4_5_MoEAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Ernie4_5_MoEStatics(nn.Module):
+class Ernie4_5_MoeStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
         - Bias for the gating
@@ -284,7 +288,7 @@ class Ernie4_5_MoEStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoESparseMoeBlock(nn.Module):
+class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -305,19 +309,19 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoEStatics(config)
+        self.moe_statics = Ernie4_5_MoeStatics(config)
 
         # gating
         self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
-            [Ernie4_5_MoEMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
+            [Ernie4_5_MoeMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
         )
         self.norm_min = config.moe_norm_min
 
         # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_MoEMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
+            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
 
     def forward(
         self,
@@ -356,8 +360,8 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hitted:
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
@@ -379,32 +383,33 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
+class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Ernie4_5_MoEAttention(config, layer_idx)
+        self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
 
         if (
             ((layer_idx + 1) % config.moe_layer_interval == 0)
             and layer_idx >= config.moe_layer_start_index
             and layer_idx <= config.moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoESparseMoeBlock(config)
+            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
         else:
-            self.mlp = Ernie4_5_MoEMLP(config)
+            self.mlp = Ernie4_5_MoeMLP(config)
 
-        self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.FloatTensor:
@@ -422,7 +427,7 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
@@ -442,7 +447,7 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -461,11 +466,11 @@ class Ernie4_5_MoEDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
-    config: Ernie4_5_MoEConfig
+class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
+    config: Ernie4_5_MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Ernie4_5_MoEDecoderLayer"]
+    _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -473,31 +478,33 @@ class Ernie4_5_MoEPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_MoESparseMoeBlock, index=1),
-        "hidden_states": Ernie4_5_MoEDecoderLayer,
-        "attentions": Ernie4_5_MoEAttention,
+        "router_logits": OutputRecorder(Ernie4_5_MoeSparseMoeBlock, index=1),
+        "hidden_states": Ernie4_5_MoeDecoderLayer,
+        "attentions": Ernie4_5_MoeAttention,
     }
     _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
+    # Not supporting multi-token prediction (MTP) atm
+    _keys_to_ignore_on_load_unexpected = ["mtp"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Ernie4_5_MoEStatics):
+        if isinstance(module, Ernie4_5_MoeStatics):
             module.e_score_correction_bias.data.zero_()
 
 
 @auto_docstring
-class Ernie4_5_MoEModel(Ernie4_5_MoEPreTrainedModel):
-    def __init__(self, config: Ernie4_5_MoEConfig):
+class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
+    def __init__(self, config: Ernie4_5_MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Ernie4_5_MoEDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Ernie4_5_MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Ernie4_5_MoERMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Ernie4_5_MoERotaryEmbedding(config=config)
+        self.norm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -553,7 +560,7 @@ class Ernie4_5_MoEModel(Ernie4_5_MoEPreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
@@ -650,14 +657,14 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPreTrainedModel, GenerationMixin):
+class Ernie4_5_MoeForCausalLM(Ernie4_5_MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Ernie4_5_MoEModel(config)
+        self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
@@ -745,4 +752,4 @@ class Ernie4_5_MoEForCausalLM(Ernie4_5_MoEPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["Ernie4_5_MoEForCausalLM", "Ernie4_5_MoEModel", "Ernie4_5_MoEPreTrainedModel"]
+__all__ = ["Ernie4_5_MoeForCausalLM", "Ernie4_5_MoeModel", "Ernie4_5_MoePreTrainedModel"]

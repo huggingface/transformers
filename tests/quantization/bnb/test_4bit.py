@@ -726,7 +726,7 @@ class BaseSerializationTest(unittest.TestCase):
         d1 = dict(model_1.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
 
-        for k in d0.keys():
+        for k in d0:
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)

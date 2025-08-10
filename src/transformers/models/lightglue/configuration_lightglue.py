@@ -129,9 +129,7 @@ class LightGlueConfig(PretrainedConfig):
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
-            )
+            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
             if keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
                 keypoint_detector_config = AutoConfig.from_pretrained(
                     keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
