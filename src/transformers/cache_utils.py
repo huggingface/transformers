@@ -37,6 +37,9 @@ class CacheLayerMixin(ABC):
         self.keys, self.values = None, None
         self.cumulative_length = 0
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}"
+
     @abstractmethod
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
@@ -74,9 +77,9 @@ class CacheLayerMixin(ABC):
             self.values.zero_()
         self.cumulative_length = 0
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
-        if self.keys is not None and self.keys.numel():
+        if self.get_seq_length() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
@@ -141,19 +144,19 @@ class DynamicLayer(CacheLayerMixin):
         if self.get_seq_length() <= max_length:
             return
 
-        if self.keys is not None and self.keys.numel():
-            self.keys = self.keys[..., :max_length, :]
-            self.values = self.values[..., :max_length, :]
+        self.keys = self.keys[..., :max_length, :]
+        self.values = self.values[..., :max_length, :]
+        self.cumulative_length = max_length
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
-        if self.keys is not None and self.keys.numel():
+        if self.get_seq_length() > 0:
             self.keys = self.keys.repeat_interleave(repeats, dim=0)
             self.values = self.values.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         """Only keep the `indices` in the batch dimension of the cache."""
-        if self.keys is not None and self.keys.numel():
+        if self.get_seq_length() > 0:
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
 
@@ -167,24 +170,9 @@ class DynamicLayer(CacheLayerMixin):
 
     @classmethod
     def from_tensors(cls, keys: torch.Tensor, values: torch.Tensor) -> "DynamicLayer":
-        """
-        Build a `DynamicLayer` instance from pre-existing key/value tensors.
-
-        Args:
-            keys (`torch.Tensor`):
-                Key cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
-            values (`torch.Tensor`):
-                Value cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
-
-        Returns:
-            `DynamicLayer`: The newly constructed layer whose internal cache directly references
-            the supplied tensors.
-        """
+        """Build a `DynamicLayer` instance from pre-existing key/value tensors."""
         layer = cls()
-        layer.dtype, layer.device = keys.dtype, keys.device
-        layer.cumulative_length = keys.shape[-2]
-        layer.keys = keys
-        layer.values = values
+        _, _ = layer.update(keys, values)
         return layer
 
 
@@ -198,7 +186,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int):
         super().__init__()
         self.sliding_window = sliding_window
-        self.cumulative_length = 0
 
     def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
@@ -553,7 +540,6 @@ class QuantizedLayer(DynamicLayer):
         self.axis_value = axis_value
         self.q_group_size = q_group_size
         self.residual_length = residual_length
-        self.cumulative_length = 0
 
     def update(
         self,
@@ -598,10 +584,6 @@ class QuantizedLayer(DynamicLayer):
             self.values = torch.cat([self.values, value_states], dim=-2)
 
         return keys_to_return, values_to_return
-
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length
 
     @abstractmethod
     def _quantize(self, tensor, axis): ...
@@ -710,7 +692,13 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
-LAYER_CLASS_MAP: dict[str, type[CacheLayerMixin]] = {
+DYNAMIC_LAYER_CLASS_MAPPING: dict[str, type[CacheLayerMixin]] = {
+    "full_attention": DynamicLayer,
+    "sliding_attention": DynamicSlidingWindowLayer,
+    "chunked_attention": DynamicSlidingWindowLayer,
+}
+
+STATIC_LAYER_CLASS_MAPPING: dict[str, type[CacheLayerMixin]] = {
     "full_attention": StaticLayer,
     "sliding_attention": SlidingWindowLayer,
     "chunked_attention": ChunkedSlidingLayer,
@@ -997,7 +985,7 @@ class DynamicCache(Cache):
         else:
             super().__init__(layer_class_to_replicate=DynamicLayer)
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility.
@@ -1008,7 +996,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]) -> "Cache":
+    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]]) -> "DynamicCache":
         """
         Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
         backward compatibility.
@@ -1068,6 +1056,27 @@ if is_torch_greater_or_equal("2.3"):
         DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec)
     )
 
+
+class HybridDynamicCache(Cache):
+
+    def __init__(self, config: PretrainedConfig):
+        sliding_window = getattr(config, "sliding_window", None) or getattr("attention_chunk_size", None)
+        if hasattr(config, "layer_types"):
+            layers = []
+            init_kwargs = {}
+            for layer_type in config.layer_types:
+                if layer_type == "sliding_attention":
+                    init_kwargs["sliding_window"] = config.sliding_window
+                elif layer_type == "chunked_attention":
+                    init_kwargs["sliding_window"] = config.attention_chunk_size
+                layers.append(DYNAMIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
+        elif sliding_window is not None:
+            # In this case, fall back to a full sliding cache
+            layers = [DynamicSlidingWindowLayer(sliding_window) for _ in range(config.num_hidden_layers)]
+        else:
+            # In this case, fallback to DynamicCache
+            layers = [DynamicLayer() for _ in range(config.num_hidden_layers)]
+        super().__init__(layers=layers)
 
 class OffloadedCache(Cache):
     """
@@ -1217,7 +1226,7 @@ class HybridCache(Cache):
                     init_kwargs["sliding_window"] = config.sliding_window
                 elif layer_type == "chunked_attention":
                     init_kwargs["sliding_window"] = config.attention_chunk_size
-                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
+                layers.append(STATIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
         else:
             # In this case, fall back to StaticCache
             layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
@@ -1249,7 +1258,7 @@ class OffloadedHybridCache(Cache):
                     init_kwargs["sliding_window"] = config.sliding_window
                 elif layer_type == "chunked_attention":
                     init_kwargs["sliding_window"] = config.attention_chunk_size
-                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
+                layers.append(STATIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
         else:
             # In this case, fall back to StaticCache
             layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]

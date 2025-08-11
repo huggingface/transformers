@@ -5,7 +5,7 @@ from torch import nn
 
 from transformers.utils.generic import check_model_inputs
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, HybridDynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -132,7 +132,7 @@ class MistralModel(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = HybridDynamicCache(self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
