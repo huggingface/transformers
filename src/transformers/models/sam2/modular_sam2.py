@@ -1252,13 +1252,7 @@ class Sam2Model(SamModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(pixel_values, **kwargs)
-        # flatten NxCxHxW to HWxNxC
-        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
-        ]
+        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1302,8 +1296,6 @@ class Sam2Model(SamModel):
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
-        vision_hidden_states = vision_outputs.hidden_states
-        vision_attentions = vision_outputs.attentions
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -1311,7 +1303,14 @@ class Sam2Model(SamModel):
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
-        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+            for feature_map_position_embedding in feature_maps_position_embeddings
+        ]
+
+        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
     @check_model_inputs
     @auto_docstring
@@ -1425,18 +1424,10 @@ class Sam2Model(SamModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
-                self.get_image_features(
-                    pixel_values,
-                    **kwargs,
-                )
+            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
+                pixel_values,
+                **kwargs,
             )
-            # flatten NxCxHxW to HWxNxC
-            feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-            feature_maps_position_embeddings = [
-                feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-                for feature_map_position_embedding in feature_maps_position_embeddings
-            ]
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding

@@ -902,12 +902,6 @@ class Sam2VideoMemoryAttention(nn.Module):
             num_object_pointer_tokens (`int`, *optional*, defaults to 0):
                 The number of object pointer tokens.
         """
-        if isinstance(current_vision_features, list) and isinstance(current_vision_position_embeddings, list):
-            current_vision_features, current_vision_position_embeddings = (
-                current_vision_features[0],
-                current_vision_position_embeddings[0],
-            )
-
         output = current_vision_features
         if current_vision_position_embeddings is not None:
             output = output + 0.1 * current_vision_position_embeddings
@@ -1060,7 +1054,7 @@ class Sam2VideoMemoryEncoder(nn.Module):
 
         vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
-        return vision_features, [vision_pos_enc]
+        return vision_features, vision_pos_enc
 
 
 class Sam2VideoInferenceCache:
@@ -1687,13 +1681,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(pixel_values, **kwargs)
-        # flatten NxCxHxW to HWxNxC
-        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
-        ]
+        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1855,8 +1843,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
-        vision_hidden_states = vision_outputs.hidden_states
-        vision_attentions = vision_outputs.attentions
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -1864,7 +1850,14 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
 
-        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
+        # flatten NxCxHxW to HWxNxC
+        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
+        feature_maps_position_embeddings = [
+            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+            for feature_map_position_embedding in feature_maps_position_embeddings
+        ]
+
+        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
     def _prepare_vision_features(
         self,
@@ -1881,9 +1874,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(image_batch)
-            vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
-            vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_position_embeddings]
+            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -1990,18 +1981,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
-                self.get_image_features(
-                    pixel_values,
-                    **kwargs,
-                )
+            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
+                pixel_values,
+                **kwargs,
             )
-            # flatten NxCxHxW to HWxNxC
-            feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-            feature_maps_position_embeddings = [
-                feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-                for feature_map_position_embedding in feature_maps_position_embeddings
-            ]
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2180,11 +2163,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             is_initial_conditioning_frame (`bool`):
                 Whether this is an initial conditioning frame with user inputs (True) or a subsequent
                 tracking frame (False).
-            current_vision_features (`list[torch.Tensor]`):
-                List of vision feature tensors for the current frame, with the last element being the
-                highest-level features of shape `(seq_len, batch_size, channels)`.
-            current_vision_positional_embeddings (`list[torch.Tensor]`):
-                List of positional embedding tensors corresponding to the vision features.
+            current_vision_features (`torch.Tensor`):
+                Highest-level vision features of shape `(seq_len, batch_size, channels)`.
+            current_vision_positional_embeddings (`torch.Tensor`):
+                Positional embedding tensors corresponding to the highest-level vision features.
             num_total_frames (`int`):
                 Total number of frames in the video sequence.
             track_in_reverse_time (`bool`, *optional*, defaults to `False`):
@@ -2197,17 +2179,17 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 suitable for input to the SAM decoder.
         """
         # Get dimensions from the highest-level (lowest-resolution) feature map
-        batch_size = current_vision_features[-1].size(1)
+        batch_size = current_vision_features.size(1)
         num_channels = self.hidden_dim
         height, width = self.backbone_feature_sizes[-1]
-        device = current_vision_features[-1].device
+        device = current_vision_features.device
 
         # If memory is disabled (e.g., for single image SAM), return current features directly.
         if self.num_maskmem == 0:
             # Permute (SeqLen, Batch, Channels) -> (Batch, Channels, SeqLen) then view as (Batch, Channels, Height, Width)
             # Assuming SeqLen = Height * Width for the last feature map
-            current_feature_map = (
-                current_vision_features[-1].permute(1, 2, 0).view(batch_size, num_channels, height, width)
+            current_feature_map = current_vision_features.permute(1, 2, 0).view(
+                batch_size, num_channels, height, width
             )
             return current_feature_map
 
@@ -2255,11 +2237,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 # Load memory features (potentially from CPU to GPU)
                 # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
                 memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
-                memories_to_concatenate.append(memory_features.flatten(2).permute(2, 0, 1))
+                memories_to_concatenate.append(memory_features)
 
                 # Spatial positional encoding (potentially from CPU to GPU)
-                spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"][-1].to(device, non_blocking=True)
-                spatial_memory_pos_embed = spatial_memory_pos_embed.flatten(2).permute(2, 0, 1)
+                spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
 
                 # Add temporal positional encoding
                 # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
@@ -2342,8 +2323,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             # For initial conditioning frames, no prior memory is used directly in this block.
             # The model might handle this with a special token or mechanism.
             # If configured, directly add a learnable "no memory" embedding.
-            # current_vision_features[-1] has shape (SeqLen, Batch, Channels)
-            conditioned_feature_map_flat = current_vision_features[-1] + self.no_memory_embedding
+            # current_vision_features has shape (SeqLen, Batch, Channels)
+            conditioned_feature_map_flat = current_vision_features + self.no_memory_embedding
             # Reshape to (Batch, Channels, Height, Width)
             conditioned_feature_map = conditioned_feature_map_flat.permute(1, 2, 0).view(
                 batch_size, num_channels, height, width
@@ -2356,7 +2337,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
         # Step 3: Forward through the memory attention mechanism.
         conditioned_feature_map_flat = self.memory_attention(
-            current_vision_features=current_vision_features,  # Pass the list as expected
+            current_vision_features=current_vision_features,
             current_vision_position_embeddings=current_vision_positional_embeddings,
             memory=combined_memory,
             memory_posision_embeddings=combined_memory_positional_embeddings,  # Corrected typo from API
@@ -2457,8 +2438,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 frame_idx=frame_idx,
                 obj_idx=obj_idx,
                 is_initial_conditioning_frame=is_init_cond_frame,
-                current_vision_features=current_vision_feats[-1:],
-                current_vision_positional_embeddings=current_vision_pos_embeds[-1:],
+                current_vision_features=current_vision_feats[-1],
+                current_vision_positional_embeddings=current_vision_pos_embeds[-1],
                 num_total_frames=inference_session.num_frames,
                 track_in_reverse_time=reverse,
                 streaming=streaming,
@@ -2485,7 +2466,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         maskmem_pos_enc = None
         if run_mem_encoder and self.num_maskmem > 0:
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=current_vision_feats,
+                current_vision_feats=current_vision_feats[-1],
                 pred_masks_high_res=sam_outputs.high_res_masks,
                 object_score_logits=sam_outputs.object_score_logits,
                 is_mask_from_pts=(point_inputs is not None or mask_inputs is not None),
@@ -2494,8 +2475,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         current_out = {
             "pred_masks": sam_outputs.pred_masks,
             "object_pointer": sam_outputs.object_pointer,
-            # save in bfloat16 to save memory, and for consistency with the original implementation
-            "maskmem_features": maskmem_features.to(torch.bfloat16) if maskmem_features is not None else None,
+            "maskmem_features": maskmem_features if maskmem_features is not None else None,
             "maskmem_pos_enc": maskmem_pos_enc,
         }
         if not self.training:
@@ -2505,17 +2485,17 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
     def _encode_new_memory(
         self,
-        current_vision_feats: list[torch.Tensor],
+        current_vision_feats: torch.Tensor,
         pred_masks_high_res: torch.Tensor,
         object_score_logits: torch.Tensor,
         is_mask_from_pts: bool,
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """Encode the current image and its prediction into a memory feature."""
-        batch_size = current_vision_feats[-1].size(1)  # batch size on this frame
+        batch_size = current_vision_feats.size(1)  # batch size on this frame
         channels = self.hidden_dim
         height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
-        pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(batch_size, channels, height, width)
+        pix_feat = current_vision_feats.permute(1, 2, 0).view(batch_size, channels, height, width)
         if is_mask_from_pts and not self.training:
             # binarize the mask logits
             mask_for_mem = (pred_masks_high_res > 0).to(pred_masks_high_res.dtype)
@@ -2537,6 +2517,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             maskmem_features += (1 - is_obj_appearing[..., None]) * self.occlusion_spatial_embedding_parameter[
                 ..., None, None
             ].expand(*maskmem_features.shape)
+
+        # convert to bfloat16 to save memory, and for consistency with the original implementation
+        maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
+        maskmem_pos_enc = maskmem_pos_enc.flatten(2).permute(2, 0, 1)
 
         return maskmem_features, maskmem_pos_enc
 
