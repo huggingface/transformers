@@ -214,6 +214,15 @@ class AutoHfQuantizer:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
+            quantization_config_from_args is not None
+            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
+        ):
+            raise ValueError(
+                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+            )
+
+        if (
             isinstance(
                 quantization_config,
                 (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
