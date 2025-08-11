@@ -35,7 +35,9 @@ class CacheLayerMixin(ABC):
 
     def __init__(self):
         self.keys, self.values = None, None
-        self.cumulative_length = 0
+        # We need it to be a Tensor to avoid recompilation issues when updating it. Also important to always
+        # keep it on "cpu", to avoid unwanted cuda sync when calling `.item()`
+        self.cumulative_length = torch.tensor([0], dtype=int, device="cpu")
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -56,7 +58,7 @@ class CacheLayerMixin(ABC):
 
     def get_seq_length(self) -> int:
         """Return the number of tokens that were already procesed."""
-        return self.cumulative_length
+        return self.cumulative_length.item()
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -75,7 +77,7 @@ class CacheLayerMixin(ABC):
         if self.keys is not None:
             self.keys.zero_()
             self.values.zero_()
-        self.cumulative_length = 0
+        self.cumulative_length = torch.tensor([0], dtype=int, device="cpu")
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
@@ -146,7 +148,7 @@ class DynamicLayer(CacheLayerMixin):
 
         self.keys = self.keys[..., :max_length, :]
         self.values = self.values[..., :max_length, :]
-        self.cumulative_length = max_length
+        self.cumulative_length = torch.tensor([max_length], dtype=int, device="cpu")
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
