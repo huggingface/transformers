@@ -405,15 +405,6 @@ generation_output[:2]
     - to_legacy_cache
     - from_legacy_cache
 
-[[autodoc]] MambaCache
-    - update_conv_state
-    - update_ssm_state
-    - reset
-
-[[autodoc]] CacheConfig
-
-[[autodoc]] QuantizedCacheConfig
-
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 
 [[autodoc]] WatermarkDetector
