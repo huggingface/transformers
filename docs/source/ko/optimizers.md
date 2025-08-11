@@ -72,13 +72,13 @@ args = TrainingArguments(
 > [!TIP]
 > `scale` 파라미터는 `n/r`으로 설정할 수 있습니다. 이때, `n`은 원본 공간 차원이고 `r`은 저랭크(low-rank) 공간 차원입니다. `scale`을 기본값으로 유지하면서 학습률만 조정해도 비슷한 효과를 얻을 수 있습니다.
 
-| parameter | description | APOLLO | APOLLO-Mini |
+| 매개 변수 | 설명 | APOLLO | APOLLO-Mini |
 |---|---|---|---|
-| rank | rank of the auxiliary sub-space for gradient scaling | 256 | 1 |
-| scale_type | how scaling factors are applied | `channel` (per-channel scaling) | `tensor` (per-tensor scaling) |
-| scale | adjusts gradient updates to stabilize training | 1.0 | 128 |
-| update_proj_gap | steps before updating projection matrices | 200 | 200 |
-| proj | projection type | `random` | `random` |
+| rank | 그래디언트 스케일링을 위한 보조 부분 공간(sub-space)의 랭크 | 256 | 1 |
+| scale_type | 스케일링 인자(factor)를 적용하는 방법 | `channel` (채널별 스케일링) | `tensor` (텐서별 스케일링) |
+| scale | 그래디언트 업데이트를 조정하여 학습을 안정화 | 1.0 | 128 |
+| update_proj_gap | 투영 행렬(projection matrices)을 업데이트하기 전 단계(step) 수 | 200 | 200 |
+| proj | 투영(projection) 유형 | `random` | `random` |
 
 아래 예시는 APOLLO-Mini 옵티마이저를 활성화하는 방법입니다.
 
