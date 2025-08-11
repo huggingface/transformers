@@ -278,9 +278,9 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         last_layer_cls_token = outputs.pooler_output
-        expected_slice = torch.tensor([ 0.4637, -0.4160,  0.4086, -0.1265, -0.2865], device=torch_device)
+        expected_slice = torch.tensor([0.4637, -0.4160, 0.4086, -0.1265, -0.2865], device=torch_device)
         torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
 
         last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
-        expected_slice = torch.tensor([-0.0386, -0.2509, -0.0161, -0.4556,  0.5716], device=torch_device)
+        expected_slice = torch.tensor([-0.0386, -0.2509, -0.0161, -0.4556, 0.5716], device=torch_device)
         torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)

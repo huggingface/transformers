@@ -488,6 +488,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DINOv3ViTLayerScale):
             module.lambda1.data.fill_(self.config.layerscale_value)
 
+
 @auto_docstring
 class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def __init__(self, config: DINOv3ViTConfig):
