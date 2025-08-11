@@ -82,6 +82,8 @@ class BitNetMLP(nn.Module):
 
 
 class BitNetRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: BitNetConfig, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -253,7 +255,6 @@ class BitNetAttention(nn.Module):
         self.rotary_emb = BitNetRotaryEmbedding(config=config)
         self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,

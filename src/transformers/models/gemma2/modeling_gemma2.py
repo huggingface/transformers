@@ -68,6 +68,8 @@ class Gemma2RMSNorm(nn.Module):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Gemma2Config, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings

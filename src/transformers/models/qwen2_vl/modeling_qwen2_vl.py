@@ -111,7 +111,7 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
 class Qwen2VLRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Qwen2VLTextConfig, device=None, layer_type=None):
+    def __init__(self, config: Qwen2VLConfig, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings

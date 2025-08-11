@@ -71,6 +71,8 @@ class Starcoder2MLP(nn.Module):
 
 
 class Starcoder2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Starcoder2Config, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
