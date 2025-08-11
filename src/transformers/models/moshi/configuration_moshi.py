@@ -15,6 +15,7 @@
 """Moshi model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -179,8 +180,6 @@ class MoshiConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 3000):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
@@ -247,7 +246,7 @@ class MoshiConfig(PretrainedConfig):
         num_key_value_heads=None,
         audio_vocab_size=None,
         max_position_embeddings=3000,
-        rope_theta=10000.0,
+        rope_scaling=None,
         hidden_act="silu",
         head_dim=None,
         initializer_range=0.02,
@@ -266,7 +265,6 @@ class MoshiConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
         self.hidden_act = hidden_act
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.initializer_range = initializer_range
@@ -278,6 +276,17 @@ class MoshiConfig(PretrainedConfig):
         self.ffn_dim = ffn_dim
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         audio_encoder_config = kwargs.pop("audio_encoder_config", {})
         audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")

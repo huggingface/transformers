@@ -70,8 +70,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
             The epsilon used by the batch normalization layers.
         embedding_size (`List`, *optional*, defaults to [15, 20]):
             The size (height, width) of the embedding for the position embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         partial_rotary_factor (`float`, *optional*, defaults to 4.0):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
@@ -131,7 +129,6 @@ class EfficientLoFTRConfig(PretrainedConfig):
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
         embedding_size: Optional[list[int]] = None,
-        rope_theta: float = 10000.0,
         partial_rotary_factor: float = 4.0,
         rope_scaling: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
@@ -188,14 +185,19 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
         self.num_key_value_heads = num_attention_heads
         self.embedding_size = embedding_size if embedding_size is not None else [15, 20]
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling if rope_scaling is not None else {"rope_type": "default"}
-
-        # for compatibility with "default" rope type
         self.partial_rotary_factor = partial_rotary_factor
-        rope_config_validation(self)
-
         self.initializer_range = initializer_range
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         super().__init__(**kwargs)
 

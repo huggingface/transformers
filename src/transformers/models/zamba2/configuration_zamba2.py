@@ -21,6 +21,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class Zamba2Config(PretrainedConfig):
@@ -91,8 +92,6 @@ class Zamba2Config(PretrainedConfig):
             Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
-        rope_theta (`float`, *optional*, defaults to `10000.0`):
-            The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -157,7 +156,7 @@ class Zamba2Config(PretrainedConfig):
         use_shared_attention_adapter=False,
         adapter_rank=128,
         use_mem_rope=False,
-        rope_theta=10000,
+        rope_scaling=None,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
@@ -190,10 +189,20 @@ class Zamba2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
         if use_mem_rope and use_long_context:
-            a = 8
-            rope_theta = rope_theta * a ** (self.attention_head_dim / (self.attention_head_dim - 2))
-        self.rope_theta = rope_theta
+            rope_theta = rope_theta * 8 ** (self.attention_head_dim / (self.attention_head_dim - 2))
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
+
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand

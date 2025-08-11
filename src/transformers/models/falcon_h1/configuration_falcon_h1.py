@@ -15,6 +15,7 @@
 """FalconH1 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -103,8 +104,6 @@ class FalconH1Config(PretrainedConfig):
             Whether to use RMSNorm instead of LayerNorm in the Mamba block
         projectors_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The theta value used for the RoPE embeddings.
         rope_scaling (`float`, *optional*):
             The scaling value used for the RoPE embeddings. If `None`, no scaling is applied.
         lm_head_multiplier (`float`, *optional*, defaults to 1.0):
@@ -163,7 +162,6 @@ class FalconH1Config(PretrainedConfig):
         mamba_norm_before_gate=True,
         mamba_rms_norm=False,
         projectors_bias=False,
-        rope_theta=100000.0,
         rope_scaling=None,
         lm_head_multiplier=1.0,
         embedding_multiplier=1.0,
@@ -198,9 +196,17 @@ class FalconH1Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
 
-        self.rope_theta = rope_theta
-        self.rope_scaling = None
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 100000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
         self.rope_scaling = rope_scaling
+        rope_config_validation(self)
+
         self.projectors_bias = projectors_bias
         mamba_intermediate = mamba_expand * hidden_size if mamba_d_ssm is None else mamba_d_ssm
 

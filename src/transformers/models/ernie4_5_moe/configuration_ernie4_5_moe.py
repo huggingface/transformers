@@ -69,8 +69,6 @@ class Ernie4_5_MoeConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -194,7 +192,6 @@ class Ernie4_5_MoeConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=True,
-        rope_theta=500000.0,
         rope_scaling=None,
         use_bias=False,
         moe_intermediate_size=1536,
@@ -222,12 +219,15 @@ class Ernie4_5_MoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
 
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         # MoE arguments

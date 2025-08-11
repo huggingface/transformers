@@ -106,8 +106,6 @@ class DeepseekV3Config(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
@@ -184,7 +182,6 @@ class DeepseekV3Config(PretrainedConfig):
         eos_token_id=1,
         pretraining_tp=1,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         rope_interleave=True,
         attention_bias=False,
@@ -225,14 +222,18 @@ class DeepseekV3Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
 
         if self.rope_scaling is not None:
             for key in ["beta_fast", "beta_slow", "factor"]:

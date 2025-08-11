@@ -74,8 +74,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        rope_theta (`float`, *optional*, defaults to 500000):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -155,7 +153,6 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=None,
         eos_token_id=None,
-        rope_theta=500000,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -191,16 +188,20 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
 
@@ -262,8 +263,6 @@ class CsmConfig(PretrainedConfig):
             Audio token id in the text input.
         audio_eos_token_id (`int`, *optional*, defaults to 128003):
             End of stream token id for audio in the text input.
-        rope_theta (`float`, *optional*, defaults to 500000):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*, defaults to `{'factor': 32.0, 'high_freq_factor': 0.5, 'low_freq_factor': 0.125, 'original_max_position_embeddings': 1024, 'rope_type': 'llama3'}`):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -359,7 +358,6 @@ class CsmConfig(PretrainedConfig):
         eos_token_id=None,
         audio_token_id=128002,
         audio_eos_token_id=128003,
-        rope_theta=500000,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -421,16 +419,20 @@ class CsmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
 

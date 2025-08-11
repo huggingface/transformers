@@ -70,8 +70,6 @@ class PhimoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor`, `long_factor`, `short_mscale`, `long_mscale` and
@@ -130,7 +128,6 @@ class PhimoeConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=1e6,
         rope_scaling=None,
         sliding_window=None,
         attention_dropout=0.0,
@@ -162,7 +159,6 @@ class PhimoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
 
         self.num_experts_per_tok = num_experts_per_tok
@@ -172,20 +168,24 @@ class PhimoeConfig(PretrainedConfig):
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
 
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
         self.rope_scaling = rope_scaling
-        if isinstance(self.rope_scaling, dict):
-            if "rope_type" not in self.rope_scaling:
-                self.rope_scaling["rope_type"] = self.rope_scaling.get("type", None)
-            if "original_max_position_embeddings" in self.rope_scaling:
-                self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
-            rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
-            rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
-            if not isinstance(rope_scaling_short_mscale, (int, float)):
-                raise TypeError(
-                    f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
-                )
-            if not isinstance(rope_scaling_long_mscale, (int, float)):
-                raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
+
+        if "original_max_position_embeddings" in self.rope_scaling:
+            self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
+        rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
+        rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
+        if not isinstance(rope_scaling_short_mscale, (int, float)):
+            raise TypeError(f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}")
+        if not isinstance(rope_scaling_long_mscale, (int, float)):
+            raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
 
         rope_config_validation(self)
 

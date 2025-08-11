@@ -15,6 +15,7 @@
 """Falcon configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -74,8 +75,6 @@ class FalconConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with, when `alibi` is `False`. Pretrained
             Falcon models with RoPE support up to 2048 tokens.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -160,7 +159,6 @@ class FalconConfig(PretrainedConfig):
         parallel_attn=True,
         bias=False,
         max_position_embeddings=2048,
-        rope_theta=10000.0,
         rope_scaling=None,
         bos_token_id=11,
         eos_token_id=11,
@@ -189,13 +187,22 @@ class FalconConfig(PretrainedConfig):
         self.bias = bias
         self.num_ln_in_parallel_attn = num_ln_in_parallel_attn
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.activation = activation
         if ffn_hidden_size is None:
             self.ffn_hidden_size = hidden_size * 4
         else:
             self.ffn_hidden_size = ffn_hidden_size
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

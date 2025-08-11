@@ -134,8 +134,6 @@ class EvollaConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for the RMS-norm layer in the llama model.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The threshold value for the RoPE layer in the llama model.
         rope_scaling (`float`, *optional*):
             The scaling factor for the RoPE layer in the llama model.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -205,7 +203,6 @@ class EvollaConfig(PretrainedConfig):
         hidden_act="silu",  # llama activation function
         max_position_embeddings=8192,  # llama rope max length
         rms_norm_eps=1e-05,
-        rope_theta=500000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -253,12 +250,15 @@ class EvollaConfig(PretrainedConfig):
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
 
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         # Subconfig

@@ -16,6 +16,7 @@
 """Phi-3 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -74,8 +75,6 @@ class Phi3Config(PretrainedConfig):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
@@ -139,7 +138,6 @@ class Phi3Config(PretrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         partial_rotary_factor=1.0,
         bos_token_id=1,
@@ -167,9 +165,19 @@ class Phi3Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+
+        rope_config_validation(self)
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window

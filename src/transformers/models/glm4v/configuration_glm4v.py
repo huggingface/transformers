@@ -161,8 +161,6 @@ class Glm4vTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -234,7 +232,6 @@ class Glm4vTextConfig(PretrainedConfig):
         rms_norm_eps=1e-05,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         attention_dropout=0.0,
         rope_scaling=None,
         image_token_id=None,
@@ -257,14 +254,17 @@ class Glm4vTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id

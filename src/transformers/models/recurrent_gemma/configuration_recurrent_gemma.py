@@ -15,6 +15,7 @@
 """RecurrentGemma model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -74,8 +75,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             The partial rotary factor used in the initialization of the rotary embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
@@ -115,7 +114,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         bos_token_id=2,
         hidden_activation="gelu_pytorch_tanh",
         partial_rotary_factor=0.5,
-        rope_theta=10000.0,
+        rope_scaling=None,
         block_types=("recurrent", "recurrent", "attention"),
         attention_dropout=0.0,
         num_key_value_heads=None,
@@ -134,7 +133,6 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.logits_soft_cap = logits_soft_cap
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.partial_rotary_factor = partial_rotary_factor
         self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
@@ -146,6 +144,18 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -50,8 +50,6 @@ class GPTNeoXConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         rotary_pct (`float`, *optional*, defaults to 0.25):
             percentage of hidden dimensions to allocate to rotary embeddings
-        rotary_emb_base (`int`, *optional*, defaults to 10000)
-            base for computing rotary embeddings frequency
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio probability of the attention score.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -153,7 +151,6 @@ class GPTNeoXConfig(PretrainedConfig):
         intermediate_size=24576,
         hidden_act="gelu",
         rotary_pct=0.25,
-        rotary_emb_base=10000,
         attention_dropout=0.0,
         hidden_dropout=0.0,
         classifier_dropout=0.1,
@@ -179,8 +176,6 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.partial_rotary_factor = rotary_pct
-        self.rotary_emb_base = rotary_emb_base
-        self.rope_theta = rotary_emb_base
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
@@ -191,12 +186,17 @@ class GPTNeoXConfig(PretrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rotary_emb_base", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"

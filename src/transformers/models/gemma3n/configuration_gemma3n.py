@@ -90,8 +90,6 @@ class Gemma3nTextConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention.
             NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we
@@ -129,8 +127,6 @@ class Gemma3nTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -213,9 +209,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_theta: float = 1_000_000.0,
         rope_scaling: Optional[dict[str, Any]] = None,
-        rope_local_base_freq: float = 10_000.0,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -257,7 +251,6 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
@@ -265,8 +258,21 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
 
-        self.rope_local_base_freq = rope_local_base_freq
-        self.rope_scaling = rope_scaling
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        rope_local_base_freq = kwargs.get("rope_local_base_freq", 100000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
 
         if layer_types is None:

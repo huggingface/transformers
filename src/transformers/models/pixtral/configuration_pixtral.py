@@ -14,6 +14,7 @@
 """Pixtral model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -50,8 +51,6 @@ class PixtralVisionConfig(PretrainedConfig):
             Activation function used in the hidden layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the attention layers.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -83,7 +82,7 @@ class PixtralVisionConfig(PretrainedConfig):
         patch_size=16,
         hidden_act="gelu",
         attention_dropout=0.0,
-        rope_theta=10000.0,
+        rope_scaling=None,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -98,9 +97,19 @@ class PixtralVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
-        self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
 
 __all__ = ["PixtralVisionConfig"]

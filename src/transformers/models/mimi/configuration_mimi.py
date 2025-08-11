@@ -19,6 +19,7 @@ import math
 import numpy as np
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -113,8 +114,6 @@ class MimiConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         use_streaming (`bool`, *optional*, defaults to `False`):
             Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 250):
             Sliding window attention window size. If not specified, will default to `250`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -175,7 +174,7 @@ class MimiConfig(PretrainedConfig):
         norm_eps=1e-5,
         use_cache=False,
         use_streaming=False,
-        rope_theta=10000.0,
+        rope_scaling=None,
         sliding_window=250,
         attention_dropout=0.0,
         layer_scale_initial_scale=0.01,
@@ -212,12 +211,22 @@ class MimiConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.use_cache = use_cache
         self.use_streaming = use_streaming
-        self.rope_theta = rope_theta
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         # Handle backward compatibility for frame_rate:
         # If frame_rate is explicitly provided, use it (backward compatibility)

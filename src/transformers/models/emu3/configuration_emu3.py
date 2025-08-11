@@ -158,8 +158,6 @@ class Emu3TextConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -240,7 +238,6 @@ class Emu3TextConfig(PretrainedConfig):
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 1000000.0,
         rope_scaling: Optional = None,
         mlp_bias=False,
         attention_bias=False,
@@ -258,14 +255,21 @@ class Emu3TextConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
-        rope_config_validation(self)
-
         self.attention_dropout = attention_dropout
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

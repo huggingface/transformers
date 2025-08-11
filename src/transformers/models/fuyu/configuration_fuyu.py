@@ -15,6 +15,7 @@
 """Fuyu model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -64,8 +65,6 @@ class FuyuConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 25000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
@@ -121,7 +120,6 @@ class FuyuConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=25000.0,
         rope_scaling=None,
         qk_layernorm=True,
         hidden_dropout=0.0,
@@ -146,7 +144,6 @@ class FuyuConfig(PretrainedConfig):
                 "initializer_range": initializer_range,
                 "layer_norm_eps": layer_norm_eps,
                 "use_cache": use_cache,
-                "rope_theta": rope_theta,
                 "rope_scaling": rope_scaling,
                 "qk_layernorm": qk_layernorm,
                 "hidden_dropout": hidden_dropout,
@@ -174,14 +171,22 @@ class FuyuConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.qk_layernorm = qk_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
         self.image_token_id = image_token_id
-        self._rope_scaling_validation()
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 25000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -190,26 +195,6 @@ class FuyuConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-            raise ValueError(
-                f"`rope_scaling` must be a dictionary with two fields, `type` and `factor`, got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
-            raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
-            )
-        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
 
 
 __all__ = ["FuyuConfig"]
