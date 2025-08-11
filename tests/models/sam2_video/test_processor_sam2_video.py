@@ -139,21 +139,18 @@ class Sam2ProcessorTest(unittest.TestCase):
 
         original_sizes = [[1764, 2646]]
 
-        reshaped_input_size = [[683, 1024]]
-        masks = processor.post_process_masks(dummy_masks, original_sizes, reshaped_input_size)
+        masks = processor.post_process_masks(dummy_masks, original_sizes)
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
-        masks = processor.post_process_masks(
-            dummy_masks, torch.tensor(original_sizes), torch.tensor(reshaped_input_size)
-        )
+        masks = processor.post_process_masks(dummy_masks, torch.tensor(original_sizes))
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         # should also work with np
         dummy_masks = [np.ones((1, 3, 5, 5))]
-        masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
+        masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))
 
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
-            masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
+            masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))
