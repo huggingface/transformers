@@ -188,7 +188,12 @@ class MistralIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         generated_ids = model.generate(
-            input_ids, max_new_tokens=20, temperature=0, dola_layers="low", repetition_penalty=1.2
+            input_ids,
+            max_new_tokens=20,
+            temperature=0,
+            dola_layers="low",
+            repetition_penalty=1.2,
+            trust_remote_code=True,
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

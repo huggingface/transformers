@@ -507,7 +507,12 @@ class GemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(
-            **inputs, max_new_tokens=20, do_sample=False, dola_layers="low", repetition_penalty=1.2
+            **inputs,
+            max_new_tokens=20,
+            do_sample=False,
+            dola_layers="low",
+            repetition_penalty=1.2,
+            trust_remote_code=True,
         )
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)

@@ -119,10 +119,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("GptOss has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
     @unittest.skip("GptOss has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
