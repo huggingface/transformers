@@ -1578,7 +1578,6 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
 
 
-
 ### Deprecated classes
 
 
