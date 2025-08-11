@@ -133,4 +133,4 @@ if is_torch_available():
 
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
-    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = True
