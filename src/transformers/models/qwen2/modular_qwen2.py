@@ -49,7 +49,7 @@ class Qwen2RotaryEmbedding(LlamaRotaryEmbedding):
 
 class Qwen2Attention(LlamaAttention):
     def __init__(self, config: Qwen2Config, layer_idx: int):
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)

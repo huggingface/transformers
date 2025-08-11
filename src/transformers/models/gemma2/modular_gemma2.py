@@ -255,7 +255,7 @@ def eager_attention_forward(
 
 class Gemma2Attention(GemmaAttention):
     def __init__(self, config: Gemma2Config, layer_idx: int):
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
 
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping

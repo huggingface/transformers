@@ -61,7 +61,7 @@ class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
 
 class Qwen3Attention(LlamaAttention):
     def __init__(self, config: Qwen3Config, layer_idx: int):
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape

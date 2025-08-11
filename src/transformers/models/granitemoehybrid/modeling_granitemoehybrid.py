@@ -68,8 +68,8 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
-        self.rope_type = rope_scaling_dict["rope_type"]
+        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = self.rope_scaling_dict["rope_type"]
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -279,6 +279,7 @@ class GraniteMoeHybridAttention(nn.Module):
                     "removed in v4.60.0. Make sure to pass `position_ids` instead."
                 )
                 cos, sin = position_embeddings
+
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:

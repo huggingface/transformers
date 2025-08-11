@@ -290,7 +290,7 @@ class Exaone4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         self.sliding_window_pattern = config.sliding_window_pattern
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.is_sliding = layer_type == "sliding_attention"
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)

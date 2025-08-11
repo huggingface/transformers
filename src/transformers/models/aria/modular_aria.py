@@ -150,8 +150,6 @@ class AriaTextConfig(LlamaConfig):
             results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
