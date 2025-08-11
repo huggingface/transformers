@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 import math
-from ..deformable_detr.modeling_deformable_detr import DeformableDetrSinePositionEmbedding, DeformableDetrLearnedPositionEmbedding
+from ..deformable_detr.modeling_deformable_detr import DeformableDetrSinePositionEmbedding, DeformableDetrLearnedPositionEmbedding, DeformableDetrFrozenBatchNorm2d
 
 
 
@@ -350,4 +350,8 @@ class GlobalRpeDecompCrossAttention(nn.Module):
         output = self.output_dropout(output)
 
         return output
+    
+
+class PlainDetrFrozenBatchNorm2d(DeformableDetrFrozenBatchNorm2d):
+    pass
 
