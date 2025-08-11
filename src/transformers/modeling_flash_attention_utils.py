@@ -518,7 +518,7 @@ def _process_flash_attention_kwargs(
 
     # Only within kernel implementation atm
     if supports_mapping["s_aux"] and s_aux is not None:
-        flash_kwargs["s_aux"] = kwargs.get("s_aux")
+        flash_kwargs["s_aux"] = s_aux
 
     return flash_kwargs
 
