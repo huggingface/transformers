@@ -20,7 +20,7 @@ from typing import Callable, Optional
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -51,7 +51,7 @@ class DINOv3ViTEmbeddings(nn.Module):
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
 
-    def forward(self, pixel_values: Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
 
@@ -218,7 +218,9 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q: Tensor, k: Tensor, cos: Tensor, sin: Tensor, **kwargs) -> tuple[Tensor, Tensor]:
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
     ignoring the prefix tokens (cls token and register tokens).
 
