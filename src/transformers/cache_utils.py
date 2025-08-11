@@ -969,10 +969,11 @@ class DynamicCache(Cache):
     # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
     # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
     # (shape=[global batch size, num_heads, seq_len, head_dim]).
+    # Note: it needs to be the 1st arg as well to work correctly
     def __init__(
         self,
         ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
-        config: PretrainedConfig = None,
+        config: Optional[PretrainedConfig] = None,
     ):
         layers = None
         # If a config is passed, use it to infer the layer types and initialize accordingly
