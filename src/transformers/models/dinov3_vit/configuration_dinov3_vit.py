@@ -14,6 +14,8 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -36,8 +38,8 @@ class DINOv3ViTConfig(PretrainedConfig):
                 The size (resolution) of each patch.
             hidden_size (`int`, *optional*, defaults to 384):
                 Dimensionality of the encoder layers and the pooler layer.
-            intermediate_size (`int`, *optional*, defaults to 1536): 
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer. 
+            intermediate_size (`int`, *optional*, defaults to 1536):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer.
             num_hidden_layers (`int`, *optional*, defaults to 12):
                 Number of hidden layers in the Transformer encoder.
             num_attention_heads (`int`, *optional*, defaults to 6):
@@ -106,32 +108,32 @@ class DINOv3ViTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        patch_size=16,
-        hidden_size=384,
-        intermediate_size=1536,
-        num_hidden_layers=12,
-        num_attention_heads=6,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        rope_theta=100.0,
-        image_size=224,
-        num_channels=3,
-        query_bias=True,
-        key_bias=False,
-        value_bias=True,
-        proj_bias=True,
-        mlp_bias=True,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        use_swiglu_ffn=False,
+        patch_size: int = 16,
+        hidden_size: int = 384,
+        intermediate_size: int = 1536,
+        num_hidden_layers: int = 12,
+        num_attention_heads: int = 6,
+        hidden_act: str = "gelu",
+        hidden_dropout_prob: float = 0.0,
+        attention_dropout: float = 0.0,
+        initializer_range: float = 0.02,
+        layer_norm_eps: float = 1e-5,
+        rope_theta: float = 100.0,
+        image_size: int = 224,
+        num_channels: int = 3,
+        query_bias: bool = True,
+        key_bias: bool = False,
+        value_bias: bool = True,
+        proj_bias: bool = True,
+        mlp_bias: bool = True,
+        layerscale_value: float = 1.0,
+        drop_path_rate: float = 0.0,
+        use_swiglu_ffn: bool = False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_shift=None,
-        pos_embed_jitter=None,
-        pos_embed_rescale=2.0,
+        pos_embed_shift: Optional[float] = None,
+        pos_embed_jitter: Optional[float] = None,
+        pos_embed_rescale: Optional[float] = 2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
