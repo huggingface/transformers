@@ -762,7 +762,7 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    if False in past_key_values.is_sliding:
+    if past_key_values is not None and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
     else:
         layer_idx = 0
@@ -855,7 +855,7 @@ def create_sliding_window_causal_mask(
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    if True in past_key_values.is_sliding:
+    if past_key_values is not None and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
         layer_idx = 0
@@ -950,7 +950,7 @@ def create_chunked_causal_mask(
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    if True in past_key_values.is_sliding:
+    if past_key_values is not None and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
         layer_idx = 0
