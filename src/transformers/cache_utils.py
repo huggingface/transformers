@@ -1058,7 +1058,6 @@ if is_torch_greater_or_equal("2.3"):
 
 
 class HybridDynamicCache(Cache):
-
     def __init__(self, config: PretrainedConfig):
         sliding_window = getattr(config, "sliding_window", None) or getattr("attention_chunk_size", None)
         if hasattr(config, "layer_types"):
@@ -1077,6 +1076,7 @@ class HybridDynamicCache(Cache):
             # In this case, fallback to DynamicCache
             layers = [DynamicLayer() for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
+
 
 class OffloadedCache(Cache):
     """
