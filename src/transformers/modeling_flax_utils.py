@@ -20,7 +20,7 @@ import os
 import warnings
 from functools import partial
 from pickle import UnpicklingError
-from typing import Any, Dict, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 import flax.linen as nn
 import jax
@@ -138,7 +138,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     for idx, shard in enumerate(sharded_state_dicts):
         shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
         shards[shard_file] = shard
-        for weight_name in shard.keys():
+        for weight_name in shard:
             weight_map[weight_name] = shard_file
 
     # Add the metadata
@@ -174,11 +174,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self,
         config: PretrainedConfig,
         module: nn.Module,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
     ):
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
         if config is None:
             raise ValueError("config cannot be None")
 
@@ -221,7 +225,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if _do_init:
             self.params = random_params
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     def enable_gradient_checkpointing(self):
@@ -250,7 +254,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return self._module
 
     @property
-    def params(self) -> Union[Dict, FrozenDict]:
+    def params(self) -> Union[dict, FrozenDict]:
         if not self._is_initialized:
             raise ValueError(
                 "`params` cannot be accessed from model when the model is created with `_do_init=False`. "
@@ -260,15 +264,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return self._params
 
     @property
-    def required_params(self) -> Set:
+    def required_params(self) -> set:
         return self._required_params
 
     @property
-    def params_shape_tree(self) -> Dict:
+    def params_shape_tree(self) -> dict:
         return self._params_shape_tree
 
     @params.setter
-    def params(self, params: Union[Dict, FrozenDict]):
+    def params(self, params: Union[dict, FrozenDict]):
         # don't set params if the model is not initialized
         if not self._is_initialized:
             raise ValueError(
@@ -286,7 +290,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
         self._params = params
 
-    def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
+    def _cast_floating_to(self, params: Union[dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
         """
         Helper method to cast floating-point values of given parameter `PyTree` to given `dtype`.
         """
@@ -309,7 +313,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         return unflatten_dict(flat_params)
 
-    def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_bf16(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.bfloat16`. This returns a new `params` tree and does not cast
         the `params` in place.
@@ -348,7 +352,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         ```"""
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
-    def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_fp32(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.float32`. This method can be used to explicitly convert the
         model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in place.
@@ -375,7 +379,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         ```"""
         return self._cast_floating_to(params, jnp.float32, mask)
 
-    def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_fp16(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.float16`. This returns a new `params` tree and does not cast the
         `params` in place.
@@ -435,7 +439,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     else:
                         raise ValueError from e
             except (UnicodeDecodeError, ValueError):
-                raise EnvironmentError(f"Unable to convert {resolved_archive_file} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {resolved_archive_file} to Flax deserializable object. ")
 
         return state
 
@@ -449,7 +453,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         loaded in the model.
 
         Args:
-            shard_files (`List[str]`:
+            shard_files (`list[str]`:
                 The list of shard files to load.
 
         Returns:
@@ -476,7 +480,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     else:
                         raise ValueError from e
             except (UnicodeDecodeError, ValueError):
-                raise EnvironmentError(f"Unable to convert {shard_file} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {shard_file} to Flax deserializable object. ")
 
             state = flatten_dict(state, sep="/")
             state_sharded_dict.update(state)
@@ -577,14 +581,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -738,13 +742,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     is_sharded = True
                     raise NotImplementedError("Support for sharded checkpoints using safetensors is coming soon!")
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -820,29 +824,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                                 "Support for sharded checkpoints using safetensors is coming soon!"
                             )
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_INDEX_NAME} but there is a sharded file for PyTorch weights. Use"
                                 " `from_pt=True` to load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}."
                             )
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -959,7 +963,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # Mismatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
         mismatched_keys = []
-        for key in state.keys():
+        for key in state:
             if key in random_state and state[key].shape != random_state[key].shape:
                 if ignore_mismatched_sizes:
                     mismatched_keys.append((key, state[key].shape, random_state[key].shape))
@@ -1108,8 +1112,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
-            kwargs (`Dict[str, Any]`, *optional*):
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether to save the model using `safetensors` or through msgpack.
@@ -1165,11 +1169,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
             weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
-            if (
-                filename.startswith(weights_no_suffix)
-                and os.path.isfile(full_filename)
-                and filename not in shards.keys()
-            ):
+            if filename.startswith(weights_no_suffix) and os.path.isfile(full_filename) and filename not in shards:
                 os.remove(full_filename)
 
         if index is None:
@@ -1218,11 +1218,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):

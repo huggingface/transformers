@@ -14,7 +14,7 @@
 # limitations under the License.
 """chameleon model configuration"""
 
-from typing import List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -47,11 +47,11 @@ class ChameleonVQVAEConfig(PretrainedConfig):
             Number of input channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
             Channel multipliers for each resolution.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of residual blocks.
-        attn_resolutions (`List[int]`, *optional*):
+        attn_resolutions (`list[int]`, *optional*):
             Resolutions to apply attention.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate.
@@ -73,9 +73,9 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         resolution: int = 512,
         in_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: Optional[List[int]] = None,
+        attn_resolutions: Optional[list[int]] = None,
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
@@ -125,8 +125,8 @@ class ChameleonConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -247,6 +247,7 @@ class ChameleonConfig(PretrainedConfig):
         self.vq_config = ChameleonVQVAEConfig(**vq_config)
 
         self.vocabulary_map = vocabulary_map
+        self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
 
         super().__init__(
             pad_token_id=pad_token_id,

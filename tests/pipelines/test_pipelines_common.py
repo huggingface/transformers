@@ -48,8 +48,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
-    require_tensorflow_probability,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -177,20 +175,6 @@ class CommonPipelineTest(unittest.TestCase):
             results.append(out)
         self.assertEqual(len(results), 10)
 
-    @require_tf
-    def test_iterator_data_tf(self):
-        def data(n: int):
-            for _ in range(n):
-                yield "This is a test"
-
-        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", framework="tf")
-        out = pipe("This is a test")
-        results = []
-        for out in pipe(data(10)):
-            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
-            results.append(out)
-        self.assertEqual(len(results), 10)
-
     @require_torch
     def test_unbatch_attentions_hidden_states(self):
         model = DistilBertForSequenceClassification.from_pretrained(
@@ -262,9 +246,9 @@ class CommonPipelineTest(unittest.TestCase):
 
 
 @is_pipeline_test
+@require_torch
 class PipelineScikitCompatTest(unittest.TestCase):
-    @require_torch
-    def test_pipeline_predict_pt(self):
+    def test_pipeline_predict(self):
         data = ["This is a test"]
 
         text_classifier = pipeline(
@@ -275,36 +259,11 @@ class PipelineScikitCompatTest(unittest.TestCase):
         actual_output = text_classifier.predict(data)
         self.assertEqual(expected_output, actual_output)
 
-    @require_tf
-    def test_pipeline_predict_tf(self):
-        data = ["This is a test"]
-
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
-        )
-
-        expected_output = [{"label": ANY(str), "score": ANY(float)}]
-        actual_output = text_classifier.predict(data)
-        self.assertEqual(expected_output, actual_output)
-
-    @require_torch
-    def test_pipeline_transform_pt(self):
+    def test_pipeline_transform(self):
         data = ["This is a test"]
 
         text_classifier = pipeline(
             task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
-
-        expected_output = [{"label": ANY(str), "score": ANY(float)}]
-        actual_output = text_classifier.transform(data)
-        self.assertEqual(expected_output, actual_output)
-
-    @require_tf
-    def test_pipeline_transform_tf(self):
-        data = ["This is a test"]
-
-        text_classifier = pipeline(
-            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
         )
 
         expected_output = [{"label": ANY(str), "score": ANY(float)}]
@@ -609,7 +568,7 @@ class PipelineUtilsTest(unittest.TestCase):
         from transformers.pipelines import SUPPORTED_TASKS
 
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
-        for task in SUPPORTED_TASKS.keys():
+        for task in SUPPORTED_TASKS:
             if task == "table-question-answering":
                 # test table in separate test due to more dependencies
                 continue
@@ -619,23 +578,6 @@ class PipelineUtilsTest(unittest.TestCase):
             # clean-up as much as possible GPU memory occupied by PyTorch
             gc.collect()
             backend_empty_cache(torch_device)
-
-    @slow
-    @require_tf
-    def test_load_default_pipelines_tf(self):
-        from transformers.modeling_tf_utils import keras
-        from transformers.pipelines import SUPPORTED_TASKS
-
-        set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
-        for task in SUPPORTED_TASKS.keys():
-            if task == "table-question-answering":
-                # test table in separate test due to more dependencies
-                continue
-
-            self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
-
-            # clean-up as much as possible GPU memory occupied by TF
-            gc.collect()
 
     @slow
     @require_torch
@@ -663,18 +605,6 @@ class PipelineUtilsTest(unittest.TestCase):
         pipe = pipeline("text-generation", device=torch_device)
         _ = pipe("Hello")
 
-    @slow
-    @require_tf
-    @require_tensorflow_probability
-    def test_load_default_pipelines_tf_table_qa(self):
-        import tensorflow as tf
-
-        set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
-        self.check_default_pipeline("table-question-answering", "tf", set_seed_fn, self.check_models_equal_tf)
-
-        # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-
     def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
@@ -697,7 +627,7 @@ class PipelineUtilsTest(unittest.TestCase):
             model_ids = []
             revisions = []
             tasks = []
-            for translation_pair in task_dict["default"].keys():
+            for translation_pair in task_dict["default"]:
                 model_id, revision = task_dict["default"][translation_pair]["model"][framework]
 
                 model_ids.append(model_id)
@@ -916,6 +846,7 @@ class CustomPipelineTest(unittest.TestCase):
             "automatic-speech-recognition",
             model="hf-internal-testing/fake-custom-wav2vec2",
             feature_extractor="hf-internal-testing/fake-custom-wav2vec2",
+            tokenizer="facebook/wav2vec2-base-960h",  # Test workaround - the pipeline requires a tokenizer
             trust_remote_code=True,
         )
 

@@ -193,7 +193,7 @@ Transformerアーキテクチャには、計算強度によって以下の3つ�
 
 パフォーマンスのボトルネックを分析する際に、この知識は役立つことがあります。
 
-この要約は、[Data Movement Is All You Need: Optimizing Transformers 2020に関するケーススタディ](https://arxiv.org/abs/2007.00072)から派生しています。
+この要約は、[Data Movement Is All You Need: Optimizing Transformers 2020に関するケーススタディ](https://huggingface.co/papers/2007.00072)から派生しています。
 
 ## Anatomy of Model's Memory
 

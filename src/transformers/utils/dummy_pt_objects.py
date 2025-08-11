@@ -44,13 +44,6 @@ class HybridCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MambaCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class OffloadedCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -536,6 +529,13 @@ class TorchExportableModuleWithStaticCache(metaclass=DummyObject):
 
 def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
+
+
+class AttentionMaskInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 def model_addition_debugger_context(*args, **kwargs):

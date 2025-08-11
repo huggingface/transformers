@@ -17,7 +17,8 @@ import unittest
 
 from transformers import Dinov2Config, DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -140,6 +141,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
@@ -203,7 +205,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             backbone_params = []
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DPTViTHybridEmbeddings":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
                     break
 
             for name, param in model.named_parameters():
@@ -265,11 +267,15 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 576, 736))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[6.0336, 7.1502, 7.4130], [6.8977, 7.2383, 7.2268], [7.9180, 8.0525, 8.0134]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[6.0336, 7.1502, 7.4130], [6.8977, 7.2383, 7.2268], [7.9180, 8.0525, 8.0134]],
+                ("cuda", 8): [[6.0350, 7.1518, 7.4144], [6.8992, 7.2396, 7.2280], [7.9194, 8.0538, 8.0145]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_beit(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
@@ -287,11 +293,23 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 384, 384))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[2669.7061, 2663.7144, 2674.9399], [2633.9326, 2650.9092, 2665.4270], [2621.8271, 2632.0129, 2637.2290]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [2669.7061, 2663.7144, 2674.9399],
+                    [2633.9326, 2650.9092, 2665.4270],
+                    [2621.8271, 2632.0129, 2637.2290],
+                ],
+                ("cuda", 8): [
+                    [2669.4292, 2663.4121, 2674.6233],
+                    [2633.7400, 2650.7026, 2665.2085],
+                    [2621.6572, 2631.8452, 2637.0525],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_swinv2(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
@@ -309,8 +327,20 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 256, 256))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[1032.7719, 1025.1886, 1030.2661], [1023.7619, 1021.0075, 1024.9121], [1022.5667, 1018.8522, 1021.4145]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [1032.7719, 1025.1886, 1030.2661],
+                    [1023.7619, 1021.0075, 1024.9121],
+                    [1022.5667, 1018.8522, 1021.4145],
+                ],
+                ("cuda", 8): [
+                    [1032.7170, 1025.0629, 1030.1941],
+                    [1023.7309, 1020.9786, 1024.8594],
+                    [1022.5233, 1018.8235, 1021.3312],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)

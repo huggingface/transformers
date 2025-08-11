@@ -70,7 +70,7 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @slow
     def test_tokenizer_from_pretrained(self):
-        for model_name in {"google-bert/bert-base-uncased", "google-bert/bert-base-cased"}:
+        for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
@@ -342,16 +342,19 @@ class AutoTokenizerTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer.save_pretrained(tmp_dir)
                 reloaded_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, use_fast=False)
+                self.assertTrue(
+                    os.path.exists(os.path.join(tmp_dir, "tokenization.py"))
+                )  # Assert we saved tokenizer code
+                self.assertEqual(reloaded_tokenizer._auto_class, "AutoTokenizer")
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "r") as f:
+                    tokenizer_config = json.load(f)
+                # Assert we're pointing at local code and not another remote repo
+                self.assertEqual(tokenizer_config["auto_map"]["AutoTokenizer"], ["tokenization.NewTokenizer", None])
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
             self.assertTrue(reloaded_tokenizer.special_attribute_present)
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
             self.assertEqual(reloaded_tokenizer.__class__.__name__, "NewTokenizer")
-
-        # The tokenizer file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(tokenizer.__class__, reloaded_tokenizer.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_tokenizer = AutoTokenizer.from_pretrained(

@@ -20,7 +20,6 @@ URL: https://github.com/facebookresearch/hiera
 import argparse
 import json
 import math
-from typing import Dict, Tuple
 
 import requests
 import torch
@@ -156,7 +155,7 @@ def prepare_img():
     return im
 
 
-def get_labels_for_classifier(model_name: str) -> Tuple[Dict[int, str], Dict[str, int], int]:
+def get_labels_for_classifier(model_name: str) -> tuple[dict[int, str], dict[str, int], int]:
     repo_id = "huggingface/label-files"
 
     filename = "imagenet-1k-id2label.json"

@@ -83,7 +83,7 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 ```
 
 </hfoption>
-</hfoptions
+</hfoptions>
 
 
 ## Notes

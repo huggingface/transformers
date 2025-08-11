@@ -356,70 +356,85 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 ## Caches
 
-[[autodoc]] Cache
-    - update
-
-[[autodoc]] CacheConfig
-	- update
-
-[[autodoc]] QuantizedCacheConfig
-	- validate
-
-[[autodoc]] DynamicCache
+[[autodoc]] CacheLayerMixin
     - update
     - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
     - reorder_cache
+    - lazy_initialization
+
+[[autodoc]] DynamicLayer
+    - update
+    - lazy_initialization
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] StaticLayer
+    - update
+    - lazy_initialization
+
+[[autodoc]] SlidingWindowLayer
+    - update
+    - lazy_initialization
+
+[[autodoc]] QuantoQuantizedLayer
+    - update
+    - lazy_initialization
+
+[[autodoc]] HQQQuantizedLayer
+    - update
+    - lazy_initialization
+
+[[autodoc]] Cache
+    - update
+    - early_initialization
+    - get_seq_length
+    - get_mask_sizes
+    - get_max_cache_shape
+    - reset
+    - reorder_cache
+    - crop
+    - batch_repeat_interleave
+    - batch_select_indices
+
+[[autodoc]] DynamicCache
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] QuantizedCache
-    - update
-    - get_seq_length
 
 [[autodoc]] QuantoQuantizedCache
 
 [[autodoc]] HQQQuantizedCache
 
-[[autodoc]] SinkCache
-    - update
-    - get_seq_length
-    - reorder_cache
-
 [[autodoc]] OffloadedCache
-    - update
-    - prefetch_layer
-    - evict_previous_layer
 
 [[autodoc]] StaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] OffloadedStaticCache
-    - update
-    - get_seq_length
-    - reset
 
 [[autodoc]] HybridCache
-    - update
-    - get_seq_length
-    - reset
+
+[[autodoc]] HybridChunkedCache
 
 [[autodoc]] SlidingWindowCache
-    - update
-    - reset
 
 [[autodoc]] EncoderDecoderCache
-    - get_seq_length
     - to_legacy_cache
     - from_legacy_cache
-    - reset
-    - reorder_cache
 
 [[autodoc]] MambaCache
     - update_conv_state
     - update_ssm_state
     - reset
+
+[[autodoc]] CacheConfig
+
+[[autodoc]] QuantizedCacheConfig
+
 
 ## Watermark Utils
 
@@ -443,4 +458,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] CompileConfig
     - __call__
-

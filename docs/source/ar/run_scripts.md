@@ -324,7 +324,7 @@ python examples/pytorch/summarization/run_summarization.py
 يمكن لجميع النصوص البرمجية رفع نموذجك النهائي إلى [مركز النماذج](https://huggingface.co/models). تأكد من تسجيل الدخول إلى Hugging Face قبل البدء:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 ثم أضف المعلمة `push_to_hub` إلى النص البرمجي . ستقوم هذه المعلمة بإنشاء مستودع باستخدام اسم مستخدم Hugging Face واسم المجلد المحدد في `output_dir`.

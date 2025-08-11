@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2410.13848) by DeepSeek AI team and later refined in [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://arxiv.org/abs/2501.17811). Janus is a vision-language model that can generate both image and text output, it can also take both images and text as input.
+The Janus Model was originally proposed in [Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation](https://huggingface.co/papers/2410.13848) by DeepSeek AI team and later refined in [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://huggingface.co/papers/2501.17811). Janus is a vision-language model that can generate both image and text output, it can also take both images and text as input.
 
 > [!NOTE]
 > The model doesn't generate both images and text in an interleaved format. The user has to pass a parameter indicating whether to generate text or image.
@@ -44,11 +44,11 @@ Here is the example of visual understanding with a single image.
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
-import torch  
-from PIL import Image  
-import requests  
+import torch
+from PIL import Image
+import requests
 
-from transformers import JanusForConditionalGeneration, JanusProcessor  
+from transformers import JanusForConditionalGeneration, JanusProcessor
 
 model_id = "deepseek-community/Janus-Pro-1B"
 # Prepare Input for generation.
@@ -64,7 +64,7 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
+model = JanusForConditionalGeneration.from_pretrained(model_id,
         torch_dtype=torch.bfloat16,
         device_map="auto")
 
@@ -208,6 +208,10 @@ for i, image in enumerate(images['pixel_values']):
 ## JanusImageProcessor
 
 [[autodoc]] JanusImageProcessor
+
+## JanusImageProcessorFast
+
+[[autodoc]] JanusImageProcessorFast
 
 ## JanusVisionModel
 
