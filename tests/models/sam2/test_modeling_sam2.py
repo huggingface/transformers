@@ -773,14 +773,13 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         sorted_indices = torch.argsort(outputs.iou_scores.squeeze(), descending=True)
         scores = outputs.iou_scores.squeeze()[sorted_indices]
         masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
-
         torch.testing.assert_close(
             scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-24.9289, -41.7473, -31.0161], [-34.5083, -31.1052, -36.5906], [-25.2572, -37.5877, -33.4020]]
+                [[-24.9288, -41.7466, -31.0128], [-34.5113, -31.1054, -36.5913], [-25.2597, -37.5912, -33.4030]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -801,12 +800,11 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
-
         torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-7.0468, -13.3871, -9.6433], [-10.4570, -9.7181, -12.3540], [-7.3701, -12.4391, -10.5542]]
+                [[-7.0462, -13.3857, -9.6419], [-10.4565, -9.7174, -12.3528], [-7.3704, -12.4391, -10.5539]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -833,14 +831,13 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         sorted_indices = torch.argsort(outputs.iou_scores[1].squeeze(), descending=True)
         scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
         masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
-
         torch.testing.assert_close(
-            scores1, torch.tensor([0.9586, 0.4914, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores1, torch.tensor([0.9586, 0.4913, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits1,
             torch.tensor(
-                [[-22.2558, -37.9267, -27.8955], [-30.8666, -27.9524, -32.8008], [-22.4173, -34.0016, -29.7156]]
+                [[-22.2555, -37.9250, -27.8928], [-30.8681, -27.9519, -32.8032], [-22.4133, -33.9966, -29.7111]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -852,7 +849,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             masks_logits2,
             torch.tensor(
-                [[-13.1202, -17.3222, -14.9687], [-16.2375, -12.7737, -17.6353], [-13.5025, -17.1528, -15.6627]]
+                [[-13.1182, -17.3217, -14.9651], [-16.2372, -12.7739, -17.6346], [-13.5013, -17.1549, -15.6614]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
@@ -870,7 +867,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
         self.assertEqual(outputs.low_res_masks.shape, (2, 2, 1, 256, 256))
-
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
@@ -881,8 +877,8 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs.low_res_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
-                    [[[[-5.8134, -11.3037], [-8.6494, -8.0695]]], [[[-4.7726, -8.7596], [-6.2399, -7.0727]]]],
-                    [[[[-13.8652, -19.1227], [-20.2452, -14.1595]]], [[[-8.8219, -10.2751], [-11.3793, -8.7168]]]],
+                    [[[[-5.8131, -11.3020], [-8.6487, -8.0690]]], [[[-4.7731, -8.7606], [-6.2399, -7.0738]]]],
+                    [[[[-13.8661, -19.1254], [-20.2477, -14.1636]]], [[[-8.8229, -10.2760], [-11.3797, -8.7189]]]],
                 ]
             ).to(torch_device),
             atol=1e-4,
@@ -903,7 +899,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
         self.assertEqual(outputs.low_res_masks.shape, (2, 4, 1, 256, 256))
-
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
@@ -917,16 +912,16 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             torch.tensor(
                 [
                     [
-                        [[[-7.6201, -11.9294], [-8.7753, -10.5658]]],
-                        [[[-17.1048, -23.4034], [-20.9588, -19.5580]]],
-                        [[[-20.5743, -29.4418], [-26.0712, -24.3209]]],
-                        [[[-19.7182, -29.0840], [-24.4883, -23.6355]]],
+                        [[[-7.6204, -11.9286], [-8.7747, -10.5662]]],
+                        [[[-17.1070, -23.4025], [-20.9608, -19.5600]]],
+                        [[[-20.5766, -29.4410], [-26.0739, -24.3225]]],
+                        [[[-19.7201, -29.0836], [-24.4915, -23.6377]]],
                     ],
                     [
-                        [[[-18.5227, -23.5157], [-25.1869, -17.2468]]],
-                        [[[-20.1201, -25.4221], [-25.7871, -19.1158]]],
-                        [[[-21.0869, -24.7938], [-27.5628, -19.2624]]],
-                        [[[-20.5171, -22.5326], [-26.0914, -17.7515]]],
+                        [[[-18.5259, -23.5202], [-25.1906, -17.2518]]],
+                        [[[-20.1214, -25.4215], [-25.7877, -19.1169]]],
+                        [[[-21.0878, -24.7938], [-27.5625, -19.2650]]],
+                        [[[-20.5210, -22.5343], [-26.0968, -17.7544]]],
                     ],
                 ]
             ).to(torch_device),
@@ -967,11 +962,10 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
         masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
-
         torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
-            torch.tensor([[-5.3898, -9.7907, -8.4924], [-5.5154, -8.8733, -8.2990], [-5.5979, -9.9265, -9.0773]]).to(
+            torch.tensor([[-5.3899, -9.7908, -8.4931], [-5.5144, -8.8731, -8.3000], [-5.5976, -9.9249, -9.0761]]).to(
                 torch_device
             ),
             atol=1e-4,
@@ -1002,7 +996,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             masks_logits,
             torch.tensor(
-                [[-15.5049, -21.8613, -18.0476], [-17.4381, -17.4725, -23.6458], [-14.3967, -19.4371, -18.5897]]
+                [[-15.5081, -21.8641, -18.0479], [-17.4401, -17.4754, -23.6469], [-14.3975, -19.4346, -18.5884]]
             ).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
