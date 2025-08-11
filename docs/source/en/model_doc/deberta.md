@@ -39,7 +39,7 @@ You can find all the original DeBERTa checkpoints under the [Microsoft](https://
 The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 import torch
