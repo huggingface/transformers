@@ -72,11 +72,8 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
         self.use_image_id = kwargs.pop("use_image_id", False)
         self.image_feature_size = kwargs.pop("image_feature_size", 64)
         self.slice_mode = kwargs.pop("slice_mode", True)
-
-        # 在 __init__ 中，将 mean 和 std 保持为 JSON 可序列化的类型（如 list 或 numpy array）
         self.mean = np.array(kwargs.pop("norm_mean", [0.5, 0.5, 0.5]))
         self.std = np.array(kwargs.pop("norm_std", [0.5, 0.5, 0.5]))
-
         self.version = kwargs.pop("version", 2.0)
 
     def ensure_divide(self, length, patch_size):
@@ -123,7 +120,18 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
         self, image_tensor: torch.Tensor, max_slice_nums=9, scale_resolution=448, patch_size=14, never_split=False
     ):
         """
-        重构后的函数，直接在 torch.Tensor 上操作
+        Slices and resizes an image tensor based on the model's slicing logic.
+
+        Note on numerical precision:
+        This function utilizes `torchvision.transforms.v2.functional.resize` for image scaling, which has
+        a different underlying implementation of the BICUBIC interpolation algorithm compared to the
+        `Pillow` library's `resize` method used in the slow processor.
+
+        This implementation difference leads to minor, unavoidable numerical discrepancies in the
+        output pixel values when processing images. Consequently, while this fast processor
+        offers performance gains, it is **not recommended for model evaluation or any task
+        that requires bit-for-bit reproducibility** with the original slow processor. For exact
+        numerical consistency, please use the corresponding slow image processor.
         """
         original_size = (image_tensor.shape[2], image_tensor.shape[1]) # (W, H)
         best_grid = self.get_sliced_grid(original_size, max_slice_nums, never_split)
