@@ -271,7 +271,7 @@ class Gemma3nTextConfig(PretrainedConfig):
 
         if layer_types is None:
             self.layer_types = [
-                "full_attention" if i % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
         else:
             self.layer_types = layer_types
@@ -509,7 +509,7 @@ class Gemma3nVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
-        label_names = config_dict.get("label_names", None)
+        label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
         # if no labels added to config, use imagenet labeller in timm

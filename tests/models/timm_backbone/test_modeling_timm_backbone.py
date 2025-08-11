@@ -137,6 +137,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
     def test_initialization(self):
         pass
 
@@ -170,10 +174,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
     def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
-    def test_tied_model_weights_key_ignore(self):
         pass
 
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")

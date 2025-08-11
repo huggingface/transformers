@@ -563,6 +563,14 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
+    if is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
+        # Case 1: Video is provided as a 4D numpy array or torch tensor (frames, height, width, channels)
+        if not is_valid_video(video):
+            raise ValueError(
+                f"When passing video as decoded frames, video should be a 4D numpy array or torch tensor, but got {video.ndim} dimensions instead."
+            )
+        return video, None
+
     if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
@@ -579,8 +587,6 @@ def load_video(
         file_obj = BytesIO(requests.get(video).content)
     elif os.path.isfile(video):
         file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
-        file_obj = None
     else:
         raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")
 
@@ -629,7 +635,7 @@ def convert_to_rgb(
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
     if not isinstance(video, np.ndarray):
-        raise ValueError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
+        raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
     # np.array usually comes with ChannelDimension.LAST so leet's convert it
     if input_data_format is None:

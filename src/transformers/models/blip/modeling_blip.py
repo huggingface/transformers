@@ -438,12 +438,12 @@ class BlipPreTrainedModel(PreTrainedModel):
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
-    _skip_keys_device_placement = ["past_key_value"]
+    _skip_keys_device_placement = ["past_key_values"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_range
-        if isinstance(module, nn.Conv2d) or isinstance(module, nn.Embedding) or isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
             module.weight.data.normal_(mean=0.0, std=factor)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
