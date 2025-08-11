@@ -1222,10 +1222,16 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
         # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float, device=scores.device)
+        # Extract single-token sequences and their biases
+        single_token_ids = []
+        single_token_biases = []
         for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
-                self.length_1_bias[sequence_ids[-1]] = bias
+                single_token_ids.append(sequence_ids[0])
+                single_token_biases.append(bias)
 
+        if single_token_ids:  # Only if we have any single-token sequences
+            self.length_1_bias[single_token_ids] = torch.tensor(single_token_biases, device=scores.device)
         self.prepared_bias_variables = True
 
     def _validate_arguments(self):
@@ -1235,13 +1241,13 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 f"`sequence_bias` has to be a non-empty dictionary, or non-empty list of lists but is {sequence_bias}."
             )
         if isinstance(sequence_bias, dict) and any(
-            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias.keys()
+            not isinstance(sequence_ids, tuple) for sequence_ids in sequence_bias
         ):
             raise ValueError(f"`sequence_bias` has to be a dict with tuples as keys, but is {sequence_bias}.")
         if isinstance(sequence_bias, dict) and any(
             any((not isinstance(token_id, (int, np.integer)) or token_id < 0) for token_id in sequence_ids)
             or len(sequence_ids) == 0
-            for sequence_ids in sequence_bias.keys()
+            for sequence_ids in sequence_bias
         ):
             raise ValueError(
                 f"Each key in `sequence_bias` has to be a non-empty tuple of positive integers, but is "
@@ -1340,10 +1346,10 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
                     eos_token_id = [eos_token_id]
                 eos_token_id = torch.tensor(eos_token_id)
 
+            eos_token_id_list = eos_token_id.tolist()  # convert to python list before
             bad_words_ids = list(
-                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id), bad_words_ids)
+                filter(lambda bad_token_seq: all(bad_token_seq != [i] for i in eos_token_id_list), bad_words_ids)
             )
-
         # Forbidding a sequence is equivalent to setting its bias to -inf
         sequence_bias = {tuple(sequence): float("-inf") for sequence in bad_words_ids}
         super().__init__(sequence_bias=sequence_bias)

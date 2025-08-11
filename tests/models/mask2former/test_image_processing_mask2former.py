@@ -191,18 +191,6 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "ignore_index"))
             self.assertTrue(hasattr(image_processing, "num_labels"))
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 32, "longest_edge": 1333})
-            self.assertEqual(image_processor.size_divisor, 0)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, max_size=84, size_divisibility=8
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-            self.assertEqual(image_processor.size_divisor, 8)
-
     def comm_get_image_processing_inputs(
         self,
         image_processor_tester,
@@ -567,20 +555,6 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
                 num_segments_fused = max([el["id"] for el in el_fused])
                 self.assertEqual(num_segments_fused, expected_num_segments)
-
-    def test_removed_deprecated_kwargs(self):
-        image_processor_dict = dict(self.image_processor_dict)
-        image_processor_dict.pop("do_reduce_labels", None)
-        image_processor_dict["reduce_labels"] = True
-
-        # test we are able to create the image processor with the deprecated kwargs
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class(**image_processor_dict)
-            self.assertEqual(image_processor.do_reduce_labels, True)
-
-            # test we still support reduce_labels with config
-            image_processor = image_processing_class.from_dict(image_processor_dict)
-            self.assertEqual(image_processor.do_reduce_labels, True)
 
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
