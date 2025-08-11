@@ -837,11 +837,11 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: int = 0, cache_position=None) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
-        return self.layers[layer_idx].get_seq_length(cache_position)
+        return self.layers[layer_idx].get_seq_length()
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         """
@@ -1578,12 +1578,13 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
 
 
+
 ### Deprecated classes
 
 
 class SinkCache(Cache):
     """
-    Is its now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
+    It is now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
     See [these docs](https://huggingface.co/docs/transformers/generation_strategies#custom-decoding-methods) for
     general `custom_generate`usage.
     """
