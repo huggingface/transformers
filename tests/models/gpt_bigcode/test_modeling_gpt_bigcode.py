@@ -510,7 +510,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         output_sequence = model.generate(input_ids)
         output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
 
-        expected_output = 'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name'
+        expected_output = 'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name'  # fmt: skip
         self.assertEqual(output_sentence, expected_output)
 
     def test_generate_batched(self):
