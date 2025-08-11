@@ -59,12 +59,10 @@ def color_quantize_fast(x, clusters):
 
 class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     # TODO: Add documentation for each argument
-    do_color_quantize: Optional[bool] = True
     clusters: Optional[np.ndarray] = None
+    do_color_quantize: Optional[bool] = True
     resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
     return_tensors: Optional[Union[str, TensorType]] = None,
-    data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None
 
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
@@ -81,21 +79,18 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     size = {"height": 256, "width": 256} # import get_size_dict?, can be overridden in preprocess
     do_resize = True
-    do_normalize = True
-
-    # Specific Kwargs
+    do_normalize = False
     do_color_quantize = True
     clusters = None
-    resample = PILImageResampling.BILINEAR
 
     # not in base ##########
     image_mean = [0.5, 0.5, 0.5] # not in base, normalize uses a constant factor to divide pixel values
     image_std = [0.5, 0.5, 0.5] # not in base, normalize uses a constant factor to divide pixel values
-    default_to_square = None # not in base
-    crop_size = None # not in base
-    do_center_crop = None # not in base
-    do_rescale = None # not in base
-    do_convert_rgb = None # not in base
+    # default_to_square = None # not in base
+    # crop_size = None # not in base
+    # do_center_crop = None # not in base
+    # do_rescale = None # not in base
+    # do_convert_rgb = None # not in base
     ############
 
     # initialize these arguments, pass it into super constructor
@@ -169,13 +164,6 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                     size=size,
                     interpolation=interpolation
                 )
-            # Normalize pixel values (if do_normalize is specified)
-            if do_normalize:
-                stacked_images = self.normalize(
-                    image=stacked_images,
-                    mean=image_mean,
-                    std=image_std
-                )
             resized_images_grouped[shape] = stacked_images
 
         # 3. Reorder and maintain original image order after processing into batches
@@ -188,10 +176,13 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            # Fused rescale
+            stacked_images = self.rescale(
+                stacked_images, rescale_factor
             )
+            if do_normalize:
+                stacked_images = (stacked_images / 127.5) - 1.0
+
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
