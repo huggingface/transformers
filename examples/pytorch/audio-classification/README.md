@@ -115,10 +115,10 @@ On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of *
 $ apt install git-lfs
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `hf`
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 

@@ -833,7 +833,7 @@ class ImageFeatureExtractionMixin:
             return image.crop((left, top, right, bottom))
 
         # Check if image is in (n_channels, height, width) or (height, width, n_channels) format
-        channel_first = True if image.shape[0] in [1, 3] else False
+        channel_first = image.shape[0] in [1, 3]
 
         # Transpose (height, width, n_channels) format images
         if not channel_first:
