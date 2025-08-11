@@ -16,9 +16,10 @@
 
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..internvl.configuration_internvl import InternVLVisionConfig
 
 
-class InternS1VisionConfig(PretrainedConfig):
+class InternS1VisionConfig(InternVLVisionConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternS1VisionModel`]. It is used to instantiate
     an InternS1VisionModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -88,60 +89,15 @@ class InternS1VisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "interns1_vision"
-    base_config_key = "vision_config"
 
     def __init__(
         self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        attention_bias=False,
-        use_qk_norm=False,
-        intermediate_size=4096,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_dropout=0.0,
-        projection_dropout=0.0,
+        *args,
         drop_path_rate=0.0,
-        initializer_range=0.02,
-        norm_type="layer_norm",
-        layer_norm_eps=1e-06,
-        image_size=[448, 448],
-        patch_size=[14, 14],
-        num_channels=3,
-        use_mask_token=False,
-        use_absolute_position_embeddings=True,
-        layer_scale_init_value=0.1,
-        use_mean_pooling=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_bias = attention_bias
-        self.use_qk_norm = use_qk_norm
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_dropout = attention_dropout
-        self.projection_dropout = projection_dropout
-        self.initializer_range = initializer_range
-        self.norm_type = norm_type
-        self.layer_norm_eps = layer_norm_eps
+        super().__init__(*args, **kwargs)
         self.drop_path_rate = drop_path_rate
-
-        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
-        self.image_size = image_size
-        self.patch_size = patch_size
-
-        self.num_channels = num_channels
-        self.use_mask_token = use_mask_token
-        self.use_absolute_position_embeddings = use_absolute_position_embeddings
-        self.layer_scale_init_value = layer_scale_init_value
-        self.use_mean_pooling = use_mean_pooling
 
 
 class InternS1Config(PretrainedConfig):
@@ -217,10 +173,16 @@ class InternS1Config(PretrainedConfig):
             self.vision_config = InternS1VisionConfig()
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen3_moe"
+            if "model_type" not in text_config:
+                raise ValueError(
+                    "If `text_config` is a dictionary, it must contain the key `model_type` to specify the model type."
+                )
+            text_config["model_type"] = text_config["model_type"]
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen3_moe"]()
+            raise ValueError(
+                "If `text_config` is None, you must pass a valid configuration object or dictionary for the text model."
+            )
 
         self.text_config = text_config
 
