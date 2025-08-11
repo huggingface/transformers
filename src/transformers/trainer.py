@@ -3784,10 +3784,6 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
-        actual_bs = None
-        if "labels" in inputs and isinstance(inputs["labels"], torch.Tensor):
-            actual_bs = inputs["labels"].shape[0]
-
         del inputs
         if (
             self.args.torch_empty_cache_steps is not None
@@ -3817,7 +3813,8 @@ class Trainer:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         if self.args.n_gpu > 1:
-            if actual_bs:
+            if "labels" in inputs and isinstance(inputs["labels"], torch.Tensor):
+                actual_bs = inputs["labels"].shape[0]
                 loss_bs = loss.shape[0] if isinstance(loss, torch.Tensor) else len(loss)
                 if actual_bs >= self.args.n_gpu:
                     assert loss_bs == self.args.n_gpu, (
