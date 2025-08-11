@@ -14,9 +14,7 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from .modeling_utils import (
-    is_fsdp_enabled
-)
+from .modeling_utils import is_fsdp_enabled
 
 
 if is_hqq_available():
