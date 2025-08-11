@@ -972,7 +972,7 @@ class DynamicCache(Cache):
         layers = None
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            sliding_window = getattr(config, "sliding_window", None) or getattr("attention_chunk_size", None)
+            sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
             layer_types = getattr(config, "layer_types", None)
             if layer_types is None:
                 layer_types = [
