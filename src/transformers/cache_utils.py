@@ -447,7 +447,7 @@ class SlidingWindowLayer(StaticLayer):
         kv_length = max(query_length, self.max_cache_len)
         return kv_length, kv_offset
 
-    def get_seq_length(self, cache_position=None) -> int:
+    def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
 
@@ -857,7 +857,7 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
