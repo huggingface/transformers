@@ -40,21 +40,21 @@ class CacheLayerMixin(ABC):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]: ...
-
-    @abstractmethod
     def lazy_initialization(self, key_states: torch.Tensor): ...
 
     @abstractmethod
-    def get_max_cache_shape(self) -> int: ...
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]: ...
 
     @abstractmethod
     def get_seq_length(self) -> int: ...
+
+    @abstractmethod
+    def get_max_cache_shape(self) -> int: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -73,6 +73,9 @@ class CacheLayerMixin(ABC):
         if self.keys is not None:
             self.keys.zero_()
             self.values.zero_()
+        # This attribute is set on several Layers
+        if hasattr(self, "cumulative_length"):
+            self.cumulative_length = 0
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
@@ -84,9 +87,7 @@ class CacheLayerMixin(ABC):
 class DynamicLayer(CacheLayerMixin):
     """
     A cache layer that grows dynamically as more tokens are generated. This is the default for generative models.
-    It stores the Key and Value states as tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    It stores the key and value states as tensors of shape `[batch_size, num_heads, seq_len, head_dim]`.
     """
 
     is_sliding = False
@@ -121,15 +122,23 @@ class DynamicLayer(CacheLayerMixin):
         self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
 
-    def get_max_cache_shape(self) -> int:
-        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
-        return -1
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length()
+        kv_length = query_length + past_seen_tokens
+        return kv_length, kv_offset
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         if self.keys is None or self.keys.numel() == 0:
             return 0
         return self.keys.shape[-2]
+
+    def get_max_cache_shape(self) -> int:
+        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
+        return -1
 
     def crop(self, max_length: int) -> None:
         """
@@ -157,18 +166,11 @@ class DynamicLayer(CacheLayerMixin):
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
 
-    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
-        """Return the length and offset of the cache, used to generate the mask"""
-        kv_offset = 0
-        query_length = cache_position.shape[0]
-        past_seen_tokens = self.get_seq_length()
-        kv_length = query_length + past_seen_tokens
-        return kv_length, kv_offset
-
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
+    It stores the key and value states as tensors of shape `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
     """
 
     is_sliding = True
@@ -246,18 +248,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().crop(max_length)
         self.cumulative_length = self.keys.shape[-2]
 
-    def reset(self) -> None:
-        """Resets the cache values while preserving the objects"""
-        super().reset()
-        self.cumulative_length = 0
-
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the Key and Value states as static tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
-    It allocates its full backing tensors up-front and mutates them in-place. Built for `torch.compile` support.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
     """
 
     is_compileable = True
@@ -345,6 +340,12 @@ class StaticLayer(CacheLayerMixin):
             self.values[:, :, cache_position] = value_states
         return self.keys, self.values
 
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        kv_offset = 0
+        kv_length = self.max_cache_len
+        return kv_length, kv_offset
+
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
@@ -355,18 +356,12 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
-    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
-        """Return the length and offset of the cache, used to generate the attention mask"""
-        kv_offset = 0
-        kv_length = self.max_cache_len
-        return kv_length, kv_offset
-
 
 class SlidingWindowLayer(StaticLayer):
     """
-    A static cache layer that implements sliding window attention caching.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    A static cache layer that stores the key and value states as static tensors of shape
+    `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`. It lazily allocates its full backing
+    tensors, and then mutates them in-place. Built for `torch.compile` support.
     """
 
     is_sliding = True
@@ -456,17 +451,10 @@ class SlidingWindowLayer(StaticLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
 
-    def reset(self) -> None:
-        """Resets the cache values while preserving the objects"""
-        super().reset()
-        self.cumulative_length = 0
-
 
 class ChunkedSlidingLayer(SlidingWindowLayer):
     """
     An extended SlidingWindowLayer that supports prefill chunking, originally implemented for Llama 4.
-
-    See `SlidingWindowLayer` for details on common methods that are implemented by all cache layers.
     """
 
     def update(
@@ -553,7 +541,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
 class QuantizedLayer(DynamicLayer):
     """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by
+    It allows the model to generate longer sequence length without allocating too much memory for the key and value caches by
     applying quantization.
 
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length`
@@ -628,11 +616,6 @@ class QuantizedLayer(DynamicLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
-
-    def reset(self) -> None:
-        """Resets the cache values while preserving the objects"""
-        super().reset()
-        self.cumulative_length = 0
 
 
 class QuantoQuantizedLayer(QuantizedLayer):
