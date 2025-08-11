@@ -116,43 +116,46 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_normalize"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_to_json_string(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        obj = json.loads(image_processor.to_json_string())
-        for key, value in self.image_processor_dict.items():
-            if key == "clusters":
-                self.assertTrue(np.array_equal(value, obj[key]))
-            else:
-                self.assertEqual(obj[key], value)
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            obj = json.loads(image_processor.to_json_string())
+            for key, value in self.image_processor_dict.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, obj[key]))
+                else:
+                    self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
-        image_processor_first = self.image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processor_list:
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            json_file_path = os.path.join(tmpdirname, "image_processor.json")
-            image_processor_first.to_json_file(json_file_path)
-            image_processor_second = self.image_processing_class.from_json_file(json_file_path).to_dict()
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                json_file_path = os.path.join(tmpdirname, "image_processor.json")
+                image_processor_first.to_json_file(json_file_path)
+                image_processor_second = image_processing_class.from_json_file(json_file_path).to_dict()
 
-        image_processor_first = image_processor_first.to_dict()
-        for key, value in image_processor_first.items():
-            if key == "clusters":
-                self.assertTrue(np.array_equal(value, image_processor_second[key]))
-            else:
-                self.assertEqual(image_processor_first[key], value)
+            image_processor_first = image_processor_first.to_dict()
+            for key, value in image_processor_first.items():
+                if key == "clusters":
+                    self.assertTrue(np.array_equal(value, image_processor_second[key]))
+                else:
+                    self.assertEqual(image_processor_first[key], value)
 
     def test_image_processor_from_and_save_pretrained(self):
         for image_processing_class in self.image_processor_list:
-            image_processor_first = self.image_processing_class(**self.image_processor_dict)
+            image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processor_first.save_pretrained(tmpdirname)
-                image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
+                image_processor_second = image_processing_class.from_pretrained(tmpdirname).to_dict()
 
             image_processor_first = image_processor_first.to_dict()
             for key, value in image_processor_first.items():
