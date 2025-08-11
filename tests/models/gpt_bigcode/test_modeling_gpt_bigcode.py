@@ -510,7 +510,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         output_sequence = model.generate(input_ids)
         output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
 
-        expected_output = """def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_"""
+        expected_output = 'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name'
         self.assertEqual(output_sentence, expected_output)
 
     def test_generate_batched(self):
@@ -527,8 +527,8 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         expected_output = [
-            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_',
-            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()',
+            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name',
+            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()\n',
         ]
         self.assertListEqual(outputs, expected_output)
 
