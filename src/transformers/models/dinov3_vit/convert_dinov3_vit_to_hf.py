@@ -5,14 +5,12 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 
 import argparse
 import os
-import random
 import re
 from typing import Optional
 
-import numpy as np
 import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
@@ -179,21 +177,6 @@ def get_image_processor(resize_size: int = 224):
     )
 
 
-def set_deterministic(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-
-
-seed = 42  # any number
-set_deterministic(seed=seed)
-
-
 @torch.no_grad()
 def convert_and_test_dinov3_checkpoint(args):
     expected_outputs = {
@@ -260,7 +243,7 @@ def convert_and_test_dinov3_checkpoint(args):
     actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
     actual_outputs[f"{model_name}_patch"] = last_layer_patch_tokens[0, 0, :5].tolist()
 
-    print("Actual:  ", actual_outputs[f"{model_name}_cls"])
+    print("Actual:  ", [round(x, 6) for x in actual_outputs[f"{model_name}_cls"]])
     print("Expected:", expected_outputs[f"{model_name}_cls"])
 
     torch.testing.assert_close(
@@ -283,6 +266,11 @@ def convert_and_test_dinov3_checkpoint(args):
     image_processor.save_pretrained(save_dir)
     print(f"Model saved to {save_dir}")
 
+    if args.push_to_hub:
+        api = HfApi()
+        repo = HUB_MODELS[model_name]
+        api.upload_folder(folder_path=save_dir, repo_id=repo, repo_type="model")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -299,6 +287,11 @@ if __name__ == "__main__":
         default="converted_models",
         type=str,
         help="Directory to save the converted model.",
+    )
+    parser.add_argument(
+        "--push-to-hub",
+        action="store_true",
+        help="Push the converted model to the Hugging Face Hub.",
     )
     args = parser.parse_args()
     convert_and_test_dinov3_checkpoint(args)
