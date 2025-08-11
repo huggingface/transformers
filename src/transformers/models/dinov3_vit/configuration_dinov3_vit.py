@@ -126,9 +126,9 @@ class DINOv3ViTConfig(PretrainedConfig):
         use_swiglu_ffn=False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_rope_shift_coords=None,
-        pos_embed_rope_jitter_coords=None,
-        pos_embed_rope_rescale_coords=2.0,
+        pos_embed_shift=None,
+        pos_embed_jitter=None,
+        pos_embed_rescale=2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -157,9 +157,9 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.num_register_tokens = num_register_tokens
 
         # train augs
-        self.pos_embed_rope_shift_coords = pos_embed_rope_shift_coords
-        self.pos_embed_rope_jitter_coords = pos_embed_rope_jitter_coords
-        self.pos_embed_rope_rescale_coords = pos_embed_rope_rescale_coords
+        self.pos_embed_shift = pos_embed_shift
+        self.pos_embed_jitter = pos_embed_jitter
+        self.pos_embed_rescale = pos_embed_rescale
 
 
 __all__ = ["DINOv3ViTConfig"]

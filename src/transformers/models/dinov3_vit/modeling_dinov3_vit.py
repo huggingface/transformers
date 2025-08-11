@@ -100,6 +100,35 @@ def get_patches_center_coordinates(
     return coords
 
 
+def augment_patches_center_coordinates(
+    coords: torch.Tensor,
+    shift: Optional[float] = None,
+    jitter: Optional[float] = None,
+    rescale: Optional[float] = None,
+) -> torch.Tensor:
+    # Shift coords by adding a uniform value in [-shift, shift]
+    if shift is not None:
+        shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        shift_hw = shift_hw.uniform_(-shift, shift)
+        coords = coords + shift_hw
+
+    # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
+    if jitter is not None:
+        jitter_range = np.log(jitter)
+        jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
+        coords = coords * jitter_hw
+
+    # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
+    if rescale is not None:
+        rescale_range = np.log(rescale)
+        rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
+        rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
+        coords = coords * rescale_hw
+
+    return coords
+
+
 class DINOv3ViTRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
@@ -114,29 +143,6 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def _augment_coords(self, coords: torch.Tensor) -> torch.Tensor:
-        # Shift coords by adding a uniform value in [-shift, shift]
-        if shift := self.config.pos_embed_rope_shift_coords is not None:
-            shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-            shift_hw = shift_hw.uniform_(-shift, shift)
-            coords = coords + shift_hw
-
-        # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
-        if jitter := self.config.pos_embed_rope_jitter_coords is not None:
-            jitter_range = np.log(jitter)
-            jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-            jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
-            coords = coords * jitter_hw
-
-        # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
-        if rescale := self.config.pos_embed_rope_rescale_coords is not None:
-            rescale_range = np.log(rescale)
-            rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
-            rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
-            coords = coords * rescale_hw
-
-        return coords
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -154,7 +160,12 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
                 num_patches_h, num_patches_w, dtype=torch.float32, device=device
             )
             if self.training:
-                patch_coords = self._augment_coords(patch_coords)
+                patch_coords = augment_patches_center_coordinates(
+                    patch_coords,
+                    shift=self.config.pos_embed_shift,
+                    jitter=self.config.pos_embed_jitter,
+                    rescale=self.config.pos_embed_rescale,
+                )
 
             # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
             angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
