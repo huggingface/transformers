@@ -1451,14 +1451,9 @@ class EncoderDecoderCache(Cache):
         ```
     """
 
-    # Override @property from Cache -> this will be set in __init__ on the instances
-    is_compileable = False
-
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
-        # Override @property from Cache
-        self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache)):
@@ -1596,6 +1591,14 @@ class EncoderDecoderCache(Cache):
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
+
+    @property
+    def is_sliding(self):
+        return self.self_attention_cache.is_sliding
+
+    @property
+    def is_compileable(self) -> bool:
+        return self.self_attention_cache.is_compileable
 
 
 ### Deprecated classes
