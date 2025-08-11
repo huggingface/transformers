@@ -567,8 +567,8 @@
         title: GPT NeoX Japanese
       - local: in_translation
         title: GPT-J
-      - local: in_translation
-        title: GPT2
+      - local: model_doc/gpt2
+        title: GPT-2
       - local: in_translation
         title: GPTBigCode
       - local: in_translation
