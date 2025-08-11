@@ -54,7 +54,14 @@ _flash_fn = None
 _flash_varlen_fn = None
 _pad_fn = None
 _unpad_fn = None
+
+# function that processes kwargs, generalized to handle any supported kwarg within the function
 _process_flash_kwargs_fn = None
+# exceptions where hf API doesn't match the original flash attention API
+_hf_api_to_flash_mapping = {
+    "dropout": "dropout_p",
+    "sliding_window": "window_size",
+}
 
 
 def _lazy_imports(implementation: Optional[str]):
@@ -93,6 +100,28 @@ def _lazy_imports(implementation: Optional[str]):
     return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
 
 
+def _lazy_define_process_function(flash_function):
+    """
+    Depending on the version and kernel some features are not supported. Due to limitations in
+    `torch.compile`, we opt to statically type which (optional) kwarg parameters are supported
+    within `_process_flash_attention_kwargs`.
+
+    NOTE: While all supported kwargs are marked as `True`, everything else is marked as `False`.
+          This might be confusing for kwargs that we use in any case, e.g. `is_causal`.
+    """
+    global _process_flash_kwargs_fn, _hf_api_to_flash_mapping
+
+    flash_parameters = inspect.signature(flash_function).parameters
+    process_parameters = inspect.signature(_process_flash_attention_kwargs).parameters
+
+    supports_mapping = {}
+    for param in process_parameters:
+        fa_param = _hf_api_to_flash_mapping.get(param, param)
+        supports_mapping[fa_param] = True if fa_param in flash_parameters else False
+
+    return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
+
+
 def lazy_import_flash_attention(implementation: Optional[str]):
     """
     Lazy loading flash attention and returning the respective functions + flags back
@@ -104,19 +133,9 @@ def lazy_import_flash_attention(implementation: Optional[str]):
     if any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
         _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
 
-    # Depending on version and kernel some features are not supported - hence, we configure the
-    # according function that prepares the necessary kwargs on the fly
     global _process_flash_kwargs_fn
     if _process_flash_kwargs_fn is None:
-        fn_parameters = inspect.signature(_flash_varlen_fn).parameters
-        _process_flash_kwargs_fn = partial(
-            _process_flash_attention_kwargs,
-            supports_dropout="dropout_p" in fn_parameters,
-            supports_sliding_window="window_size" in fn_parameters,
-            supports_determinism="deterministic" in fn_parameters,
-            supports_softcap="softcap" in fn_parameters,
-            supports_s_aux="s_aux" in fn_parameters,  # attention sink (e.g. gpt oss)
-        )
+        _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
@@ -443,17 +462,15 @@ def _process_flash_attention_kwargs(
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
-    supports_dropout: Optional[bool] = None,
-    supports_sliding_window: Optional[bool] = None,
-    supports_determinism: Optional[bool] = None,
-    supports_softcap: Optional[bool] = None,
-    supports_s_aux: Optional[bool] = None,
+    s_aux: Optional[torch.Tensor] = None,
+    supports_mapping: Optional[dict[str, bool]] = None,
     **kwargs,
 ):
     """
     Returns a set of kwargs that are passed down to the according flash attention function based on
     requested features and whether it is supported - depends on the version and kernel implementation
-    which is dynamically configued at `lazy_import_flash_attention` and the respective kwargs `supports_xxx`.
+    which is dynamically configued at `lazy_import_flash_attention` can be inspected in `supports_mapping`.
+    Please see `_lazy_define_process_function` for more details.
 
     Args:
         query_length (`int`):
@@ -468,12 +485,14 @@ def _process_flash_attention_kwargs(
             The scaling of QK^T before applying softmax. Default to `1 / sqrt(head_dim)`.
         sliding_window (`int`, *optional*):
             The size of the sliding window, i.e. we look at a max of `sliding_window` tokens back.
-        use_top_left_mask (`bool`, *optional*):
+        use_top_left_mask (`bool`):
             Deprecated behavior of older versions of flash attention requiring different masking.
         softcap (`float`, *optional*):
             Softcap for the attention logits, used e.g. in gemma2.
         deterministic (`bool`, *optional*):
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
+        s_aux (`torch.Tensor`, *optional*):
+            Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -483,22 +502,22 @@ def _process_flash_attention_kwargs(
         "softmax_scale": softmax_scale,
     }
 
-    if supports_dropout:
+    if supports_mapping["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
 
-    if supports_sliding_window and sliding_window is not None and key_length > sliding_window:
+    if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
         flash_kwargs["window_size"] = (sliding_window, sliding_window)
 
-    if supports_determinism:
+    if supports_mapping["deterministic"]:
         flash_kwargs["deterministic"] = (
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if supports_softcap and softcap is not None:
+    if supports_mapping["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
     # Only within kernel implementation atm
-    if supports_s_aux and "s_aux" in kwargs:
+    if supports_mapping["s_aux"] and s_aux is not None:
         flash_kwargs["s_aux"] = kwargs.get("s_aux")
 
     return flash_kwargs
