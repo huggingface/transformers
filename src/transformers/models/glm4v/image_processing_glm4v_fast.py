@@ -88,7 +88,7 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (
-            getattr(self.size, "shortest_edge", None) is None or getattr(self.size, "longest_edge", None) is None
+            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
         ):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
