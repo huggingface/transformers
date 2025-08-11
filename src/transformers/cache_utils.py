@@ -1080,27 +1080,6 @@ if is_torch_greater_or_equal("2.3"):
     )
 
 
-class HybridDynamicCache(Cache):
-    def __init__(self, config: PretrainedConfig):
-        sliding_window = getattr(config, "sliding_window", None) or getattr("attention_chunk_size", None)
-        if hasattr(config, "layer_types"):
-            layers = []
-            init_kwargs = {}
-            for layer_type in config.layer_types:
-                if layer_type == "sliding_attention":
-                    init_kwargs["sliding_window"] = config.sliding_window
-                elif layer_type == "chunked_attention":
-                    init_kwargs["sliding_window"] = config.attention_chunk_size
-                layers.append(DYNAMIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
-        elif sliding_window is not None:
-            # In this case, fall back to a full sliding cache
-            layers = [DynamicSlidingWindowLayer(sliding_window) for _ in range(config.num_hidden_layers)]
-        else:
-            # In this case, fallback to DynamicCache
-            layers = [DynamicLayer() for _ in range(config.num_hidden_layers)]
-        super().__init__(layers=layers)
-
-
 class OffloadedCache(Cache):
     """
     A drop-in replacement for DynamicCache that conserves accelerator (GPU, XPU) memory at the expense of more CPU memory.
