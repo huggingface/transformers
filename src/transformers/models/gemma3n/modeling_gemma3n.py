@@ -1309,7 +1309,7 @@ class Gemma3nTextAttention(nn.Module):
 
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
         self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
         # Find the index of the last sliding or full layer before sharing starts (or None if no sharing)
@@ -1320,7 +1320,7 @@ class Gemma3nTextAttention(nn.Module):
         )
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -1543,7 +1543,7 @@ class Gemma3nAttention(nn.Module):
 
     def __init__(self, config: Gemma3nConfig, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)

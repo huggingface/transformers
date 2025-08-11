@@ -192,7 +192,6 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         self.layer_idx = layer_idx
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rope_theta = config.rotary_emb_base
         self.rotary_emb = GPTNeoXJapaneseRotaryEmbedding(config=config)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = math.sqrt(self.head_size)

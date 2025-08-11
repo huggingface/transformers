@@ -231,12 +231,16 @@ class MiniMaxConfig(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "rope_theta", 1000000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        linear_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
-            full_attention_rope.update(**rope_scaling)
+            if "full_attention" in rope_scaling or "linear_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                linear_attention_rope.update(**rope_scaling.get("linear_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
 
-        rope_scaling = {"full_attention": full_attention_rope, "linear_attention": sliding_attention_rope}
+        rope_scaling = {"full_attention": full_attention_rope, "linear_attention": linear_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
 

@@ -241,7 +241,7 @@ class Gemma2Attention(nn.Module):
 
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
-        layer_type = config.layer_types[layer_idx]
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)

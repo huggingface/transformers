@@ -157,7 +157,10 @@ class Lfm2Config(PretrainedConfig):
         rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
-            full_attention_rope.update(**rope_scaling)
+            if "full_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
 
         rope_scaling = {"full_attention": full_attention_rope, "conv": None}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
