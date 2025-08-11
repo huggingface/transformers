@@ -91,7 +91,7 @@ echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "S
 ```
 
 </hfoption>
-</hfoptions
+</hfoptions>
 
 ## Notes
 - DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
