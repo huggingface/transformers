@@ -363,37 +363,34 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - get_max_cache_shape
     - reset
     - reorder_cache
+    - lazy_initialization
 
 [[autodoc]] DynamicLayer
     - update
+    - lazy_initialization
     - crop
     - batch_repeat_interleave
     - batch_select_indices
 
 [[autodoc]] StaticLayer
     - update
+    - lazy_initialization
 
 [[autodoc]] SlidingWindowLayer
     - update
+    - lazy_initialization
 
-[[autodoc]] CacheProcessor
-    - pre_update
-    - post_update
+[[autodoc]] QuantoQuantizedLayer
+    - update
+    - lazy_initialization
 
-[[autodoc]] OffloadedCacheProcessor
-    - pre_update
-
-[[autodoc]] QuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] QuantoQuantizedCacheProcessor
-    - post_update
-
-[[autodoc]] HQQQuantizedCacheProcessor
-    - post_update
+[[autodoc]] HQQQuantizedLayer
+    - update
+    - lazy_initialization
 
 [[autodoc]] Cache
     - update
+    - early_initialization
     - get_seq_length
     - get_mask_sizes
     - get_max_cache_shape
@@ -411,11 +408,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] QuantoQuantizedCache
 
-[[autodoc]] QuantoQuantizedCacheProcessor
-
 [[autodoc]] HQQQuantizedCache
-
-[[autodoc]] HQQQuantizedCacheProcessor
 
 [[autodoc]] OffloadedCache
 
