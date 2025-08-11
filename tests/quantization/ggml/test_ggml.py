@@ -303,8 +303,8 @@ class GgufModelTests(unittest.TestCase):
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
-    qwen2vl_model_id = "unsloth/Qwen2.5-VL-7B-Instruct-GGUF"
-    original_qwen2vl_model_id = "Qwen/Qwen2.5-VL-7B-Instruct"
+    qwen2vl_model_id = "unsloth/Qwen2.5-VL-3B-Instruct-GGUF"
+    original_qwen2vl_model_id = "Qwen/Qwen2.5-VL-3B-Instruct"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -339,7 +339,7 @@ class GgufModelTests(unittest.TestCase):
     bf16_gemma3_vision_model_id = "gemma-3-4b-it-BF16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
-    q8_0_qwen2vl_model_id = "Qwen2.5-VL-7B-Instruct-Q8_0.gguf"
+    q8_0_qwen2vl_model_id = "Qwen2.5-VL-3B-Instruct-Q8_0.gguf"
 
     example_text = "Hello"
 
@@ -993,7 +993,6 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen2vl(self):
         original_model = AutoModelForCausalLM.from_pretrained(
