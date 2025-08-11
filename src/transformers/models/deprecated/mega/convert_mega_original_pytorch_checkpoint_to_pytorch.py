@@ -188,7 +188,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     # also renaming previously confusing parameter names
     original_state_dict = original_mlm.mega.encoders.state_dict()
     updated_keys = {}
-    for module_name in original_state_dict.keys():
+    for module_name in original_state_dict:
         new_module_name = None
         # have to handle gamma, beta, and alpha differently due to their use
         # in multiple modules within the original repository;

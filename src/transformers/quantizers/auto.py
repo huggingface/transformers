@@ -27,9 +27,11 @@ from ..utils.quantization_config import (
     EetqConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
+    FPQuantConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -49,9 +51,11 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
@@ -67,6 +71,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "quark": QuarkHfQuantizer,
+    "fp_quant": FPQuantHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
@@ -78,6 +83,7 @@ AUTO_QUANTIZER_MAPPING = {
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
+    "mxfp4": Mxfp4HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -89,6 +95,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "quark": QuarkConfig,
+    "fp_quant": FPQuantConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
@@ -99,6 +106,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
+    "mxfp4": Mxfp4Config,
 }
 
 logger = logging.get_logger(__name__)
@@ -112,7 +120,7 @@ class AutoQuantizationConfig:
 
     @classmethod
     def from_dict(cls, quantization_config_dict: dict):
-        quant_method = quantization_config_dict.get("quant_method", None)
+        quant_method = quantization_config_dict.get("quant_method")
         # We need a special care for bnb models to make sure everything is BC ..
         if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
             suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
@@ -122,7 +130,7 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
@@ -167,7 +175,7 @@ class AutoHfQuantizer:
             else:
                 quant_method += "_4bit"
 
-        if quant_method not in AUTO_QUANTIZER_MAPPING.keys():
+        if quant_method not in AUTO_QUANTIZER_MAPPING:
             raise ValueError(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}"
@@ -206,8 +214,18 @@ class AutoHfQuantizer:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
+            quantization_config_from_args is not None
+            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
+        ):
+            raise ValueError(
+                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+            )
+
+        if (
             isinstance(
-                quantization_config, (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig)
+                quantization_config,
+                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
             )
             and quantization_config_from_args is not None
         ):
@@ -218,9 +236,11 @@ class AutoHfQuantizer:
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "":
+        if warning_msg != "" and not isinstance(quantization_config, Mxfp4Config):
             warnings.warn(warning_msg)
-
+        else:
+            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
+            logger.info(warning_msg)
         return quantization_config
 
     @staticmethod
@@ -234,7 +254,7 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
@@ -252,7 +272,7 @@ def register_quantization_config(method: str):
             raise ValueError(f"Config '{method}' already registered")
 
         if not issubclass(cls, QuantizationConfigMixin):
-            raise ValueError("Config must extend QuantizationConfigMixin")
+            raise TypeError("Config must extend QuantizationConfigMixin")
 
         AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
         return cls

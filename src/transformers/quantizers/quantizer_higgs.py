@@ -123,13 +123,19 @@ class HiggsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations import replace_with_higgs_linear
 
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
+
         replace_with_higgs_linear(
             model,
             quantization_config=self.quantization_config,
+            modules_to_not_convert=self.modules_to_not_convert,
         )
         model.config.quantization_config = self.quantization_config
 

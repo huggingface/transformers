@@ -48,7 +48,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -220,6 +220,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoX->GPTNeoXJapanese
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"

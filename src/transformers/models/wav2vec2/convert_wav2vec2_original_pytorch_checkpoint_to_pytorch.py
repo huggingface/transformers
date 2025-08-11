@@ -89,7 +89,7 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
         hf_pointer = getattr(hf_pointer, attribute)
 
     hf_param_name = None
-    for param_key in PARAM_MAPPING.keys():
+    for param_key in PARAM_MAPPING:
         if full_name.endswith(param_key):
             hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
             weight_type = "param"
@@ -148,7 +148,7 @@ def set_recursively(key, value, full_name, weight_type, hf_pointer):
 
 def rename_dict(key, value, full_name, weight_type, hf_dict):
     hf_param_name = None
-    for param_key in PARAM_MAPPING.keys():
+    for param_key in PARAM_MAPPING:
         if full_name.endswith(param_key):
             hf_param_name = PARAM_MAPPING[full_name.split(".")[-1]]
             weight_type = "param"
@@ -326,7 +326,7 @@ def convert_wav2vec2_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
+            return_attention_mask = config.feat_extract_norm == "layer"
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,
