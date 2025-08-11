@@ -268,12 +268,14 @@ class DINOv3ViTAttention(nn.Module):
 
         self.dropout = config.attention_dropout
 
+        # Ignore copy
         # NOTE: modified for granular control over bias, DINOv3ViT has no bias in the key projection
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
 
+    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,

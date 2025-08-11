@@ -32,71 +32,74 @@ class DINOv3ViTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-           Initial value to use for layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
-        use_mask_token (`bool`, *optional*, defaults to `True`):
-            Whether to use mask_token in embeddings.
+            patch_size (`int`, *optional*, defaults to 16):
+                The size (resolution) of each patch.
+            hidden_size (`int`, *optional*, defaults to 384):
+                Dimensionality of the encoder layers and the pooler layer.
+            intermediate_size (`int`, *optional*, defaults to 1536): 
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer. 
+            num_hidden_layers (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            num_attention_heads (`int`, *optional*, defaults to 6):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the layer normalization layers.
+            rope_theta (`float`, *optional*, defaults to 100.0):
+                The base period of the RoPE embeddings.
+            image_size (`int`, *optional*, defaults to 224):
+                The size (resolution) of each image.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of input channels.
+            query_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the query projection.
+            key_bias (`bool`, *optional*, defaults to `False`):
+                Whether to add a bias to the key projection.
+            value_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the value projection.
+            proj_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the output projection.
+            mlp_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the MLP layers.
+            layerscale_value (`float`, *optional*, defaults to 1.0):
+                Initial value to use for layer scale.
+            drop_path_rate (`float`, *optional*, defaults to 0.0):
+                Stochastic depth rate per sample (when applied in the main path of residual layers).
+            use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+                Whether to use the SwiGLU feedforward neural network.
+            num_register_tokens (`int`, *optional*, defaults to 0):
+                The number of register tokens.
+            pos_embed_shift (`float`, *optional*):
+                Amount to randomly shift position embedding coordinates in [-shift, shift],
+                applied only in training mode if not `None`.
+            pos_embed_jitter (`float`, *optional*):
+                Amount to randomly jitter position embedding coordinates in log-uniform value in [1/jitter, jitter],
+                applied only in training mode if not `None`.
+            pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+                Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
+                applied only in training mode if not `None`.
 
     Example:
 
     ```python
-    >>> from transformers import DINOv3Config, DINOv3Model
+    >>> from transformers import DINOv3ViTConfig, DINOv3ViTModel
 
-    >>> # Initializing a DINOv3 DINOv3-base-patch16-224 style configuration
-    >>> configuration = DINOv3ViTConfig()
+    >>> # Initializing a DINOv3 ViT-small style configuration
+    >>> config = DINOv3ViTConfig()
 
-    >>> # Initializing a model (with random weights) from the DINOv3-base-patch16-224 style configuration
-    >>> model = DINOv3ViTModel(configuration)
+    >>> # Initializing a model (with random weights) from the config
+    >>> model = DINOv3ViTModel(config)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> # Accessing the model config
+    >>> config = model.config
     ```"""
 
     model_type = "DINOv3ViT"
