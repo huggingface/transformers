@@ -22,7 +22,6 @@ from PIL import Image
 
 from transformers.utils import TensorType, is_torch_device, is_torch_dtype, requires_backends
 
-from ... import AutoImageProcessor
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
@@ -64,6 +63,7 @@ class MiniCPMVBatchFeature(BatchFeature):
                 if not is_tensor(value):
                     tensor = as_tensor(value)
                     return tensor
+                return value
             except:  # noqa E722
                 if key == "overflowing_values":
                     raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
@@ -365,4 +365,4 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             data={"pixel_values": new_images_list, "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list}, tensor_type=return_tensors
         )
 
-AutoImageProcessor.register("MiniCPMVImageProcessor", MiniCPMVImageProcessor)
+__all__ = ["MiniCPMVImageProcessor"]
