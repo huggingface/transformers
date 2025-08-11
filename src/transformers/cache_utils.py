@@ -214,8 +214,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
         # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
-        self.keys = full_key_states[:, :, -self.sliding_window + 1, :]
-        self.values = full_value_states[:, :, -self.sliding_window + 1, :]
+        self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
+        self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
 
         # Return the full states
         return full_key_states, full_value_states
