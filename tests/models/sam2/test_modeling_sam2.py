@@ -60,14 +60,15 @@ class Sam2VisionModelTester:
         self,
         parent,
         hidden_size=12,
+        embed_dim_per_stage=[12, 24, 48, 96],
+        num_attention_heads_per_stage=[1, 2, 4, 8],
         num_channels=3,
         image_size=128,
         patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
         batch_size=2,
-        dim_mul=2.0,
-        stages=[1, 2, 7, 2],
+        blocks_per_stage=[1, 2, 7, 2],
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
@@ -82,8 +83,9 @@ class Sam2VisionModelTester:
         self.patch_padding = patch_padding
         self.batch_size = batch_size
         self.is_training = is_training
-        self.stages = stages
-        self.dim_mul = dim_mul
+        self.blocks_per_stage = blocks_per_stage
+        self.embed_dim_per_stage = embed_dim_per_stage
+        self.num_attention_heads_per_stage = num_attention_heads_per_stage
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
@@ -96,7 +98,9 @@ class Sam2VisionModelTester:
             patch_stride=self.patch_stride,
             patch_kernel_size=self.patch_kernel_size,
             patch_padding=self.patch_padding,
-            stages=self.stages,
+            blocks_per_stage=self.blocks_per_stage,
+            embed_dim_per_stage=self.embed_dim_per_stage,
+            num_attention_heads_per_stage=self.num_attention_heads_per_stage,
         )
         return Sam2VisionConfig(
             backbone_config=backbone_config,
@@ -117,8 +121,8 @@ class Sam2VisionModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        output_size = self.image_size // self.patch_stride // (self.dim_mul * len(self.stages))
-        output_channels = self.hidden_size * self.dim_mul * len(self.stages)
+        output_size = self.image_size // self.patch_stride // (2 * len(self.blocks_per_stage))
+        output_channels = self.hidden_size * 2 * len(self.blocks_per_stage)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, output_size, output_size, output_channels)
         )
@@ -190,13 +194,13 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            expected_num_attentions = sum(self.model_tester.stages)
+            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size = config.backbone_config.window_spec[0]
+            window_size = config.backbone_config.window_size_per_stage[0]
             out_dim = config.backbone_config.hidden_size
             patch_stride = config.backbone_config.patch_stride
             num_windows = (
@@ -241,7 +245,7 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = sum(self.model_tester.stages) + 1
+            expected_num_layers = sum(self.model_tester.blocks_per_stage) + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             self.assertListEqual(
@@ -367,8 +371,8 @@ class Sam2ModelTester:
         patch_kernel_size=7,
         patch_stride=4,
         patch_padding=3,
-        dim_mul=2.0,
-        stages=[1, 2, 7, 2],
+        blocks_per_stage=[1, 2, 7, 2],
+        embed_dim_per_stage=[12, 24, 48, 96],
         backbone_channel_list=[96, 48, 24, 12],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
@@ -382,8 +386,8 @@ class Sam2ModelTester:
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
-        self.dim_mul = dim_mul
-        self.stages = stages
+        self.blocks_per_stage = blocks_per_stage
+        self.embed_dim_per_stage = embed_dim_per_stage
         self.backbone_channel_list = backbone_channel_list
         self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
@@ -409,8 +413,8 @@ class Sam2ModelTester:
             patch_stride=self.patch_stride,
             patch_kernel_size=self.patch_kernel_size,
             patch_padding=self.patch_padding,
-            dim_mul=self.dim_mul,
-            stages=self.stages,
+            blocks_per_stage=self.blocks_per_stage,
+            embed_dim_per_stage=self.embed_dim_per_stage,
         )
         vision_config = Sam2VisionConfig(
             backbone_config=backbone_config,
@@ -513,7 +517,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.vision_attentions
-            expected_num_attentions = sum(self.model_tester.stages)
+            expected_num_attentions = sum(self.model_tester.blocks_per_stage)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
@@ -522,7 +526,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.vision_config.output_attentions = True
             config.output_attentions = True
             model = model_class._from_config(config, attn_implementation="eager")
-            window_size = config.vision_config.backbone_config.window_spec[0]
+            window_size = config.vision_config.backbone_config.window_size_per_stage[0]
             out_dim = self.model_tester.hidden_size
             patch_stride = self.model_tester.patch_stride
             num_windows = (

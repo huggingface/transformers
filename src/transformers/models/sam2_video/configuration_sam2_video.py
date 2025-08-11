@@ -240,8 +240,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The initial value for the layer scale in the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
-        fill_hole_area (`int`, *optional*, defaults to 8):
-            The maximum area of holes to fill in the masks.
         non_overlap_masks (`bool`, *optional*, defaults to `False`):
             Whether to enforce non-overlapping masks.
         kwargs (*optional*):
@@ -329,7 +327,6 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_fuser_layer_scale_init_value=1e-6,
         memory_fuser_hidden_act="gelu",
         # post-processing parameters
-        fill_hole_area=8,
         non_overlap_masks=False,
         **kwargs,
     ):
@@ -399,7 +396,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
         # post-processing parameters
-        self.fill_hole_area = fill_hole_area  # area threshold for filling holes in masks
         self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 

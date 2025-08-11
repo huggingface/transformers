@@ -47,22 +47,24 @@ class Sam2HieraDetConfig(PretrainedConfig):
             The stride of the patch.
         patch_padding (`list[int]`, *optional*, defaults to `[3, 3]`):
             The padding of the patch.
-        num_query_pool_stages (`int`, *optional*, defaults to 3):
-            The number of query pool stages.
         query_stride (`list[int]`, *optional*, defaults to `[2, 2]`):
             The downsample stride between stages.
-        stages (`list[int]`, *optional*, defaults to `[1, 2, 7, 2]`):
-            The number of blocks per stage.
-        dim_mul (`float`, *optional*, defaults to 2.0):
-            The dimension multiplier factor at stage shift.
-        head_mul (`float`, *optional*, defaults to 2.0):
-            The head multiplier factor at stage shift.
         window_positional_embedding_background_size (`list[int]`, *optional*, defaults to `[7, 7]`):
             The window size per stage when not using global attention.
-        window_spec (`list[int]`, *optional*, defaults to `[8, 4, 14, 7]`):
-            The window specifications for each stage.
+        num_query_pool_stages (`int`, *optional*, defaults to 3):
+            The number of query pool stages.
+        blocks_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 7, 2]`):
+            The number of blocks per stage.
+        embed_dim_per_stage (`list[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
+            The embedding dimension per stage.
+        num_attention_heads_per_stage (`list[int]`, *optional*, defaults to `[1, 2, 4, 8]`):
+            The number of attention heads per stage.
+        window_size_per_stage (`list[int]`, *optional*, defaults to `[8, 4, 14, 7]`):
+            The window size per stage.
         global_attention_blocks (`list[int]`, *optional*, defaults to `[5, 7, 9]`):
             The blocks where global attention is used.
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            The ratio of the MLP hidden dimension to the embedding dimension.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the neck.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -84,14 +86,15 @@ class Sam2HieraDetConfig(PretrainedConfig):
         patch_kernel_size=[7, 7],
         patch_stride=[4, 4],
         patch_padding=[3, 3],
-        num_query_pool_stages=3,
         query_stride=[2, 2],
-        stages=[1, 2, 7, 2],
-        dim_mul=2.0,
-        head_mul=2.0,
         window_positional_embedding_background_size=[7, 7],
-        window_spec=[8, 4, 14, 7],
+        num_query_pool_stages=3,
+        blocks_per_stage=[1, 2, 7, 2],
+        embed_dim_per_stage=[96, 192, 384, 768],
+        num_attention_heads_per_stage=[1, 2, 4, 8],
+        window_size_per_stage=[8, 4, 14, 7],
         global_attention_blocks=[5, 7, 9],
+        mlp_ratio=4.0,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         initializer_range=0.02,
@@ -106,15 +109,15 @@ class Sam2HieraDetConfig(PretrainedConfig):
         self.patch_kernel_size = patch_kernel_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
-        self.num_query_pool_stages = num_query_pool_stages
         self.query_stride = query_stride
-        self.stages = stages
-        self.dim_mul = dim_mul
-        self.head_mul = head_mul
         self.window_positional_embedding_background_size = window_positional_embedding_background_size
-        self.window_spec = window_spec
+        self.num_query_pool_stages = num_query_pool_stages
+        self.blocks_per_stage = blocks_per_stage
+        self.embed_dim_per_stage = embed_dim_per_stage
+        self.num_attention_heads_per_stage = num_attention_heads_per_stage
+        self.window_size_per_stage = window_size_per_stage
         self.global_attention_blocks = global_attention_blocks
-
+        self.mlp_ratio = mlp_ratio
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range

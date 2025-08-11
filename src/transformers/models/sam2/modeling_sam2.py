@@ -444,41 +444,49 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
     def __init__(
         self,
         config: Sam2HieraDetConfig,
-        dim: int,
-        dim_out: int,
-        num_attention_heads: int,
-        mlp_ratio: float = 4.0,
-        query_stride: Optional[tuple[int, int]] = None,
-        window_size: int = 0,
+        stage_idx: int,
+        block_idx: int,
+        total_block_idx: int,
     ):
         super().__init__()
 
-        self.dim = dim
-        self.dim_out = dim_out
-        self.layer_norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-
-        self.window_size = window_size
-
-        self.query_stride = query_stride
-        self.attn = Sam2MultiScaleAttention(
-            config,
-            dim,
-            dim_out,
-            num_attention_heads=num_attention_heads,
-            query_stride=self.query_stride,
+        # take embed dim from previous stage if first block of stage
+        self.dim = (
+            config.embed_dim_per_stage[stage_idx - 1]
+            if stage_idx > 0 and block_idx == 0
+            else config.embed_dim_per_stage[stage_idx]
+        )
+        self.dim_out = config.embed_dim_per_stage[stage_idx]
+        self.layer_norm1 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+        # take window size from previous stage if first block of stage
+        self.window_size = (
+            config.window_size_per_stage[stage_idx - 1]
+            if stage_idx > 0 and block_idx == 0
+            else config.window_size_per_stage[stage_idx]
+        )
+        self.window_size = 0 if total_block_idx in config.global_attention_blocks else self.window_size
+        # use query stride for first block of stage if stage is a query pool stage
+        self.query_stride = (
+            config.query_stride if 0 < stage_idx <= config.num_query_pool_stages and block_idx == 0 else None
         )
 
-        self.layer_norm2 = nn.LayerNorm(dim_out, eps=config.layer_norm_eps)
+        self.attn = Sam2MultiScaleAttention(
+            config,
+            self.dim,
+            self.dim_out,
+            num_attention_heads=config.num_attention_heads_per_stage[stage_idx],
+            query_stride=self.query_stride,
+        )
+        self.layer_norm2 = nn.LayerNorm(self.dim_out, eps=config.layer_norm_eps)
         self.mlp = Sam2FeedForward(
-            dim_out,
-            int(dim_out * mlp_ratio),
-            dim_out,
+            self.dim_out,
+            int(self.dim_out * config.mlp_ratio),
+            self.dim_out,
             num_layers=2,
             activation=config.hidden_act,
         )
-
-        if dim != dim_out:
-            self.proj = nn.Linear(dim, dim_out)
+        if self.dim != self.dim_out:
+            self.proj = nn.Linear(self.dim, self.dim_out)
 
     def forward(
         self,
@@ -592,43 +600,18 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
             torch.zeros(1, config.hidden_size, *config.window_positional_embedding_background_size)
         )
         self.pos_embed_window = nn.Parameter(
-            torch.zeros(1, config.hidden_size, config.window_spec[0], config.window_spec[0])
+            torch.zeros(1, config.hidden_size, config.window_size_per_stage[0], config.window_size_per_stage[0])
         )
-
-        self.stage_ends = [sum(config.stages[:i]) - 1 for i in range(1, len(config.stages) + 1)]
-        self.global_attention_blocks = config.global_attention_blocks
-
+        self.stage_ends = (np.cumsum(config.blocks_per_stage) - 1).tolist()
         self.blocks = nn.ModuleList()
-        embed_dim = config.hidden_size
-        num_attention_heads = config.num_attention_heads
-        self.query_pool_blocks = [x + 1 for x in self.stage_ends[:-1]][: config.num_query_pool_stages]
-        cur_stage = 1
-        for i in range(sum(config.stages)):
-            dim_out = embed_dim
-            # lags by a block, so first block of
-            # next stage uses an initial window size
-            # of previous stage and final window size of current stage
-            window_size = config.window_spec[cur_stage - 1]
-
-            if self.global_attention_blocks is not None:
-                window_size = 0 if i in self.global_attention_blocks else window_size
-
-            if i - 1 in self.stage_ends:
-                dim_out = int(embed_dim * config.dim_mul)
-                num_attention_heads = int(num_attention_heads * config.head_mul)
-                cur_stage += 1
-
-            block = Sam2MultiScaleBlock(
-                config=config,
-                dim=embed_dim,
-                dim_out=dim_out,
-                num_attention_heads=num_attention_heads,
-                query_stride=config.query_stride if i in self.query_pool_blocks else None,
-                window_size=window_size,
-            )
-
-            embed_dim = dim_out
-            self.blocks.append(block)
+        total_block_idx = 0
+        for stage_idx, blocks_per_stage in enumerate(config.blocks_per_stage):
+            for block_idx in range(blocks_per_stage):
+                block = Sam2MultiScaleBlock(
+                    config=config, stage_idx=stage_idx, block_idx=block_idx, total_block_idx=total_block_idx
+                )
+                self.blocks.append(block)
+                total_block_idx += 1
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -657,7 +640,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         for i, block_module in enumerate(self.blocks):
             hidden_states = block_module(hidden_states, **kwargs)
 
-            if (i == self.stage_ends[-1]) or (i in self.stage_ends):
+            if i in self.stage_ends:
                 intermediate_hidden_states = intermediate_hidden_states + (hidden_states,)
 
         return Sam2HieraDetModelOutput(
