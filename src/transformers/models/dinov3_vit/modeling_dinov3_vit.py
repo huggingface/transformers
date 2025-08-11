@@ -14,9 +14,8 @@
 # limitations under the License.
 """PyTorch DINOv3 model."""
 
-import collections.abc
 import math
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -25,11 +24,10 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPooling,
-)
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
@@ -54,7 +52,6 @@ class DINOv3ViTEmbeddings(nn.Module):
         )
 
     def forward(self, pixel_values: Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> Tensor:
-        
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
 
@@ -74,7 +71,10 @@ class DINOv3ViTEmbeddings(nn.Module):
         return embeddings
 
 
-def get_patches_center_coordinates(num_patches_h: int, num_patches_w: int, dtype: torch.dtype) -> torch.Tensor:
+@compile_compatible_method_lru_cache(maxsize=32)
+def get_patches_center_coordinates(
+    num_patches_h: int, num_patches_w: int, dtype: torch.dtype, device: torch.device
+) -> torch.Tensor:
     """
     Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
     The center of each patch is exactly halfway between its top-left and bottom-right corners.
@@ -88,8 +88,8 @@ def get_patches_center_coordinates(num_patches_h: int, num_patches_w: int, dtype
         torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
             coordinates of a patch center, normalized to [-1, +1].
     """
-    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype)
-    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype)
+    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype, device=device)
+    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype, device=device)
     coords_h = coords_h / num_patches_h
     coords_w = coords_w / num_patches_w
     # (height, width, 2) -> (height * width, 2)
@@ -102,7 +102,6 @@ def get_patches_center_coordinates(num_patches_h: int, num_patches_w: int, dtype
 
 class DINOv3ViTRopePositionEmbedding(nn.Module):
     inv_freq: torch.Tensor
-    patch_coords: torch.Tensor
 
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
@@ -115,9 +114,6 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        patch_coords = get_patches_center_coordinates(self.num_patches_h, self.num_patches_w, dtype=torch.float32)
-        self.register_buffer("patch_coords", patch_coords, persistent=False)
 
     def _augment_coords(self, coords: torch.Tensor) -> torch.Tensor:
         # Shift coords by adding a uniform value in [-shift, shift]
@@ -142,10 +138,21 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
 
         return coords
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        _, _, height, width = pixel_values.shape
+        num_patches_h = height // self.config.patch_size
+        num_patches_w = width // self.config.patch_size
+
+        device = pixel_values.device
+        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            patch_coords = self.patch_coords
+            # Although we could precompute static patch_coords from image_size and patch_size in the config,
+            # the model was trained with random_scale, so it can process images of varying sizes.
+            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+            patch_coords = get_patches_center_coordinates(
+                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+            )
             if self.training:
                 patch_coords = self._augment_coords(patch_coords)
 
@@ -157,7 +164,8 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
             cos = torch.cos(angles)
             sin = torch.sin(angles)
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        dtype = pixel_values.dtype
+        return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
 # Copied from transformers.models.vit.modeling_vit.eager_attention_forward
@@ -398,33 +406,28 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in DINOv3, layernorm is applied before self-attention
-            head_mask,
+    ) -> torch.Tensor:
+        # Attention with residual connection
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(
+            hidden_states,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        outputs = self_attention_outputs[1:]  #
-        attention_output = self.layer_scale1(attention_output)
+        # MLP with residual connection
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
-
-        # in DINOv3, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        return (layer_output,) + outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -441,7 +444,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
         "attentions": "DINOv3ViTAttention",
     }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -503,16 +506,15 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         """
 
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        position_embeddings = self.rope_embeddings(hidden_states)
+        position_embeddings = self.rope_embeddings(pixel_values)
 
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
-                head_mask=layer_head_mask,
+                attention_mask=layer_head_mask,
                 position_embeddings=position_embeddings,
             )
-            hidden_states = layer_outputs[0]
 
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
