@@ -2106,7 +2106,9 @@ class Gemma3nTextModel(Gemma3TextModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                per_layer_input=per_layer_input,
+                None,
+                None,
+                per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,

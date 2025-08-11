@@ -194,6 +194,7 @@ class DbrxConfig(PretrainedConfig):
         use_cache: bool = True,
         initializer_range: float = 0.02,
         output_router_logits: bool = False,
+        rope_scaling=None,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -225,6 +226,10 @@ class DbrxConfig(PretrainedConfig):
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
+
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": self.attn_config.rope_theta}
+        self.rope_scaling = rope_scaling
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

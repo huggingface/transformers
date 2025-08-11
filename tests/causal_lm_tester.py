@@ -322,7 +322,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if self.rotary_embedding_layer is None:
             self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        rope_theta = config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
@@ -355,7 +355,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if self.rotary_embedding_layer is None:
             self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        rope_theta = config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
