@@ -98,7 +98,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = outputs.consolidated_res_masks
+        low_res_masks = outputs.low_res_masks
         video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
@@ -187,7 +187,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = outputs.consolidated_res_masks
+        low_res_masks = outputs.low_res_masks
         video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
@@ -241,7 +241,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = outputs.consolidated_res_masks
+        low_res_masks = outputs.low_res_masks
         video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
@@ -297,7 +297,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = outputs.consolidated_res_masks
+        low_res_masks = outputs.low_res_masks
         video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
@@ -352,7 +352,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = outputs.consolidated_res_masks
+        low_res_masks = outputs.low_res_masks
         video_res_masks = outputs.video_res_masks
         self.assertEqual(low_res_masks.shape, (2, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (2, 1, raw_video.shape[-3], raw_video.shape[-2]))
@@ -420,7 +420,7 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             frame_idx=ann_frame_idx,
             consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
         )
-        low_res_masks = sam2_video_output.consolidated_res_masks
+        low_res_masks = sam2_video_output.low_res_masks
         video_res_masks = sam2_video_output.video_res_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
