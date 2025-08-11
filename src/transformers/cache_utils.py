@@ -14,6 +14,9 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from .modeling_utils import (
+    is_fsdp_enabled
+)
 
 
 if is_hqq_available():
@@ -1071,8 +1074,8 @@ class DynamicCache(Cache):
 
 
 # Utilities for `DynamicCache` <> torch.export support
-
-if is_torch_greater_or_equal("2.3"):
+# Pytree registration is not supported for FSDP runs, see here: https://github.com/huggingface/transformers/issues/39795
+if is_torch_greater_or_equal("2.3") and not is_fsdp_enabled():
 
     def _get_cache_dict(cache: DynamicCache):
         if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
