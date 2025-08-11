@@ -509,7 +509,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -520,6 +520,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             pre-training.
         """
 
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
