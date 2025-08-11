@@ -168,13 +168,6 @@ class DynamicLayer(CacheLayerMixin):
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
 
-    @classmethod
-    def from_tensors(cls, keys: torch.Tensor, values: torch.Tensor) -> "DynamicLayer":
-        """Build a `DynamicLayer` instance from pre-existing key/value tensors."""
-        layer = cls()
-        _, _ = layer.update(keys, values)
-        return layer
-
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
@@ -232,7 +225,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
 
-        kv_offset = torch.clamp(first_cache_position - self.max_cache_len + 1, min=0)
+        kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
 
         if self.get_seq_length() >= self.sliding_window:
             kv_length = self.sliding_window - 1 + query_length
@@ -972,22 +965,47 @@ class DynamicCache(Cache):
     """
 
     # Specialized constructor for DDP cache data, needed for BC
-    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None, config: PretrainedConfig = None):
-        # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
-        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
-        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
-        # (shape=[global batch size, num_heads, seq_len, head_dim]).
-        if ddp_cache_data is not None:
+    # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
+    # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
+    # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
+    # (shape=[global batch size, num_heads, seq_len, head_dim]).
+    def __init__(
+        self,
+        ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
+        config: PretrainedConfig = None,
+    ):
+        layers = None
+        # If a config is passed, use it to infer the layer types and initialize accordingly
+        if config is not None:
+            sliding_window = getattr(config, "sliding_window", None) or getattr("attention_chunk_size", None)
+            layer_types = getattr(config, "layer_types", None)
+            if layer_types is None:
+                layer_types = [
+                    "sliding_attention" if sliding_window is not None else "full_attention"
+                    for _ in range(config.num_hidden_layers)
+                ]
+
             layers = []
-            for key_states, value_states in ddp_cache_data:
-                layers.append(DynamicLayer.from_tensors(key_states, value_states))
-            super().__init__(layers=layers)
-        # If we have a config, let's use it to correctly initialize the correct number of layers immediately
-        elif config is not None:
-            layers = [DynamicLayer() for _ in range(config.num_hidden_layers)]
-            super().__init__(layers=layers)
-        else:
+            for layer_type in layer_types:
+                if layer_type in ("sliding_attention", "chunked_attention"):
+                    layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                else:
+                    layers.append(DynamicLayer())
+
+        # In this case, use the passed data to already fill in the Cache
+        if ddp_cache_data is not None:
+            # If the config was not passed above, initialize only DynamicLayer of the size of the ddp data
+            if layers is None:
+                layers = [DynamicLayer() for _ in range(len(ddp_cache_data))]
+            # Init all the layers with the data
+            for layer, (key_states, value_states) in zip(layers, ddp_cache_data):
+                _, _ = layer.update(key_states, value_states)
+
+        # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
+        if layers is None:
             super().__init__(layer_class_to_replicate=DynamicLayer)
+        else:
+            super().__init__(layers=layers)
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -1018,7 +1036,7 @@ class DynamicCache(Cache):
 if is_torch_greater_or_equal("2.3"):
 
     def _get_cache_dict(cache: DynamicCache):
-        if any(not isinstance(layer, DynamicLayer) for layer in cache.layers):
+        if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
             raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
         if not is_torch_greater_or_equal_than_2_6:

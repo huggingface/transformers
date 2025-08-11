@@ -2131,10 +2131,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
-    # Default cache class to be used with the model. Usually DynamicCache, but models with sliding window should use
-    # HybridDynamicCache instead to avoid wasting memory on the sliding layers
-    _default_cache_class = DynamicCache
-
     @property
     @torch._dynamo.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
