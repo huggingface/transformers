@@ -1002,7 +1002,7 @@ class DynamicCache(Cache):
         ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
         config: Optional[PretrainedConfig] = None,
     ):
-        layers = None
+        layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             config = config.get_text_config()
@@ -1014,7 +1014,6 @@ class DynamicCache(Cache):
                     for _ in range(config.num_hidden_layers)
                 ]
 
-            layers = []
             for layer_type in layer_types:
                 if layer_type in ("sliding_attention", "chunked_attention"):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
@@ -1023,15 +1022,16 @@ class DynamicCache(Cache):
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
-            # If the config was not passed above, initialize only DynamicLayer of the size of the ddp data
-            if layers is None:
-                layers = [DynamicLayer() for _ in range(len(ddp_cache_data))]
             # Init all the layers with the data
-            for layer, (key_states, value_states) in zip(layers, ddp_cache_data):
-                _, _ = layer.update(key_states, value_states)
+            for layer_idx, (key_states, value_states) in enumerate(ddp_cache_data):
+                # If the config was not passed above, initialize a DynamicLayer for each entry of the ddp_data
+                if config is None:
+                    layers.append(DynamicLayer())
+                # Update the layer with the data
+                _, _ = layers[layer_idx].update(key_states, value_states)
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
-        if layers is None:
+        if len(layers) == 0:
             super().__init__(layer_class_to_replicate=DynamicLayer)
         else:
             super().__init__(layers=layers)
