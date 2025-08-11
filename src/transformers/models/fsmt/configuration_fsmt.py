@@ -28,8 +28,8 @@ class DecoderConfig(PretrainedConfig):
 
     model_type = "fsmt_decoder"
 
-    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True):
-        super().__init__()
+    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True, **kwargs):
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.bos_token_id = bos_token_id
         self.is_encoder_decoder = is_encoder_decoder
@@ -134,6 +134,7 @@ class FSMTConfig(PretrainedConfig):
 
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    sub_configs = {"decoder": DecoderConfig}
 
     # update the defaults from config file
     def __init__(

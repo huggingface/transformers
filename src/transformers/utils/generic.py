@@ -52,6 +52,8 @@ if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
 
+    from ..model_debugging_utils import model_addition_debugger_context
+
 
 class cached_property(property):
     """
@@ -413,11 +415,7 @@ class ModelOutput(OrderedDict):
             # set the associated fields
             if first_field_iterator:
                 for idx, element in enumerate(iterator):
-                    if (
-                        not isinstance(element, (list, tuple))
-                        or not len(element) == 2
-                        or not isinstance(element[0], str)
-                    ):
+                    if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
                             # If we do not have an iterator of key/values, set it as attribute
                             self[class_fields[0].name] = first_field
@@ -830,7 +828,7 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs]
                 invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message
@@ -978,11 +976,13 @@ class OutputRecorder:
         target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
+        class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
     target_class: "type[torch.nn.Module]"
     index: Optional[int] = 0
     layer_name: Optional[str] = None
+    class_name: Optional[str] = None
 
 
 def check_model_inputs(func):
@@ -993,7 +993,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        use_cache = kwargs.get("use_cache", None)
+        use_cache = kwargs.get("use_cache")
         if use_cache is None:
             use_cache = getattr(self.config, "use_cache", False)
 
@@ -1034,11 +1034,20 @@ def check_model_inputs(func):
             def wrapped_forward(*args, **kwargs):
                 if key == "hidden_states" and len(collected_outputs[key]) == 0:
                     collected_outputs[key] += (args[0],)
-                output = orig_forward(*args, **kwargs)
+                if kwargs.get("debug_io", False):
+                    with model_addition_debugger_context(
+                        module, kwargs.get("debug_io_dir", "~/model_debug"), kwargs.get("prune_layers")
+                    ):
+                        output = orig_forward(*args, **kwargs)
+                else:
+                    output = orig_forward(*args, **kwargs)
                 if not isinstance(output, tuple):
                     collected_outputs[key] += (output,)
                 elif output[index] is not None:
-                    collected_outputs[key] += (output[index],)
+                    if key not in collected_outputs:
+                        collected_outputs[key] = (output[index],)
+                    else:
+                        collected_outputs[key] += (output[index],)
                 return output
 
             return wrapped_forward
@@ -1053,12 +1062,17 @@ def check_model_inputs(func):
                 for specs in layer_specs:
                     if not isinstance(specs, OutputRecorder):
                         index = 0 if "hidden_states" in key else 1
-                        specs = OutputRecorder(target_class=specs, index=index)
+                        class_name = None if not isinstance(specs, str) else specs
+                        target_class = specs if not isinstance(specs, str) else None
+                        specs = OutputRecorder(target_class=target_class, index=index, class_name=class_name)
                     capture_tasks.append((key, specs))
 
             for name, module in self.named_modules():
                 for key, specs in capture_tasks:
-                    if isinstance(module, specs.target_class):
+                    # The second check is for multimodals where only backbone layer suffix is available
+                    if (specs.target_class is not None and isinstance(module, specs.target_class)) or (
+                        specs.class_name is not None and name.endswith(specs.class_name)
+                    ):
                         if specs.layer_name is not None and specs.layer_name not in name:
                             continue
                         # Monkey patch forward

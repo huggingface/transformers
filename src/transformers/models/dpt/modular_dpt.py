@@ -139,9 +139,6 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
 
     valid_kwargs = DPTFastImageProcessorKwargs
 
-    def from_dict():
-        raise NotImplementedError("No need to override this method")
-
     def resize(
         self,
         image: "torch.Tensor",
