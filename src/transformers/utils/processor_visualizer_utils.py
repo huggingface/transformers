@@ -3,10 +3,12 @@ from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import requests
 import torch
 from PIL import Image
 
-from transformers import AutoConfig, AutoProcessor
+from ..image_transforms import convert_to_rgb, to_pil_image, unnormalize
+from ..models.auto import AutoConfig, AutoProcessor
 
 
 # archs failing that should raise immediately for this util:
@@ -60,6 +62,11 @@ INCOMPATIBLE_MODELS = [
 ]
 
 
+DEFAULT_IMAGE_URL = (
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/hf-logo-224x224.png"
+)
+
+
 def _looks_like_global(tile: np.ndarray, base: Image.Image, *, mae_tol: float = 0.3) -> bool:
     """
     Very simple visualizer heuristic.
@@ -80,7 +87,6 @@ class ImageVisualizer:
         self.processor = AutoProcessor.from_pretrained(repo_id, trust_remote_code=False)
         self.config = AutoConfig.from_pretrained(repo_id, trust_remote_code=False)
 
-        # infer processor
         if hasattr(self.processor, "image_processor"):
             image_processor = self.processor.image_processor
         elif hasattr(self.processor, "image_mean"):
@@ -88,15 +94,17 @@ class ImageVisualizer:
         else:
             raise ValueError(f"No image processor found for {repo_id}.")
 
-        # Image normalization parameters
         self.channel_means = getattr(image_processor, "image_mean", [0.485, 0.456, 0.406])
         self.channel_stds = getattr(image_processor, "image_std", [0.229, 0.224, 0.225])
+        if hasattr(self.processor, "image_token"):
+            self.image_token_marker = self.processor.image_token
+        elif hasattr(self.processor, "image_token_id"):
+            self.image_token_marker = self.processor.decode(self.processor.image_token_id)
+        else:
+            self.image_token_marker = "<image>"
 
-        # Image token marker used in prompts
-        self.image_token_marker = getattr(self.processor, "image_token_index", "<image>")
         self.default_prompt = f"{self.image_token_marker} How does it look?"
 
-        # Vision configuration
         self.vision_config = getattr(self.config, "vision_config", None)
         self.patch_size = getattr(self.vision_config, "patch_size", getattr(image_processor, "patch_size", 14))
         self.merge_size = getattr(image_processor, "merge_size", 1)
@@ -130,42 +138,6 @@ class ImageVisualizer:
             raise ValueError(f"Unexpected pixel tensor shape {pixel_values.shape}")
 
         return pixel_values
-
-    def _to_pil(self, image_input: Union[str, np.ndarray, Image.Image]) -> Image.Image:
-        if isinstance(image_input, str):
-            return Image.open(image_input).convert("RGB")
-        elif isinstance(image_input, np.ndarray):
-            return Image.fromarray(image_input).convert("RGB")
-        elif isinstance(image_input, Image.Image):
-            return image_input.convert("RGB")
-        else:
-            raise TypeError(f"Unsupported image input type: {type(image_input)}")
-
-    def _unnormalize(
-        self, pixel_values: Union[torch.Tensor, np.ndarray, list[np.ndarray], list[torch.Tensor]]
-    ) -> np.ndarray:
-        """
-        Inverse-normalize pixel values using stored means/stds and return numpy array(s) in HWC.
-        """
-        tensor_pixels = self._pixel_values_as_tensor(pixel_values).float()
-
-        num_channels = tensor_pixels.shape[-3]
-        means = torch.tensor(
-            self.channel_means[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device
-        ).view(-1, 1, 1)
-        stds = torch.tensor(
-            self.channel_stds[:num_channels], dtype=tensor_pixels.dtype, device=tensor_pixels.device
-        ).view(-1, 1, 1)
-
-        tensor_pixels = tensor_pixels * stds + means
-        tensor_pixels = tensor_pixels.clamp(0, 1)
-
-        if tensor_pixels.ndim == 4:
-            return tensor_pixels.permute(0, 2, 3, 1).cpu().numpy()
-        elif tensor_pixels.ndim == 3:
-            return tensor_pixels.permute(1, 2, 0).cpu().numpy()
-        else:
-            raise ValueError(f"Expected 3D or 4D image tensor after normalization, got {tensor_pixels.shape}")
 
     def _display_single_image(self, image_array: np.ndarray, show_patch_grid: bool, figsize=(7, 7)):
         plt.figure(figsize=figsize)
@@ -334,7 +306,7 @@ class ImageVisualizer:
 
     def visualize(
         self,
-        images: Union[Image.Image, np.ndarray, str, list[Union[Image.Image, np.ndarray, str]]],
+        images: Optional[Union[Image.Image, np.ndarray, str, list[Union[Image.Image, np.ndarray, str]]]] = None,
         rows: Optional[int] = None,
         cols: Optional[int] = None,
         add_grid: bool = True,
@@ -344,6 +316,9 @@ class ImageVisualizer:
         Visualize the model-processed image(s). Only single images are supported.
         If the processor returns multiple tiles, display them in a grid with optional patch grid overlay.
         """
+        if images is None:
+            images = Image.open(requests.get(DEFAULT_IMAGE_URL, stream=True).raw)
+
         if not isinstance(images, list):
             images = [images]
         else:
@@ -352,13 +327,13 @@ class ImageVisualizer:
                     "You passed a list of several images. Only single images are accepted by the visualizer."
                 )
 
-        pil_images = [self._to_pil(x) for x in images]
+        pil_images = [convert_to_rgb(to_pil_image(x)) for x in images]
         img_width, img_height = pil_images[0].size
         aspect_ratio = img_width / max(img_height, 1)
 
         processed_inputs = self.processor(images=pil_images, text=self.default_prompt, return_tensors="pt")
         pixel_values = processed_inputs["pixel_values"]
-        unnormalized = self._unnormalize(pixel_values)
+        unnormalized = unnormalize(pixel_values, mean=self.channel_means, std=self.channel_stds)
         if unnormalized.ndim == 3 or unnormalized.shape[0] == 1:
             self._display_single_image(
                 unnormalized[0] if unnormalized.ndim == 4 else unnormalized,
