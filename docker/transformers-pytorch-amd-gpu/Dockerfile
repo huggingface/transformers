@@ -21,7 +21,7 @@ ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main ve
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # On ROCm, torchcodec is required to decode audio files
-RUN python3 -m pip install --no-cache-dir torchcodec
+# RUN python3 -m pip install --no-cache-dir torchcodec
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
 

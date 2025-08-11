@@ -676,8 +676,10 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         if mask is not None:
             mask = mask.reshape(batch_size, 2, num_keypoints)
-            mask0 = mask[:, 0].unsqueeze(-1).expand(-1, -1, num_keypoints)
-            scores = scores.masked_fill(mask0 == 0, -1e9)
+            mask0 = mask[:, 0].unsqueeze(2)
+            mask1 = mask[:, 1].unsqueeze(1)
+            mask = torch.logical_and(mask0, mask1)
+            scores = scores.masked_fill(mask == 0, torch.finfo(scores.dtype).min)
 
         # Run the optimal transport.
         scores = log_optimal_transport(scores, self.bin_score, iterations=self.config.sinkhorn_iterations)
