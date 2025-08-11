@@ -469,8 +469,8 @@ def _process_flash_attention_kwargs(
     """
     Returns a set of kwargs that are passed down to the according flash attention function based on
     requested features and whether it is supported - depends on the version and kernel implementation
-    which is dynamically configued at `lazy_import_flash_attention` can be inspected in `supports_mapping`.
-    Please see `_lazy_define_process_function` for more details.
+    which is dynamically configued at `lazy_import_flash_attention`. The (un)supported features can be
+    inspected in `supports_mapping`, see `_lazy_define_process_function` for more details.
 
     Args:
         query_length (`int`):
