@@ -685,12 +685,6 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
-DYNAMIC_LAYER_CLASS_MAPPING: dict[str, type[CacheLayerMixin]] = {
-    "full_attention": DynamicLayer,
-    "sliding_attention": DynamicSlidingWindowLayer,
-    "chunked_attention": DynamicSlidingWindowLayer,
-}
-
 STATIC_LAYER_CLASS_MAPPING: dict[str, type[CacheLayerMixin]] = {
     "full_attention": StaticLayer,
     "sliding_attention": SlidingWindowLayer,
