@@ -16,21 +16,11 @@
 import unittest
 
 from transformers import DINOv3ViTConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -38,9 +28,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        DINOv3ViTModel,
-    )
+    from transformers import DINOv3ViTModel
 
 
 if is_vision_available():
@@ -57,7 +45,7 @@ class DINOv3ViTModelTester:
         image_size=30,
         patch_size=2,
         num_channels=3,
-        is_training=True,
+        is_training=False,
         use_labels=True,
         hidden_size=32,
         num_hidden_layers=2,
@@ -239,7 +227,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/dinov3-base"
+        model_name = "converted_models/vits"
         model = DINOv3ViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -255,11 +243,11 @@ def prepare_img():
 class DINOv3ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/dinov3-base") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("converted_models/vits") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
-        model = DINOv3ViTModel.from_pretrained("facebook/dinov3-base").to(torch_device)
+        model = DINOv3ViTModel.from_pretrained("converted_models/vits").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -270,18 +258,17 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the last hidden states
-        # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
-        num_patches = (image_processor.crop_size["height"] // model.config.patch_size) ** 2
+        # in DINOv3 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        _, _, height, width = inputs["pixel_values"].shape
+        num_patches = (height // model.config.patch_size) * (width // model.config.patch_size)
         expected_seq_length = num_patches + 1 + model.config.num_register_tokens
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [-0.4636, -1.4582, -0.0274],
-                [-1.4738, -0.8858, 0.3002],
-                [0.0714, -0.2407, -1.5940],
-            ],
-            device=torch_device,
-        )
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        last_layer_cls_token = outputs.pooler_output
+        expected_slice = torch.tensor([0.4637, -0.4160, 0.4086, -0.1265, -0.2865], device=torch_device)
+        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+
+        last_layer_patch_tokens = outputs.last_hidden_state[:, model.config.num_register_tokens + 1 :]
+        expected_slice = torch.tensor([-0.0386, -0.2509, -0.0161, -0.4556, 0.5716], device=torch_device)
+        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)

@@ -117,6 +117,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dinat", "DinatConfig"),
         ("dinov2", "Dinov2Config"),
         ("dinov2_with_registers", "Dinov2WithRegistersConfig"),
+        ("dinov3_convnext", "DINOv3ConvNextConfig"),
+        ("dinov3_vit", "DINOv3ViTConfig"),
         ("distilbert", "DistilBertConfig"),
         ("doge", "DogeConfig"),
         ("donut-swin", "DonutSwinConfig"),
