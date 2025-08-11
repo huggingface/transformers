@@ -220,27 +220,46 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         return kwargs
 
+    def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
+        """
+        Apply non-overlapping constraints to the object scores in pred_masks. Here we
+        keep only the highest scoring object at each spatial location in pred_masks.
+        """
+        batch_size = pred_masks.size(0)
+        if batch_size == 1:
+            return pred_masks
+
+        device = pred_masks.device
+        # "max_obj_inds": object index of the object with the highest score at each location
+        max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
+        # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
+        batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
+        keep = max_obj_inds == batch_obj_inds
+        # suppress overlapping regions' scores below -10.0 so that the foreground regions
+        # don't overlap (here sigmoid(-10.0)=4.5398e-05)
+        pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
+        return pred_masks
+
     def post_process_masks(
         self,
         masks,
         original_sizes,
-        reshaped_input_sizes,
         mask_threshold=0.0,
         binarize=True,
         max_hole_area=0.0,
         max_sprinkle_area=0.0,
+        apply_non_overlapping_constraints=False,
+        **kwargs,
     ):
         """
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
+            masks (`Union[torch.Tensor, List[torch.Tensor], np.ndarray, List[np.ndarray]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
             original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
-                The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 Threshold for binarization and post-processing operations.
             binarize (`bool`, *optional*, defaults to `True`):
@@ -249,6 +268,8 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
                 The maximum area of a hole to fill.
             max_sprinkle_area (`float`, *optional*, defaults to 0.0):
                 The maximum area of a sprinkle to fill.
+            apply_non_overlapping_constraints (`bool`, *optional*, defaults to `False`):
+                Whether to apply non-overlapping constraints to the masks.
 
         Returns:
             (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
@@ -256,23 +277,21 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         """
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
             original_sizes = original_sizes.tolist()
-        if isinstance(reshaped_input_sizes, (torch.Tensor, np.ndarray)):
-            reshaped_input_sizes = reshaped_input_sizes.tolist()
-        if max_hole_area > 0 or max_sprinkle_area > 0:
-            processed_masks = []
-            # TODO: add connected components kernel for postprocessing
-            # for mask in masks:
-            #     if mask.ndim == 3:
-            #         mask_flat = mask.flatten(0).unsqueeze(1)
-            #     elif mask.ndim == 4:
-            #         mask_flat = mask.flatten(0, 1).unsqueeze(1)
-            #     elif mask.ndim == 5:
-            #         mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
-            #     else:
-            #         raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            # else:
-            processed_masks = masks
-            masks = processed_masks
+        # if max_hole_area > 0 or max_sprinkle_area > 0:
+        #     processed_masks = []
+        #     TODO: add connected components kernel for postprocessing
+        #     for mask in masks:
+        #         if mask.ndim == 3:
+        #             mask_flat = mask.flatten(0).unsqueeze(1)
+        #         elif mask.ndim == 4:
+        #             mask_flat = mask.flatten(0, 1).unsqueeze(1)
+        #         elif mask.ndim == 5:
+        #             mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
+        #         else:
+        #             raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+        #     else:
+        #         processed_masks = masks
+        #     masks = processed_masks
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
@@ -280,6 +299,8 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             elif not isinstance(masks[i], torch.Tensor):
                 raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
+            if apply_non_overlapping_constraints:
+                interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)
@@ -325,9 +346,6 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
-        original image size.
     object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
     image_embeddings (`tuple(torch.FloatTensor)`):
@@ -346,7 +364,6 @@ class Sam2ImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
-    low_res_masks: torch.FloatTensor = None
     object_score_logits: torch.FloatTensor = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1470,12 +1487,9 @@ class Sam2Model(SamModel):
             **kwargs,
         )
 
-        low_res_masks = low_res_multimasks
-
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
-            pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
+            pred_masks=low_res_multimasks,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,

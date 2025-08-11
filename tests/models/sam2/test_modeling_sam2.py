@@ -447,7 +447,7 @@ class Sam2ModelTester:
         with torch.no_grad():
             result = model(pixel_values)
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
-        self.parent.assertEqual(result.low_res_masks.shape[:3], (self.batch_size, 1, 3))
+        self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -773,10 +773,10 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 3))
-        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 3, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 3, 256, 256))
         sorted_indices = torch.argsort(outputs.iou_scores.squeeze(), descending=True)
         scores = outputs.iou_scores.squeeze()[sorted_indices]
-        masks_logits = outputs.low_res_masks.squeeze()[sorted_indices][0, :3, :3]
+        masks_logits = outputs.pred_masks.squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
             scores, torch.tensor([0.9547, 0.4932, 0.0427]).to(torch_device), atol=1e-4, rtol=1e-4
         )
@@ -801,9 +801,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
         torch.testing.assert_close(scores, torch.tensor([0.9364]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
@@ -827,14 +827,14 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
         self.assertEqual(outputs.iou_scores.shape, (2, 1, 3))
-        self.assertEqual(outputs.low_res_masks.shape, (2, 1, 3, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 1, 3, 256, 256))
 
         sorted_indices = torch.argsort(outputs.iou_scores[0].squeeze(), descending=True)
         scores1 = outputs.iou_scores[0].squeeze()[sorted_indices]
-        masks_logits1 = outputs.low_res_masks[0].squeeze()[sorted_indices][0, :3, :3]
+        masks_logits1 = outputs.pred_masks[0].squeeze()[sorted_indices][0, :3, :3]
         sorted_indices = torch.argsort(outputs.iou_scores[1].squeeze(), descending=True)
         scores2 = outputs.iou_scores[1].squeeze()[sorted_indices]
-        masks_logits2 = outputs.low_res_masks[1].squeeze()[sorted_indices][0, :3, :3]
+        masks_logits2 = outputs.pred_masks[1].squeeze()[sorted_indices][0, :3, :3]
         torch.testing.assert_close(
             scores1, torch.tensor([0.9586, 0.4913, 0.0448]).to(torch_device), atol=1e-4, rtol=1e-4
         )
@@ -870,7 +870,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 2, 1))
-        self.assertEqual(outputs.low_res_masks.shape, (2, 2, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 2, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9500], [0.9718]], [[0.9568], [0.9114]]]).to(torch_device),
@@ -878,7 +878,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
         torch.testing.assert_close(
-            outputs.low_res_masks[:, :, :, :2, :2],
+            outputs.pred_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
                     [[[[-5.8131, -11.3020], [-8.6487, -8.0690]]], [[[-4.7731, -8.7606], [-6.2399, -7.0738]]]],
@@ -902,7 +902,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs, multimask_output=False)
         self.assertEqual(outputs.iou_scores.shape, (2, 4, 1))
-        self.assertEqual(outputs.low_res_masks.shape, (2, 4, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (2, 4, 1, 256, 256))
         torch.testing.assert_close(
             outputs.iou_scores,
             torch.tensor([[[0.9873], [0.9264], [0.9496], [0.9208]], [[0.9445], [0.9496], [0.9497], [0.9481]]]).to(
@@ -912,7 +912,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
         torch.testing.assert_close(
-            outputs.low_res_masks[:, :, :, :2, :2],
+            outputs.pred_masks[:, :, :, :2, :2],
             torch.tensor(
                 [
                     [
@@ -944,7 +944,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**original_inputs)
 
         # best mask to use as input for new points
-        mask_input = outputs.low_res_masks[:, :, torch.argmax(outputs.iou_scores)]
+        mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores)]
 
         new_input_points = [[[[500, 375], [1125, 625]]]]
         new_input_labels = [[[1, 1]]]
@@ -963,9 +963,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
             )
 
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
         torch.testing.assert_close(scores, torch.tensor([0.9738]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,
@@ -993,9 +993,9 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
                 multimask_output=False,
             )
         self.assertEqual(outputs.iou_scores.shape, (1, 1, 1))
-        self.assertEqual(outputs.low_res_masks.shape, (1, 1, 1, 256, 256))
+        self.assertEqual(outputs.pred_masks.shape, (1, 1, 1, 256, 256))
         scores = outputs.iou_scores.squeeze((0, 1))
-        masks_logits = outputs.low_res_masks.squeeze((0, 1))[0, :3, :3]
+        masks_logits = outputs.pred_masks.squeeze((0, 1))[0, :3, :3]
         torch.testing.assert_close(scores, torch.tensor([0.9719]).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
             masks_logits,

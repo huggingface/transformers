@@ -93,14 +93,12 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = outputs.low_res_masks
-        video_res_masks = outputs.video_res_masks
+        outputs = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = outputs.pred_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        video_res_masks = self.processor.post_process_masks([low_res_masks], [raw_video.shape[-3:-1]], binarize=False)[
+            0
+        ]
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
@@ -117,7 +115,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             inference_session=inference_session,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -153,7 +154,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -182,13 +186,11 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        outputs = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = outputs.low_res_masks
-        video_res_masks = outputs.video_res_masks
+        outputs = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = outputs.pred_masks
+        video_res_masks = self.processor.post_process_masks(
+            [outputs.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+        )[0]
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -207,7 +209,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         # higher tolerance due to errors propagating from frame to frame
@@ -236,13 +241,11 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             obj_ids=ann_obj_id,
             input_boxes=[[[300, 0, 500, 400]]],
         )
-        outputs = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = outputs.low_res_masks
-        video_res_masks = outputs.video_res_masks
+        outputs = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = outputs.pred_masks
+        video_res_masks = self.processor.post_process_masks(
+            [outputs.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+        )[0]
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -261,7 +264,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         # higher tolerance due to errors propagating from frame to frame
@@ -292,13 +298,11 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             input_points=[[[[460, 60]]]],
             input_labels=[[[1]]],
         )
-        outputs = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = outputs.low_res_masks
-        video_res_masks = outputs.video_res_masks
+        outputs = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = outputs.pred_masks
+        video_res_masks = self.processor.post_process_masks(
+            [outputs.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+        )[0]
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -317,7 +321,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         # higher tolerance due to errors propagating from frame to frame
@@ -347,13 +354,11 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             input_points=[[[[200, 300], [230, 250], [275, 175]], [[400, 150]]]],
             input_labels=[[[1, 1, 0], [1]]],
         )
-        outputs = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = outputs.low_res_masks
-        video_res_masks = outputs.video_res_masks
+        outputs = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = outputs.pred_masks
+        video_res_masks = self.processor.post_process_masks(
+            [outputs.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+        )[0]
         self.assertEqual(low_res_masks.shape, (2, 1, 256, 256))
         self.assertEqual(video_res_masks.shape, (2, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -372,7 +377,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -402,27 +410,23 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             input_points=[[[[210, 350], [250, 220]]]],
             input_labels=[[[1, 1]]],
         )
-        sam2_video_output = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=True,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
+        sam2_video_output = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
 
         # set mask as input
         self.processor.add_inputs_to_inference_session(
             inference_session=inference_session,
             frame_idx=ann_frame_idx,
             obj_ids=ann_obj_id,
-            input_masks=sam2_video_output.video_res_masks,
+            input_masks=self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0],
         )
-        sam2_video_output = self.video_model(
-            inference_session=inference_session,
-            frame_idx=ann_frame_idx,
-            consolidate_at_video_res=False,  # Whether to save the masks at the video resolution (True) or at the model's resolution in the video session state (False)
-        )
-        low_res_masks = sam2_video_output.low_res_masks
-        video_res_masks = sam2_video_output.video_res_masks
+        sam2_video_output = self.video_model(inference_session=inference_session, frame_idx=ann_frame_idx)
+        low_res_masks = sam2_video_output.pred_masks
         self.assertEqual(low_res_masks.shape, (1, 1, 256, 256))
+        video_res_masks = self.processor.post_process_masks(
+            [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+        )[0]
         self.assertEqual(video_res_masks.shape, (1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
             video_res_masks[0, 0, :3, :3],
@@ -440,7 +444,10 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             start_frame_idx=ann_frame_idx,
             max_frame_num_to_track=2,
         ):
-            frames.append(sam2_video_output.video_res_masks)
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            frames.append(video_res_masks)
         frames = torch.stack(frames, dim=0)
         self.assertEqual(frames.shape, (3, 1, 1, raw_video.shape[-3], raw_video.shape[-2]))
         torch.testing.assert_close(
@@ -476,7 +483,11 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
                     original_size=inputs.original_sizes[0],
                 )
             sam2_video_output = self.video_model(inference_session=inference_session, frame=inputs.pixel_values[0])
-            video_res_masks.append(sam2_video_output.video_res_masks)
+            video_res_masks.append(
+                self.processor.post_process_masks(
+                    [sam2_video_output.pred_masks], inputs.original_sizes, binarize=False
+                )[0]
+            )
 
         video_res_masks = torch.stack(video_res_masks, dim=0)
         self.assertEqual(

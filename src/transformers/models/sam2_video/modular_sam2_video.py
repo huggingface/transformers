@@ -118,8 +118,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The maximum number of points to trigger multimask output.
         multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
             Whether to use multimask output for tracking.
-        non_overlap_masks_for_mem_enc (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks for the memory encoder.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
@@ -174,8 +172,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The initial value for the layer scale in the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
-        non_overlap_masks (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -230,7 +226,6 @@ class Sam2VideoConfig(PretrainedConfig):
         multimask_min_pt_num=0,
         multimask_max_pt_num=1,
         multimask_output_for_tracking=True,
-        non_overlap_masks_for_mem_enc=False,
         max_object_pointers_in_encoder=16,
         enable_temporal_pos_encoding_for_object_pointers=True,
         # memory attention
@@ -260,8 +255,6 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
         memory_fuser_hidden_act="gelu",
-        # post-processing parameters
-        non_overlap_masks=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -294,7 +287,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.multimask_min_pt_num = multimask_min_pt_num
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
         # The next 4 are True for sam2.1 and False for sam2
         self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
@@ -328,9 +320,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
-
-        # post-processing parameters
-        self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 class Sam2VideoInferenceSession:
@@ -887,9 +876,6 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
     pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
-        original image size.
     object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
     image_embeddings (`tuple(torch.FloatTensor)`):
@@ -918,16 +904,13 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
-    video_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-        The predicted masks, upscaled to the original video resolution.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
         The predicted masks stored at the model's resolution.
     frame_idx (`int`):
         The frame index of the video.
     """
 
-    video_res_masks: torch.FloatTensor = None
-    low_res_masks: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
     frame_idx: int = None
 
 
@@ -1810,7 +1793,6 @@ class Sam2VideoModel(Sam2Model):
         return Sam2VideoImageSegmentationOutput(
             iou_scores=iou_scores,
             pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
             object_pointer=object_pointer,
             object_score_logits=object_score_logits,
@@ -1818,45 +1800,6 @@ class Sam2VideoModel(Sam2Model):
             vision_hidden_states=vision_hidden_states,
             vision_attentions=vision_attentions,
         )
-
-    def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
-        """
-        Apply non-overlapping constraints to the object scores in pred_masks. Here we
-        keep only the highest scoring object at each spatial location in pred_masks.
-        """
-        batch_size = pred_masks.size(0)
-        if batch_size == 1:
-            return pred_masks
-
-        device = pred_masks.device
-        # "max_obj_inds": object index of the object with the highest score at each location
-        max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
-        # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
-        batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
-        keep = max_obj_inds == batch_obj_inds
-        # suppress overlapping regions' scores below -10.0 so that the foreground regions
-        # don't overlap (here sigmoid(-10.0)=4.5398e-05)
-        pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
-        return pred_masks
-
-    def _get_orig_video_res_output(
-        self, inference_session: Sam2VideoInferenceSession, any_res_masks: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Resize the object scores to the original video resolution (video_res_masks)
-        and apply non-overlapping constraints for final output.
-        """
-        video_H = inference_session.video_height
-        video_W = inference_session.video_width
-        video_res_masks = torch.nn.functional.interpolate(
-            any_res_masks,
-            size=(video_H, video_W),
-            mode="bilinear",
-            align_corners=False,
-        )
-        if self.config.non_overlap_masks:
-            video_res_masks = self._apply_non_overlapping_constraints(video_res_masks)
-        return video_res_masks
 
     def _use_mask_as_output(
         self,
@@ -1898,7 +1841,6 @@ class Sam2VideoModel(Sam2Model):
         return Sam2VideoImageSegmentationOutput(
             iou_scores=iou_scores,
             pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
             object_pointer=object_pointer,
             object_score_logits=object_score_logits,
@@ -2247,7 +2189,7 @@ class Sam2VideoModel(Sam2Model):
             )
 
         current_out = {
-            "pred_masks": sam_outputs.low_res_masks,
+            "pred_masks": sam_outputs.pred_masks,
             "object_pointer": sam_outputs.object_pointer,
             # save in bfloat16 to save memory, and for consistency with the original implementation
             "maskmem_features": maskmem_features.to(torch.bfloat16) if maskmem_features is not None else None,
@@ -2271,11 +2213,6 @@ class Sam2VideoModel(Sam2Model):
         height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
         pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(batch_size, channels, height, width)
-        if self.config.non_overlap_masks_for_mem_enc and not self.training:
-            # optionally, apply non-overlapping constraints to the masks (it's applied
-            # in the batch dimension and should only be used during eval, where all
-            # the objects come from the same video under batch size 1).
-            pred_masks_high_res = self._apply_non_overlapping_constraints(pred_masks_high_res)
         if is_mask_from_pts and not self.training:
             # binarize the mask logits
             mask_for_mem = (pred_masks_high_res > 0).to(pred_masks_high_res.dtype)
@@ -2308,7 +2245,6 @@ class Sam2VideoModel(Sam2Model):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
-        consolidate_at_video_res: bool = True,
     ) -> Sam2VideoSegmentationOutput:
         r"""
         inference_session (`Sam2VideoInferenceSession`):
@@ -2320,8 +2256,6 @@ class Sam2VideoModel(Sam2Model):
             The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
-        consolidate_at_video_res (`bool`, *optional*, defaults to `True`):
-            Whether to consolidate the output at the original video resolution
         """
         if frame is not None:
             frame_idx = inference_session.add_new_frame(frame)
@@ -2385,11 +2319,8 @@ class Sam2VideoModel(Sam2Model):
             all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
         else:
             all_pred_masks = pred_masks_per_obj[0]
-        video_res_masks = self._get_orig_video_res_output(inference_session, all_pred_masks)
 
-        return Sam2VideoSegmentationOutput(
-            video_res_masks=video_res_masks, low_res_masks=all_pred_masks, frame_idx=frame_idx
-        )
+        return Sam2VideoSegmentationOutput(pred_masks=all_pred_masks, frame_idx=frame_idx)
 
     @torch.inference_mode()
     @auto_docstring(

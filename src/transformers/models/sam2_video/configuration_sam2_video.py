@@ -184,8 +184,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The maximum number of points to trigger multimask output.
         multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
             Whether to use multimask output for tracking.
-        non_overlap_masks_for_mem_enc (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks for the memory encoder.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
@@ -240,8 +238,6 @@ class Sam2VideoConfig(PretrainedConfig):
             The initial value for the layer scale in the memory fuser.
         memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the memory fuser.
-        non_overlap_masks (`bool`, *optional*, defaults to `False`):
-            Whether to enforce non-overlapping masks.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -296,7 +292,6 @@ class Sam2VideoConfig(PretrainedConfig):
         multimask_min_pt_num=0,
         multimask_max_pt_num=1,
         multimask_output_for_tracking=True,
-        non_overlap_masks_for_mem_enc=False,
         max_object_pointers_in_encoder=16,
         enable_temporal_pos_encoding_for_object_pointers=True,
         # memory attention
@@ -326,8 +321,6 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
         memory_fuser_hidden_act="gelu",
-        # post-processing parameters
-        non_overlap_masks=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -360,7 +353,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.multimask_min_pt_num = multimask_min_pt_num
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.non_overlap_masks_for_mem_enc = non_overlap_masks_for_mem_enc
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
         # The next 4 are True for sam2.1 and False for sam2
         self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
@@ -394,9 +386,6 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
-
-        # post-processing parameters
-        self.non_overlap_masks = non_overlap_masks  # whether to apply non-overlapping constraints on output masks
 
 
 __all__ = ["Sam2VideoMaskDecoderConfig", "Sam2VideoPromptEncoderConfig", "Sam2VideoConfig"]

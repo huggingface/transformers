@@ -89,9 +89,6 @@ class Sam2ImageSegmentationOutput(ModelOutput):
     pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    low_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
-        The predicted low-resolution masks. These masks need to be post-processed by the processor to be brought to the
-        original image size.
     object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
     image_embeddings (`tuple(torch.FloatTensor)`):
@@ -110,7 +107,6 @@ class Sam2ImageSegmentationOutput(ModelOutput):
 
     iou_scores: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
-    low_res_masks: torch.FloatTensor = None
     object_score_logits: torch.FloatTensor = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1585,12 +1581,9 @@ class Sam2Model(Sam2PreTrainedModel):
             **kwargs,
         )
 
-        low_res_masks = low_res_multimasks
-
         return Sam2ImageSegmentationOutput(
             iou_scores=iou_scores,
-            pred_masks=low_res_masks,
-            low_res_masks=low_res_masks,
+            pred_masks=low_res_multimasks,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,

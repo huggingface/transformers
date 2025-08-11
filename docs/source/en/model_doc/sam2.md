@@ -86,9 +86,7 @@ You can segment objects by providing a single point click on the object you want
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 
 >>> # The model outputs multiple mask predictions ranked by quality score
 >>> print(f"Generated {masks.shape[0]} masks with shape {masks.shape}")
@@ -109,9 +107,7 @@ You can provide multiple points to refine the segmentation:
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Bounding Box Input
@@ -127,9 +123,7 @@ SAM2 also supports bounding box inputs for segmentation:
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 ```
 
 #### Multiple Objects Segmentation
@@ -147,9 +141,7 @@ You can segment multiple objects simultaneously:
 ...     outputs = model(**inputs, multimask_output=False)
 
 >>> # Each object gets its own mask
->>> masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )[0]
+>>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 >>> print(f"Generated masks for {masks.shape[0]} objects")
 Generated masks for 2 objects
 ```
@@ -186,9 +178,7 @@ Process multiple images simultaneously for improved efficiency:
 ...     outputs = model(**inputs, multimask_output=False)
 
 >>> # Post-process masks for each image
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 >>> print(f"Processed {len(all_masks)} images, each with {all_masks[0].shape[0]} objects")
 Processed 2 images, each with 1 objects
 ```
@@ -213,9 +203,7 @@ Segment multiple objects within each image using batch inference:
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 >>> print(f"Truck image: {all_masks[0].shape[0]} objects, Dog image: {all_masks[1].shape[0]} objects")
 Truck image: 2 objects, Dog image: 1 objects
 ```
@@ -245,9 +233,7 @@ Handle complex batch scenarios with multiple points per object:
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 ```
 
 #### Batched Bounding Boxes
@@ -269,9 +255,7 @@ Process multiple images with bounding box inputs:
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
->>> all_masks = processor.post_process_masks(
-...     outputs.pred_masks.cpu(), inputs["original_sizes"], inputs["reshaped_input_sizes"]
-... )
+>>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
 >>> print(f"Processed {len(input_boxes)} images with {len(input_boxes[0])} and {len(input_boxes[1])} boxes respectively")
 Processed 2 images with 4 and 4 boxes respectively
 ```

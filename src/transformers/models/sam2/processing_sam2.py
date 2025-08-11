@@ -476,8 +476,51 @@ class Sam2Processor(ProcessorMixin):
                 else:
                     tensor[img_idx] = normalized_coords
 
-    def post_process_masks(self, *args, **kwargs):
-        return self.image_processor.post_process_masks(*args, **kwargs)
+    def post_process_masks(
+        self,
+        masks,
+        original_sizes,
+        mask_threshold=0.0,
+        binarize=True,
+        max_hole_area=0.0,
+        max_sprinkle_area=0.0,
+        apply_non_overlapping_constraints=False,
+        **kwargs,
+    ):
+        """
+        Remove padding and upscale masks to the original image size.
+
+        Args:
+            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
+                Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
+            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+                The original sizes of each image before it was resized to the model's expected input shape, in (height,
+                width) format.
+            mask_threshold (`float`, *optional*, defaults to 0.0):
+                Threshold for binarization and post-processing operations.
+            binarize (`bool`, *optional*, defaults to `True`):
+                Whether to binarize the masks.
+            max_hole_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a hole to fill.
+            max_sprinkle_area (`float`, *optional*, defaults to 0.0):
+                The maximum area of a sprinkle to fill.
+            apply_non_overlapping_constraints (`bool`, *optional*, defaults to `False`):
+                Whether to apply non-overlapping constraints to the masks.
+
+        Returns:
+            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            is given by original_size.
+        """
+        return self.image_processor.post_process_masks(
+            masks,
+            original_sizes,
+            mask_threshold,
+            binarize,
+            max_hole_area,
+            max_sprinkle_area,
+            apply_non_overlapping_constraints,
+            **kwargs,
+        )
 
 
 __all__ = ["Sam2Processor"]
