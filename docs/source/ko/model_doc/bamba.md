@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Bamba
+# Bamba[[bamba]]
 
 [Bamba](https://huggingface.co/blog/bamba)는 [Mamba-2](./mamba2) 아키텍처를 기반으로 구축된 90억 개 매개변수를 가진 디코더 전용 언어 모델입니다. 이 모델은 두 단계로 사전 학습됩니다. 먼저 [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) 데이터 세트에서 2T 토큰으로 학습한 후, [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)과 [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia)에서 추가로 200B 토큰으로 학습합니다.
 
