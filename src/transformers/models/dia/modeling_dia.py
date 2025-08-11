@@ -141,6 +141,8 @@ class DiaRMSNorm(nn.Module):
 
 
 class DiaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: DiaConfig, device=None, layer_type=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -307,12 +309,13 @@ class DiaSelfAttention(nn.Module):
         self.rotary_emb = DiaRotaryEmbedding(config=config)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -337,10 +340,10 @@ class DiaSelfAttention(nn.Module):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

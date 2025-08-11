@@ -74,6 +74,8 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: EfficientLoFTRConfig, device=None, layer_type=None):
         super().__init__()
         self.config = config

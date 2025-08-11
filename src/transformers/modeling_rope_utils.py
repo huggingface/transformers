@@ -281,10 +281,13 @@ def _compute_yarn_parameters(
         """Inverse dimension formula to find the dimension based on the number of rotations"""
         return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
-    def find_correction_range(low_rot, high_rot, dim, base, max_position_embeddings):
+    def find_correction_range(low_rot, high_rot, dim, base, max_position_embeddings, truncate):
         """Find dimension range bounds based on rotations"""
-        low = math.floor(find_correction_dim(low_rot, dim, base, max_position_embeddings))
-        high = math.ceil(find_correction_dim(high_rot, dim, base, max_position_embeddings))
+        low = find_correction_dim(low_rot, dim, base, max_position_embeddings)
+        high = find_correction_dim(high_rot, dim, base, max_position_embeddings)
+        if truncate:
+            low = low = math.floor(low)
+            high = math.ceil(high)
         return max(low, 0), min(high, dim - 1)
 
     def linear_ramp_factor(min, max, dim):
@@ -301,7 +304,8 @@ def _compute_yarn_parameters(
     inv_freq_extrapolation = 1.0 / pos_freqs
     inv_freq_interpolation = 1.0 / (factor * pos_freqs)
 
-    low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings)
+    truncate = config.rope_scaling.get("truncate", True)
+    low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings, truncate)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
     inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).to(device=device, dtype=torch.float)

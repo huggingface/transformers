@@ -208,7 +208,7 @@ class Exaone4Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         if "sliding_window" in self.layer_types:
-            self._attn_implementation = "hybrid"
+            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters

@@ -29,7 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, HybridCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowLayer
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -1148,8 +1148,10 @@ class Gemma3nTextAltUp(nn.Module):
         return self.forward(corrected)
 
 
-class Gemma3nRotaryEmbedding(nn.Module):
-    def __init__(self, config: Gemma3nTextConfig, device=None, layer_type=None):
+class Gemma3nTextRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: Gemma3nTextConfig, device=None, layer_tyepe=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1347,12 +1349,13 @@ class Gemma3nTextAttention(nn.Module):
         self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -1376,23 +1379,21 @@ class Gemma3nTextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_value is not None:
-            # Device of past layer may be different from current one
-            indices = cache_position.to(past_key_value.layers[self.kv_shared_layer_index].keys.device)
+        if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_values is not None:
             # In this case we need special handling of the slice as the layer is of fixed small size (for full layers, we never go beyond)
-            if isinstance(past_key_value, HybridCache) and self.is_sliding:
-                max_length = past_key_value.sliding_window
-                indices = (
-                    slice(0, max_length)
-                    if cache_position.shape[0] > max_length
-                    else cache_position.clamp(min=0, max=max_length - 1)
-                )
+            layer = past_key_values.layers[self.kv_shared_layer_index]
+            # Device of past layer may be different from current one
+            indices = cache_position.to(layer.keys.device)
+            # Sliding window cache layers might have smaller size (for full layers, we never go beyond)
+            if isinstance(layer, SlidingWindowLayer):
+                if cache_position.shape[0] > layer.get_max_cache_shape():
+                    indices = slice(0, layer.get_max_cache_shape())
+                else:
+                    indices = indices.clamp(min=0, max=layer.get_max_cache_shape() - 1)
 
             # Device of past layer may be different from current one
-            key_states = past_key_value.layers[self.kv_shared_layer_index].keys[:, :, indices].to(query_states.device)
-            value_states = (
-                past_key_value.layers[self.kv_shared_layer_index].values[:, :, indices].to(query_states.device)
-            )
+            key_states = layer.keys[:, :, indices].to(query_states.device)
+            value_states = layer.values[:, :, indices].to(query_states.device)
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
@@ -1403,7 +1404,7 @@ class Gemma3nTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
                 "sin": sin,
@@ -1411,7 +1412,7 @@ class Gemma3nTextAttention(nn.Module):
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1459,6 +1460,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
 
     @deprecate_kwarg("position_embeddings_global", version="4.60.0")
     @deprecate_kwarg("position_embeddings_local", version="4.60.0")
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1467,7 +1469,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         per_layer_input: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1483,7 +1485,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
             hidden_states=active_prediction_normed,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -1876,7 +1878,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -2167,6 +2169,48 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         vision_outputs *= self.config.vision_config.hidden_size**0.5
         return self.embed_vision(inputs_embeds=vision_outputs)
 
+    def get_placeholder_mask(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        audio_features: Optional[torch.FloatTensor] = None,
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_audio_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            ).all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+            special_audio_mask = input_ids == self.config.audio_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0] * image_features.shape[1]}"
+            )
+
+        n_audio_tokens = special_audio_mask.sum()
+        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if audio_features is not None and inputs_embeds[special_audio_mask].numel() != audio_features.numel():
+            raise ValueError(
+                f"Audio features and image tokens do not match: tokens: {n_audio_tokens}, features {audio_features.shape[0] * audio_features.shape[1]}"
+            )
+
+        return special_image_mask, special_audio_mask
+
     @can_return_tuple
     def forward(
         self,
@@ -2253,23 +2297,10 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            else:
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of images does not match number of special image tokens in the input text. "
-                    f"Got {image_tokens_in_text} image tokens in the text and "
-                    f"{image_features.shape[0] * image_features.shape[1]} tokens from image embeddings."
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Merge text and audio
@@ -2290,23 +2321,10 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             extra_padding_features = audio_padding_embs.expand(audio_batch_size, extra_padding_tokens, audio_embed_dim)
 
             audio_features = torch.cat((audio_features, extra_padding_features), dim=1)
-
-            if input_ids is None:
-                special_audio_mask = inputs_embeds == self.embed_audio(
-                    input_ids=torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            else:
-                special_audio_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-                special_audio_mask = special_audio_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_audio_mask].numel() != audio_features.numel():
-                audio_tokens_in_text = (special_audio_mask).sum(dim=1).sum(dim=0)[0]
-                raise ValueError(
-                    f"Number of audio input features does not match number of special audio tokens in the input text. "
-                    f"Got {audio_tokens_in_text} audio tokens in the text and "
-                    f"{audio_features.shape[0] * audio_features.shape[1]} tokens from audio embeddings."
-                )
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
         outputs = self.language_model(
