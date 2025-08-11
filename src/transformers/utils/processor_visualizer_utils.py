@@ -229,15 +229,15 @@ class ImageVisualizer:
         plt.show()
 
         if saved_original_tile is not None:
-            plt.figure(figsize=figsize)
-            plt.title("Original Image (Detected as one of the patches)")
-            plt.imshow(saved_original_tile)
-            plt.xticks([])
-            plt.yticks([])
+            fig2, ax2 = plt.subplots(figsize=figsize)
+            ax2.imshow(saved_original_tile)
+            ax2.set_xticks([])
+            ax2.set_yticks([])
+            ax2.set_aspect("equal", adjustable="box")
+            fig2.subplots_adjust(left=0, right=1, top=1, bottom=0)  # no clipping
             h0, w0 = saved_original_tile.shape[:2]
             caption = f"{w0}×{h0} | mean={', '.join(f'{m:.3f}' for m in self.channel_means)} | std={', '.join(f'{s:.3f}' for s in self.channel_stds)}"
-            plt.tight_layout()
-            plt.figtext(0.5, -0.02, caption, ha="center", va="top", fontsize=12)
+            fig2.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=12)
             plt.show()
 
     def default_message(self, full_output: bool = False) -> str:
@@ -362,10 +362,9 @@ class ImageVisualizer:
 
             rows = best_rows
             cols = best_cols
-
             self._display_tiled_images(
                 unnormalized,
-                images[0],
+                pil_images[0],
                 rows=rows,
                 cols=cols,
                 aspect_ratio=aspect_ratio,
