@@ -439,18 +439,20 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 @auto_docstring
 class DINOv3ViTPreTrainedModel(PreTrainedModel):
     config: DINOv3ViTConfig
-    base_model_prefix = "DINOv3ViT"
+    base_model_prefix = "dinov3_vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DINOv3ViTLayer,
         "attentions": DINOv3ViTAttention,
     }
 
-    def _init_weights(self, module):
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid

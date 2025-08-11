@@ -22,22 +22,22 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from transformers.models.arcee.modeling_arcee import ArceeMLP
+from transformers.models.dinov2.modeling_dinov2 import (
+    Dinov2DropPath,
+    Dinov2LayerScale,
+    Dinov2PreTrainedModel,
+    eager_attention_forward,
+)
+from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
+
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
-
-from transformers.models.dinov2.modeling_dinov2 import (
-    eager_attention_forward,
-    Dinov2LayerScale,
-    Dinov2DropPath,
-)
-from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
-from transformers.models.arcee.modeling_arcee import ArceeMLP
-
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -187,7 +187,6 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
-
 def apply_rotary_pos_emb(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -222,7 +221,6 @@ def apply_rotary_pos_emb(
 
 
 class DINOv3ViTAttention(PixtralAttention):
-
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
 
@@ -277,8 +275,10 @@ class DINOv3ViTAttention(PixtralAttention):
 class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
+
 class DINOv3ViTDropPath(Dinov2DropPath):
     pass
+
 
 class DINOv3ViTMLP(ArceeMLP):
     pass
@@ -348,14 +348,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class DINOv3ViTPreTrainedModel(PreTrainedModel):
-    config: DINOv3ViTConfig
-    base_model_prefix = "DINOv3ViT"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DINOv3ViTLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn_2 = True
+class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DINOv3ViTLayer,
         "attentions": DINOv3ViTAttention,
