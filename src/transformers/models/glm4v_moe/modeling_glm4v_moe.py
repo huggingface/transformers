@@ -126,15 +126,18 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
+    # Ignore copy
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
+        # In contrast to other models, Glm4vMoeText has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -275,6 +278,7 @@ class Glm4vMoeTextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -288,7 +292,16 @@ class Glm4vMoeTextAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
@@ -971,7 +984,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
-        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1021,13 +1033,9 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for decoder_layer in self.layers:
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

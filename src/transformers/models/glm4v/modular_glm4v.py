@@ -35,6 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
@@ -615,11 +616,13 @@ class Glm4vTextAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="v4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -636,7 +639,16 @@ class Glm4vTextAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
@@ -657,6 +669,7 @@ class Glm4vTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -680,10 +693,11 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("position_embeddings", version="v4.60.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[tuple[torch.Tensor]] = None,
@@ -851,7 +865,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
         del self._attn_implementation
         del self.has_sliding_layers
 
@@ -901,13 +914,9 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
         for decoder_layer in self.layers:
             layer_outputs = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

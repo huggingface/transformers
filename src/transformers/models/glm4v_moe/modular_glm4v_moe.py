@@ -37,6 +37,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
+    Glm4vTextRotaryEmbedding,
     rotate_half,
 )
 
@@ -350,6 +351,18 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
+class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    def __init__(self, config: Glm4vMoeTextConfig, device=None, layer_type=None):
+        super().__init__(config, device=device, layer_type=layer_type)
+
+    def compute_default_rope_parameters(
+        self,
+        config: Optional[Glm4vMoeTextConfig] = None,
+        **super_kwargs,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(config, **super_kwargs)
+
+
 class Glm4vMoeTextAttention(Glm4Attention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
@@ -362,6 +375,7 @@ class Glm4vMoeTextAttention(Glm4Attention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -375,7 +389,16 @@ class Glm4vMoeTextAttention(Glm4Attention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )

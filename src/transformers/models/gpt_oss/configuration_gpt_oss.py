@@ -56,7 +56,6 @@ class GptOssConfig(PretrainedConfig):
         num_attention_heads: int = 64,
         num_key_value_heads: int = 8,
         sliding_window: int = 128,
-        rope_theta: float = 150000.0,
         tie_word_embeddings=False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
@@ -87,8 +86,6 @@ class GptOssConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.layer_types = layer_types
@@ -99,9 +96,19 @@ class GptOssConfig(PretrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 150000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
 
         self.attention_bias = True

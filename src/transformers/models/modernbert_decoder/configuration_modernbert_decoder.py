@@ -185,11 +185,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_activation = classifier_activation
         self.reference_compile = reference_compile
 
-        if self.classifier_pooling not in ["cls", "mean"]:
-            raise ValueError(
-                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
-            )
-
         self.layer_types = layer_types
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub

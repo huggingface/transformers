@@ -33,10 +33,13 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_gpt_oss import GptOssConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -328,6 +331,7 @@ class GptOssAttention(nn.Module):
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    @deprecate_kwarg("position_embeddings", version="4.60")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -335,6 +339,7 @@ class GptOssAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -344,7 +349,16 @@ class GptOssAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -364,6 +378,7 @@ class GptOssAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            position_ids=position_ids,
             s_aux=self.sinks,  # diff with Llama
             **kwargs,
         )
@@ -384,6 +399,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.attention_type = config.layer_types[layer_idx]
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    @deprecate_kwarg("position_embeddings", version="4.60")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -392,7 +408,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -530,7 +546,6 @@ class GptOssModel(GptOssPreTrainedModel):
             }
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -540,7 +555,6 @@ class GptOssModel(GptOssPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
