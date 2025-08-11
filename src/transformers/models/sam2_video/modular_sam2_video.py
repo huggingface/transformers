@@ -956,17 +956,16 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
     Supports 2D (axial) rotary embeddings for spatial dimensions.
     """
 
-    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
+    def __init__(self, config: Sam2VideoConfig):
         super().__init__()
+        dim = config.memory_attention_hidden_size // (
+            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
+        )
         # Ensure even dimension for proper axial splitting
         if dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-
-        self.dim = dim
-        self.theta = theta
-        self.max_end_x = end_x
-
-        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        end_x, end_y = config.memory_attention_rope_feat_sizes
+        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         # Generate 2D position indices for axial rotary embedding
         flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
@@ -1052,7 +1051,7 @@ class Sam2VideoRoPEAttention(nn.Module):
 
     def __init__(
         self,
-        config,
+        config: Sam2VideoConfig,
         kv_in_dim: Optional[int] = None,
         rope_k_repeat=False,
     ):
@@ -1072,12 +1071,7 @@ class Sam2VideoRoPEAttention(nn.Module):
         self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
         self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
-        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(
-            dim=self.head_dim,
-            end_x=config.memory_attention_rope_feat_sizes[0],
-            end_y=config.memory_attention_rope_feat_sizes[1],
-            theta=config.memory_attention_rope_theta,
-        )
+        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
         self.rope_k_repeat = rope_k_repeat
         self.dropout_p = config.memory_attention_rope_dropout
 
