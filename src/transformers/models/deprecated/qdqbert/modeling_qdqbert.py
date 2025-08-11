@@ -49,6 +49,7 @@ from ....utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_qdqbert import QDQBertConfig
 
 
@@ -242,6 +243,7 @@ class QDQBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -249,7 +251,7 @@ class QDQBertSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
@@ -259,20 +261,20 @@ class QDQBertSelfAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
-        if is_cross_attention and past_key_value is not None:
+        if is_cross_attention and past_key_values is not None:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
+            key_layer = past_key_values[0]
+            value_layer = past_key_values[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
             key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
+        elif past_key_values is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -286,8 +288,8 @@ class QDQBertSelfAttention(nn.Module):
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+            # if encoder bi-directional self-attention `past_key_values` is always `None`
+            past_key_values = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(
@@ -337,7 +339,7 @@ class QDQBertSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (past_key_values,)
         return outputs
 
 
@@ -390,6 +392,7 @@ class QDQBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -397,7 +400,7 @@ class QDQBertAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
@@ -406,7 +409,7 @@ class QDQBertAttention(nn.Module):
             head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            past_key_value,
+            past_key_values,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -467,6 +470,7 @@ class QDQBertLayer(GradientCheckpointingLayer):
         self.intermediate = QDQBertIntermediate(config)
         self.output = QDQBertOutput(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -474,17 +478,17 @@ class QDQBertLayer(GradientCheckpointingLayer):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
 
@@ -503,8 +507,8 @@ class QDQBertLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_values tuple
+            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -567,7 +571,6 @@ class QDQBertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states,
@@ -575,7 +578,7 @@ class QDQBertEncoder(nn.Module):
                 layer_head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value,
+                past_key_values[i] if past_key_values is not None else None,
                 output_attentions,
             )
 
