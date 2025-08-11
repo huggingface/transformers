@@ -485,7 +485,8 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 ).to(module.register_tokens.dtype)
             module.mask_token.data.zero_()
-
+        elif isinstance(module, DINOv3ViTLayerScale):
+            module.lambda1.data.fill_(self.config.layerscale_value)
 
 @auto_docstring
 class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
