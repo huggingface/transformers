@@ -453,8 +453,8 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _can_record_outputs = {
-        "hidden_states": "DINOv3ViTLayer",
-        "attentions": "DINOv3ViTAttention",
+        "hidden_states": DINOv3ViTLayer,
+        "attentions": DINOv3ViTAttention,
     }
 
     def _init_weights(self, module):
