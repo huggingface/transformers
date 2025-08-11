@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
-from .configuration_state_tx import LlamaBidirectionalConfig, StateTxConfig
+from .configuration_state_transition import LlamaBidirectionalConfig, StateTransitionConfig
 
 
 class SamplesLoss(nn.Module):
@@ -51,7 +51,7 @@ class SamplesLoss(nn.Module):
 class LatentToGeneDecoder(nn.Module):
     """Decoder that converts latent representations back to gene space."""
 
-    def __init__(self, config: StateTxConfig):
+    def __init__(self, config: StateTransitionConfig):
         super().__init__()
         self.decoder = nn.Sequential(
             nn.Linear(config.gene_dim, 1024, bias=True),
@@ -465,13 +465,13 @@ class LlamaBidirectionalModel(LlamaBidirectionalPreTrainedModel):
         return None
 
 
-class StateTxPreTrainedModel(PreTrainedModel):
+class StateTransitionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = StateTxConfig
+    config_class = StateTransitionConfig
     base_model_prefix = "state_tx"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
@@ -493,7 +493,7 @@ class StateTxPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
 
-class StateTxModel(StateTxPreTrainedModel):
+class StateTransitionModel(StateTransitionPreTrainedModel):
     """
     StateTx Model implementing PertSetsPerturbationModel architecture.
 
@@ -501,7 +501,7 @@ class StateTxModel(StateTxPreTrainedModel):
     and produces gene expression predictions.
     """
 
-    def __init__(self, config: StateTxConfig):
+    def __init__(self, config: StateTransitionConfig):
         super().__init__(config)
         self.config = config
 
@@ -658,4 +658,4 @@ class StateTxModel(StateTxPreTrainedModel):
         }
 
 
-__all__ = ["StateTxPreTrainedModel", "StateTxModel"]
+__all__ = ["StateTransitionPreTrainedModel", "StateTransitionModel"]

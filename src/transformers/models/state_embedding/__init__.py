@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_state_tx import *
-    from .modeling_state_tx import *
+    from .configuration_state_embedding import *
+    from .modeling_state_embedding import *
 else:
     import sys
 

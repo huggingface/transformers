@@ -87,9 +87,9 @@ class LlamaBidirectionalConfig(LlamaConfig):
             head_dim=head_dim,
         )
 
-class StateTxConfig(PretrainedConfig):
+class StateTransitionConfig(PretrainedConfig):
     r"""
-    Configuration class for StateTx (State Transformer) model based on PertSetsPerturbationModel.
+    Configuration class for StateTx (State Transformer) model based on StateTransitionPerturbationModel.
     
     This model uses a bidirectional Llama transformer backbone to process perturbation data.
     """
@@ -134,21 +134,14 @@ class StateTxConfig(PretrainedConfig):
         self.pert_dim = pert_dim
         self.basal_dim = basal_dim
         self.hidden_dim = hidden_dim
-        self.hidden_size = hidden_dim  # Add for Llama compatibility
-        self.num_layers = num_layers
+        self.hidden_size = hidden_dim        self.num_layers = num_layers
         self.num_heads = num_heads
-        self.num_attention_heads = num_heads  # Add for Llama compatibility
-        self.num_key_value_heads = num_key_value_heads or num_heads  # Add for Llama compatibility
-        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_heads        self.num_key_value_heads = num_key_value_heads or num_heads        self.intermediate_size = intermediate_size
         self.vocab_size = vocab_size
         self.num_batches = num_batches
         self.dropout = dropout
-        self.attention_dropout = attention_dropout  # Add for Llama compatibility
-        self.hidden_dropout = hidden_dropout
-        self.attention_bias = False  # Add for Llama compatibility
-        self.mlp_bias = False  # Add for Llama compatibility
-        self.hidden_act = "silu"  # Add for Llama compatibility
-        self.rms_norm_eps = rms_norm_eps
+        self.attention_dropout = attention_dropout        self.hidden_dropout = hidden_dropout
+        self.attention_bias = False        self.mlp_bias = False        self.hidden_act = "silu"        self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.head_dim = head_dim or (hidden_dim // num_heads)
         self.layer_norm_eps = layer_norm_eps
@@ -174,7 +167,7 @@ class SamplesLoss(nn.Module):
 class LatentToGeneDecoder(nn.Module):
     """Decoder that converts latent representations back to gene space."""
     
-    def __init__(self, config: StateTxConfig):
+    def __init__(self, config: StateTransitionConfig):
         super().__init__()
         self.decoder = nn.Sequential(
             nn.Linear(config.gene_dim, 1024, bias=True),
@@ -276,13 +269,13 @@ class LlamaBidirectionalModel(LlamaModel):
         )
 
 
-class StateTxPreTrainedModel(PreTrainedModel):
+class StateTransitionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = StateTxConfig
+    config_class = StateTransitionConfig
     base_model_prefix = "state_tx"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
@@ -304,15 +297,15 @@ class StateTxPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
 
-class StateTxModel(StateTxPreTrainedModel):
+class StateTransitionModel(StateTransitionPreTrainedModel):
     """
-    StateTx Model implementing PertSetsPerturbationModel architecture.
+    StateTx Model implementing StateTransitionPerturbationModel architecture.
     
     This model processes perturbation data through encoders, a bidirectional transformer,
     and produces gene expression predictions.
     """
 
-    def __init__(self, config: StateTxConfig):
+    def __init__(self, config: StateTransitionConfig):
         super().__init__(config)
         self.config = config
 
@@ -468,7 +461,7 @@ class StateTxModel(StateTxPreTrainedModel):
 
 
 __all__ = [
-    "StateTxConfig",
-    "StateTxPreTrainedModel", 
-    "StateTxModel",
+    "StateTransitionConfig",
+    "StateTransitionPreTrainedModel", 
+    "StateTransitionModel",
 ]

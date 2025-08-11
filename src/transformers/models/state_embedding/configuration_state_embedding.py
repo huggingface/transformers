@@ -76,7 +76,6 @@ class StateEmbeddingConfig(PretrainedConfig):
         self,
         token_dim=5120,
         d_model=2048,
-        # nhead=8,
         nhead=16,
         d_hid=2048,
         nlayers=16,
@@ -92,7 +91,6 @@ class StateEmbeddingConfig(PretrainedConfig):
     ):
         super().__init__(
             use_cache=use_cache,
-            # use_return_dict=use_return_dict,
             **kwargs,
         )
         self.token_dim = token_dim

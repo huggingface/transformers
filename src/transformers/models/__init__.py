@@ -293,8 +293,8 @@ if TYPE_CHECKING:
     from .squeezebert import *
     from .stablelm import *
     from .starcoder2 import *
-    from .state_emb import *
-    from .state_tx import *
+    from .state_embedding import *
+    from .state_transition import *
     from .superglue import *
     from .superpoint import *
     from .swiftformer import *

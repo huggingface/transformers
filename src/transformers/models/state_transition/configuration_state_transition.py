@@ -221,7 +221,7 @@ class LlamaBidirectionalConfig(PretrainedConfig):
         rope_config_validation(self)
 
 
-class StateTxConfig(PretrainedConfig):
+class StateTransitionConfig(PretrainedConfig):
     r"""
     Configuration class for StateTx (State Transformer) model based on PertSetsPerturbationModel.
 
@@ -255,20 +255,13 @@ class StateTxConfig(PretrainedConfig):
         self.pert_dim = pert_dim
         self.basal_dim = basal_dim
         self.hidden_dim = hidden_dim
-        self.hidden_size = hidden_dim  # Add for Llama compatibility
-        self.num_layers = num_layers
+        self.hidden_size = hidden_dim        self.num_layers = num_layers
         self.num_heads = num_heads
-        self.num_attention_heads = num_heads  # Add for Llama compatibility
-        self.num_key_value_heads = num_heads  # Add for Llama compatibility
-        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_heads        self.num_key_value_heads = num_heads        self.intermediate_size = intermediate_size
         self.vocab_size = vocab_size
         self.num_batches = num_batches
         self.dropout = dropout
-        self.attention_dropout = dropout  # Add for Llama compatibility
-        self.attention_bias = False  # Add for Llama compatibility
-        self.mlp_bias = False  # Add for Llama compatibility
-        self.hidden_act = "silu"  # Add for Llama compatibility
-        self.rms_norm_eps = rms_norm_eps
+        self.attention_dropout = dropout        self.attention_bias = False        self.mlp_bias = False        self.hidden_act = "silu"        self.rms_norm_eps = rms_norm_eps
 
 
-__all__ = ["StateTxConfig"]
+__all__ = ["StateTransitionConfig"]
