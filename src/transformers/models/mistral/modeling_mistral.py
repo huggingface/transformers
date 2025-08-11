@@ -341,7 +341,6 @@ class MistralModel(MistralPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            # Pass the config explicitly here to correctly use sliding layers
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
