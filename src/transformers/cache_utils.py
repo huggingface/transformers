@@ -11,6 +11,7 @@ import torch
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
+from .modeling_utils import is_fsdp_enabled
 from .utils import (
     is_hqq_available,
     is_quanto_greater,
@@ -18,7 +19,6 @@ from .utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from .modeling_utils import is_fsdp_enabled
 
 
 if _is_quanto_greater_than_0_2_5 := is_quanto_greater("0.2.5", accept_dev=True):
