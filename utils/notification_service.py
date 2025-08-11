@@ -80,10 +80,8 @@ def handle_test_results(test_results):
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
-
-    print(expressions)
-
-    time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    # It could be `'71.60s', '(0:01:11)', '====\n'` or `'in', '35.01s', '================\n'`.
+    # Let always select the one with `s`.
     time_spent = expressions[-1]
     if "=" in time_spent:
         time_spent = expressions[-2]
@@ -206,19 +204,7 @@ class Message:
         for r in all_results:
             if len(r["time_spent"]):
                 time_spent.extend(r["time_spent"])
-        print(time_spent)
-
         total_secs = sum(time_spent)
-
-        # for time in time_spent:
-        #     time_parts = time.split(":")
-        #
-        #     # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-        #     if len(time_parts) == 1:
-        #         time_parts = [0, 0, time_parts[0]]
-        #
-        #     hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-        #     total_secs += hours * 3600 + minutes * 60 + seconds
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -1235,11 +1221,7 @@ if __name__ == "__main__":
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
                 matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
-
                 failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
-                print(matrix_name)
-                print(time_spent)
-
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
@@ -1374,8 +1356,6 @@ if __name__ == "__main__":
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
             failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
-            print(time_spent)
-
             additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
