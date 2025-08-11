@@ -972,7 +972,7 @@ class DynamicCache(Cache):
     """
 
     # Specialized constructor for DDP cache data, needed for BC
-    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None):
+    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None, config: PretrainedConfig = None):
         # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
         # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
@@ -981,6 +981,10 @@ class DynamicCache(Cache):
             layers = []
             for key_states, value_states in ddp_cache_data:
                 layers.append(DynamicLayer.from_tensors(key_states, value_states))
+            super().__init__(layers=layers)
+        # If we have a config, let's use it to correctly initialize the correct number of layers immediately
+        elif config is not None:
+            layers = [DynamicLayer() for _ in range(config.num_hidden_layers)]
             super().__init__(layers=layers)
         else:
             super().__init__(layer_class_to_replicate=DynamicLayer)
@@ -1500,23 +1504,13 @@ class EncoderDecoderCache(Cache):
                     cache.is_updated[layer_idx] = True
         return cache
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0, cache_position=None) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # check if empty list because in case of static cache it will be a tensors and we can't check `if not torch.Tensor`
-        return self.self_attention_cache.get_seq_length(layer_idx, cache_position)
+        return self.self_attention_cache.get_seq_length(layer_idx)
 
     def reset(self):
-        if hasattr(self.self_attention_cache, "reset"):
-            self.self_attention_cache.reset()
-        if hasattr(self.cross_attention_cache, "reset"):
-            self.cross_attention_cache.reset()
-        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(self.cross_attention_cache, "reset"):
-            raise ValueError(
-                "Neither self nor cross-attention cache have valid `.reset()` methods. `.reset()` should "
-                "only be called on compatible cache classes, such as `StaticCache` or `SlidingWindowCache`. "
-                f"Got {self.self_attention_cache.__str__()} for the self attention cache and "
-                f"{self.cross_attention_cache.__str__()} for the cross attention cache."
-            )
+        self.self_attention_cache.reset()
+        self.cross_attention_cache.reset()
         for layer_idx in self.is_updated:
             self.is_updated[layer_idx] = False
 
