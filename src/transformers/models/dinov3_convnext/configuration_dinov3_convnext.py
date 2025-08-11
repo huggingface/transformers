@@ -68,7 +68,7 @@ class DINOv3ConvNextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "DINOv3ConvNext"
+    model_type = "dinov3_convnext"
 
     def __init__(
         self,

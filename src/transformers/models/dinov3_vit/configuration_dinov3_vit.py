@@ -104,7 +104,7 @@ class DINOv3ViTConfig(PretrainedConfig):
     >>> config = model.config
     ```"""
 
-    model_type = "DINOv3ViT"
+    model_type = "dinov3_vit"
 
     def __init__(
         self,
