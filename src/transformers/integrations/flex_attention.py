@@ -243,7 +243,7 @@ def flex_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     s_aux: Optional[torch.Tensor] = None,
     **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
     if head_mask is not None:
         logger.warning_once(
             "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
@@ -290,6 +290,7 @@ def flex_attention_forward(
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options")
+    output_attentions = kwargs.get("output_attentions", False)
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
@@ -301,11 +302,15 @@ def flex_attention_forward(
         kernel_options=kernel_options,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=True,
+        return_lse=output_attentions,
         training=module.training,
     )
-    # lse is returned in float32
-    attention_weights = attention_weights.to(value.dtype)
+    if output_attentions:
+        attn_output, attention_weights = flex_attn_output
+        # lse is returned in float32
+        attention_weights = attention_weights.to(value.dtype)
+    else:
+        attn_output, attention_weights = flex_attn_output, None
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attention_weights
