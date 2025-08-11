@@ -21,8 +21,8 @@ from ... import (
     PreTrainedTokenizer,
     PretrainedConfig,
     LlamaForCausalLM,
-    Qwen2AudioEncoder,
 )
+from .af3.modeling_qwen2_audio import Qwen2AudioEncoder
 
 from huggingface_hub import file_exists, repo_exists, snapshot_download
 from huggingface_hub.utils import HFValidationError
@@ -159,7 +159,7 @@ class LlavaMetaModel(ABC):
 
         self.llm, self.tokenizer = build_llm_and_tokenizer(llm_cfg, config, *args, **kwargs)
         
-        self.sound_tower = Qwen2AudioSoundTower(sound_tower_cfg).to(self.llm.device)
+        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
         self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
         self.sound_encoder = BasicSoundEncoder(parent=self)
         
@@ -527,7 +527,7 @@ AutoModel.register(SoundMultimodalProjectorConfig, SoundMultimodalProjector)
 # -------------------------------------------------------------------------------------------------
 
 
-class Qwen2AudioSoundTower(nn.Module):
+class AudioFlamingo3SoundTower(nn.Module):
     def __init__(self, model_name_or_path):
         super().__init__()
 
