@@ -14,6 +14,7 @@
 import inspect
 import os
 import warnings
+from functools import partial
 from typing import Optional, TypedDict
 
 import torch
@@ -53,12 +54,7 @@ _flash_fn = None
 _flash_varlen_fn = None
 _pad_fn = None
 _unpad_fn = None
-
-_supports_dropout = None
-_supports_sliding_window = None
-_supports_determinism = None
-_supports_softcap = None
-_supports_s_aux = None
+_process_flash_kwargs_fn = None
 
 
 def _lazy_imports(implementation: Optional[str]):
@@ -108,29 +104,21 @@ def lazy_import_flash_attention(implementation: Optional[str]):
     if any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
         _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
 
-    # Depending on version and kernel some features are not supported
-    global _supports_dropout, _supports_sliding_window, _supports_determinism, _supports_softcap, _supports_s_aux
-    if any(
-        k is None
-        for k in [
-            _supports_dropout,
-            _supports_sliding_window,
-            _supports_determinism,
-            _supports_softcap,
-            _supports_s_aux,
-        ]
-    ):
+    # Depending on version and kernel some features are not supported - hence, we configure the
+    # according function that prepares the necessary kwargs on the fly
+    global _process_flash_kwargs_fn
+    if _process_flash_kwargs_fn is None:
         fn_parameters = inspect.signature(_flash_varlen_fn).parameters
-        _supports_dropout = "dropout_p" in fn_parameters
-        _supports_sliding_window = "window_size" in fn_parameters
-        _supports_determinism = "deterministic" in fn_parameters
-        _supports_softcap = "softcap" in fn_parameters
-        _supports_s_aux = "s_aux" in fn_parameters  # attention sink (e.g. gpt oss)
+        _process_flash_kwargs_fn = partial(
+            _process_flash_attention_kwargs,
+            supports_dropout="dropout_p" in fn_parameters,
+            supports_sliding_window="window_size" in fn_parameters,
+            supports_determinism="deterministic" in fn_parameters,
+            supports_softcap="softcap" in fn_parameters,
+            supports_s_aux="s_aux" in fn_parameters,  # attention sink (e.g. gpt oss)
+        )
 
-    return (
-        (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn),
-        (_supports_dropout, _supports_sliding_window, _supports_determinism, _supports_softcap, _supports_s_aux),
-    )
+    return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
 def _index_first_axis(tensor, indices):
@@ -445,6 +433,77 @@ class FlashAttentionKwargs(TypedDict, total=False):
     max_length_k: Optional[int]
 
 
+def _process_flash_attention_kwargs(
+    query_length: int,
+    key_length: int,
+    is_causal: bool,
+    dropout: float = 0.0,
+    softmax_scale: Optional[float] = None,
+    sliding_window: Optional[int] = None,
+    use_top_left_mask: bool = False,
+    softcap: Optional[float] = None,
+    deterministic: Optional[bool] = None,
+    supports_dropout: Optional[bool] = None,
+    supports_sliding_window: Optional[bool] = None,
+    supports_determinism: Optional[bool] = None,
+    supports_softcap: Optional[bool] = None,
+    supports_s_aux: Optional[bool] = None,
+    **kwargs,
+):
+    """
+    Returns a set of kwargs that are passed down to the according flash attention function based on
+    requested features and whether it is supported - depends on the version and kernel implementation
+    which is dynamically configued at `lazy_import_flash_attention` and the respective kwargs `supports_xxx`.
+
+    Args:
+        query_length (`int`):
+            Length of the query states
+        key_length (`int`):
+            Length of the key states
+        is_causal (`bool`):
+            Whether we perform causal (decoder) attention or full attention.
+        dropout (`float`):
+            Attention dropout.
+        softmax_scale (`float`, *optional*):
+            The scaling of QK^T before applying softmax. Default to `1 / sqrt(head_dim)`.
+        sliding_window (`int`, *optional*):
+            The size of the sliding window, i.e. we look at a max of `sliding_window` tokens back.
+        use_top_left_mask (`bool`, *optional*):
+            Deprecated behavior of older versions of flash attention requiring different masking.
+        softcap (`float`, *optional*):
+            Softcap for the attention logits, used e.g. in gemma2.
+        deterministic (`bool`, *optional*):
+            Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
+    Return:
+        flash_kwargs (`dict`):
+            A dict of kwargs that are requested and supported.
+    """
+    flash_kwargs = {
+        "causal": is_causal and not (use_top_left_mask and query_length == 1),
+        "softmax_scale": softmax_scale,
+    }
+
+    if supports_dropout:
+        flash_kwargs["dropout_p"] = dropout
+
+    if supports_sliding_window and sliding_window is not None and key_length > sliding_window:
+        flash_kwargs["window_size"] = (sliding_window, sliding_window)
+
+    if supports_determinism:
+        flash_kwargs["deterministic"] = (
+            deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+        )
+
+    if supports_softcap and softcap is not None:
+        flash_kwargs["softcap"] = softcap
+
+    # Only within kernel implementation atm
+    if supports_s_aux and "s_aux" in kwargs:
+        flash_kwargs["s_aux"] = kwargs.get("s_aux")
+
+    return flash_kwargs
+
+
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -471,6 +530,8 @@ def _flash_attention_forward(
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
     first unpad the input, then computes the attention scores and pad the final attention scores.
 
+    (Optional) kwargs are described further in `_process_flash_attention_kwargs` and `FlashAttentionKwargs`.
+
     Args:
         query_states (`torch.Tensor`):
             Input query states to be passed to Flash Attention API
@@ -481,47 +542,28 @@ def _flash_attention_forward(
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
-        dropout (`float`):
-            Attention dropout
-        softmax_scale (`float`, *optional*):
-            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        softcap (`float`, *optional*):
-            Softcap for the attention logits, used e.g. in gemma2.
-        deterministic (`bool`, *optional*):
-            Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), supports_flags = lazy_import_flash_attention(implementation)
-    supports_dropout, supports_sliding_window, supports_determinism, supports_softcap, supports_s_aux = supports_flags
-
-    # Iterating through optional possible kwargs to be passed down
-    flash_kwargs = {
-        "causal": is_causal and not (use_top_left_mask and query_length == 1),
-        "softmax_scale": softmax_scale,
-    }
-
-    if supports_dropout:
-        flash_kwargs["dropout_p"] = dropout
-
-    if supports_sliding_window and sliding_window is not None and key_states.shape[1] > sliding_window:
-        flash_kwargs["window_size"] = (sliding_window, sliding_window)
-
-    if supports_determinism:
-        flash_kwargs["deterministic"] = (
-            deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
-        )
-
-    if supports_softcap and softcap is not None:
-        flash_kwargs["softcap"] = softcap
-
-    # Only within kernel implementation atm
-    if supports_s_aux and "s_aux" in kwargs:
-        flash_kwargs["s_aux"] = kwargs.get("s_aux")
+    (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(implementation)
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
+    )
+
+    # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
+    flash_kwargs = process_flash_kwargs_fn(
+        query_length=query_length,
+        key_length=key_states.size(1),
+        is_causal=is_causal,
+        dropout=dropout,
+        softmax_scale=softmax_scale,
+        sliding_window=sliding_window,
+        use_top_left_mask=use_top_left_mask,
+        softcap=softcap,
+        deterministic=deterministic,
+        **kwargs,
     )
 
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
@@ -531,7 +573,7 @@ def _flash_attention_forward(
     #
     # NOTE: it is user's responsibility to take care of flattenning `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.shape[0])
+    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
     is_fa_with_varlen_kwargs = all(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
