@@ -86,8 +86,8 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"score": ANY(float), "label": ANY(str)},
-                {"score": ANY(float), "label": ANY(str)},
+                {"keypoints0": list[ANY(float)], "keypoints1": list[ANY(float)], "matching_scores": list[ANY(float)]},
+                {"keypoints0": list[ANY(float)], "keypoints1": list[ANY(float)], "matching_scores": list[ANY(float)]},
             ],
         )
 
@@ -107,27 +107,55 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
             outputs,
             [
                 [
-                    {"score": ANY(float), "label": ANY(str)},
-                    {"score": ANY(float), "label": ANY(str)},
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
                 ],
                 [
-                    {"score": ANY(float), "label": ANY(str)},
-                    {"score": ANY(float), "label": ANY(str)},
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
                 ],
                 [
-                    {"score": ANY(float), "label": ANY(str)},
-                    {"score": ANY(float), "label": ANY(str)},
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
                 ],
                 [
-                    {"score": ANY(float), "label": ANY(str)},
-                    {"score": ANY(float), "label": ANY(str)},
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
+                    {
+                        "keypoints0": list[ANY(float)],
+                        "keypoints1": list[ANY(float)],
+                        "matching_scores": list[ANY(float)],
+                    },
                 ],
             ],
         )
-
-        # for single_output in outputs:
-        #     for output_element in single_output:
-        #         compare_pipeline_output_to_hub_spec(output_element, KeypointMatchingOutputElement)
 
     @require_torch
     def test_single_image(self):
