@@ -3483,6 +3483,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+            # Custom kernel which needs the mask interface to be properly usable on these models
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3584,10 +3587,6 @@ class ModelTesterMixin:
     @mark.flash_attn_test
     @slow
     @is_flaky()
-    @unittest.skip(
-        reason="Does not work with certain models such as encoder-decoder models and hence also their decoder variants."
-        "Skipping for now."
-    )
     def test_flash_attn_kernels_inference_equivalence(self):
         self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
 
