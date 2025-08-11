@@ -1,0 +1,38 @@
+name: CI collated reports
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+      report_repo_id:
+        required: true
+        type: string
+
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+
+jobs:
+  collate_reports:
+    name: Collate reports
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+
+      - name: Collated reports
+        shell: bash
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_SHA: ${{ github.sha }}
+          CI_TEST_JOB: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+        run: python3 utils/collated_reports.py --path /transformers/reports
+
+      - name: Upload collated reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: collated_reports_ ...
+          path: collated_reports_ ...
