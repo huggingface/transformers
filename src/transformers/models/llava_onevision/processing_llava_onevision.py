@@ -214,8 +214,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         prompt_strings = []
         max_num_vision_tokens = 0
         for sample in text:
-            num_images = next(batch_num_images)  # should consume iterable
             if special_token in sample:
+                num_images = next(batch_num_images)  # should consume iterable
                 is_multi_image = num_images != 1
             else:
                 is_multi_image = False
