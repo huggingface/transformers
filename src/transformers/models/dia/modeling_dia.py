@@ -586,11 +586,11 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         normed_states = self.pre_sa_norm(hidden_states)
         self_attn_output, self_attn_weights = self.self_attention(
             normed_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
+            position_embeddings,
+            attention_mask,
             # Needs to be an arg in order to function properly
             # on inplace operations to be carried (e.g. compile)
-            past_key_value=self_attn_cache,
+            self_attn_cache,
             cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
@@ -693,8 +693,11 @@ class DiaDecoder(DiaPreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states,
-                attention_mask=attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                # Needs to be an arg in order to function properly
+                # on inplace operations to be carried (e.g. compile)
+                None,
+                attention_mask,
+                encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 cache_position=cache_position,

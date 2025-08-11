@@ -619,8 +619,9 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                attention_mask=self_attn_mask_mapping[layer_module.attention_type],
-                position_ids=position_ids,
+                None,
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
@@ -723,13 +724,14 @@ class T5GemmaDecoder(T5GemmaEncoder):
         for layer_module in self.layers[: self.config.num_hidden_layers]:
             hidden_states = layer_module(
                 hidden_states,
-                attention_mask=self_attn_mask_mapping[layer_module.attention_type],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=cross_attn_mask_mapping["full_attention"],
+                None,
+                self_attn_mask_mapping[layer_module.attention_type],
+                position_ids,
+                past_key_values,
+                use_cache,
+                cache_position,
+                encoder_hidden_states,
+                cross_attn_mask_mapping["full_attention"],
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)

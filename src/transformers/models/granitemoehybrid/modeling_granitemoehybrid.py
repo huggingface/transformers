@@ -267,6 +267,7 @@ class GraniteMoeHybridAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        cos, sin = (None, None)
         if self.config.position_embedding_type == "rope":
             if position_embeddings is None:
                 cos, sin = self.rotary_emb(hidden_states, position_ids)
@@ -278,7 +279,6 @@ class GraniteMoeHybridAttention(nn.Module):
                     "removed in v4.60.0. Make sure to pass `position_ids` instead."
                 )
                 cos, sin = position_embeddings
-
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:

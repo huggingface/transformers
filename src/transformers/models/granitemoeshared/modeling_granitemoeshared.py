@@ -477,6 +477,7 @@ class GraniteMoeSharedAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        cos, sin = (None, None)
         if self.config.position_embedding_type == "rope":
             if position_embeddings is None:
                 cos, sin = self.rotary_emb(hidden_states, position_ids)
