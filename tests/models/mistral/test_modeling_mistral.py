@@ -18,6 +18,7 @@ import unittest
 
 import pytest
 from packaging import version
+from parameterized import parameterized
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -336,6 +337,40 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @require_flash_attn
+    @slow
+    def test_generation_beyond_sliding_window(self, attn_implementation: str):
+        """Test that we can correctly generate beyond the sliding window. This is non-trivial as Mistral will use
+        a DynamicCache with only sliding layers."""
+
+        model_id = "mistralai/Mistral-7B-v0.1"
+        EXPECTED_COMPLETIONS = [
+            "This is a nice place. This is a nice place. This is a nice place. This is",
+            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+        ]
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = MistralForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, device_map=torch_device, torch_dtype=torch.float16
+        )
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
 
 @slow
