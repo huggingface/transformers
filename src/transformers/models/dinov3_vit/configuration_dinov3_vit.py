@@ -120,17 +120,12 @@ class DINOv3ViTConfig(PretrainedConfig):
         query_bias=True,
         key_bias=False,
         value_bias=True,
-        proj_bias: bool = True,
+        proj_bias=True,
         mlp_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
         num_register_tokens: int = 0,
-        # backbone related parameters
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
         # train augs
         pos_embed_rope_shift_coords=None,
         pos_embed_rope_jitter_coords=None,
@@ -139,6 +134,9 @@ class DINOv3ViTConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -148,9 +146,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
@@ -161,16 +156,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.proj_bias = proj_bias
         self.mlp_bias = mlp_bias
         self.num_register_tokens = num_register_tokens
-
-        # backbone related parameters
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features,
-            out_indices=out_indices,
-            stage_names=self.stage_names,
-        )
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
 
         # train augs
         self.pos_embed_rope_shift_coords = pos_embed_rope_shift_coords

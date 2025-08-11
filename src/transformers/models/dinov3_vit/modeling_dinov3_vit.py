@@ -38,40 +38,6 @@ from .configuration_dinov3_vit import DINOv3ViTConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings with Dinov2 -> DINOv3ViT
-class DINOv3ViTPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
-            )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
-
-
 class DINOv3ViTEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -83,20 +49,27 @@ class DINOv3ViTEmbeddings(nn.Module):
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = DINOv3ViTPatchEmbeddings(config)
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
 
     def forward(self, pixel_values: Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> Tensor:
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        
+        batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.weight.dtype
+
+        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
+        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
 
         if bool_masked_pos is not None:
-            embeddings = torch.where(bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype), embeddings)
+            mask_token = self.mask_token.to(patch_embeddings.dtype)
+            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
 
         # Add CLS and register tokens
-        batch_size = embeddings.shape[0]
         cls_token = self.cls_token.expand(batch_size, -1, -1)
         register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-        embeddings = torch.cat([cls_token, register_tokens, embeddings], dim=1)
+        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
 
         return embeddings
 
@@ -226,7 +199,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q: Tensor, k: Tensor, cos: Tensor, sin: Tensor) -> tuple[Tensor, Tensor]:
+def apply_rotary_pos_emb(q: Tensor, k: Tensor, cos: Tensor, sin: Tensor, **kwargs) -> tuple[Tensor, Tensor]:
     """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
     ignoring the prefix tokens (cls token and register tokens).
 
@@ -511,7 +484,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> DINOv3ViTPatchEmbeddings:
+    def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
     @check_model_inputs
