@@ -213,7 +213,7 @@ class MiniCPMVImageProcessorFast(BaseImageProcessorFast):
         patches = patches.permute(0, 1, 3, 2).reshape(image_tensor.size(0), patch_size, -1)
         return patches
 
-    def preprocess(
+    def _preprocess(
             self,
             images: Union[Image.Image, list[Image.Image], list[list[Image.Image]]],
             do_pad: Optional[bool] = True, # TODO: add pad for MiniCPM-Llama3-V-2_5
