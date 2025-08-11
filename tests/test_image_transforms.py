@@ -246,7 +246,7 @@ class ImageTransformsTester(unittest.TestCase):
 
         # Test that exception is raised if inputs are incorrect
         # Not a numpy array image
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             normalize(5, 5, 5)
 
         # Number of mean values != number of channels

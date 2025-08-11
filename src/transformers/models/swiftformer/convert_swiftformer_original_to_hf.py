@@ -65,7 +65,7 @@ def rename_key(dct, old, new):
 
 def create_rename_keys(state_dict):
     rename_keys = []
-    for k in state_dict.keys():
+    for k in state_dict:
         k_new = k
         if ".pwconv" in k:
             k_new = k_new.replace(".pwconv", ".point_wise_conv")
