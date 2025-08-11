@@ -92,7 +92,7 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 ...     frame_idx=ann_frame_idx,
 ... )
 >>> video_res_masks = processor.post_process_masks(
-...     [outputs.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...     [outputs.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ... )[0]
 >>> print(f"Segmentation shape: {video_res_masks.shape}")
 Segmentation shape: torch.Size([1, 1, 480, 854])
@@ -101,7 +101,7 @@ Segmentation shape: torch.Size([1, 1, 480, 854])
 >>> video_segments = {}
 >>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
 ...     video_res_masks = processor.post_process_masks(
-...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ...     )[0]
 ...     video_segments[sam2_video_output.frame_idx] = video_res_masks
 
@@ -141,7 +141,7 @@ Track multiple objects simultaneously across video frames:
 >>> video_segments = {}
 >>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
 ...     video_res_masks = processor.post_process_masks(
-...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ...     )[0]
 ...     video_segments[sam2_video_output.frame_idx] = {
 ...         obj_id: video_res_masks[i]
@@ -175,7 +175,7 @@ You can add additional clicks on any frame to refine the tracking:
 >>> video_segments = {}
 >>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
 ...     video_res_masks = processor.post_process_masks(
-...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ...     )[0]
 ...     video_segments[sam2_video_output.frame_idx] = video_res_masks
 ```
@@ -251,7 +251,7 @@ Track multiple objects simultaneously in video by adding them all at once:
 ...     frame_idx=ann_frame_idx,
 ... )
 >>> video_res_masks = processor.post_process_masks(
-...     [outputs.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...     [outputs.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ... )[0]
 >>> print(f"Generated masks for {video_res_masks.shape[0]} objects")
 Generated masks for 2 objects
@@ -260,7 +260,7 @@ Generated masks for 2 objects
 >>> video_segments = {}
 >>> for sam2_video_output in model.propagate_in_video_iterator(inference_session):
 ...     video_res_masks = processor.post_process_masks(
-...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.height, inference_session.width]], binarize=False
+...         [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
 ...     )[0]
 ...     video_segments[sam2_video_output.frame_idx] = {
 ...         obj_id: video_res_masks[i]

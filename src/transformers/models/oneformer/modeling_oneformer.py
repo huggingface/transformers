@@ -1396,7 +1396,7 @@ class OneFormerPixelDecoder(nn.Module):
         position_embeddings_list = []
         for level, source in enumerate(features[::-1][: self.num_feature_levels]):
             sources.append(self.input_projections[level](source))
-            position_embeddings_list.append(self.position_embedding(source))
+            position_embeddings_list.append(self.position_embedding(source.shape, source.device, source.dtype))
 
         masks = [torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in sources]
 
@@ -2355,7 +2355,11 @@ class OneFormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
-            multi_stage_positional_embeddings.append(self.position_embedder(multi_scale_features[i], None).flatten(2))
+            multi_stage_positional_embeddings.append(
+                self.position_embedder(
+                    multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
+                ).flatten(2)
+            )
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
@@ -2371,7 +2375,7 @@ class OneFormerTransformerModule(nn.Module):
         query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
         task_token = task_token.unsqueeze(0)
 
-        query_features = self.position_embedder(mask_features, None)
+        query_features = self.position_embedder(mask_features.shape, mask_features.device, mask_features.dtype, None)
 
         return self.decoder(
             task_token=task_token,
