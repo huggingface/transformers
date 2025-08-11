@@ -2,6 +2,7 @@ from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 
 from transformers.utils.generic import TransformersKwargs
 
@@ -11,6 +12,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
+from ..llama.modeling_llama import repeat_kv
 from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
@@ -21,8 +23,36 @@ from ..olmo2.modeling_olmo2 import (
     Olmo2RMSNorm,
     Olmo2RotaryEmbedding,
     apply_rotary_pos_emb,
-    eager_attention_forward,
 )
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    scores = probs[..., :-1]
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
 class Olmo3Config(Olmo2Config):
@@ -195,6 +225,7 @@ class Olmo3Attention(Olmo2Attention):
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
         self.q_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
         self,
@@ -244,6 +275,7 @@ class Olmo3Attention(Olmo2Attention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -253,7 +285,9 @@ class Olmo3Attention(Olmo2Attention):
 
 
 class Olmo3DecoderLayer(Olmo2DecoderLayer):
-    pass
+    def __init__(self, config: Olmo3Config, layer_idx: int):
+        super().__init__(config, layer_idx=layer_idx)
+        self.self_attn = Olmo3Attention(config=config, layer_idx=layer_idx)
 
 
 class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
@@ -261,7 +295,11 @@ class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Olmo3Attention):
+            module.sinks.data.normal_(mean=0.0, std=std)
 
 
 # The OLMo 3 model is identical to the OLMo 2 model, except:
