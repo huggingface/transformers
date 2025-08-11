@@ -1342,20 +1342,24 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         **kwargs,
     ) -> tuple[tf.Tensor] | TFFunnelForPreTrainingOutput:
         r"""
-        Returns:
+                        Returns:
 
-        Examples:
+                        Examples:
 
-        ```python
-        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
-        >>> import torch
+                        ```python
+                        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
-        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
+                        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
+                        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> logits = model(inputs).logits
-        ```"""
+                        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+                        >>> logits = model(inputs).logits
+                        ```"""
         discriminator_hidden_states = self.funnel(
             input_ids,
             attention_mask,
