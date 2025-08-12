@@ -195,7 +195,6 @@ def convert_and_test_dinov3_checkpoint(args):
     }
     model_name = args.model_name
     config = get_dinov3_config(model_name)
-    # print(config)
 
     model = DINOv3ViTModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])

@@ -14,11 +14,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import (
-    DINOv3ConvNextConfig,
-    DINOv3ViTImageProcessorFast,
-    DINOv3ConvNextModel,
-)
+from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessorFast
 
 
 HUB_MODELS = {
@@ -34,6 +30,12 @@ HUB_CHECKPOINTS = {
     "convnext_base": "dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth",
     "convnext_large": "dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth",
 }
+
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+
+}
+# fmt: on
 
 
 def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
@@ -86,82 +88,53 @@ def get_image_processor(resize_size: int = 224):
     )
 
 
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
+
+
 @torch.no_grad()
 def convert_and_test_dinov3_checkpoint(args):
     expected_outputs = {
-        "convnext_tiny_cls": [
-            -6.372119903564453,
-            1.3007919788360596,
-            2.074303388595581,
-            -0.0799759104847908,
-            0.6072055697441101,
-        ],
-        "convnext_tiny_patch": [
-            0.4905306398868561,
-            -3.7134664058685303,
-            1.8485137224197388,
-            -1.0403193235397339,
-            -1.0908184051513672,
-        ],
-        "convnext_small_cls": [
-            -0.9039149284362793,
-            1.4121832847595215,
-            0.2874654531478882,
-            0.17529653012752533,
-            -2.3979403972625732,
-        ],
-        "convnext_small_patch": [
-            -1.081114649772644,
-            0.6373621821403503,
-            3.7487659454345703,
-            0.1701796054840088,
-            1.4451534748077393,
-        ],
-        "convnext_base_cls": [
-            0.15536683797836304,
-            -0.37877172231674194,
-            -0.7351579070091248,
-            -2.818718671798706,
-            0.015095720998942852,
-        ],
-        "convnext_base_patch": [
-            3.0391180515289307,
-            0.7781552672386169,
-            -1.9613221883773804,
-            -1.6071475744247437,
-            -2.4119417667388916,
-        ],
-        "convnext_large_cls": [
-            -2.219094753265381,
-            -0.5944517254829407,
-            -2.3002943992614746,
-            -0.9574159979820251,
-            -0.5204737782478333,
-        ],
-        "convnext_large_patch": [
-            -1.477349042892456,
-            -0.21703894436359406,
-            -3.1281375885009766,
-            0.41896212100982666,
-            0.3349491357803345,
-        ],
+        "convnext_tiny_cls": [-6.372119, 1.300791, 2.074303, -0.079975, 0.607205],
+        "convnext_tiny_patch": [0.490530, -3.713466, 1.848513, -1.040319, -1.090818],
+        "convnext_small_cls": [-0.903914, 1.412183, 0.287465, 0.175296, -2.397940],
+        "convnext_small_patch": [-1.081114, 0.637362, 3.748765, 0.170179, 1.445153],
+        "convnext_base_cls": [0.155366, -0.378771, -0.735157, -2.818718, 0.015095],
+        "convnext_base_patch": [3.039118, 0.778155, -1.961322, -1.607147, -2.411941],
+        "convnext_large_cls": [-2.219094, -0.594451, -2.300294, -0.957415, -0.520473],
+        "convnext_large_patch": [-1.477349, -0.217038, -3.128137, 0.418962, 0.334949],
     }
     model_name = args.model_name
     config = get_dinov3_config(model_name)
     # print(config)
 
     model = DINOv3ConvNextModel(config).eval()
-    state_dict_path = hf_hub_download(
-        repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name]
-    )
+    state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
     original_state_dict = torch.load(state_dict_path)
     original_keys = list(original_state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(original_keys)
+
     converted_state_dict = {}
     for key in original_keys:
+        new_key = new_keys[key]
         weight_tensor = original_state_dict[key]
         if key == "norms.3.weight" or key == "norms.3.bias":
             continue
-        converted_state_dict[key] = weight_tensor
+        converted_state_dict[new_key] = weight_tensor
     model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
@@ -173,9 +146,7 @@ def convert_and_test_dinov3_checkpoint(args):
     original_pixel_values = transform(image).unsqueeze(0)  # add batch dimension
     inputs = image_processor(image, return_tensors="pt")
 
-    torch.testing.assert_close(
-        original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6
-    )
+    torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
