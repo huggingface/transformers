@@ -161,7 +161,7 @@ print("Pooled output shape:", pooled_output.shape)
 
 [[autodoc]] DINOv3ViTConfig
 
-## DINOv3ConvNeXtConfig
+## DINOv3ConvNextConfig
 
 [[autodoc]] DINOv3ConvNextConfig
 

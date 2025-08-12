@@ -26,8 +26,8 @@ logger = logging.get_logger(__name__)
 class DINOv3ConvNextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
-    DINOv3ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DINOv3ConvNeXT
+    DINOv3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINOv3ConvNext
     [facebook/convnext-tiny-224](https://huggingface.co/facebook/convnext-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
