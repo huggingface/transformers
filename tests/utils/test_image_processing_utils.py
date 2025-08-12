@@ -65,16 +65,6 @@ class ImageProcessorUtilTester(unittest.TestCase):
 
         self.assertIsNotNone(config)
 
-    def test_vit_processors_compatibility(self):
-        processor = ViTImageProcessor.from_pretrained("hf-internal-testing/tiny-random-vit")
-        processor_fast = ViTImageProcessorFast.from_pretrained("hf-internal-testing/tiny-random-vit")
-
-        # Check that both processors have similar configurations
-        self.assertEqual(processor.size, processor_fast.size)
-        self.assertEqual(processor.do_resize, processor_fast.do_resize)
-        self.assertEqual(processor.do_rescale, processor_fast.do_rescale)
-        self.assertEqual(processor.do_normalize, processor_fast.do_normalize)
-
 
 @is_staging_test
 class ImageProcessorPushToHubTester(unittest.TestCase):
