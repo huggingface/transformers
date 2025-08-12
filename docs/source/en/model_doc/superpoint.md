@@ -131,6 +131,11 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 [[autodoc]] SuperPointImageProcessor
 
 - preprocess
+
+## SuperPointImageProcessorFast
+
+[[autodoc]] SuperPointImageProcessorFast
+- preprocess
 - post_process_keypoint_detection
 
 <frameworkcontent>

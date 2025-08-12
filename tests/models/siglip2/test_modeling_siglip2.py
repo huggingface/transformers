@@ -99,7 +99,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
         dtype = torch.float16
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Prepare inputs
@@ -514,9 +514,9 @@ class Siglip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
 
     def get_config(self):
-        return Siglip2Config.from_text_vision_configs(
-            self.text_model_tester.get_config(),
-            self.vision_model_tester.get_config(),
+        return Siglip2Config(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
         )
 
     def create_and_check_model(

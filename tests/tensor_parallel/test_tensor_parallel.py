@@ -109,7 +109,7 @@ class TestTensorParallel(TestCasePlus):
 
             assert has_dtensor == 1, "TP model must has DTensor"
 
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
             prompt = "Can I help"
 
             inputs = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)

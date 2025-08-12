@@ -261,7 +261,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         if self.per_bin_stddev is not None:
             log_mel_spec = log_mel_spec / self.per_bin_stddev  # Broadcasting
 
-        mel_spectrogram = log_mel_spec.squeeze()
+        mel_spectrogram = log_mel_spec.squeeze(0)
         mask = attention_mask[:: self.hop_length].astype(bool)
         # TODO: The filtered mask is always exactly 3 elements longer than the mel_spectrogram. Why???
         return mel_spectrogram, mask[: mel_spectrogram.shape[0]]

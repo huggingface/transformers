@@ -157,7 +157,7 @@ class TFLayoutLMEmbeddings(keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
         if bbox is None:
-            bbox = bbox = tf.fill(input_shape + [4], value=0)
+            bbox = tf.fill(input_shape + [4], value=0)
         try:
             left_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 0])
             upper_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 1])
