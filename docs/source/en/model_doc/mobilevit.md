@@ -49,14 +49,12 @@ The example below demonstrates how to do [Image Classification] with [`Pipeline`
 import torch
 from transformers import pipeline
 
-
-classifier = pipeline(task = "image-classification",
-					  model = "apple/mobilevit-small",
-					  torch_dtype = torch.float16,
-                       device = 0
+classifier = pipeline(task="image-classification",
+					  model="apple/mobilevit-small",
+					  torch_dtype=torch.float16, device=0,
                       )
 
-preds = classifier("https://huggingface.co/datasets/huggingface/documentation-							images/resolve/main/pipeline-cat-chonk.jpeg")
+preds = classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 print(f"Prediction: {preds}\n")
 ```
 
@@ -73,11 +71,10 @@ from transformers import AutoImageProcessor, MobileViTForImageClassification
 
 image_processor = AutoImageProcessor.from_pretrained(
 							"apple/mobilevit-small",
-                            use_fast = True,
+                            use_fast=True,
 							)
-model = MobileViTForImageClassification.from_pretrained(
-    								"apple/mobilevit-small"
-                                     )
+model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
+
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(image, return_tensors="pt").to("cuda")
@@ -88,7 +85,7 @@ predicted_class_id = logits.argmax(dim=-1).item()
 
 class_labels = model.config.id2label
 predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted calss label is:{predicted_class_label}")
+print(f"The predicted class label is:{predicted_class_label}")
 ```
 
 </hfoption>
