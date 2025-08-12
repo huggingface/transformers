@@ -12,7 +12,6 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ..llama.modeling_llama import repeat_kv
 from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
@@ -23,10 +22,11 @@ from ..olmo2.modeling_olmo2 import (
     Olmo2RMSNorm,
     Olmo2RotaryEmbedding,
     apply_rotary_pos_emb,
+    repeat_kv,
 )
 
 
-def eager_attention_forward(
+def olmo3_eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -34,11 +34,13 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: float,
     dropout: float = 0.0,
+    sliding_window: Optional[int] = None,
     **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -48,7 +50,7 @@ def eager_attention_forward(
 
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]
+    scores = probs[..., :-1]  # we drop the sink here
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -225,6 +227,7 @@ class Olmo3Attention(Olmo2Attention):
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
         self.q_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo3RMSNorm(self.head_dim, config.rms_norm_eps)
+        # Add attention sink parameter
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
@@ -262,7 +265,7 @@ class Olmo3Attention(Olmo2Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
+        attention_interface: Callable = olmo3_eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -275,7 +278,6 @@ class Olmo3Attention(Olmo2Attention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -286,8 +288,8 @@ class Olmo3Attention(Olmo2Attention):
 
 class Olmo3DecoderLayer(Olmo2DecoderLayer):
     def __init__(self, config: Olmo3Config, layer_idx: int):
-        super().__init__(config, layer_idx=layer_idx)
-        self.self_attn = Olmo3Attention(config=config, layer_idx=layer_idx)
+        super().__init__(config, layer_idx)
+        self.self_attn = Olmo3Attention(config, layer_idx)
 
 
 class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
@@ -381,7 +383,9 @@ class Olmo3Model(Olmo2Model):
 
 # The heads now only need to redefine the model inside to the correct `RobertaModel`
 class Olmo3ForCausalLM(Olmo2ForCausalLM):
-    pass
+    def __init__(self, config: Olmo3Config):
+        super().__init__(config)
+        self.model = Olmo3Model(config)
 
 
 __all__ = [

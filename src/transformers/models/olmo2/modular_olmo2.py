@@ -36,24 +36,33 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)      # [B, H, K, D]
+    value_states = repeat_kv(value, module.num_key_value_groups)  # [B, H, K, D]
+
+    attn_logits = torch.matmul(query, key_states.transpose(2, 3)) * scaling  # [B, H, Q, K]
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_logits = attn_logits + causal_mask
 
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+    B, H, Q, K = attn_logits.shape
+    s_param = module.sinks
+    if s_param.ndim == 1:
+        S = s_param.numel()
+        sink_logits = s_param.view(1, 1, 1, S).to(attn_logits).expand(B, H, Q, S)
+    elif s_param.ndim == 2:
+        assert s_param.size(0) == H, "sinks first dim must equal num heads"
+        S = s_param.size(1)
+        sink_logits = s_param.view(1, H, 1, S).to(attn_logits).expand(B, H, Q, S)
+    else:
+        raise ValueError("module.sinks must have shape [S] or [H, S]")
 
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
+    combined_logits = torch.cat([attn_logits, sink_logits], dim=-1)  # [B, H, Q, K+S]
+    combined_probs = F.softmax(combined_logits, dim=-1, dtype=torch.float32).to(attn_logits.dtype)
+    probs = combined_probs[..., :K]
 
+    probs = F.dropout(probs, p=dropout, training=module.training)
+    attn_out = torch.matmul(probs, value_states)  # [B, H, Q, D]
+    return attn_out.transpose(1, 2).contiguous(), probs
 
 class Olmo2Config(OlmoConfig):
     r"""
