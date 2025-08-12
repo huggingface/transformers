@@ -52,7 +52,7 @@ def get_paths(p: str, glob_pattern: str | None) -> list[Path]:
     if glob_pattern is None:
         return [path]
 
-    return [p for p in path.glob(glob_pattern) if p.is_dir()]
+    return [p for p in path.glob(glob_pattern) if p.is_file()]
 
 
 def get_gpu_name(gpu_name: str | None) -> str:
@@ -129,8 +129,8 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Post process models test reports.")
     parser.add_argument("--path", "-p", help="Path to the reports folder")
-    parser.add_argument("--glob", "-p", help="Glob pattern to access test reports folders", default=None)
-    parser.add_argument("--gpu-name", "-g", help="GPU name", default=None)
+    parser.add_argument("--glob", "-g", help="Glob pattern to access test reports folders", default=None)
+    parser.add_argument("--gpu-name", "-gpu", help="GPU name", default=None)
     parser.add_argument("--commit-hash", "-c", help="Commit hash", default=None)
     parser.add_argument("--job", "-j", help="Optional job name required for uploading reports", default=None)
     parser.add_argument(
@@ -148,14 +148,14 @@ if __name__ == "__main__":
     }
     collated_report_buffer = []
 
-    for model_dir in sorted(paths):
+    for summary_path in sorted(paths):
         # Create a new entry for the model
-        model_name = model_dir.name.removesuffix("_test_reports")
+        model_name = summary_path.parent.name.removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
         results = []
 
         # Read short summary
-        with open(model_dir / "summary_short.txt", "r") as f:
+        with open(summary_path, "r") as f:
             short_summary_lines = f.readlines()
 
         # Parse short summary
