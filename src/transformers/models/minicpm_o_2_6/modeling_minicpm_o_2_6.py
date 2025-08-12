@@ -695,7 +695,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             model_inputs["vision_hidden_states"] = vision_hidden_states
 
-        model_output = {}
         with torch.inference_mode():
             model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(model_inputs)
             model_inputs["inputs_embeds"] = self.get_omni_embedding(
@@ -3311,7 +3310,6 @@ def gen_logits(
         logits_processors.append(CustomRepetitionPenaltyLogitsProcessorRepeat(repetition_penalty, num_code, 16))
 
     return logits_warpers, logits_processors
-
 
 # Copy and modified from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
 def prepare_inputs_for_generation(

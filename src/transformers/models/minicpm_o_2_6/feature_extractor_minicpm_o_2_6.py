@@ -25,7 +25,6 @@ class MiniCPM_O_2_6FeatureExtractor(WhisperFeatureExtractor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print(kwargs)
 
     def __call__(
         self,
