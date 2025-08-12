@@ -18,6 +18,9 @@ import subprocess
 from pathlib import Path
 
 
+DEFAULT_GPU_NAMES = ["mi300", "mi355", "h100", "a10"]
+
+
 def simplify_gpu_name(gpu_name: str, simplified_names: list[str]) -> str:
     matches = []
     for simplified_name in simplified_names:
@@ -42,7 +45,48 @@ def parse_short_summary_line(line: str) -> tuple[str | None, int]:
     return None, 0
 
 
-DEFAULT_GPU_NAMES = ["mi300", "mi355", "h100", "a10"]
+def get_path(s: str) -> Path:
+    # validate path
+    path = Path(s)
+    assert path.is_dir(), f"Path {path} is not a directory"
+    return path
+
+
+def get_gpu_name(gpu_name: str | None) -> str:
+    # Get GPU name if available
+    if gpu_name is None:
+        try:
+            import torch
+
+            gpu_name = torch.cuda.get_device_name()
+        except Exception as e:
+            print(f"Failed to get GPU name with {e}")
+            gpu_name = "unknown"
+    else:
+        gpu_name = gpu_name.replace(" ", "_").lower()
+        gpu_name = simplify_gpu_name(gpu_name, DEFAULT_GPU_NAMES)
+
+    return gpu_name
+
+
+def get_commit_hash(commit_hash: str | None) -> str:
+    # Get commit hash if available
+    if commit_hash is None:
+        try:
+            commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+        except Exception as e:
+            print(f"Failed to get commit hash with {e}")
+            commit_hash = "unknown"
+
+    return commit_hash[:7]
+
+
+def get_arguments(args: argparse.Namespace) -> tuple[Path, str, str]:
+    path = get_path(args.path)
+    gpu_name = get_gpu_name(args.gpu_name)
+    commit_hash = get_commit_hash(args.commit_hash)
+    return path, gpu_name, commit_hash
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Post process models test reports.")
@@ -50,36 +94,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu-name", "-g", help="GPU name", default=None)
     parser.add_argument("--commit-hash", "-c", help="Commit hash", default=None)
 
-    args = parser.parse_args()
-    path = Path(args.path)
-    assert path.is_dir(), f"Path {path} is not a directory"
-
-    # Get GPU name if available
-    if args.gpu_name is None:
-        try:
-            import torch
-
-            gpu_name = torch.cuda.get_device_name()
-            gpu_name = gpu_name.replace(" ", "_").lower()
-            gpu_name = simplify_gpu_name(gpu_name, DEFAULT_GPU_NAMES)
-        except Exception as e:
-            print(f"Failed to get GPU name with {e}")
-            gpu_name = "unknown"
-    else:
-        gpu_name = args.gpu_name
-    print(f"GPU: {gpu_name}")
-
-    # Get commit hash if available
-    if args.commit_hash is None:
-        try:
-            commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-            commit_hash = commit_hash[:7]
-        except Exception as e:
-            print(f"Failed to get commit hash with {e}")
-            commit_hash = "unknown"
-    else:
-        commit_hash = args.commit_hash
-    print(f"Commit hash: {commit_hash}")
+    path, gpu_name, commit_hash = get_arguments(parser.parse_args())
 
     # Initialize accumulators for collated report
     total_status_count = {
@@ -119,7 +134,7 @@ if __name__ == "__main__":
         collated_report_buffer.append(report)
 
     # Write collated report
-    with open(f"collated_reports_{gpu_name}_{commit_hash}.json", "w") as f:
+    with open(f"collated_reports_{commit_hash}.json", "w") as f:
         json.dump(
             {
                 "gpu_name": gpu_name,
