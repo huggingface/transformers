@@ -167,7 +167,7 @@ boxes have the correct coordinates relative to the original image:
 ...     outputs = model(**inputs)
 
 >>> results = processor.post_process_grounded_object_detection(
-...    outputs, threshold=0.50, target_sizes=[image.size[::-1]], text_labels=text_labels,
+...    outputs, threshold=0.50, target_sizes=[(image.height, image.width)], text_labels=text_labels,
 ...)[0]
 
 >>> draw = ImageDraw.Draw(image)
@@ -213,7 +213,7 @@ of several images, a list of tuples. Let's create predictions for the two exampl
 >>> with torch.no_grad():
 >>>     outputs = model(**inputs)
 
->>> target_sizes = [x.size[::-1] for x in images]
+>>> target_sizes = [(image.height, image.width) for image in images]
 >>> results = processor.post_process_grounded_object_detection(
 ...     outputs, threshold=0.3, target_sizes=target_sizes, text_labels=text_labels,
 ... )
