@@ -21,7 +21,7 @@ import torch.export as te
 
 from transformers import MixtralConfig
 from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 
 
 @require_torch
@@ -43,31 +43,30 @@ class MixtralTorchExportTest(unittest.TestCase):
         # Create MoE block
         moe_block = MixtralSparseMoeBlock(self.config)
         moe_block.eval()
-        
+
         # Move to meta device for export testing
         moe_block = moe_block.to("meta")
-        
+
         # Create test input
         batch_size, seq_len = 2, 8
         hidden_states = torch.randn(
-            batch_size, seq_len, self.config.hidden_size, 
-            device="meta"
+            batch_size, seq_len, self.config.hidden_size, device="meta"
         )
-        
+
         # Test torch.export - should not raise GuardOnDataDependentSymNode error
         try:
             exported_program = te.export(
-                moe_block,
-                args=(hidden_states,),
-                kwargs={},
-                strict=False
+                moe_block, args=(hidden_states,), kwargs={}, strict=False
             )
             # If export succeeds, the test passes
             self.assertIsNotNone(exported_program)
         except Exception as e:
             # Check if it's the specific error we're trying to avoid
             error_msg = str(e)
-            if "GuardOnDataDependentSymNode" in error_msg or "nonzero" in error_msg.lower():
+            if (
+                "GuardOnDataDependentSymNode" in error_msg
+                or "nonzero" in error_msg.lower()
+            ):
                 self.fail(
                     f"torch.export failed with data-dependent operation error: {error_msg}\n"
                     "This suggests the .nonzero() fix is not working properly."
@@ -81,30 +80,29 @@ class MixtralTorchExportTest(unittest.TestCase):
         # Create MoE block
         moe_block = MixtralSparseMoeBlock(self.config)
         moe_block.eval()
-        
+
         # Create test input
         batch_size, seq_len = 2, 4
         hidden_states = torch.randn(batch_size, seq_len, self.config.hidden_size)
-        
+
         # Forward pass
         with torch.no_grad():
             output, router_logits = moe_block(hidden_states)
-        
+
         # Verify output shapes
         self.assertEqual(output.shape, hidden_states.shape)
         self.assertEqual(
-            router_logits.shape, 
-            (batch_size * seq_len, self.config.num_local_experts)
+            router_logits.shape, (batch_size * seq_len, self.config.num_local_experts)
         )
-        
+
         # Verify that outputs are not all zeros (computation happened)
         self.assertFalse(torch.allclose(output, torch.zeros_like(output)))
-        
+
         # Test with different input to ensure different outputs
         hidden_states2 = torch.randn(batch_size, seq_len, self.config.hidden_size)
         with torch.no_grad():
             output2, _ = moe_block(hidden_states2)
-        
+
         # Outputs should be different for different inputs
         self.assertFalse(torch.allclose(output, output2))
 
@@ -117,7 +115,7 @@ class MixtralTorchExportTest(unittest.TestCase):
             (16, 2),
             (8, 4),
         ]
-        
+
         for num_experts, top_k in test_configs:
             with self.subTest(num_experts=num_experts, top_k=top_k):
                 config = MixtralConfig(
@@ -127,25 +125,24 @@ class MixtralTorchExportTest(unittest.TestCase):
                     num_experts_per_tok=top_k,
                     router_jitter_noise=0.0,
                 )
-                
+
                 moe_block = MixtralSparseMoeBlock(config)
                 moe_block.eval()
                 moe_block = moe_block.to("meta")
-                
+
                 hidden_states = torch.randn(1, 4, config.hidden_size, device="meta")
-                
+
                 # Should export without errors
                 try:
                     exported_program = te.export(
-                        moe_block,
-                        args=(hidden_states,),
-                        kwargs={},
-                        strict=False
+                        moe_block, args=(hidden_states,), kwargs={}, strict=False
                     )
                     self.assertIsNotNone(exported_program)
                 except Exception as e:
                     if "GuardOnDataDependentSymNode" in str(e):
-                        self.fail(f"Export failed for config ({num_experts}, {top_k}): {e}")
+                        self.fail(
+                            f"Export failed for config ({num_experts}, {top_k}): {e}"
+                        )
                     else:
                         raise
 
