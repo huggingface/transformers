@@ -24,5 +24,3 @@ RUN uv pip uninstall transformers
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN apt remove -y g++ cmake  xz-utils libprotobuf-dev protobuf-compiler
-
-ENV PATH="/.venv/bin:$PATH"
