@@ -219,7 +219,7 @@ of several images, a list of tuples. Let's create predictions for the two exampl
 ... )
 ```
 
-Let's visulaize the results:
+Let's visualize the results:
 
 ```py
 >>> image_idx = 1
