@@ -163,6 +163,7 @@ class PhimoeRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
         self.config = config
 
+    @staticmethod
     def compute_default_rope_parameters(
         config: Optional[PhimoeConfig] = None,
         device: Optional["torch.device"] = None,

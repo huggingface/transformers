@@ -99,6 +99,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", emb, persistent=False)
 
+    @staticmethod
     def compute_default_rope_parameters(
         config: Optional[EfficientLoFTRConfig] = None,
         device: Optional["torch.device"] = None,
