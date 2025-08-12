@@ -190,7 +190,7 @@ def _upad_input(
     )
 
 
-def _prepare_from_posids(query, key, value, position_ids):
+def _prepare_from_posids(query, key, value, position_ids, query_length):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
@@ -205,6 +205,8 @@ def _prepare_from_posids(query, key, value, position_ids):
             Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
         position_ids (`torch.Tensor`):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+        query_length (`int`):
+            Sequence length of the input queries.
     Return:
         query (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
@@ -212,36 +214,57 @@ def _prepare_from_posids(query, key, value, position_ids):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
         value (`torch.Tensor`):
             Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        indices_q (`torch.Tensor`):
-            The indices of non-masked tokens from the flattened input target sequence.
         (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
             The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
+    kv_length = key.shape[1]
     query = query.contiguous().view(-1, query.size(-2), query.size(-1))
     key = key.contiguous().view(-1, key.size(-2), key.size(-1))
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
 
-    position_ids = position_ids.flatten()
-    indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+    # If the lengths are not equal, most probably we are in decoding stage with cache
+    # In that case the position ids will not always start with `0` and we need a better way to infer
+    # cumulative seq lengths.
+    if query_length != kv_length:
+        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
 
-    cu_seq_lens = torch.cat(
-        (
-            indices_q[position_ids == 0],
-            torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+        tensor_kws = {"dtype": torch.int32, "device": position_ids.device}
+        last_position_ids = position_ids[:, -1]
+
+        cu_seq_lens_k = torch.cat(
+            [torch.zeros(1, **tensor_kws), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0
         )
-    )
-    # NOTE: With torch compile, this will cause a graph break if you don't set
-    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
-    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
-    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
-    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
-    # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
-    # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
-    # for some models (e.g. qwen2-vl).
-    max_length = cu_seq_lens.diff().max().item()
-    return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+        max_length_k = int(last_position_ids.max()) + 1
+
+        batch_size, seq_len = query.shape[:2]
+        q_len = torch.ones(batch_size, **tensor_kws) if query_length == 1 else last_position_ids.add(1)
+        cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0).to(torch.int32)], 0)
+        max_length_q = int(q_len.max())
+    else:
+        position_ids = position_ids.flatten()
+        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+
+        cu_seq_lens_q = torch.cat(
+            (
+                indices_q[position_ids == 0],
+                torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+            )
+        )
+        cu_seq_lens_k = cu_seq_lens_q
+
+        # NOTE: With torch compile, this will cause a graph break if you don't set
+        # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
+        # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
+        # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
+        # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+        # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
+        # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
+        # for some models (e.g. qwen2-vl).
+        max_length_q = cu_seq_lens_q.diff().max().item()
+        max_length_k = max_length_q
+    return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 
 def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
@@ -261,7 +284,7 @@ def fa_peft_integration_check(q, k, v, target_dtype: Optional[torch.dtype] = Non
 
 def _lazy_imports(impl: Optional[str]):
     # returns funcs and pad/unpad based on impl
-    is_fa2 = is_flash_attn_2_available() or is_torch_npu_available()
+    is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
     if impl == "flash_attention_2" or (impl is None and is_fa2 and not is_fa3):
         try:
@@ -299,7 +322,12 @@ def _lazy_imports(impl: Optional[str]):
                 raise ImportError(
                     "Failed to import flash attention 2, please install it or use another implementation."
                 ) from e
-    if impl == "flash_attention_3" or (impl is None and is_fa3):
+    elif is_torch_npu_available():
+        # get flash attention related functions from `.integrations.npu_flash_attention` module for Ascend NPU
+        from .integrations.npu_flash_attention import get_npu_flash_attn_funcs
+
+        return get_npu_flash_attn_funcs()
+    elif impl == "flash_attention_3" or (impl is None and is_fa3):
         from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
 
         pad_input, unpad_input = _fa3_pad_input, _fa3_unpad_input
@@ -389,7 +417,8 @@ def _flash_attention_forward(
         flash_kwargs["deterministic"] = det
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
-
+    if "s_aux" in kwargs:
+        flash_kwargs["s_aux"] = kwargs.get("s_aux")
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
     )
@@ -424,8 +453,8 @@ def _flash_attention_forward(
                 raise ValueError(
                     "Position ids should be passed if the attention mask is not passed and the cu_seq-lens are not passed."
                 )
-            q, k, v, idx, (cu_q, cu_k), (mq, mk) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids
+            q, k, v, (cu_q, cu_k), (mq, mk) = _prepare_from_posids(
+                query_states, key_states, value_states, position_ids, query_length=query_length
             )
         else:
             q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))

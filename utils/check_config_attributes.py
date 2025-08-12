@@ -345,6 +345,8 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsConfig": True,
         "IdeficsVisionConfig": True,
         "IdeficsPerceiverConfig": True,
+        # TODO: @Arthur/Joao (`hidden_act` unused)
+        "GptOssConfig": True,
     }
 )
 
