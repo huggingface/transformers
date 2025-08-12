@@ -109,8 +109,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
             If True, randomly routes dropped tokens to available experts.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
     """
 
     model_type = "hunyuan_v1_moe"
@@ -147,7 +145,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         moe_drop_tokens=False,
         moe_random_routing_dropped_token=False,
         head_dim=None,
-        sliding_window=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -156,7 +153,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
         self.num_experts = num_experts
         self.use_mixed_mlp_moe = use_mixed_mlp_moe
         self.moe_topk = moe_topk

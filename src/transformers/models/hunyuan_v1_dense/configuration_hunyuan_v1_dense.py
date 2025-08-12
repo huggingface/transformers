@@ -95,8 +95,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
     """
 
     model_type = "hunyuan_v1_dense"
@@ -126,7 +124,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         head_dim=None,
-        sliding_window=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -135,7 +132,6 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
         self.head_dim = head_dim
         # for backward compatibility
         if num_key_value_heads is None:

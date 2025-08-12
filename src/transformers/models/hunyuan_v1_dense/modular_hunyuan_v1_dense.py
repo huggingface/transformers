@@ -34,12 +34,12 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
+    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
 from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
 
 
@@ -70,7 +70,7 @@ class HunYuanDenseV1Attention(LlamaAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -84,10 +84,10 @@ class HunYuanDenseV1Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -128,7 +128,7 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class HunYuanDenseV1Model(MistralModel):
+class HunYuanDenseV1Model(LlamaModel):
     pass
 
 
