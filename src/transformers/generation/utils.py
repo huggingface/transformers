@@ -1814,7 +1814,7 @@ class GenerationMixin(ContinuousMixin):
             # Support for BC tuple cache format
             if isinstance(cache, tuple):
                 past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+            elif hasattr(cache, "get_seq_length"):
                 past_length = cache.get_seq_length()
 
             cache_position = cache_position[past_length:]
@@ -1957,6 +1957,10 @@ class GenerationMixin(ContinuousMixin):
             )
             generation_config.cache_implementation = None
 
+        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
+            self.config.get_text_config(decoder=True), "cache_implementation", None
+        )
+
         # assisted decoding and contrastive search need to roll-back the Cache, which is not supported if
         # it has sliding layers - so if we use any of those 2, do not pass the config to DynamicCache, which
         # will result in creating a Cache with only full layers even if model uses sliding window
@@ -1965,9 +1969,6 @@ class GenerationMixin(ContinuousMixin):
             {"config": self.config}
             if generation_mode not in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
             else {}
-        )
-        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(decoder=True), "cache_implementation", None
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
