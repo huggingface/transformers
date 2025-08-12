@@ -735,8 +735,12 @@ class Sam2VideoProcessor(ProcessorMixin):
                 existing_points = inference_session.point_inputs_per_obj[obj_idx].get(frame_idx, None)
                 if existing_points is not None:
                     # Concatenate with existing points
-                    input_points_for_obj = torch.cat([existing_points["point_coords"], input_points_for_obj], dim=2)
-                    input_labels_for_obj = torch.cat([existing_points["point_labels"], input_labels_for_obj], dim=2)
+                    input_points_for_obj = torch.cat(
+                        [existing_points["point_coords"].to(input_points_for_obj.device), input_points_for_obj], dim=2
+                    )
+                    input_labels_for_obj = torch.cat(
+                        [existing_points["point_labels"].to(input_labels_for_obj.device), input_labels_for_obj], dim=2
+                    )
             point_inputs = {
                 "point_coords": input_points_for_obj,
                 "point_labels": input_labels_for_obj,

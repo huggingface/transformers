@@ -52,11 +52,11 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 #### Basic Video Tracking
 
 ```python
->>> from transformers import Sam2VideoModel, Sam2Processor
+>>> from transformers import Sam2VideoModel, Sam2VideoProcessor
 >>> import torch
 
 >>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-large")
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
+>>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
 >>> # video_frames = [Image.open(f"frame_{i:05d}.jpg") for i in range(num_frames)]
