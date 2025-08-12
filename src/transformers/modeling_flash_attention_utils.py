@@ -117,7 +117,7 @@ def _lazy_define_process_function(flash_function):
     supports_mapping = {}
     for param in process_parameters:
         fa_param = _hf_api_to_flash_mapping.get(param, param)
-        supports_mapping[fa_param] = True if fa_param in flash_parameters else False
+        supports_mapping[fa_param] = fa_param in flash_parameters
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
