@@ -39,10 +39,9 @@ class RopeTest(unittest.TestCase):
 
         # If we explicitly set the other RoPE types, then validation should fail
         for rope_type in all_rope_types:
-            if rope_type != "default":
-                config.rope_scaling = {"rope_type": rope_type}
-                with self.assertRaises(KeyError):
-                    rope_config_validation(config)
+            config.rope_scaling = {"rope_type": rope_type}
+            with self.assertRaises(KeyError):
+                rope_config_validation(config)
 
         # Parameters are exclusive to their own RoPE type, and should raise an exception if incorrectly passed
         valid_param_mapping = {
@@ -54,8 +53,6 @@ class RopeTest(unittest.TestCase):
             "long_factor": ["longrope"],
         }
         for rope_type in all_rope_types:
-            if rope_type == "default":
-                continue  # checked above
             for param, valid_rope_types in valid_param_mapping.items():
                 # Set `param` with a dummy value -- we want to test the dict key
                 config.rope_scaling = {"rope_type": rope_type, param: True}
@@ -69,14 +66,25 @@ class RopeTest(unittest.TestCase):
         # But sometimes we can have model-specific RoPE kwargs and bypass warning with `ignore_keys`
         model_specific_kwarg = "mrope_sections"  # e,g in Qwen2-VL
 
-        for rope_type in all_rope_types:
-            if rope_type == "default":
-                config.rope_scaling = {"rope_type": rope_type, model_specific_kwarg: True}
-                rope_config_validation(config, ignore_keys={model_specific_kwarg})
-                with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-                    rope_config_validation(config)
-                    self.assertEqual(len(logs.output), 1)
-                    self.assertIn(model_specific_kwarg, logs.output[0])
+        config.rope_scaling = {"rope_type": "default", model_specific_kwarg: True}
+        rope_config_validation(config, ignore_keys={model_specific_kwarg})
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            rope_config_validation(config)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn(model_specific_kwarg, logs.output[0])
+
+        # We can indicate Different RoPE params for each attention type
+        # If any of the layer types have no RoPE params defined, we raise an error
+        config.layer_types = ["global_attn", "local_attn", "mamba"]
+        config.rope_scaling = {
+            "global_attn": {"rope_type": "default", "rope_theta": 10000},
+            "local_attn": {"rope_type": "linear", "rope_theta": 10000, "factor": 2.0},
+            "mamba": None,
+        }
+        rope_config_validation(config)
+        with self.assertRaises(KeyError):
+            del config.rope_scaling["local_attn"]
+            rope_config_validation(config)
 
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
