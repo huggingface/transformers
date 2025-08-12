@@ -45,119 +45,119 @@ class Gemma3nTextConfig(PretrainedConfig):
     the documentation from [`Gemma3nTextConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 262400):
-            Vocabulary size of the Gemma3nText model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Gemma3nTextModel`]
-        vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
-            Dimension of the hidden representations for per-layer emebeddings.
-        intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
-            Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
-            to account for vairable intermediate_size values across layers. In such cases,
-            `len(intermediate_size) == num_hidden_layers`.
-        num_hidden_layers (`int`, *optional*, defaults to 35):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout this
-            [paper](https://arxiv.org/pdf/2305.13245.pdf). If not specified, will default to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 256):
-            The attention head dimension.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to
-            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
-            activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            Beginning of stream token id.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention.
-            NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we
-            recommend you to update this value accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        sliding_window (`int`, *optional*, defaults to 512):
-            This is the size of the sliding window used by local attention layers.
-        layer_types (`Optional`, *optional*):
-            A sequence of strings defining the attention type for that layer as either "sliding_attention" or
-            "full_attention". If not provided, `layer_types` will de inferred from `num_hidden_layers` using a pattern
-            of four "sliding_attention" layers followed one "full_attention". The last layer in the model should always
-            be a "full_attention" layer.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0):
-            Scaling factor when applying tanh softcapping on the logits.
-        altup_active_idx (`int`, *optional*, defaults to 0):
-            The index of the prediction from which AltUp will compute additional predictions or correct
-        altup_coef_clip (`float`, *optional*, defaults to 120.0):
-            The maximum amplitude of an AltUp prediction or correction coeficient weight.
-        altup_correct_scale (`bool`, *optional*, defaults to `True`):
-            If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
-        altup_num_inputs (`int`, *optional*, defaults to 4):
-            The number of predictions that AltUp should be make given the input sequence.
-        num_kv_shared_layers (`int`, *optional*, defaults to 15):
-            The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
-            layers in the model "share" the KV values in that each local and global layer in this range uses the KV
-            cache values computed for the last local or global layer, respectively, before entering this range. The
-            value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
-        laurel_rank (int, *optional*, defaults to 64):
-            The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
-            The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
-            explicitly provide a sparsity value for each layer in the model.
+            vocab_size (`int`, *optional*, defaults to 262400):
+                Vocabulary size of the Gemma3nText model. Defines the number of different tokens that can be represented by
+                the `inputs_ids` passed when calling [`Gemma3nTextModel`]
+            vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
+                Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
+            hidden_size (`int`, *optional*, defaults to 2048):
+                Dimension of the hidden representations.
+            hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
+                Dimension of the hidden representations for per-layer emebeddings.
+            intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
+                Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
+                to account for vairable intermediate_size values across layers. In such cases,
+                `len(intermediate_size) == num_hidden_layers`.
+            num_hidden_layers (`int`, *optional*, defaults to 35):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 8):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*, defaults to 2):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details checkout this
+                [paper](https://arxiv.org/pdf/2305.13245.pdf). If not specified, will default to `num_attention_heads`.
+            head_dim (`int`, *optional*, defaults to 256):
+                The attention head dimension.
+            hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+                The non-linear activation function (function or string) in the decoder. Will default to
+                `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
+                activation function.
+            max_position_embeddings (`int`, *optional*, defaults to 32768):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the rms normalization layers.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            pad_token_id (`int`, *optional*, defaults to 0):
+                Padding token id.
+            eos_token_id (`int`, *optional*, defaults to 1):
+                End of stream token id.
+            bos_token_id (`int`, *optional*, defaults to 2):
+                Beginning of stream token id.
+            rope_scaling (`Dict`, *optional*):
+                Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention.
+                NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we
+                recommend you to update this value accordingly.
+                Expected contents:
+                    `rope_type` (`str`):
+                        The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                        'llama3'], with 'default' being the original RoPE implementation.
+                    `factor` (`float`, *optional*):
+                        Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                        most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                        original maximum pre-trained length.
+                    `original_max_position_embeddings` (`int`, *optional*):
+                        Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
+                        pretraining.
+                    `attention_factor` (`float`, *optional*):
+                        Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                        computation. If unspecified, it defaults to value recommended by the implementation, using the
+                        `factor` field to infer the suggested value.
+                    `beta_fast` (`float`, *optional*):
+                        Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                        ramp function. If unspecified, it defaults to 32.
+                    `beta_slow` (`float`, *optional*):
+                        Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                        ramp function. If unspecified, it defaults to 1.
+                    `short_factor` (`List[float]`, *optional*):
+                        Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                        `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                        size divided by the number of attention heads divided by 2
+                    `long_factor` (`List[float]`, *optional*):
+                        Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                        `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                        size divided by the number of attention heads divided by 2
+                    `low_freq_factor` (`float`, *optional*):
+                        Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
+                    `high_freq_factor` (`float`, *optional*):
+                        Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+            attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+                Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            sliding_window (`int`, *optional*, defaults to 512):
+                This is the size of the sliding window used by local attention layers.
+            layer_types (`Optional`, *optional*):
+                A sequence of strings defining the attention type for that layer as either "sliding_attention" or
+                "full_attention". If not provided, `layer_types` will de inferred from `num_hidden_layers` using a pattern
+                of four "sliding_attention" layers followed one "full_attention". The last layer in the model should always
+                be a "full_attention" layer.
+            final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+                Scaling factor when applying tanh softcapping on the logits.
+            altup_active_idx (`int`, *optional*, defaults to 0):
+                The index of the prediction from which AltUp will compute additional predictions or correct
+            altup_coef_clip (`float`, *optional*, defaults to 120.0):
+                The maximum amplitude of an AltUp prediction or correction coeficient weight.
+            altup_correct_scale (`bool`, *optional*, defaults to `True`):
+                If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
+            altup_num_inputs (`int`, *optional*, defaults to 4):
+                The number of predictions that AltUp should be make given the input sequence.
+            num_kv_shared_layers (`int`, *optional*, defaults to 15):
+                The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
+                layers in the model "share" the KV values in that each local and global layer in this range uses the KV
+                cache values computed for the last local or global layer, respectively, before entering this range. The
+                value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
+            laurel_rank (int, *optional*, defaults to 64):
+                The intermediate size for the linear projections in the Learned Augmented Residual Layer.
+            activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
+                The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
+                explicitly provide a sparsity value for each layer in the model.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -258,6 +258,15 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
 
+        if layer_types is None:
+            self.layer_types = [
+                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+            ]
+        else:
+            self.layer_types = layer_types
+
+        layer_type_validation(self.layer_types)
+
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 1000000.0)
@@ -274,15 +283,6 @@ class Gemma3nTextConfig(PretrainedConfig):
         rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
-
-        if layer_types is None:
-            self.layer_types = [
-                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
-            ]
-        else:
-            self.layer_types = layer_types
-
-        layer_type_validation(self.layer_types)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers

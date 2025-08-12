@@ -158,55 +158,56 @@ class MoshiConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MoshiDecoder model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`MoshiDecoder`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the layers and the pooler layer of the main decoder.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the main decoder block.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
-        audio_vocab_size (`int`, *optional*):
-            Vocabulary size of the audio part of model. Defines the number of different tokens that can be
-            represented by the `audio_codes` passed when calling the Moshi models.
-        max_position_embeddings (`int`, *optional*, defaults to 3000):
-            The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
-            The attention head dimension.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        sliding_window (`int`, *optional*, defaults to 3000):
-            Sliding window attention window size. If not specified, will default to `3000`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        ffn_dim (`int`, *optional*, defaults to 22528):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-08):
-            The epsilon used by the rms normalization layers.
-        num_codebooks (`int`, *optional*, defaults to 8):
-            The number of audio codebooks for each audio channels.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the depth decoder config.
+            vocab_size (`int`, *optional*, defaults to 32000):
+                Vocabulary size of the MoshiDecoder model. Defines the number of different tokens that can be
+                represented by the `inputs_ids` passed when calling [`MoshiDecoder`].
+            hidden_size (`int`, *optional*, defaults to 4096):
+                Dimensionality of the layers and the pooler layer of the main decoder.
+            num_hidden_layers (`int`, *optional*, defaults to 32):
+                Number of decoder layers.
+            num_attention_heads (`int`, *optional*, defaults to 32):
+                Number of attention heads for each attention layer in the main decoder block.
+            num_key_value_heads (`int`, *optional*):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details, check out [this
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
+            audio_vocab_size (`int`, *optional*):
+                Vocabulary size of the audio part of model. Defines the number of different tokens that can be
+                represented by the `audio_codes` passed when calling the Moshi models.
+            max_position_embeddings (`int`, *optional*, defaults to 3000):
+                The maximum sequence length that this model might ever be used with. Typically, set this to something large
+                just in case (e.g., 512 or 1024 or 2048).
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the decoder.
+            head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
+                The attention head dimension.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            sliding_window (`int`, *optional*, defaults to 3000):
+                Sliding window attention window size. If not specified, will default to `3000`.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            ffn_dim (`int`, *optional*, defaults to 22528):
+                Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-08):
+                The epsilon used by the rms normalization layers.
+            num_codebooks (`int`, *optional*, defaults to 8):
+                The number of audio codebooks for each audio channels.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie weight embeddings
+            kwargs (*optional*):
+                Dictionary of keyword arguments. Notably:
+                    - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                      defines the audio encoder config.
+                    - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                      defines the depth decoder config.
 
 
     Example:

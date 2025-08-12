@@ -92,6 +92,10 @@ class MiniMaxConfig(PretrainedConfig):
                 The aux loss factor for the total loss.
             router_jitter_noise (`float`, *optional*, defaults to 0.0):
                 Amount of noise to add to the router.
+            rope_scaling (`Dict`, *optional*):
+                Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+                and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+                accordingly.
             layer_types (`list`, *optional*):
                 Attention pattern for each layer.
             block_size (`int`, *optional*, defaults to 256):
@@ -109,7 +113,6 @@ class MiniMaxConfig(PretrainedConfig):
                 Weight for residual value in residual connection after MLP.
             mlp_beta_factor (`float`, *optional*, defaults to 1):
                 Weight for hidden state value in residual connection after MLP.
-            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
     >>> from transformers import MiniMaxModel, MiniMaxConfig
@@ -167,6 +170,7 @@ class MiniMaxConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
+        rope_scaling=None,
         layer_types=None,
         block_size=256,
         full_attn_alpha_factor=1,
@@ -175,7 +179,6 @@ class MiniMaxConfig(PretrainedConfig):
         linear_attn_beta_factor=1,
         mlp_alpha_factor=1,
         mlp_beta_factor=1,
-        rope_scaling=None,
         **kwargs,
     ):
         super().__init__(
@@ -210,6 +213,18 @@ class MiniMaxConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = getattr(self, "rope_theta", 1000000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
@@ -224,10 +239,6 @@ class MiniMaxConfig(PretrainedConfig):
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
-
-        # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
         linear_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
@@ -238,8 +249,6 @@ class MiniMaxConfig(PretrainedConfig):
                 full_attention_rope.update(**rope_scaling)
 
         rope_scaling = {"full_attention": full_attention_rope, "linear_attention": linear_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
-        rope_config_validation(self)
 
 
 __all__ = ["MiniMaxConfig"]

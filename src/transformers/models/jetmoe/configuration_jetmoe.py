@@ -35,48 +35,49 @@ class JetMoeConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the JetMoe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`JetMoeModel`]
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each key and value in the Transformer encoder.
-        kv_channels (`int`, *optional*, defaults to 128):
-            Defines the number of channels for the key and value tensors.
-        intermediate_size (`int`, *optional*, defaults to 5632):
-            Dimension of the MLP representations.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with. JetMoe's attention allows sequence of
-            up to 4096 tokens.
-        activation_function (`string`, *optional*, defaults to `"silu"`):
-            Defines the activation function for MLP experts.
-        num_local_experts (`int`, *optional*, defaults to 8):
-            Defines the number of experts in the MoE and MoA.
-        num_experts_per_tok (`int, *optional*, defaults to 2):
-            The number of experts to route per-token and for MoE and MoA.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss.
-        aux_loss_coef (`float`, *optional*, defaults to 0.01):
-            The coefficient for the auxiliary loss.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the "end-of-sequence" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+            vocab_size (`int`, *optional*, defaults to 32000):
+                Vocabulary size of the JetMoe model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`JetMoeModel`]
+            hidden_size (`int`, *optional*, defaults to 2048):
+                Dimension of the hidden representations.
+            num_hidden_layers (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            num_key_value_heads (`int`, *optional*, defaults to 16):
+                Number of attention heads for each key and value in the Transformer encoder.
+            kv_channels (`int`, *optional*, defaults to 128):
+                Defines the number of channels for the key and value tensors.
+            intermediate_size (`int`, *optional*, defaults to 5632):
+                Dimension of the MLP representations.
+            max_position_embeddings (`int`, *optional*, defaults to 4096):
+                The maximum sequence length that this model might ever be used with. JetMoe's attention allows sequence of
+                up to 4096 tokens.
+            activation_function (`string`, *optional*, defaults to `"silu"`):
+                Defines the activation function for MLP experts.
+            num_local_experts (`int`, *optional*, defaults to 8):
+                Defines the number of experts in the MoE and MoA.
+            num_experts_per_tok (`int, *optional*, defaults to 2):
+                The number of experts to route per-token and for MoE and MoA.
+            output_router_logits (`bool`, *optional*, defaults to `False`):
+                Whether or not the router logits should be returned by the model. Enabling this will also
+                allow the model to output the auxiliary loss.
+            aux_loss_coef (`float`, *optional*, defaults to 0.01):
+                The coefficient for the auxiliary loss.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            bos_token_id (`int`, *optional*, defaults to 1):
+                The id of the "beginning-of-sequence" token.
+            eos_token_id (`int`, *optional*, defaults to 2):
+                The id of the "end-of-sequence" token.
+            tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+                Whether the model's input and output word embeddings should be tied.
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the rms normalization layers.
+            initializer_range (`float`, *optional*, defaults to 0.01):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import JetMoeModel, JetMoeConfig

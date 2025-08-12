@@ -35,38 +35,39 @@ class Llama4VisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        num_hidden_layers (`int`, *optional*, defaults to 34):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        intermediate_size (`int`, *optional*, defaults to 5632):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        vision_output_dim (`int`, *optional*, defaults to 7680):
-            Dimensionality of the vision model output. Includes output of transformer
-            encoder with intermediate layers and global transformer encoder.
-        image_size (`int`, *optional*, defaults to 448):
-            The size (resolution) of each image *tile*.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        vision_feature_layer (``, *optional*, defaults to -1): TODO
-        vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5): TODO
-        projector_input_dim (`int`, *optional*, defaults to 4096): TODO
-        projector_output_dim (`int`, *optional*, defaults to 4096): TODO
-        multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
-        projector_dropout (`int`, *optional*, defaults to 0.0): TODO
-        attention_dropout (`int`, *optional*, defaults to 0.0): TODO
+            hidden_size (`int`, *optional*, defaults to 768):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+            num_hidden_layers (`int`, *optional*, defaults to 34):
+                Number of hidden layers in the Transformer encoder.
+            num_attention_heads (`int`, *optional*, defaults to 16):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            num_channels (`int`, *optional*, defaults to 3):
+                Number of channels in the input image.
+            intermediate_size (`int`, *optional*, defaults to 5632):
+                Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+            vision_output_dim (`int`, *optional*, defaults to 7680):
+                Dimensionality of the vision model output. Includes output of transformer
+                encoder with intermediate layers and global transformer encoder.
+            image_size (`int`, *optional*, defaults to 448):
+                The size (resolution) of each image *tile*.
+            patch_size (`int`, *optional*, defaults to 14):
+                The size (resolution) of each patch.
+            norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the layer normalization layers.
+            vision_feature_layer (``, *optional*, defaults to -1): TODO
+            vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`): TODO
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5): TODO
+            projector_input_dim (`int`, *optional*, defaults to 4096): TODO
+            projector_output_dim (`int`, *optional*, defaults to 4096): TODO
+            multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
+            projector_dropout (`int`, *optional*, defaults to 0.0): TODO
+            attention_dropout (`int`, *optional*, defaults to 0.0): TODO
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
     """
 
     base_model_tp_plan = {

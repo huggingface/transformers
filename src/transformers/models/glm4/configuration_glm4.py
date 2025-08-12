@@ -27,51 +27,52 @@ class Glm4Config(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        vocab_size (`int`, *optional*, defaults to 151552):
-            Vocabulary size of the Glm4 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4Model`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The legacy activation function. It is overwritten by the `hidden_activation`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1.5625e-07):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        pad_token_id (`int`, *optional*, defaults to 151329):
-            Padding token id.
-        eos_token_id (`int` | `list`, *optional*, defaults to `[151329, 151336, 151338]`):
-            End of stream token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            vocab_size (`int`, *optional*, defaults to 151552):
+                Vocabulary size of the Glm4 model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`Glm4Model`]
+            hidden_size (`int`, *optional*, defaults to 4096):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*, defaults to 13696):
+                Dimension of the MLP representations.
+            num_hidden_layers (`int`, *optional*, defaults to 40):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 32):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*, defaults to 2):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details, check out [this
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+                `num_attention_heads`.
+            partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
+            head_dim (`int`, *optional*, defaults to 128):
+                The attention head dimension.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The legacy activation function. It is overwritten by the `hidden_activation`.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            max_position_embeddings (`int`, *optional*, defaults to 131072):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rms_norm_eps (`float`, *optional*, defaults to 1.5625e-07):
+                The epsilon used by the rms normalization layers.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models). Only
+                relevant if `config.is_decoder=True`.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie weight embeddings
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+            pad_token_id (`int`, *optional*, defaults to 151329):
+                Padding token id.
+            eos_token_id (`int` | `list`, *optional*, defaults to `[151329, 151336, 151338]`):
+                End of stream token id.
+            bos_token_id (`int`, *optional*):
+                Beginning of stream token id.
+            attention_bias (`bool`, defaults to `False`, *optional*, defaults to `True`):
+                Whether to use a bias in the query, key, value and output projection layers during self-attention.
     ```python
     >>> from transformers import Glm4Model, Glm4Config
     >>> # Initializing a Glm4 glm4-4-9b-chat style configuration

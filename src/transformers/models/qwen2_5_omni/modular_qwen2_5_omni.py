@@ -26,7 +26,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import Parameter
 
-from transformers.models.llama.modeling_llama import rotate_half
+from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
@@ -644,8 +644,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
@@ -762,7 +760,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         head_dim=128,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=1000000.0,
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
@@ -813,7 +810,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
         self.position_id_per_seconds = position_id_per_seconds  # zf
@@ -833,6 +829,22 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
@@ -892,7 +904,7 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
-        rope_theta=10000.0,
+        rope_scaling=None,
         max_position_embeddings=32768,
         block_size=24,
         look_ahead_layers=[10],
@@ -917,7 +929,6 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         self.ff_mult = ff_mult
         self.emb_dim = emb_dim
         self.head_dim = head_dim
-        self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
         self.block_size = block_size
         self.look_ahead_layers = look_ahead_layers
@@ -934,6 +945,17 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         self.enc_attention_channels = enc_attention_channels
         self.enc_res2net_scale = enc_res2net_scale
         self.enc_se_channels = enc_se_channels
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
         super().__init__(**kwargs)
 
 
@@ -2797,30 +2819,23 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 ############################
 
 
-# Using custom RoPE, will use LlamaRotaryEmbedding next version
-class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
+    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None, layer_type=None):
+        super().__init__(config, device=device, layer_type=layer_type)
 
-    def __init__(self, dim, base=10000):
-        super().__init__()
-
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-    def forward(self, x):
-        batch_size, seq_len = x.shape[0], x.shape[1]
-        t = torch.arange(seq_len, device=x.device)
-        device_type = x.device.type
-        device_type = device_type if device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = t.unsqueeze(1).float() @ self.inv_freq.unsqueeze(0).float()
-            freqs = torch.stack((freqs, freqs), dim=-1)
-            freqs = freqs.reshape(*freqs.shape[:-2], -1)
-            freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
-            cos = freqs.cos()
-            sin = freqs.sin()
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Qwen2_5OmniDiTConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(
+            config,
+            device=device,
+            seq_len=seq_len,
+            layer_type=layer_type,
+        )
 
 
 # Modified from Llama with a different rotate function, will fixed in next release
@@ -3800,7 +3815,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
 
-        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config.head_dim)
+        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config=config)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
@@ -3861,7 +3876,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         )
 
         # Compute positional encodings
-        position_embeddings = self.rotary_embed(hidden_states)
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
         # Transformer blocks
