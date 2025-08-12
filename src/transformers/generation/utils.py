@@ -2360,7 +2360,7 @@ class GenerationMixin(ContinuousMixin):
         # Expand inputs depending on the generation mode
         input_ids, model_kwargs = self._expand_inputs_for_generation(
             input_ids=input_ids,
-            expand_size=max(generation_config.num_beams, generation_config.num_return_sequences)
+            expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
             is_encoder_decoder=self.config.is_encoder_decoder,
             **model_kwargs,
         )
