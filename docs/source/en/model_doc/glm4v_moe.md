@@ -42,7 +42,6 @@ Beyond benchmark performance, GLM-4.5V focuses on real-world usability. Through 
 
 The model also introduces a **Thinking Mode** switch, allowing users to balance between quick responses and deep reasoning. This switch works the same as in the `GLM-4.5` language model.
 
-
 ## Glm4vMoeConfig
 
 [[autodoc]] Glm4vMoeConfig
