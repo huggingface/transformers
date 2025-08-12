@@ -967,41 +967,50 @@ class Cache:
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
-
-    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
-    `[batch_size, num_heads, seq_len, head_dim]`.
+    It stores the key and value states as a list of `CacheLayer`, one for each layer. The expected shape for each tensor
+    in the `CacheLayer`s is `[batch_size, num_heads, seq_len, head_dim]`.
+    If a config is passed, it will additionally check for sliding or hybrid cache structure, greatly reducing the
+    memory requirement of the cached tensors to `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = DynamicCache()
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        DynamicCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = DynamicCache(config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    DynamicCache()
+    ```
     """
 
-    # Specialized constructor for DDP cache data, needed for BC
-    # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
-    # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
-    # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
-    # (shape=[global batch size, num_heads, seq_len, head_dim]).
-    # Note: it needs to be the 1st arg as well to work correctly
     def __init__(
         self,
         ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
         config: Optional[PretrainedConfig] = None,
     ):
+        """
+        Create a `DynamicCache`. Specialized constructor for DDP cache data, needed for BC.
+
+        Args:
+            ddp_cache_data (`Iterable[tuple[torch.Tensor, torch.Tensor]]`, *optional*):
+                It was originally added for compatibility with `torch.distributed` (DDP). In a nutshell, it is
+                `map(gather_map, zip(*caches))`, i.e. each item in the iterable contains the key and value states
+                for a layer gathered across replicas by torch.distributed (shape=[global batch size, num_heads, seq_len, head_dim]).
+                Note: it needs to be the 1st arg as well to work correctly
+            config (`PretrainedConfig`, *optional*):
+                The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
+                or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
+                `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+        """
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
@@ -1128,22 +1137,22 @@ class StaticCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-        >>> inputs = tokenizer(text="My name is Llama", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Llama", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = StaticCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        StaticCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = StaticCache(max_cache_len=max_generated_length, config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    StaticCache()
+    ```
     """
 
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
@@ -1163,21 +1172,22 @@ class OffloadedStaticCache(Cache):
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, OffloadedStaticCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, OffloadedStaticCache
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
-        >>> # Prepare a cache class with offloading
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = OffloadedStaticCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache with offloaded layers
-        OffloadedStaticCache()
-        ```
+    >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+    >>> # Prepare a cache class with offloading
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = OffloadedStaticCache(max_cache_len=max_generated_length, config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache with offloaded layers
+    OffloadedStaticCache()
+    ```
     """
 
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
@@ -1193,22 +1203,22 @@ class SlidingWindowCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+    >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+    >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
-        >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = SlidingWindowCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        SlidingWindowCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = SlidingWindowCache(max_cache_len=max_generated_length, config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    SlidingWindowCache()
+    ```
     """
 
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
@@ -1228,22 +1238,22 @@ class HybridCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
+    >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 
-        >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HybridCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = HybridCache(max_cache_len=max_generated_length, config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    HybridCache()
+    ```
     """
 
     # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
@@ -1350,21 +1360,21 @@ class QuantoQuantizedCache(QuantizedCache):
 
     Example:
 
-        ```python
-        >>> # Run pip install quanto first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
+    ```python
+    >>> # Run pip install quanto first if you don't have it yet
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = QuantoQuantizedCache(config=model.config, nbits=4)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        QuantoQuantizedCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = QuantoQuantizedCache(config=model.config, nbits=4)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    QuantoQuantizedCache()
+    ```
     """
 
     def __init__(
@@ -1395,21 +1405,21 @@ class HQQQuantizedCache(QuantizedCache):
 
     Example:
 
-        ```python
-        >>> # Run pip install hqq first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
+    ```python
+    >>> # Run pip install hqq first if you don't have it yet
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = HQQQuantizedCache(config=model.config, nbits=4, axis_key=1, axis_value=1)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HQQQuantizedCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = HQQQuantizedCache(config=model.config, nbits=4, axis_key=1, axis_value=1)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    HQQQuantizedCache()
+    ```
     """
 
     def __init__(
@@ -1433,22 +1443,22 @@ class EncoderDecoderCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoProcessor, AutoModelForCausalLM, DynamicCache, EncoderDecoderCache
+    ```python
+    >>> from transformers import AutoProcessor, AutoModelForCausalLM, DynamicCache, EncoderDecoderCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai/whisper-small")
-        >>> processor = AutoProcessor.from_pretrained("openai/whisper-small")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai/whisper-small")
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-small")
 
-        >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
+    >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
 
-        >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
-        >>> self_attention_cache = DynamicCache()
-        >>> cross_attention_cache = DynamicCache()
-        >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        EncoderDecoderCache()
-        ```
+    >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
+    >>> self_attention_cache = DynamicCache()
+    >>> cross_attention_cache = DynamicCache()
+    >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    EncoderDecoderCache()
+    ```
     """
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
