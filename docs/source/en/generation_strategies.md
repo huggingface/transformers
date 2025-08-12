@@ -504,9 +504,9 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
-### Reusing `generate`’s preparation steps by passing a callable
+### Reusing `generate`’s input preparation
 
-You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline (batch expansion, attention masks, logits processors, stopping criteria, etc.) while overriding only the decoding loop.
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
 
 ```py
 def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
@@ -527,7 +527,7 @@ output = model.generate(
 ```
 
 > [!TIP]
-> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in preparation logic.
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
 
 ## Resources
 

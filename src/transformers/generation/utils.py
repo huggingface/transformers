@@ -2358,20 +2358,12 @@ class GenerationMixin(ContinuousMixin):
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         # Expand inputs depending on the generation mode
-        if generation_config.num_beams > 1:
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_beams,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
-        elif generation_config.do_sample:
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids=input_ids,
-                expand_size=generation_config.num_return_sequences,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=max(generation_config.num_beams, generation_config.num_return_sequences)
+            is_encoder_decoder=self.config.is_encoder_decoder,
+            **model_kwargs,
+        )
 
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, tokenizer)
@@ -2454,7 +2446,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 10. go into different generation modes
-        if custom_generate is not None and isinstance(custom_generate, Callable):
+        if isinstance(custom_generate, Callable):
             result = custom_generate(
                 self,
                 input_ids,
@@ -2592,7 +2584,6 @@ class GenerationMixin(ContinuousMixin):
                 num_beam_groups=generation_config.num_beam_groups,
                 max_length=generation_config.max_length,
             )
-            final_constraints = []
             result = self._group_beam_search(
                 input_ids,
                 beam_scorer,
