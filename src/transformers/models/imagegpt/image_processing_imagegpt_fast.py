@@ -142,10 +142,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 pixels = img_hwc.reshape(-1, 3)
                 return color_quantize_torch(pixels, device_clusters)
 
-            if isinstance(normalized, torch.Tensor):
-                images_list = [img for img in normalized]
-            else:
-                images_list = list(normalized)
+            images_list = list(normalized)
 
             ids_list = [_quantize_one_image(img, clusters_torch) for img in images_list]
 
