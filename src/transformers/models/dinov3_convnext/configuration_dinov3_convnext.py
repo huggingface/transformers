@@ -34,25 +34,25 @@ class DINOv3ConvNextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_stages (`int`, *optional*, defaults to 4):
-            The number of stages in the model with different spatial resolution and hidden size.
-        hidden_sizes (`list[int]`, *optional*, defaults to [96, 192, 384, 768]):
-            Dimensionality (hidden size) at each stage.
-        depths (`list[int]`, *optional*, defaults to [3, 3, 9, 3]):
-            The number of layers for each stage.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            The initial value for the layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The drop rate for stochastic depth.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of input channels.
+            hidden_sizes (`list[int]`, *optional*, defaults to [96, 192, 384, 768]):
+                Dimensionality (hidden size) at each stage.
+            depths (`list[int]`, *optional*, defaults to [3, 3, 9, 3]):
+                The number of layers for each stage.
+            hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+                The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
+                `"selu"` and `"gelu_new"` are supported.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the layer normalization layers.
+            layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+                The initial value for the layer scale.
+            drop_path_rate (`float`, *optional*, defaults to 0.0):
+                The drop rate for stochastic depth.
+            image_size (`int`, *optional*, defaults to 224):
+                The size (resolution) of input images.
 
     Example:
     ```python
