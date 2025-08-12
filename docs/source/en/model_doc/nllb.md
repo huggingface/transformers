@@ -85,8 +85,6 @@ model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M"
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
 ```
 
-
-
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
 ```python
@@ -95,10 +93,6 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("facebook/nllb-200-distilled-600M")
 visualizer("UN Chief says there is no military solution in Syria")
 ```
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/nllb-example.webp"/>
-</div>
 
 ## Notes
 
