@@ -2216,7 +2216,7 @@ class Sam2VideoModel(Sam2Model):
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
-        maskmem_pos_enc = maskmem_pos_enc.flatten(2).permute(2, 0, 1)
+        maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 
         return maskmem_features, maskmem_pos_enc
 
