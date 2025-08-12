@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 
 
 class Lfm2Config(PretrainedConfig):
@@ -151,6 +151,7 @@ class Lfm2Config(PretrainedConfig):
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
+        layer_type_validation(self.layer_types)
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
