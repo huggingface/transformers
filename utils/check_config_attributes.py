@@ -308,6 +308,14 @@ SPECIAL_CASES_TO_ALLOW = {
     "MarkupLMConfig": ["position_embedding_type"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "HiggsAudioConfig": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
+    "HiggsAudioEncoderConfig": [
+        "activation_dropout",
+        "activation_function",
+        "attention_dropout",
+        "encoder_attention_heads",
+        "encoder_ffn_dim",
+    ],
 }
 
 

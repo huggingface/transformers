@@ -2679,13 +2679,21 @@ class ModelTesterMixin:
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
+
+                        def bool_to_int(t: torch.Tensor) -> torch.Tensor:
+                            if t.dtype == torch.bool:
+                                return t.int()
+                            return t
+
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(bool_to_int(tuple_object)),
+                                set_nan_tensor_to_zero(bool_to_int(dict_object)),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.max(torch.abs(bool_to_int(tuple_object) - bool_to_int(dict_object)))}. Tuple has `nan`:"
                                 f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
                                 f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
                             ),
