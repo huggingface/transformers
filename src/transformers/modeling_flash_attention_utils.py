@@ -311,58 +311,43 @@ def _upad_input(
     )
 
 
-def _prepare_from_posids(query, key, value, position_ids, query_length):
+def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool = True):
     """
-    This function returns necessary arguments to call `flash_attn_varlen_func`.
-    All three query, key, value states will be flattened.
-    Cumulative lengths of each examples in the batch will be extracted from position_ids.
-    NOTE: ideally cumulative lengths should be prepared at the data collator stage
+    This function returns all the necessary kwargs to call `flash_attn_varlen_func`
+    extracted from position_ids. The `position_ids` can be either packed sequence or
+    the usual padded position ids, for example in inference time.
 
     Arguments:
-        query (`torch.Tensor`):
-            Query state with padding. Shape: (batch_size, query_length, num_heads, head_dim).
-        key (`torch.Tensor`):
-            Key state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
-        value (`torch.Tensor`):
-            Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
         position_ids (`torch.Tensor`):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
-        query_length (`int`):
-            Sequence length of the input queries.
-    Return:
-        query (`torch.Tensor`):
-            Query state without padding. Shape: (total_target_length, num_heads, head_dim).
-        key (`torch.Tensor`):
-            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        value (`torch.Tensor`):
-            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
-        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
-            The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
-        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
-            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
-    """
-    kv_length = key.shape[1]
-    query = query.contiguous().view(-1, query.size(-2), query.size(-1))
-    key = key.contiguous().view(-1, key.size(-2), key.size(-1))
-    value = value.contiguous().view(-1, value.size(-2), value.size(-1))
+        is_packed_sequence (`bool`, *optional*, defaults to `True`):
+            Whether the input position ids are a packed sequence or not.
 
+    Return:
+        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
+            The cumulative sequence lengths for the target (query) and source (key, value), used to index into
+            ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
+            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query,
+            `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
+    """
     # If the lengths are not equal, most probably we are in decoding stage with cache
     # In that case the position ids will not always start with `0` and we need a better way to infer
     # cumulative seq lengths.
-    if query_length != kv_length:
-        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+    if not is_packed_sequence:
+        tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
-        tensor_kws = {"dtype": torch.int32, "device": position_ids.device}
         last_position_ids = position_ids[:, -1]
-
-        cu_seq_lens_k = torch.cat(
-            [torch.zeros(1, **tensor_kws), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0
+        q_len = (
+            torch.ones(position_ids.size(0), **tensor_kwargs) if position_ids.shape[-1] == 1 else last_position_ids.add(1)
         )
-        max_length_k = int(last_position_ids.max()) + 1
+        cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kwargs), q_len.cumsum(0).to(torch.int32)], 0)
+        cu_seq_lens_k = torch.cat(
+            [torch.zeros(1, **tensor_kwargs), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0
+        )
 
-        q_len = torch.ones(query.shape[0], **tensor_kws) if query_length == 1 else last_position_ids.add(1)
-        cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kws), q_len.cumsum(0).to(torch.int32)], 0)
         max_length_q = int(q_len.max())
+        max_length_k = int(last_position_ids.max()) + 1
     else:
         position_ids = position_ids.flatten()
         indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
@@ -386,6 +371,52 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
         max_length_q = max_length_q.item()
         max_length_k = max_length_q
+
+    return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
+
+
+def _prepare_from_posids(query, key, value, position_ids, query_length):
+    """
+    This function returns necessary arguments to call `flash_attn_varlen_func`.
+    All three query, key, value states will be flattened.
+    Cumulative lengths of each examples in the batch will be extracted from position_ids.
+    NOTE: ideally cumulative lengths should be prepared at the data collator stage
+
+    Arguments:
+        query (`torch.Tensor`):
+            Query state with padding. Shape: (batch_size, query_length, num_heads, head_dim).
+        key (`torch.Tensor`):
+            Key state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
+        value (`torch.Tensor`):
+            Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
+        position_ids (`torch.Tensor`):
+            Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+        query_length (`int`):
+            Sequence length of the input queries.
+
+    Return:
+        query (`torch.Tensor`):
+            Query state without padding. Shape: (total_target_length, num_heads, head_dim).
+        key (`torch.Tensor`):
+            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        value (`torch.Tensor`):
+            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
+            The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
+        (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
+            Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
+    """
+    kv_length = key.shape[1]
+    is_packed_sequence = query_length == kv_length
+
+    query = query.contiguous().view(-1, query.size(-2), query.size(-1))
+    key = key.contiguous().view(-1, key.size(-2), key.size(-1))
+    value = value.contiguous().view(-1, value.size(-2), value.size(-1))
+
+    (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
+        position_ids, is_packed_sequence=is_packed_sequence
+    )
+
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 

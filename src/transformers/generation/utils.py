@@ -46,6 +46,7 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -676,6 +677,17 @@ class GenerationMixin(ContinuousMixin):
 
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
+
+        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
+            (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
+                position_ids, is_packed_sequence=False
+            )
+            model_inputs.update(
+                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
+                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
+            )
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
