@@ -92,6 +92,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
+    "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
 ]
 
@@ -158,6 +159,7 @@ IGNORE_NON_TESTED = (
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
+        "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model

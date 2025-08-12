@@ -78,9 +78,14 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_exists = False
             elif pkg_name == "triton":
                 try:
-                    package_version = importlib.metadata.version("pytorch-triton")
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
                 except Exception:
-                    package_exists = False
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -238,7 +243,6 @@ _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
 _triton_available, _triton_version = _is_package_available("triton", return_version=True)
-_triton_kernels_available = _is_package_available("triton_kernels")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -421,10 +425,6 @@ def is_torch_deterministic():
 
 def is_triton_available(min_version: str = TRITON_MIN_VERSION):
     return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
-
-
-def is_triton_kernels_availalble():
-    return _triton_kernels_available
 
 
 def is_hadamard_available():
@@ -1281,6 +1281,24 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
         ) >= version.parse(library_version)
     else:
         return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_quanto_greater(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("optimum-quanto"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
 
 
 def is_torchdistx_available():

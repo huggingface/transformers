@@ -143,7 +143,7 @@ class ModernBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-        if test := os.environ.get("PYTEST_CURRENT_TEST", False):
+        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
 
             # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
