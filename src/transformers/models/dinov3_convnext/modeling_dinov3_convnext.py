@@ -121,7 +121,7 @@ class DINOv3ConvNextLayer(nn.Module):
         self.pointwise_conv1 = nn.Linear(channels, 4 * channels)  # can be seen as a 1x1 conv
         self.activation_fn = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Linear(4 * channels, channels)  # can be seen as a 1x1 conv
-        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(channels), requires_grad=True)
+        self.gamma = nn.Parameter(torch.full((channels,), config.layer_scale_init_value), requires_grad=True)
         self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
