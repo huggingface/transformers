@@ -3492,6 +3492,9 @@ class ModelTesterMixin:
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
 
+            # TODO it is unclear why saving and reloading with dtype works while
+            # casting with `.to(dtype=..., device=...)` does not.
+            # Discovered on tests with `Bart` models.
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
