@@ -46,6 +46,7 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -646,8 +647,8 @@ class GenerationMixin(ContinuousMixin):
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                token_type_ids = model_inputs.get("token_type_ids", None)
-                position_ids = model_inputs.get(position_ids_key, None)
+                token_type_ids = model_inputs.get("token_type_ids")
+                position_ids = model_inputs.get(position_ids_key)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
                 attention_mask = causal_mask_creation_function(
@@ -677,12 +678,24 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
-        # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        # 7. Prepare kwargs for flash attention to avoid recomputations
+        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
+            (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
+                model_inputs["position_ids"], is_packed_sequence=False
+            )
+            model_inputs.update(
+                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
+                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
+                max_length_q=max_length_q,
+                max_length_k=max_length_k,
+            )
+
+        # 8. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
                 model_inputs[key] = value
 
-        # 8. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
+        # 9. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
         model_inputs.pop("labels", None)
         return model_inputs
 
@@ -1801,7 +1814,7 @@ class GenerationMixin(ContinuousMixin):
             # Support for BC tuple cache format
             if isinstance(cache, tuple):
                 past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+            elif hasattr(cache, "get_seq_length"):
                 past_length = cache.get_seq_length()
 
             cache_position = cache_position[past_length:]
@@ -1847,10 +1860,7 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            cache_kwargs = {
-                "max_cache_len": max_cache_len,
-                "config": self.config.get_text_config(),
-            }
+            cache_kwargs = {"config": self.config.get_text_config(), "max_cache_len": max_cache_len}
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
@@ -1947,6 +1957,16 @@ class GenerationMixin(ContinuousMixin):
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
             self.config.get_text_config(decoder=True), "cache_implementation", None
         )
+
+        # assisted decoding and contrastive search need to roll-back the Cache, which is not supported if
+        # it has sliding layers - so if we use any of those 2, do not pass the config to DynamicCache, which
+        # will result in creating a Cache with only full layers even if model uses sliding window
+        generation_mode = generation_config.get_generation_mode(assistant_model)
+        dynamic_cache_kwargs = (
+            {"config": self.config}
+            if generation_mode not in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
+            else {}
+        )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._can_compile_fullgraph:
@@ -1989,15 +2009,15 @@ class GenerationMixin(ContinuousMixin):
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
             elif generation_config.cache_implementation == "dynamic":
-                model_kwargs[cache_name] = DynamicCache()
+                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
-                DynamicCache()
+                DynamicCache(**dynamic_cache_kwargs)
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else EncoderDecoderCache(DynamicCache(**dynamic_cache_kwargs), DynamicCache(**dynamic_cache_kwargs))
             )
 
     def _supports_logits_to_keep(self) -> bool:
