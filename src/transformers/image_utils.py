@@ -123,7 +123,7 @@ def get_image_type(image):
         return ImageType.TENSORFLOW
     if is_jax_tensor(image):
         return ImageType.JAX
-    raise ValueError(f"Unrecognised image type {type(image)}")
+    raise ValueError(f"Unrecognized image type {type(image)}")
 
 
 def is_valid_image(img):
