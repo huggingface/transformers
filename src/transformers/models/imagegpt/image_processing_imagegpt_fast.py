@@ -23,6 +23,7 @@ from ...image_processing_utils_fast import (
     DefaultFastImageProcessorKwargs,
 )
 from ...image_utils import PILImageResampling, ChannelDimension
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -137,7 +138,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     def __init__(
         self,
         clusters: Optional[Union[list, np.ndarray]] = None,
-        **kwargs,
+        **kwargs: Unpack[ImageGPTFastImageProcessorKwargs],
     ):
         super().__init__(**kwargs)
         # Store clusters as numpy for JSON serializability. Convert to torch in _preprocess when needed.
@@ -164,7 +165,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,
         return_tensors: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[ImageGPTFastImageProcessorKwargs],
     ):
         """
         Preprocess an image or batch of images.
@@ -189,11 +190,11 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         if isinstance(pixel_values, torch.Tensor):
             normalized = pixel_values.to(dtype=torch.float32)
             if do_normalize:
-                normalized = normalized / 127.5 - 1.0
+                normalized = F.normalize(normalized, mean=[0.0], std=[127.5]) - 1.0
         else:
             normalized = [img.to(dtype=torch.float32) for img in pixel_values]
             if do_normalize:
-                normalized = [img / 127.5 - 1.0 for img in normalized]
+                normalized = [F.normalize(img, mean=[0.0], std=[127.5]) - 1.0 for img in normalized]
 
         # If color quantization is requested, perform it; otherwise return pixel values
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
