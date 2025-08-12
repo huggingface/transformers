@@ -61,7 +61,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available():
-            raise RuntimeError("Using MXFP4 quantized models requires a GPU")
+            if self.pre_quantized:
+                logger.warning_once(
+                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
+                )
+                self.quantization_config.dequantize = True
+                return
+            else:
+                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
 
         if not is_accelerate_available():
             raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
@@ -101,7 +108,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             global triton_kernels_hub
             triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
@@ -210,11 +217,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
-            empty_param = kwargs.get("empty_param", None)
-            casting_dtype = kwargs.get("casting_dtype", None)
-            to_contiguous = kwargs.get("to_contiguous", None)
-            rank = kwargs.get("rank", None)
-            device_mesh = kwargs.get("device_mesh", None)
+            empty_param = kwargs.get("empty_param")
+            casting_dtype = kwargs.get("casting_dtype")
+            to_contiguous = kwargs.get("to_contiguous")
+            rank = kwargs.get("rank")
+            device_mesh = kwargs.get("device_mesh")
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
                 # blocks and scales have the same length that's this works for both
                 module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
