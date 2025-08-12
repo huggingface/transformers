@@ -917,7 +917,7 @@ class Trainer:
         if isinstance(self.processing_class, ProcessorMixin):
             tokenizer = self.processing_class.tokenizer
         else:
-            tokenizer = self.tokenizer
+            tokenizer = self.processing_class
         model_has_generation_config = (
             hasattr(self.model, "generation_config") and self.model.generation_config is not None
         )
