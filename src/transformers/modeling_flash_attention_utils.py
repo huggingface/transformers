@@ -345,7 +345,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
         )
         cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kwargs), q_len.cumsum(0).to(torch.int32)], 0)
         cu_seq_lens_k = torch.cat(
-            [torch.zeros(1, **tensor_kwargs), last_position_ids.cumsum(0).add(1).to(torch.int32)], 0
+            [torch.zeros(1, **tensor_kwargs), last_position_ids.add(1).cumsum(0).to(torch.int32)], 0
         )
 
         max_length_q = int(q_len.max())
