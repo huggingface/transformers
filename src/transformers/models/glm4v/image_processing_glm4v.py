@@ -464,6 +464,8 @@ class Glm4vImageProcessor(BaseImageProcessor):
             min_pixels=size["shortest_edge"],
             max_pixels=size["longest_edge"],
             temporal_factor=self.temporal_patch_size,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w

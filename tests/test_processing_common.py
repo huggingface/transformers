@@ -536,12 +536,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
-        inputs = processor(
-            text=input_str,
-            videos=video_input,
-            return_tensors="pt",
-            do_sample_frames=False,
-        )
+        inputs = processor(text=input_str, videos=video_input, do_sample_frames=False, return_tensors="pt")
         self.assertEqual(inputs[self.text_input_name].shape[-1], 167)
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
@@ -565,12 +560,7 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modality="video")
         video_input = self.prepare_video_inputs()
 
-        inputs = processor(
-            text=input_str,
-            videos=video_input,
-            return_tensors="pt",
-            do_sample_frames=False,
-        )
+        inputs = processor(text=input_str, videos=video_input, do_sample_frames=False, return_tensors="pt")
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
@@ -587,10 +577,10 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=input_str,
             videos=video_input,
+            do_sample_frames=False,
             return_tensors="pt",
             max_length=162,
             padding="max_length",
-            do_sample_frames=False,
         )
         self.assertEqual(inputs[self.text_input_name].shape[-1], 162)
 
@@ -613,10 +603,10 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=input_str,
             videos=video_input,
+            do_sample_frames=False,
             do_rescale=True,
             rescale_factor=-1,
             return_tensors="pt",
-            do_sample_frames=False,
         )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
@@ -633,6 +623,7 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=input_str,
             videos=video_input,
+            do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
             rescale_factor=-1,
@@ -657,6 +648,7 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=input_str,
             videos=video_input,
+            do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
             rescale_factor=-1,
@@ -685,6 +677,7 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 videos=video_input,
+                do_sample_frames=False,
                 videos_kwargs={"do_rescale": True, "rescale_factor": -1},
                 do_rescale=True,
                 return_tensors="pt",
