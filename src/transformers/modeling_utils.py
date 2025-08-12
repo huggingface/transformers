@@ -74,6 +74,7 @@ from .integrations.tensor_parallel import (
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2126,7 +2127,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _pp_plan = None
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
-    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
@@ -2740,6 +2741,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if attention_wrapper is None:
                         attention_wrapper = flash_attention_forward
                     kernel_function = partial(attention_wrapper, implementation=kernel)
+                    lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
                 ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
@@ -2755,7 +2757,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
             return attn_implementation
         else:
-            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+            attn_implementation = self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+
+            # preload flash attention here to allow compile with fullgraph
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
+
+            return attn_implementation
 
     def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
         requested_attention = "sdpa" if _requested_attention is None else _requested_attention

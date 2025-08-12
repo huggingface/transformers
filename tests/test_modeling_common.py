@@ -3482,92 +3482,107 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+            # Custom kernel which needs the mask interface to be properly usable on these models
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.head_dim = 64  # fa2 does not always support arbitrary headim
+
+            # flash attention variants does not always support arbitrary headim
+            config = self._prepare_config_headdim(config, 16)
+
+            # TODO it is unclear why saving and reloading with dtype works while
+            # casting with `.to(dtype=..., device=...)` does not.
+            # Discovered on tests with `Bart` models.
             model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model.to(torch_device)
 
-            model.to(torch_device)
-            model.to(torch.bfloat16)
-            dummy_input = inputs_dict[model.main_input_name][:1]
-            if dummy_input.dtype in [torch.float32, torch.float16]:
-                dummy_input = dummy_input.to(torch.bfloat16)
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
 
-            dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
-            if dummy_attention_mask is not None:
-                dummy_attention_mask = dummy_attention_mask[:1]
-                if padding_side == "left":
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, :1] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1:] = 0
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 else:
-                    dummy_attention_mask[:, :-1] = 1
-                    dummy_attention_mask[:, -1:] = 0
-            if model.config.is_encoder_decoder:
-                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, output_hidden_states=True)
 
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-            else:
-                outputs = model(dummy_input, output_hidden_states=True)
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(dummy_input, output_hidden_states=True)
+                model.set_attn_implementation("sdpa")
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
-            model.set_attn_implementation("sdpa")
-            logits = (
-                outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
-            )
-            logits_fa = (
-                outputs_fa.hidden_states[-1]
-                if not model.config.is_encoder_decoder
-                else outputs_fa.decoder_hidden_states[-1]
-            )
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-            assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
 
-            if model.config.is_encoder_decoder:
-                other_inputs = {
-                    "decoder_input_ids": decoder_input_ids,
-                    "decoder_attention_mask": dummy_attention_mask,
-                    "output_hidden_states": True,
-                }
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
+                    outputs = model(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
 
-                outputs = model(dummy_input, **other_inputs)
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(dummy_input, **other_inputs)
-            else:
-                other_inputs = {
-                    "output_hidden_states": True,
-                }
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
+                    outputs = model(dummy_input, **other_inputs)
+                    model.set_attn_implementation(attn_implementation)
+                    outputs_fa = model(dummy_input, **other_inputs)
 
-                outputs = model(dummy_input, **other_inputs)
-                model.set_attn_implementation(attn_implementation)
-                outputs_fa = model(dummy_input, **other_inputs)
+                model.set_attn_implementation("sdpa")
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
-            model.set_attn_implementation("sdpa")
-            logits = (
-                outputs.hidden_states[-1] if not model.config.is_encoder_decoder else outputs.decoder_hidden_states[-1]
-            )
-            logits_fa = (
-                outputs_fa.hidden_states[-1]
-                if not model.config.is_encoder_decoder
-                else outputs_fa.decoder_hidden_states[-1]
-            )
+                if padding_side == "left":
+                    assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
 
-            if padding_side == "left":
-                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                # check with inference + dropout
-                model.train()
-                model.set_attn_implementation(attn_implementation)
-                _ = model(dummy_input, **other_inputs)
-            else:
-                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+                    # check with inference + dropout
+                    model.train()
+                    model.set_attn_implementation(attn_implementation)
+                    _ = model(dummy_input, **other_inputs)
+                else:
+                    assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
     @require_kernels
     @require_torch_gpu
@@ -4610,6 +4625,70 @@ class ModelTesterMixin:
                 is_tested = recursively_check(eager_outputs, exported_outputs)
                 self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        This method allows to update the head dim for all model types including
+        composite models and models that do not support head dim by themselves.
+
+        Why? A lot of kernels including flex attention rely on triton for compilation.
+        However, triton cannot handle hidden dimensions of less than 16 for example.
+        (There are many more examples especially now that the `kernels` library is
+        supported)
+        """
+
+        def update_config_headdim(config, requested_dim):
+            # Flex Attention cannot use dropout
+            if hasattr(config, "attention_dropout"):
+                config.attention_dropout = 0
+            if hasattr(config, "attention_probs_dropout_prob"):
+                config.attention_probs_dropout_prob = 0
+
+            # Update the head dim and try to update hidden size as well if present in config
+            # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
+            head_dim = None
+            if hasattr(config, "head_dim") and config.head_dim is not None:
+                head_dim = config.head_dim
+                config.head_dim = max(requested_dim, config.head_dim)
+
+            cross_head_dim = None
+            if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
+                cross_head_dim = config.cross_head_dim
+                config.cross_head_dim = max(requested_dim, config.cross_head_dim)
+
+            if (
+                getattr(config, "hidden_size", None) is not None
+                and getattr(config, "num_attention_heads", None) is not None
+            ):
+                head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+                config.hidden_size *= max(requested_dim // head_dim, 1)
+
+            if (
+                getattr(config, "decoder_hidden_size", None) is not None
+                and getattr(config, "decoder_num_attention_heads", None) is not None
+            ):
+                decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
+                config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+
+            if (
+                getattr(config, "cross_hidden_size", None) is not None
+                and getattr(config, "cross_num_attention_heads", None) is not None
+            ):
+                cross_head_dim = (
+                    cross_head_dim
+                    if cross_head_dim is not None
+                    else config.cross_hidden_size // config.cross_num_attention_heads
+                )
+                config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+
+        # Update config values
+        update_config_headdim(config, requested_dim)
+        for key in config.sub_configs:
+            sub_config = getattr(config, key)
+            update_config_headdim(sub_config, requested_dim)
+
+        return config
+
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
@@ -4623,59 +4702,8 @@ class ModelTesterMixin:
             ):
                 self.skipTest(reason="At least some parts of this model do not support flex attention")
 
-            def update_config_for_flex(config):
-                # Flex Attention cannot use dropout
-                if hasattr(config, "attention_dropout"):
-                    config.attention_dropout = 0
-                if hasattr(config, "attention_probs_dropout_prob"):
-                    config.attention_probs_dropout_prob = 0
-
-                # Flex attention relies on triton on compilation
-                # However, triton cannot handle hidden dimensions of less than 16
-                # --> forcing at least a hidden dim of 16
-
-                # Update the head dim and try to update hidden size as well if present in config
-                # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
-                head_dim = None
-                if hasattr(config, "head_dim") and config.head_dim is not None:
-                    head_dim = config.head_dim
-                    config.head_dim = max(16, config.head_dim)
-
-                cross_head_dim = None
-                if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
-                    cross_head_dim = config.cross_head_dim
-                    config.cross_head_dim = max(16, config.cross_head_dim)
-
-                if (
-                    getattr(config, "hidden_size", None) is not None
-                    and getattr(config, "num_attention_heads", None) is not None
-                ):
-                    head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
-                    config.hidden_size *= max(16 // head_dim, 1)
-
-                if (
-                    getattr(config, "decoder_hidden_size", None) is not None
-                    and getattr(config, "decoder_num_attention_heads", None) is not None
-                ):
-                    decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
-                    config.decoder_hidden_size *= max(16 // decoder_head_dim, 1)
-
-                if (
-                    getattr(config, "cross_hidden_size", None) is not None
-                    and getattr(config, "cross_num_attention_heads", None) is not None
-                ):
-                    cross_head_dim = (
-                        cross_head_dim
-                        if cross_head_dim is not None
-                        else config.cross_hidden_size // config.cross_num_attention_heads
-                    )
-                    config.cross_hidden_size *= max(16 // cross_head_dim, 1)
-
             # Set default attention to flex and update config values
-            update_config_for_flex(config)
-            for key in config.sub_configs:
-                sub_config = getattr(config, key)
-                update_config_for_flex(sub_config)
+            config = self._prepare_config_headdim(config, 16)  # specific to triton
 
             if model_class._can_set_attn_implementation():
                 model = model_class(config).to(device=torch_device)
