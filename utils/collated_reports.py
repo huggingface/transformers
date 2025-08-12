@@ -108,7 +108,7 @@ if __name__ == "__main__":
             if status:
                 result = {
                     "status": status,
-                    "line": line.split(status.upper(), maxsplit=1)[1].strip(),
+                    "test": line.split(status.upper(), maxsplit=1)[1].strip(),
                     "count": count,
                 }
                 results.append(result)
@@ -128,5 +128,5 @@ if __name__ == "__main__":
                 "results": collated_report_buffer,
             },
             f,
-            indent=4,
+            indent=2,
         )

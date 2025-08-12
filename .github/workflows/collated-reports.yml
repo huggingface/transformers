@@ -6,9 +6,6 @@ on:
       job:
         required: true
         type: string
-      report_repo_id:
-        required: true
-        type: string
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -28,11 +25,10 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
-          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
-        run: python3 utils/collated_reports.py --path /transformers/reports
+        run: python3 utils/collated_reports.py --path /transformers/reports/ --commit-hash ${{ env.CI_SHA }}
 
       - name: Upload collated reports
         uses: actions/upload-artifact@v4
         with:
-          name: collated_reports_ ...
-          path: collated_reports_ ...
+          name: collated_reports_${{ env.CI_SHA }}.json
+          path: collated_reports_${{ env.CI_SHA }}.json
