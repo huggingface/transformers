@@ -104,8 +104,8 @@ class ArceeRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
         self.config = config
 
+    @staticmethod
     def compute_default_rope_parameters(
-        self,
         config: Optional[ArceeConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

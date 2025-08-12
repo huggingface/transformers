@@ -216,6 +216,7 @@ class DeepseekV2RotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
         self.config = config
 
+    @staticmethod
     def compute_default_rope_parameters(
         self,
         config: Optional[DeepseekV2Config] = None,
