@@ -615,6 +615,10 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
+            class MyTest2RotaryEmbedding(Phi4MultimodalRotaryEmbedding):
+                pass
+
+
             class MyTest2Attention(Phi4MultimodalAttention):
                 pass
 
@@ -624,10 +628,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
 
             class MyTest2FeatureEmbedding(Phi4MultimodalFeatureEmbedding):
-                pass
-
-
-            class MyTest2RotaryEmbedding(Phi4MultimodalRotaryEmbedding):
                 pass
 
 

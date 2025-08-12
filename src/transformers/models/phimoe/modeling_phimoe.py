@@ -1302,7 +1302,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         ```"""
         if (
             use_cache
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and cache_position is not None
             and cache_position[0] == self.config.original_max_position_embeddings
         ):
@@ -1382,7 +1382,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]
