@@ -192,6 +192,12 @@ class FalconMambaConfig(MambaConfig):
             **kwargs,
         )
         self.mixer_rms_eps = mixer_rms_eps
+        # This is needed since mamba overrides the intermediate_size attribute
+        self.intermediate_size = (
+            int(expand * self.hidden_size)
+            if kwargs.get("intermediate_size") is None
+            else kwargs.get("intermediate_size")
+        )
 
 
 class FalconMambaCache(MambaCache):

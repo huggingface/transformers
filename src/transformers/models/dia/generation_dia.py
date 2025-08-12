@@ -347,7 +347,7 @@ class DiaGenerationMixin(GenerationMixin):
         ):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length
         )
 
         # 8. determine generation mode
@@ -421,7 +421,7 @@ class DiaGenerationMixin(GenerationMixin):
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         # We expect the initial input ids to be the complete mask (delayed input)
-        delay_mask = kwargs.get("decoder_input_ids", None)
+        delay_mask = kwargs.get("decoder_input_ids")
         if delay_mask is not None:
             delay_mask = delay_mask.clone()
 

@@ -79,8 +79,8 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = Glm4MoeForCausalLM if is_torch_available() else None
+    # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
+    _torch_compile_train_cls = None
 
 
 @require_torch_accelerator
@@ -107,9 +107,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
         model = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
+            "zai-org/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

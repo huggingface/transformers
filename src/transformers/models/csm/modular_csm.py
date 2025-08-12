@@ -134,7 +134,7 @@ class CsmPreTrainedModel(PreTrainedModel):
     # does not because of Mimi codec model
     # _supports_flex_attn = True
 
-    _supports_static_cache = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": CsmDecoderLayer,
@@ -231,7 +231,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,

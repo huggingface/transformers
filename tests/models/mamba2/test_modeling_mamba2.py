@@ -309,10 +309,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Mamba 2 weights are not tied")
-    def test_tied_weights_keys(self):
-        pass
-
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
         pass

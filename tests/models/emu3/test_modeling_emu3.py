@@ -89,7 +89,7 @@ class Emu3Text2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         config = self.get_config()
 
@@ -198,12 +198,12 @@ class Emu3Vision2TextModelTester:
         bos_token_id=1,
         eos_token_id=2,
         image_token_id=3,
-        image_size=30,
+        image_size=15,
         codebook_size=20,
         temporal_downsample_factor=1,
         base_channels=32,
-        vq_channel_multiplier=[1, 1],
-        image_seq_length=100,
+        vq_channel_multiplier=[1, 2, 1],
+        image_seq_length=12,
         vq_img_token_start_id=3,
     ):
         self.parent = parent
@@ -234,9 +234,9 @@ class Emu3Vision2TextModelTester:
         config = self.get_config()
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
-        attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
 
         pixel_values = floats_tensor(
             [
@@ -288,6 +288,7 @@ class Emu3Vision2TextModelTester:
             "base_channels": self.base_channels,
             "channel_multiplier": self.vq_channel_multiplier,
             "hidden_size": self.base_channels,
+            "attn_resolutions": [],
         }
         return Emu3Config(text_config=text_config, vq_config=vq_config, vocabulary_map=vocab_map)
 
@@ -357,6 +358,10 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
         pass
+
+    # @unittest.skip("Emu3 can't be smaller than currently if we want to downsample images")
+    # def test_model_is_small(self):
+    #     pass
 
 
 @require_torch

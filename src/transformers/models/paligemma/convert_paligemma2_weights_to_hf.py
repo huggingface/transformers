@@ -263,7 +263,7 @@ def slice_state_dict(state_dict, config):
         state_dict[f"language_model.model.layers.{i}.post_feedforward_layernorm.weight"] = llm_post_feedforward_layernorm[i]
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
     state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied.
-    [k for k in state_dict.keys() if not k.startswith('vision') and not k.startswith('language')]
+    [k for k in state_dict if not k.startswith('vision') and not k.startswith('language')]
     # fmt: on
     for key, value in state_dict.items():
         if not isinstance(value, torch.Tensor):
