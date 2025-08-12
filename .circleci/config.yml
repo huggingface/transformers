@@ -39,7 +39,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: huggingface/transformers-quality:dev
         parallelism: 1
         steps:
             - checkout
@@ -91,7 +91,7 @@ jobs:
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: huggingface/transformers-quality:dev
         parallelism: 1
         steps:
             - checkout
@@ -140,7 +140,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: huggingface/transformers-quality:dev
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -165,7 +165,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-consistency
+            - image: huggingface/transformers-consistency:dev
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
