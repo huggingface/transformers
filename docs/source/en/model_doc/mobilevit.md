@@ -49,10 +49,11 @@ The example below demonstrates how to do [Image Classification] with [`Pipeline`
 import torch
 from transformers import pipeline
 
-classifier = pipeline(task="image-classification",
-					  model="apple/mobilevit-small",
-					  torch_dtype=torch.float16, device=0,
-                      )
+classifier = pipeline(
+   task="image-classification",
+   model="apple/mobilevit-small",
+   torch_dtype=torch.float16, device=0,
+)
 
 preds = classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 print(f"Prediction: {preds}\n")
@@ -70,9 +71,9 @@ from PIL import Image
 from transformers import AutoImageProcessor, MobileViTForImageClassification
 
 image_processor = AutoImageProcessor.from_pretrained(
-							"apple/mobilevit-small",
-                            use_fast=True,
-							)
+   "apple/mobilevit-small",
+   use_fast=True,
+)
 model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
