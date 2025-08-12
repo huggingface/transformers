@@ -20,7 +20,8 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, DynamicCache, MistralConfig, is_torch_available, set_seed
+from transformers.cache_utils import DynamicSlidingWindowLayer
 from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
@@ -341,7 +342,7 @@ class MistralIntegrationTest(unittest.TestCase):
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
     @require_flash_attn
     @slow
-    def test_generation_beyond_sliding_window(self, attn_implementation: str):
+    def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non-trivial as Mistral will use
         a DynamicCache with only sliding layers."""
 
@@ -367,10 +368,18 @@ class MistralIntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
-        output_text = tokenizer.batch_decode(out)
+        # Should already be Dynamic by default, but let's make sure!
+        out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
+        output_text = tokenizer.batch_decode(out.sequences[:, input_size:])
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+        # Let's check that the dynamic cache has hybrid layers!
+        dynamic_cache = out.past_key_values
+        self.assertTrue(isinstance(dynamic_cache, DynamicCache))
+        for layer in dynamic_cache.layers:
+            self.assertTrue(isinstance(layer, DynamicSlidingWindowLayer))
+            self.assertEqual(layer.keys.shape[-2], model.config.sliding_window - 1)
 
 
 @slow
