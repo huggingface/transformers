@@ -9,7 +9,7 @@ import math
 import os
 import os.path as osp
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -858,19 +858,32 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         load_4bit: bool = False,
         device_map: str = "auto",
         device: str = "cuda",
+        *,
+        # minimal Hub args
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        local_files_only: bool = False,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
         **kwargs,
     ) -> "AudioFlamingo3":
-        # — resolve path -------------------------------------------------
+        # — resolve to local path (supports repo_id) ---------------------
         model_path = os.path.expanduser(model_path)
+        if not os.path.isdir(model_path):
+            # treat as HF repo id
+            model_path = snapshot_download(
+                repo_id=model_path,
+                revision=revision,
+                token=token,
+                local_files_only=local_files_only,
+                cache_dir=cache_dir,
+            )
         if os.path.exists(os.path.join(model_path, "model")):
             model_path = os.path.join(model_path, "model")
 
         # — optional GPU selection --------------------------------------
         if devices is not None:
             assert "max_memory" not in kwargs, "`max_memory` should not be set when `devices` is set"
-            kwargs["max_memory"] = {
-                d: torch.cuda.get_device_properties(d).total_memory for d in devices
-            }
+            kwargs["max_memory"] = {d: torch.cuda.get_device_properties(d).total_memory for d in devices}
 
         # — device map & quantisation -----------------------------------
         kwargs["device_map"] = {"": device} if device != "cuda" else device_map

@@ -1,7 +1,7 @@
 import math
 import os
 from collections import defaultdict
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import numpy as np
 import soundfile as sf
@@ -20,28 +20,52 @@ class AudioFlamingo3Processor(ProcessorMixin):
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-
     def __init__(self, feature_extractor=None, tokenizer=None):
         super().__init__(feature_extractor, tokenizer)
 
-
     @classmethod
-    def from_pretrained(cls, path: str):
-        fe = WhisperFeatureExtractor.from_pretrained('openai/whisper-large-v3')
+    def from_pretrained(
+        cls,
+        path: str,
+        *,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        local_files_only: bool = False,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+    ):
+        # Resolve to local dir (supports HF repo id)
+        root = os.path.expanduser(path)
+        if not os.path.isdir(root):
+            root = snapshot_download(
+                repo_id=path,
+                revision=revision,
+                token=token,
+                local_files_only=local_files_only,
+                cache_dir=cache_dir,
+            )
 
+        # Prefer "<root>/llm", fallback to "<root>/model/llm"
+        llm_dir = os.path.join(root, "llm")
+        if not os.path.isdir(llm_dir):
+            alt = os.path.join(root, "model", "llm")
+            llm_dir = alt if os.path.isdir(alt) else llm_dir
+        if not os.path.isdir(llm_dir):
+            raise FileNotFoundError(f"Tokenizer folder 'llm' not found under: {root}")
+
+        # Load components
+        fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-large-v3")
         tok = AutoTokenizer.from_pretrained(
-            os.path.join(path, "llm"),
+            llm_dir,
             padding_side="right",
             use_fast=True,
             legacy=False,
         )
 
-        # any post‑init tweaks, e.g. adding MEDIA_TOKENS
+        # Post-init tweaks
         tok.media_tokens = MEDIA_TOKENS
-        for name, token in MEDIA_TOKENS.items():
-            tok.add_tokens([token], special_tokens=True)
+        for _, t in MEDIA_TOKENS.items():
+            tok.add_tokens([t], special_tokens=True)
 
-        # 4) return the processor
         return cls(fe, tok)
 
 
