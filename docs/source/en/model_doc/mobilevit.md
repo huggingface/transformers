@@ -109,7 +109,7 @@ print(model.config.id2label[predicted_class])
 
 - Does **not** operate on sequential data, it's purely designed for image tasks.
 - Feature maps are used directly instead of token embeddings.
-- Use [`MobileViTImageProcessor`](https://huggingface.co/docs/transformers/main/en/model_doc/mobilevit#transformers.MobileViTImageProcessor) to preprocess images.
+- Use [`MobileViTImageProcessor`] to preprocess images.
 - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
 - The **classification models** are pretrained on [**ImageNet-1k**](https://huggingface.co/datasets/imagenet-1k) (ILSVRC 2012).
 - The **segmentation models** use a [**DeepLabV3**](https://huggingface.co/papers/1706.05587) head and are pretrained on [**PASCAL VOC**](http://host.robots.ox.ac.uk/pascal/VOC/).
