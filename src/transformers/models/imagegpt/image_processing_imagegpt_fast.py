@@ -36,9 +36,9 @@ def squared_euclidean_distance_torch(a: torch.Tensor, b: torch.Tensor) -> torch.
         (N, M) tensor of squared distances
     """
     b = b.t()  # (3, M)
-    a2 = torch.sum(a ** 2, dim=1)  # (N,)
-    b2 = torch.sum(b ** 2, dim=0)  # (M,)
-    ab = torch.matmul(a, b)        # (N, M)
+    a2 = torch.sum(a**2, dim=1)  # (N,)
+    b2 = torch.sum(b**2, dim=0)  # (M,)
+    ab = torch.matmul(a, b)  # (N, M)
     d = a2[:, None] - 2 * ab + b2[None, :]
     return d
 
@@ -110,10 +110,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         do_color_quantize: Optional[bool] = None,
         clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,
         return_tensors: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         # Run standard fast pipeline (resize, crop, batching) without rescale/normalize
-        base_batch = super()._preprocess(images, return_tensors=return_tensors, **kwargs)
+        base_batch = super()._preprocess(
+            images, return_tensors=return_tensors, **kwargs
+        )
         pixel_values = base_batch["pixel_values"]  # Tensor [B,C,H,W] or list of [C,H,W]
 
         # Apply ImageGPT normalization when requested: [-1, 1]
@@ -128,7 +130,11 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 normalized = [img / 127.5 - 1.0 for img in normalized]
 
         # If color quantization is requested, perform it; otherwise return pixel values
-        do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
+        do_color_quantize = (
+            do_color_quantize
+            if do_color_quantize is not None
+            else self.do_color_quantize
+        )
         if do_color_quantize:
             # Prepare clusters
             clusters = clusters if clusters is not None else self.clusters
@@ -137,8 +143,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
             clusters_torch = torch.as_tensor(clusters, dtype=torch.float32)
 
             # Helper for clarity: quantize a single image [C,H,W] -> [H*W]
-            def _quantize_one_image(image_chw: torch.Tensor, clusters_ref: torch.Tensor) -> torch.Tensor:
-                device_clusters = clusters_ref.to(image_chw.device, dtype=image_chw.dtype)
+            def _quantize_one_image(
+                image_chw: torch.Tensor, clusters_ref: torch.Tensor
+            ) -> torch.Tensor:
+                device_clusters = clusters_ref.to(
+                    image_chw.device, dtype=image_chw.dtype
+                )
                 img_hwc = image_chw.permute(1, 2, 0)
                 pixels = img_hwc.reshape(-1, 3)
                 return color_quantize_torch(pixels, device_clusters)
@@ -155,7 +165,11 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 pixel_values_out = images_list
 
             from ...image_processing_utils import BatchFeature
-            return BatchFeature(data={"input_ids": input_ids, "pixel_values": pixel_values_out}, tensor_type=return_tensors)
+
+            return BatchFeature(
+                data={"input_ids": input_ids, "pixel_values": pixel_values_out},
+                tensor_type=return_tensors,
+            )
 
         # Otherwise, return pixel values (normalized or not depending on flag)
         base_batch["pixel_values"] = normalized
@@ -164,14 +178,16 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     def to_dict(self):
         # Convert numpy arrays to lists for JSON serialization
         output = super().to_dict()
-        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
+        if output.get("clusters") is not None and isinstance(
+            output["clusters"], np.ndarray
+        ):
             output["clusters"] = output["clusters"].tolist()
         # ImageGPT does not use base mean/std normalization; keep these None for parity with slow processor
         # output["image_mean"] = None
         # output["image_std"] = None
         # No rescaling in fast ImageGPT path
 
-        #Need to set these valus to match with slow processor during testing
+        # Need to set these valus to match with slow processor during testing
         output["rescale_factor"] = None
         output["do_rescale"] = None
         output["do_color_quantize"] = bool(getattr(self, "do_color_quantize", True))
