@@ -255,13 +255,20 @@ class StateTransitionConfig(PretrainedConfig):
         self.pert_dim = pert_dim
         self.basal_dim = basal_dim
         self.hidden_dim = hidden_dim
-        self.hidden_size = hidden_dim        self.num_layers = num_layers
+        self.hidden_size = hidden_dim
+        self.num_layers = num_layers
         self.num_heads = num_heads
-        self.num_attention_heads = num_heads        self.num_key_value_heads = num_heads        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_heads
+        self.num_key_value_heads = num_heads
+        self.intermediate_size = intermediate_size
         self.vocab_size = vocab_size
         self.num_batches = num_batches
         self.dropout = dropout
-        self.attention_dropout = dropout        self.attention_bias = False        self.mlp_bias = False        self.hidden_act = "silu"        self.rms_norm_eps = rms_norm_eps
+        self.attention_dropout = dropout
+        self.attention_bias = False
+        self.mlp_bias = False
+        self.hidden_act = "silu"
+        self.rms_norm_eps = rms_norm_eps
 
 
 __all__ = ["StateTransitionConfig"]

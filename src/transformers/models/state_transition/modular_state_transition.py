@@ -92,6 +92,28 @@ class StateTransitionConfig(PretrainedConfig):
     Configuration class for StateTx (State Transformer) model based on StateTransitionPerturbationModel.
     
     This model uses a bidirectional Llama transformer backbone to process perturbation data.
+    
+    Args:
+        gene_dim (`int`, *optional*, defaults to 2000):
+            Dimensionality of gene embeddings.
+        pert_dim (`int`, *optional*, defaults to 91):
+            Dimensionality of perturbation embeddings.
+        basal_dim (`int`, *optional*, defaults to 2000):
+            Dimensionality of basal gene expressions.
+        hidden_dim (`int`, *optional*, defaults to 1440):
+            Hidden size of the transformer layers.
+        num_layers (`int`, *optional*, defaults to 4):
+            Number of transformer layers.
+        num_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads.
+        dropout (`float`, *optional*, defaults to 0.1):
+            Dropout probability.
+        decoder_layers (`int`, *optional*, defaults to 3):
+            Number of layers in the LatentToGeneDecoder.
+        decoder_hidden_dims (`List[int]`, *optional*, defaults to [1024, 1024, 512]):
+            Hidden dimensions for each layer in the LatentToGeneDecoder.
+        decoder_use_residual (`bool`, *optional*, defaults to False):
+            Whether to use residual connections in the LatentToGeneDecoder.
     """
 
     model_type = "state_tx"
@@ -111,6 +133,9 @@ class StateTransitionConfig(PretrainedConfig):
         dropout=0.1,
         rms_norm_eps=1e-6,
         use_cache=True,
+        decoder_layers=3,
+        decoder_hidden_dims=[1024, 1024, 512],
+        decoder_use_residual=False,
         max_position_embeddings=512,
         num_key_value_heads=None,
         head_dim=None,
@@ -134,14 +159,21 @@ class StateTransitionConfig(PretrainedConfig):
         self.pert_dim = pert_dim
         self.basal_dim = basal_dim
         self.hidden_dim = hidden_dim
-        self.hidden_size = hidden_dim        self.num_layers = num_layers
+        self.hidden_size = hidden_dim
+        self.num_layers = num_layers
         self.num_heads = num_heads
-        self.num_attention_heads = num_heads        self.num_key_value_heads = num_key_value_heads or num_heads        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_heads
+        self.num_key_value_heads = num_key_value_heads or num_heads
+        self.intermediate_size = intermediate_size
         self.vocab_size = vocab_size
         self.num_batches = num_batches
         self.dropout = dropout
-        self.attention_dropout = attention_dropout        self.hidden_dropout = hidden_dropout
-        self.attention_bias = False        self.mlp_bias = False        self.hidden_act = "silu"        self.rms_norm_eps = rms_norm_eps
+        self.attention_dropout = attention_dropout
+        self.hidden_dropout = hidden_dropout
+        self.attention_bias = False
+        self.mlp_bias = False
+        self.hidden_act = "silu"
+        self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.head_dim = head_dim or (hidden_dim // num_heads)
         self.layer_norm_eps = layer_norm_eps
@@ -152,6 +184,9 @@ class StateTransitionConfig(PretrainedConfig):
         self.rotary_dim = rotary_dim
         self.use_rotary_embeddings = use_rotary_embeddings
         self.n_positions = n_positions
+        self.decoder_layers = decoder_layers
+        self.decoder_hidden_dims = decoder_hidden_dims
+        self.decoder_use_residual = decoder_use_residual
 
 
 class SamplesLoss(nn.Module):
@@ -165,29 +200,51 @@ class SamplesLoss(nn.Module):
 
 
 class LatentToGeneDecoder(nn.Module):
-    """Decoder that converts latent representations back to gene space."""
-    
+    """Decoder to transform latent embeddings back to gene expression space."""
+
     def __init__(self, config: StateTransitionConfig):
         super().__init__()
-        self.decoder = nn.Sequential(
-            nn.Linear(config.gene_dim, 1024, bias=True),
-            nn.LayerNorm(1024, eps=1e-05),
-            nn.GELU(),
-            nn.Dropout(p=config.dropout),
-            nn.Linear(1024, 1024, bias=True),
-            nn.LayerNorm(1024, eps=1e-05),
-            nn.GELU(),
-            nn.Dropout(p=config.dropout),
-            nn.Linear(1024, 512, bias=True),
-            nn.LayerNorm(512, eps=1e-05),
-            nn.GELU(),
-            nn.Dropout(p=config.dropout),
-            nn.Linear(512, config.gene_dim, bias=True),
-            nn.ReLU()
-        )
-    
-    def forward(self, x):
-        return self.decoder(x)
+        
+        self.residual_decoder = config.decoder_use_residual
+        input_dim = config.gene_dim
+
+        if self.residual_decoder:
+            self.blocks = nn.ModuleList()
+            for hidden_dim in config.decoder_hidden_dims:
+                self.blocks.append(nn.Sequential(
+                    nn.Linear(input_dim, hidden_dim), 
+                    nn.LayerNorm(hidden_dim), 
+                    nn.GELU(), 
+                    nn.Dropout(config.dropout)
+                ))
+                input_dim = hidden_dim
+            self.final_layer = nn.Sequential(nn.Linear(input_dim, config.gene_dim), nn.ReLU())
+        else:
+            layers = []
+            for hidden_dim in config.decoder_hidden_dims:
+                layers.extend([
+                    nn.Linear(input_dim, hidden_dim),
+                    nn.LayerNorm(hidden_dim),
+                    nn.GELU(),
+                    nn.Dropout(config.dropout)
+                ])
+                input_dim = hidden_dim
+            layers.extend([nn.Linear(input_dim, config.gene_dim), nn.ReLU()])
+            self.decoder = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.residual_decoder:
+            block_outputs = []
+            current = x
+            for i, block in enumerate(self.blocks):
+                output = block(current)
+                if i >= 1 and i % 2 == 1:
+                    output = output + block_outputs[i - 1]
+                block_outputs.append(output)
+                current = output
+            return self.final_layer(current)
+        else:
+            return self.decoder(x)
 
 
 class NoRoPE(nn.Module):
