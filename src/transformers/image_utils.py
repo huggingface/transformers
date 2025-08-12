@@ -123,7 +123,7 @@ def get_image_type(image):
         return ImageType.TENSORFLOW
     if is_jax_tensor(image):
         return ImageType.JAX
-    raise ValueError(f"Unrecognised image type {type(image)}")
+    raise ValueError(f"Unrecognized image type {type(image)}")
 
 
 def is_valid_image(img):
@@ -833,7 +833,7 @@ class ImageFeatureExtractionMixin:
             return image.crop((left, top, right, bottom))
 
         # Check if image is in (n_channels, height, width) or (height, width, n_channels) format
-        channel_first = True if image.shape[0] in [1, 3] else False
+        channel_first = image.shape[0] in [1, 3]
 
         # Transpose (height, width, n_channels) format images
         if not channel_first:
