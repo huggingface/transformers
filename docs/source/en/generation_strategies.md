@@ -504,9 +504,9 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
-### Custom decoding loops passing a callable
+### Reusing `generate`’s preparation steps by passing a callable
 
-Power users can also take advantage of the preparation steps in [`~GenerationMixin.generate`] and pass a callable to `custom_generate` instead of a string. Unlike when passing a repository, which replaces the entire generation logic, passing a callable will still run the standard preparation steps, but will call the provided callable to perform the decoding loop.
+You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline (batch expansion, attention masks, logits processors, stopping criteria, etc.) while overriding only the decoding loop.
 
 ```py
 def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
@@ -526,6 +526,8 @@ output = model.generate(
 )
 ```
 
+> [!TIP]
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in preparation logic.
 
 ## Resources
 
