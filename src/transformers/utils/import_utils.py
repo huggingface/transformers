@@ -78,9 +78,14 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_exists = False
             elif pkg_name == "triton":
                 try:
-                    package_version = importlib.metadata.version("pytorch-triton")
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
                 except Exception:
-                    package_exists = False
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -446,9 +451,7 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # NOTE: MLU is OK with non-contiguous inputs.
@@ -462,9 +465,7 @@ def is_torch_sdpa_available():
 
 
 def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -1083,7 +1084,7 @@ def is_ninja_available():
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
