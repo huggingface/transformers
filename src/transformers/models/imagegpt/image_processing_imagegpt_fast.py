@@ -18,14 +18,17 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import (
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
+)
 from ...image_utils import PILImageResampling, ChannelDimension
 from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
-    is_torchvision_v2_available
+    is_torchvision_v2_available,
 )
 
 if is_torch_available():
@@ -36,6 +39,7 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+
 
 def squared_euclidean_distance_torch(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """
@@ -70,6 +74,7 @@ def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tenso
     d = squared_euclidean_distance_torch(x, clusters)
     return torch.argmin(d, dim=1)
 
+
 class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     clusters (`np.ndarray` or `list[list[int]]`, *optional*):
@@ -101,8 +106,8 @@ class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
     clusters: Optional[np.ndarray] = None
     resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
-    return_tensors: Optional[Union[str, TensorType]] = None,
-    data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+    return_tensors: Optional[Union[str, TensorType]] = (None,)
+    data_format: Optional[Union[str, ChannelDimension]] = (ChannelDimension.FIRST,)
     input_data_format: Optional[Union[str, ChannelDimension]] = None
     do_color_quantize: Optional[bool] = True
 
@@ -176,9 +181,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
         """
         # Run standard fast pipeline (resize, crop, batching) without rescale/normalize
-        base_batch = super()._preprocess(
-            images, return_tensors=return_tensors, **kwargs
-        )
+        base_batch = super()._preprocess(images, return_tensors=return_tensors, **kwargs)
         pixel_values = base_batch["pixel_values"]  # Tensor [B,C,H,W] or list of [C,H,W]
 
         # Apply ImageGPT normalization when requested: [-1, 1]
@@ -193,11 +196,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 normalized = [img / 127.5 - 1.0 for img in normalized]
 
         # If color quantization is requested, perform it; otherwise return pixel values
-        do_color_quantize = (
-            do_color_quantize
-            if do_color_quantize is not None
-            else self.do_color_quantize
-        )
+        do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         if do_color_quantize:
             # Prepare clusters
             clusters = clusters if clusters is not None else self.clusters
@@ -206,12 +205,8 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
             clusters_torch = torch.as_tensor(clusters, dtype=torch.float32)
 
             # Helper for clarity: quantize a single image [C,H,W] -> [H*W]
-            def _quantize_one_image(
-                image_chw: torch.Tensor, clusters_ref: torch.Tensor
-            ) -> torch.Tensor:
-                device_clusters = clusters_ref.to(
-                    image_chw.device, dtype=image_chw.dtype
-                )
+            def _quantize_one_image(image_chw: torch.Tensor, clusters_ref: torch.Tensor) -> torch.Tensor:
+                device_clusters = clusters_ref.to(image_chw.device, dtype=image_chw.dtype)
                 img_hwc = image_chw.permute(1, 2, 0)
                 pixels = img_hwc.reshape(-1, 3)
                 return color_quantize_torch(pixels, device_clusters)
@@ -241,9 +236,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     def to_dict(self):
         # Convert numpy arrays to lists for JSON serialization
         output = super().to_dict()
-        if output.get("clusters") is not None and isinstance(
-            output["clusters"], np.ndarray
-        ):
+        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
             output["clusters"] = output["clusters"].tolist()
         # ImageGPT does not use base mean/std normalization; keep these None for parity with slow processor
         # output["image_mean"] = None
