@@ -241,3 +241,74 @@ Let's visulaize the results:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_4.png" alt="Beach photo with detected objects"/>
 </div>
 
+## Image-guided object detection
+
+In addition to zero-shot object detection with text queries, models like [OWL-ViT](https://huggingface.co/collections/ariG23498/owlvit-689b0d0872a7634a6ea17ae7) and [OWLv2](https://huggingface.co/collections/ariG23498/owlv2-689b0d27bd7d96ba3c7f7530) offers image-guided object detection. This means you can use an image query to find similar
+objects in the target image.
+
+```py
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+
+>>> checkpoint = "google/owlv2-base-patch16-ensemble"
+>>> model = AutoModelForZeroShotObjectDetection.from_pretrained(checkpoint, device_map="auto")
+>>> processor = AutoProcessor.from_pretrained(checkpoint)
+```
+
+Unlike text queries, only a single example image is allowed.
+
+Let's take an image with two cats on a couch as a target image, and an image of a single cat
+as a query:
+
+```py
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image_target = Image.open(requests.get(url, stream=True).raw)
+
+>>> query_url = "http://images.cocodataset.org/val2017/000000524280.jpg"
+>>> query_image = Image.open(requests.get(query_url, stream=True).raw)
+```
+
+Let's take a quick look at the images:
+
+```py
+>>> import matplotlib.pyplot as plt
+
+>>> fig, ax = plt.subplots(1, 2)
+>>> ax[0].imshow(image_target)
+>>> ax[1].imshow(query_image)
+>>> fig.show()
+```
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_5.png" alt="Cats"/>
+</div>
+
+In the preprocessing step, instead of text queries, you now need to use `query_images`:
+
+```py
+>>> inputs = processor(images=image_target, query_images=query_image, return_tensors="pt")
+```
+
+For predictions, instead of passing the inputs to the model, pass them to [`~OwlViTForObjectDetection.image_guided_detection`]. Draw the predictions
+as before except now there are no labels.
+
+```py
+>>> with torch.no_grad():
+...     outputs = model.image_guided_detection(**inputs)
+...     target_sizes = torch.tensor([image_target.size[::-1]])
+...     results = processor.post_process_image_guided_detection(outputs=outputs, target_sizes=target_sizes)[0]
+
+>>> draw = ImageDraw.Draw(image_target)
+
+>>> scores = results["scores"].tolist()
+>>> boxes = results["boxes"].tolist()
+
+>>> for box, score in zip(boxes, scores):
+...     xmin, ymin, xmax, ymax = box
+...     draw.rectangle((xmin, ymin, xmax, ymax), outline="white", width=4)
+
+>>> image_target
+```
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_6.png" alt="Cats with bounding boxes"/>
+</div>
