@@ -88,7 +88,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.llm = Qwen2ForCausalLM(config)
-        self.llm.prepare_inputs_for_generation = types.MethodType(prepare_inputs_for_generation, self.llm)  # patch llm
 
         self.embed_dim = self.llm.config.hidden_size
         self.scale_emb = getattr(self.llm.config, "scale_emb", 1.0)
@@ -3391,7 +3390,6 @@ def prepare_inputs_for_generation(
         }
     )
     return model_inputs
-
 
 
 def get_2d_sincos_pos_embed(embed_dim, image_size):
