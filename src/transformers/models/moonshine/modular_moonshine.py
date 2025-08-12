@@ -106,8 +106,6 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -199,7 +197,6 @@ class MoonshineConfig(PretrainedConfig):
         initializer_range=0.02,
         decoder_start_token_id=1,
         use_cache=True,
-        rope_theta=10000.0,
         rope_scaling=None,
         partial_rotary_factor=0.9,
         is_encoder_decoder=True,
@@ -233,16 +230,21 @@ class MoonshineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
         # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
-
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,

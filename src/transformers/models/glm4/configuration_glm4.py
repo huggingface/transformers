@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_scaling import rope_config_validation
+from ...modeling_rope_utils import rope_config_validation
 
 
 class Glm4Config(PretrainedConfig):

@@ -96,8 +96,6 @@ class Cohere2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -193,7 +191,6 @@ class Cohere2Config(PretrainedConfig):
         bos_token_id=5,
         eos_token_id=255001,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -218,7 +215,6 @@ class Cohere2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
@@ -226,9 +222,6 @@ class Cohere2Config(PretrainedConfig):
         self.layer_types = layer_types
         # Need to specify head_dim in the config so it can be used in the attention forward functions
         self.head_dim = hidden_size // num_attention_heads
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -249,6 +242,22 @@ class Cohere2Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
     @property
     def sliding_window_pattern(self):

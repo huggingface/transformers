@@ -326,8 +326,6 @@ class Phi4MultimodalConfig(Phi3Config):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
@@ -389,7 +387,6 @@ class Phi4MultimodalConfig(Phi3Config):
         rms_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         partial_rotary_factor=1,
         bos_token_id=199999,
@@ -417,7 +414,6 @@ class Phi4MultimodalConfig(Phi3Config):
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
             rope_scaling=rope_scaling,
             partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,

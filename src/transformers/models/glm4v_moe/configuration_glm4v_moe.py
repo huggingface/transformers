@@ -294,7 +294,6 @@ class Glm4vMoeTextConfig(PretrainedConfig):
             rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
             rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
         self.rope_scaling = rope_scaling
-        rope_config_validation(self)
         rope_config_validation(self, ignore_keys={"mrope_section"})
 
         # MoE arguments

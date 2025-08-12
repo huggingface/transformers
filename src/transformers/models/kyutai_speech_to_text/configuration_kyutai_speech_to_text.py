@@ -14,7 +14,7 @@
 # limitations under the License.s
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_utils_rope import rope_config_validation
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 

@@ -23,6 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
@@ -99,8 +100,6 @@ class GemmaConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -151,7 +150,7 @@ class GemmaConfig(PretrainedConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
+        rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
         **kwargs,
@@ -169,9 +168,19 @@ class GemmaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
