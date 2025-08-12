@@ -1386,10 +1386,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
-    @unittest.skip("EncoderDecoderCache can't be gathered because it is not iterable.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig
