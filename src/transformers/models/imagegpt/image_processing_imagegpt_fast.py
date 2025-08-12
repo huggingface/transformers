@@ -14,9 +14,10 @@
 # limitations under the License.
 """Fast Image processor class for ImageGPT."""
 
+from typing import Optional, Union
+
 import numpy as np
 import torch
-from typing import Optional, Union
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import PILImageResampling
