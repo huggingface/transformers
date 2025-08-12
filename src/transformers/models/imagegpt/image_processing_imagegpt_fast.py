@@ -112,6 +112,20 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Preprocess an image or batch of images.
+
+        Args:
+            clusters (`np.ndarray`, `list[list[float]]`, or `torch.Tensor`, *optional*, defaults to `self.clusters`):
+                Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
+                `do_color_quantize` is set to `True`.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - Unset: Return a list of `torch.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        """
         # Run standard fast pipeline (resize, crop, batching) without rescale/normalize
         base_batch = super()._preprocess(
             images, return_tensors=return_tensors, **kwargs
