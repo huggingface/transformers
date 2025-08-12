@@ -100,7 +100,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", emb, persistent=False)
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[EfficientLoFTRConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

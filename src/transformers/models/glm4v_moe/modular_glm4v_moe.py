@@ -357,7 +357,6 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
         super().__init__(config, device=device, layer_type=layer_type)
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[Glm4vMoeTextConfig] = None,
         **super_kwargs,
     ) -> tuple["torch.Tensor", float]:

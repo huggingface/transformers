@@ -218,7 +218,6 @@ class DeepseekV2RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        self,
         config: Optional[DeepseekV2Config] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

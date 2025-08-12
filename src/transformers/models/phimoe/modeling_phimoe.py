@@ -164,7 +164,6 @@ class PhimoeRotaryEmbedding(nn.Module):
         self.config = config
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[PhimoeConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

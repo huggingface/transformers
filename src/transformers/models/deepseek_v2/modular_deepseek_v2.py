@@ -82,8 +82,6 @@ class DeepseekV2Config(LlamaConfig):
             End-of-sequence token ID.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the Rotary Position Embeddings (RoPE).
         rope_scaling (`Dict`, *optional*):
             Configuration for scaling RoPE embeddings. Supports `linear` and `dynamic` scaling strategies.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -170,7 +168,6 @@ class DeepseekV2Config(LlamaConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
@@ -364,7 +361,6 @@ class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
         super().__init__()
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[DeepseekV2Config] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

@@ -408,7 +408,6 @@ class JetMoeRotaryEmbedding(nn.Module):
         self.config = config
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[JetMoeConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,

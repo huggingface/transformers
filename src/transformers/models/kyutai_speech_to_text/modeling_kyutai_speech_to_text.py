@@ -287,7 +287,6 @@ class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
         self.config = config
 
     def compute_default_rope_parameters(
-        self,
         config: Optional[KyutaiSpeechToTextConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
