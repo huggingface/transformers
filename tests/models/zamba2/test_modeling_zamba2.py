@@ -315,6 +315,26 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, Zamba2HybridDynamicCache)
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+
+        self.assertListEqual(
+            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+            [expected_shape] * len(decoder_past_key_values.key_cache),
+        )
+        self.assertListEqual(
+            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+            [expected_shape] * len(decoder_past_key_values.value_cache),
+        )
+
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
