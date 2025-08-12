@@ -5409,7 +5409,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._move_missing_keys_from_meta_to_cpu(missing_keys + mismatched_keys, unexpected_keys, dtype, hf_quantizer)
 
         # correctly initialize the missing (and potentially mismatched) keys
-        model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
+        model._initialize_missing_keys(missing_keys + mismatched_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
         if keep_in_fp32_regex is not None:
