@@ -24,10 +24,9 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 [MobileViT](https://huggingface.co/papers/2110.02178) is a lightweight vision transformer for mobile devices that merges CNNs's efficiency and inductive biases with transformers global context modeling. It treats transformers as convolutions, enabling global information processing without the heavy computational cost of standard ViTs.
 
-![enter image description here](https://user-images.githubusercontent.com/67839539/136470152-2573529e-1a24-4494-821d-70eb4647a51d.png)
 
 <div class="flex justify-center">
-   <img>
+   <img src = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/MobileViT.png">
 </div>
 
 
@@ -47,19 +46,18 @@ The example below demonstrates how to do [Image Classification] with [`Pipeline`
 
 ```python
 
+import torch
 from transformers import pipeline
-from datasets import load_dataset
-
-dataset = load_dataset("huggingface/cats-image")
-
-#initialize an image classification pipeline
-classifier = pipeline("image-classification", model = "apple/mobilevit-small")
 
 
-#run inference on each image in dataset:
-for i in dataset["test"]:
-	preds = classifier(i["image"])
-	print(f"Prediction: {preds}\n")
+classifier = pipeline(task = "image-classification",
+					  model = "apple/mobilevit-small",
+					  torch_dtype = torch.float16,
+                       device = 0
+                      )
+
+preds = classifier("https://huggingface.co/datasets/huggingface/documentation-							images/resolve/main/pipeline-cat-chonk.jpeg")
+print(f"Prediction: {preds}\n")
 ```
 
 </hfoption>
@@ -69,34 +67,28 @@ for i in dataset["test"]:
 ```python
 
 import torch
-from datasets import load_dataset
+import requests
+from PIL import Image
 from transformers import AutoImageProcessor, MobileViTForImageClassification
 
-
-dataset = load_dataset("huggingface/cats-image")
-img = dataset["test"]["image"][0]
-
-# Load processor and model
-processor = AutoImageProcessor.from_pretrained("apple/mobilevit-small")
+image_processor = AutoImageProcessor.from_pretrained(
+							"apple/mobilevit-small",
+                            use_fast = True,
+							)
 model = MobileViTForImageClassification.from_pretrained(
-    								"apple/mobilevit-small")
+    								"apple/mobilevit-small"
+                                     )
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt").to("cuda")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-
-#Preprocess
-inputs = processor(images = img, return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
-
-#Forward Pass
 with torch.no_grad():
-    outputs = model(**inputs)
+    logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
 
-#Get Predicted label
-logits = outputs.logits
-predicted_class = logits.argmax(-1).item()
-print(model.config.id2label[predicted_class])
-
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted calss label is:{predicted_class_label}")
 ```
 
 </hfoption>
