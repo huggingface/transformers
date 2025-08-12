@@ -144,7 +144,7 @@ class GPTBigCodeAttention(nn.Module):
             )
 
         self.scale_attn_weights = config.scale_attn_weights
-        self.scaling = self.head_dim**0.5 if config.scale_attn_weights else 1.0
+        self.scaling = self.head_dim**-0.5 if config.scale_attn_weights else 1.0
         self.is_cross_attention = is_cross_attention
 
         self.layer_idx = layer_idx

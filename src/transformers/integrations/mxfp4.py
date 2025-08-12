@@ -49,7 +49,7 @@ FP4_VALUES = [
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
-    from triton_kernels.numerics_details.mxfp import downcast_to_mxfp
+    downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
 
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
     w, w_scale = swizzle_mxfp4(w, w_scale)
@@ -57,9 +57,13 @@ def quantize_to_mxfp4(w):
 
 
 def swizzle_mxfp4(w, w_scale):
-    from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
-    from triton_kernels.tensor_details import layout
-    from triton_kernels.tensor_details.layout import StridedLayout
+    FP4, convert_layout, wrap_torch_tensor = (
+        triton_kernels_hub.tensor.FP4,
+        triton_kernels_hub.tensor.convert_layout,
+        triton_kernels_hub.tensor.wrap_torch_tensor,
+    )
+    layout = triton_kernels_hub.tensor_details.layout
+    StridedLayout = triton_kernels_hub.tensor_details.layout.StridedLayout
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
@@ -173,8 +177,12 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
-        from triton_kernels.matmul_ogs import FnSpecs, FusedActivation, matmul_ogs
-        from triton_kernels.swiglu import swiglu_fn
+        FnSpecs, FusedActivation, matmul_ogs = (
+            triton_kernels_hub.matmul_ogs.FnSpecs,
+            triton_kernels_hub.matmul_ogs.FusedActivation,
+            triton_kernels_hub.matmul_ogs.matmul_ogs,
+        )
+        swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
@@ -211,7 +219,12 @@ def routing_torch_dist(
 ):
     import os
 
-    from triton_kernels.routing import GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch
+    GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch = (
+        triton_kernels_hub.routing.GatherIndx,
+        triton_kernels_hub.routing.RoutingData,
+        triton_kernels_hub.routing.ScatterIndx,
+        triton_kernels_hub.routing.compute_expt_data_torch,
+    )
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
@@ -264,8 +277,8 @@ def routing_torch_dist(
 
         expt_data = compute_expt_data_torch(hist, n_local_experts, n_gates_pad)
 
-        hitted_experts = n_expts_act
-    return RoutingData(gate_scal, hist, n_local_experts, hitted_experts, expt_data), gather_indx, scatter_indx
+        hit_experts = n_expts_act
+    return RoutingData(gate_scal, hist, n_local_experts, hit_experts, expt_data), gather_indx, scatter_indx
 
 
 def mlp_forward(self, hidden_states):
@@ -274,13 +287,16 @@ def mlp_forward(self, hidden_states):
     if dist.is_available() and dist.is_initialized():
         routing = routing_torch_dist
     else:
-        from triton_kernels.routing import routing
+        routing = triton_kernels_hub.routing.routing
 
         routing = routing
     batch_size = hidden_states.shape[0]
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-    routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
+
+    with torch.cuda.device(router_logits.device):
+        routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
+
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
@@ -334,8 +350,11 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
-    from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
-
+    PrecisionConfig, FlexCtx, InFlexData = (
+        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+        triton_kernels_hub.matmul_ogs.FlexCtx,
+        triton_kernels_hub.matmul_ogs.InFlexData,
+    )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
     model = kwargs.get("model", None)
@@ -447,6 +466,11 @@ def replace_with_mxfp4_linear(
 ):
     if quantization_config.dequantize:
         return model
+    else:
+        from kernels import get_kernel
+
+        global triton_kernels_hub
+        triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
 
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 
