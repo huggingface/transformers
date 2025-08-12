@@ -1859,10 +1859,7 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            cache_kwargs = {
-                "max_cache_len": max_cache_len,
-                "config": self.config.get_text_config(),
-            }
+            cache_kwargs = {"config": self.config.get_text_config(), "max_cache_len": max_cache_len}
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
