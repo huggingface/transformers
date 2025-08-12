@@ -89,7 +89,7 @@ class GradientCheckpointingLayer(nn.Module):
             # warn if anything was changed
             if do_warn:
                 message = message.rstrip(",") + "."
-                logger.warning(message)
+                logger.warning_once(message)
 
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
         return super().__call__(*args, **kwargs)

@@ -2794,11 +2794,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, OneFormerPixelDecoder):
             nn.init.normal_(module.level_embed, std=0)
-        elif isinstance(module, OneFormerTransformerDecoderLayer):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-        elif isinstance(module, OneFormerTransformerDecoderQueryTransformer):
+        elif isinstance(module, (OneFormerTransformerDecoderLayer, OneFormerTransformerDecoderQueryTransformer)):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p, gain=xavier_std)

@@ -5017,7 +5017,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
-            "git log".split(),
+            ["git", "log"],
             capture_output=True,
             check=True,
             encoding="utf-8",
