@@ -81,18 +81,18 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
             raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            input: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+            x: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
         """
         if self.data_format == "channels_first":
-            output = input.permute(0, 2, 3, 1)
-            output = super().forward(output)
-            output = output.permute(0, 3, 1, 2)
+            x = x.permute(0, 2, 3, 1)
+            x = super().forward(x)
+            x = x.permute(0, 3, 1, 2)
         else:
-            output = super().forward(input)
-        return output
+            x = super().forward(x)
+        return x
 
 
 class DINOv3ConvNextLayer(nn.Module):
