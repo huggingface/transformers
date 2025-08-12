@@ -339,7 +339,9 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
 
         last_position_ids = position_ids[:, -1]
         q_len = (
-            torch.ones(position_ids.size(0), **tensor_kwargs) if position_ids.shape[-1] == 1 else last_position_ids.add(1)
+            torch.ones(position_ids.size(0), **tensor_kwargs)
+            if position_ids.shape[-1] == 1
+            else last_position_ids.add(1)
         )
         cu_seq_lens_q = torch.cat([torch.zeros(1, **tensor_kwargs), q_len.cumsum(0).to(torch.int32)], 0)
         cu_seq_lens_k = torch.cat(
