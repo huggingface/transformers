@@ -2228,12 +2228,15 @@ class GenerationMixin(ContinuousMixin):
                 (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
                 `True`.
             custom_generate (`str` or `Callable`, *optional*):
-                A string containing the name of a huggingface.co repository, a local repository path, or a callable.
-                If a repository is provided, the custom `generate` function defined in that repository's
-                `custom_generate/generate.py` file will be executed instead of the standard `generate` method. Note
-                that the logic for generation will be entirely replaced by the repository, and the return type may be
-                different from the standard `generate` method. If a callable is provided, `generate` will still run the
-                standard preparation steps, but will call the provided callable to perform the decoding loop.
+                One of the following:
+
+                - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
+                  `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
+                  repository fully replaces the generation logic, and the return type may differ.
+                - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
+                - `Callable`: `generate` will perform the usual preparation steps, then call the provided callable to
+                  run the decoding loop. For more information, see
+                [Reusing generate's preparation steps by passing a callable](https://huggingface.co/docs/transformers/en/generation_strategies#reusing-generate-s-preparation-steps-by-passing-a-callable).
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
