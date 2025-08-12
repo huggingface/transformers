@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -1580,7 +1580,9 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache()
+            past_key_values = EncoderDecoderCache(
+                self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
+            )
         return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(

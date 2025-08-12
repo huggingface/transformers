@@ -1732,15 +1732,15 @@ class EncoderDecoderCache(Cache):
     # Override @property from Cache
     is_compileable = None
 
-    def __init__(self, self_attention_cache: Cache = None, cross_attention_cache: Cache = None):
+    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
         super().__init__(layer_classes=DynamicLayer)
-        self.self_attention_cache = self_attention_cache if self_attention_cache is not None else DynamicCache()
-        self.cross_attention_cache = cross_attention_cache if cross_attention_cache is not None else DynamicCache()
+        self.self_attention_cache = self_attention_cache
+        self.cross_attention_cache = cross_attention_cache
         self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
-        for layer_idx in range(len(self.cross_attention_cache)):
-            self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
+        for layer_idx in range(len(cross_attention_cache)):
+            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
 
     def __iter__(self):
         """

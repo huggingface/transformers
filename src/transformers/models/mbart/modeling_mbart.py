@@ -1036,7 +1036,11 @@ class MBartDecoder(MBartPreTrainedModel):
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache() if encoder_hidden_states is not None else DynamicCache()
+            past_key_values = (
+                EncoderDecoderCache(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
+                if encoder_hidden_states is not None
+                else DynamicCache()
+            )
         return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
             return_legacy_cache = True

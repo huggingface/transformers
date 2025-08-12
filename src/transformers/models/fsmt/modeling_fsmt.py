@@ -35,7 +35,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
@@ -650,7 +650,9 @@ class FSMTDecoder(nn.Module):
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache()
+            past_key_values = EncoderDecoderCache(
+                self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
+            )
         return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
             return_legacy_cache = True
