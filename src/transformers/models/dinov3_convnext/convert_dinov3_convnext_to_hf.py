@@ -33,9 +33,11 @@ HUB_CHECKPOINTS = {
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    "dwconv": "depthwise_conv",
-    "pwconv": "pointwise_conv",
-    "norm": "layer_norm",
+    r"dwconv":                              r"depthwise_conv",
+    r"pwconv":                              r"pointwise_conv",
+    r"norm":                                r"layer_norm",
+    r"stages.(\d+).(\d+)":                  r"stages.\1.layers.\2",
+    r"downsample_layers.(\d+).(\d+)":       r"stages.\1.downsample_layers.\2",
 }
 # fmt: on
 

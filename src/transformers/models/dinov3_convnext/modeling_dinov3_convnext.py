@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -27,6 +27,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import check_model_inputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
@@ -98,7 +99,7 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
 class DINOv3ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
-    There are two equivalent implementations: 
+    There are two equivalent implementations:
      1) DwConv, LayerNorm (channels_first), Conv, GELU, Conv (all in (N, C, H, W) format)
      2) DwConv, Permute, LayerNorm (channels_last), Linear, GELU, Linear, Permute
 
@@ -107,20 +108,20 @@ class DINOv3ConvNextLayer(nn.Module):
     Args:
         config ([`DINOv3ConvNextConfig`]):
             Model config.
-        dim (`int`):
+        channels (`int`):
             Number of input (and output) channels.
         drop_path (`float`):
             Drop path rate. Default: 0.0.
     """
 
-    def __init__(self, config: DINOv3ConvNextConfig, dim: int, drop_path: float = 0.0):
+    def __init__(self, config: DINOv3ConvNextConfig, channels: int, drop_path: float = 0.0):
         super().__init__()
-        self.depthwise_conv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
-        self.layer_norm = DINOv3ConvNextLayerNorm(dim, eps=config.layer_norm_eps)
-        self.pointwise_conv1 = nn.Linear(dim, 4 * dim)  # implemented with linear, but can be seen as a 1x1 conv
+        self.depthwise_conv = nn.Conv2d(channels, channels, kernel_size=7, padding=3, groups=channels)
+        self.layer_norm = DINOv3ConvNextLayerNorm(channels, eps=config.layer_norm_eps)
+        self.pointwise_conv1 = nn.Linear(channels, 4 * channels)  # can be seen as a 1x1 conv
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.pointwise_conv2 = nn.Linear(4 * dim, dim)  # implemented with linear, but can be seen as a 1x1 conv
-        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
+        self.pointwise_conv2 = nn.Linear(4 * channels, channels)  # can be seen as a 1x1 conv
+        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(channels), requires_grad=True)
         self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -141,12 +142,58 @@ class DINOv3ConvNextLayer(nn.Module):
         return x
 
 
+class DINOv3ConvNextStage(nn.Module):
+    """ """
+
+    def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
+        super().__init__()
+
+        in_channels = config.hidden_sizes[stage_idx - 1] if stage_idx > 0 else config.num_channels
+        out_channels = config.hidden_sizes[stage_idx]
+
+        if stage_idx == 0:
+            self.downsample_layers = nn.Sequential(
+                nn.Conv2d(config.num_channels, out_channels, kernel_size=4, stride=4),
+                DINOv3ConvNextLayerNorm(out_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+            )
+        else:
+            self.downsample_layers = nn.Sequential(
+                DINOv3ConvNextLayerNorm(in_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+                nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2),
+            )
+
+        num_stage_layers = config.depths[stage_idx]
+        num_previous_layers = sum(config.depths[:stage_idx])
+        num_total_layers = sum(config.depths)
+        drop_path_rates = np.linspace(0, config.drop_path_rate, num_total_layers).tolist()
+
+        self.layers = nn.ModuleList(
+            [
+                DINOv3ConvNextLayer(config, channels=out_channels, drop_path=drop_path_rates[i])
+                for i in range(num_previous_layers, num_previous_layers + num_stage_layers)
+            ]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor of shape (batch_size, channels, height, width)
+        """
+        x = self.downsample_layers(x)
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
 @auto_docstring
 class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
     _no_split_modules = ["DINOv3ConvNextLayer"]
+    _can_record_outputs = {
+        "hidden_states": DINOv3ConvNextLayer,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -166,83 +213,37 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
         self.config = config
-        self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layers
-        stem = nn.Sequential(
-            nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4),
-            DINOv3ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first"),
-        )
-        self.downsample_layers.append(stem)
-        for i in range(3):
-            downsample_layer = nn.Sequential(
-                DINOv3ConvNextLayerNorm(config.hidden_sizes[i], eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(
-                    config.hidden_sizes[i],
-                    config.hidden_sizes[i + 1],
-                    kernel_size=2,
-                    stride=2,
-                ),
-            )
-            self.downsample_layers.append(downsample_layer)
-
-        self.stages = nn.ModuleList()  # 4 feature resolution stages, each consisting of multiple residual blocks
-        dp_rates = np.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
-        cur = 0
-        for i in range(4):
-            stage = nn.Sequential(
-                *[
-                    DINOv3ConvNextLayer(
-                        config=config,
-                        dim=config.hidden_sizes[i],
-                        drop_path=dp_rates[cur + j],
-                    )
-                    for j in range(config.depths[i])
-                ]
-            )
-            self.stages.append(stage)
-            cur += config.depths[i]
-
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
         self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
+        self.pooling = nn.AdaptiveAvgPool2d(1)
         self.post_init()
 
+    @check_model_inputs
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        all_hidden_states = () if output_hidden_states else None
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
-        for dw_layer, stage_layer in zip(self.downsample_layers, self.stages):
-            hidden_states = stage_layer(dw_layer(hidden_states))
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
 
-        pooled_output = hidden_states.mean([-2, -1])  # global average pooling, (N, C, H, W) -> (N, C)
-        hidden_states = torch.flatten(hidden_states, 2).transpose(1, 2)
+        # Make global representation, a.k.a [CLS] token
+        pooled_output = self.pooling(hidden_states)
 
-        # concat [CLS] and patch tokens as (N, HW + 1, C), then normalize
-        hidden_states_norm = self.layer_norm(torch.cat([pooled_output.unsqueeze(1), hidden_states], dim=1))
+        # (batch_size, channels, 1, 1) -> (batch_size, channels)
+        pooled_output = pooled_output.flatten(2).transpose(1, 2)
 
-        if not return_dict:
-            return (hidden_states_norm, hidden_states_norm[:, 0], all_hidden_states)
+        # (batch_size, channels, height, width) -> (batch_size, channels, height * width)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+
+        # concat [CLS] and "patch tokens" as (batch_size, 1 + height * width, channels)
+        hidden_states = torch.cat([pooled_output, hidden_states], dim=1)
+        hidden_states = self.layer_norm(hidden_states)
 
         return BaseModelOutputWithPoolingAndNoAttention(
-            last_hidden_state=hidden_states_norm,
-            pooler_output=hidden_states_norm[:, 0],
-            hidden_states=all_hidden_states,
+            last_hidden_state=hidden_states,
+            pooler_output=hidden_states[:, 0],
         )
 
 

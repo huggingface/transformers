@@ -14,6 +14,8 @@
 # limitations under the License.
 """ConvNeXT model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -34,14 +36,12 @@ class DINOv3ConvNextConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, *optional*, defaults to 4):
-            Patch size to use in the patch embedding layer.
         num_stages (`int`, *optional*, defaults to 4):
-            The number of stages in the model.
+            The number of stages in the model with different spatial resolution and hidden size.
         hidden_sizes (`list[int]`, *optional*, defaults to [96, 192, 384, 768]):
             Dimensionality (hidden size) at each stage.
         depths (`list[int]`, *optional*, defaults to [3, 3, 9, 3]):
-            Depth (number of blocks) for each stage.
+            The number of layers for each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
@@ -72,24 +72,20 @@ class DINOv3ConvNextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
-        patch_size=4,
-        num_stages=4,
-        hidden_sizes=None,
-        depths=None,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        layer_scale_init_value=1e-6,
-        drop_path_rate=0.0,
-        image_size=224,
+        num_channels: int = 3,
+        hidden_sizes: Optional[list[int]] = None,
+        depths: Optional[list[int]] = None,
+        hidden_act: str = "gelu",
+        initializer_range: float = 0.02,
+        layer_norm_eps: float = 1e-6,
+        layer_scale_init_value: float = 1e-6,
+        drop_path_rate: float = 0.0,
+        image_size: int = 224,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.num_stages = num_stages
         self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
         self.depths = [3, 3, 9, 3] if depths is None else depths
         self.hidden_act = hidden_act
@@ -98,6 +94,10 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+
+    @property
+    def num_stages(self) -> int:
+        return len(self.hidden_sizes)
 
 
 __all__ = ["DINOv3ConvNextConfig"]
