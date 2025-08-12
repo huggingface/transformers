@@ -1,0 +1,2 @@
+[environment]
+python = "/raid/manuel/micromamba/envs/py313_torch27/bin/python"
