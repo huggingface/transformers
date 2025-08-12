@@ -111,9 +111,9 @@ print(model.config.id2label[predicted_class])
 - Feature maps are used directly instead of token embeddings.
 - Use [`MobileViTImageProcessor`] to preprocess images.
 - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
-- The **classification models** are pretrained on [**ImageNet-1k**](https://huggingface.co/datasets/imagenet-1k) (ILSVRC 2012).
-- The **segmentation models** use a [**DeepLabV3**](https://huggingface.co/papers/1706.05587) head and are pretrained on [**PASCAL VOC**](http://host.robots.ox.ac.uk/pascal/VOC/).
-- TensorFlow versions are compatible with **TensorFlow Lite**, making them ideal for edge/mobile deployment.
+- The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k).
+- The segmentation models use a [DeepLabV3](https://huggingface.co/papers/1706.05587) head and are pretrained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
+- TensorFlow versions are compatible with TensorFlow Lite, making them ideal for edge/mobile deployment.
 
 
 
