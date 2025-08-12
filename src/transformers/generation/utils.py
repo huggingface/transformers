@@ -2443,7 +2443,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 10. go into different generation modes
-        if custom_generate is not None and isinstance(custom_generate, Callable):
+        if isinstance(custom_generate, Callable):
             result = custom_generate(
                 self,
                 input_ids,
