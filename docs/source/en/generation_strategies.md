@@ -506,7 +506,7 @@ Recommended practices:
 
 ### Reusing `generate`’s input preparation
 
-You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline (batch expansion, attention masks, logits processors, stopping criteria, etc.) while overriding only the decoding loop.
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
 
 ```py
 def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
