@@ -14,7 +14,7 @@
 # limitations under the License.
 """Vocos model configuration"""
 
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 from transformers import EncodecConfig
 
@@ -85,7 +85,7 @@ class VocosConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-6,
         n_fft: int = 1024,
         hop_length: int = 256,
-        spec_padding: str = "center",
+        spec_padding: Literal["center", "same"] = "center",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -163,7 +163,7 @@ class VocosWithEncodecConfig(VocosConfig):
         adanorm_num_embeddings: int = 4,
         n_fft: int = 1280,
         hop_length: int = 320,
-        spec_padding: str = "same",
+        spec_padding: Literal["center", "same"] = "same",
         **kwargs,
     ):
         super().__init__(

@@ -78,34 +78,23 @@ def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, win
     return audio
 
 
-class VocosLayerNorm(nn.Module):
+class VocosAdaptiveLayerNorm(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.eps = config.layer_norm_eps
         self.hidden_dim = config.hidden_dim
-        self.use_adaptive_norm = config.use_adaptive_norm
-        if self.use_adaptive_norm:
-            # only used in Encodec variant
-            self.weight = nn.Parameter(torch.ones(config.adanorm_num_embeddings, config.hidden_dim))
-            self.bias = nn.Parameter(torch.zeros(config.adanorm_num_embeddings, config.hidden_dim))
-        else:
-            self.weight = nn.Parameter(torch.ones(config.hidden_dim))
-            self.bias = nn.Parameter(torch.zeros(config.hidden_dim))
+        self.weight = nn.Parameter(torch.ones(config.adanorm_num_embeddings, config.hidden_dim))
+        self.bias = nn.Parameter(torch.zeros(config.adanorm_num_embeddings, config.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor = None):
-        if self.use_adaptive_norm:
-            if cond_embedding_id is None:
-                # the index used to select the target bandwidth is used to to index into Adaptive Normalization lookup table (adanorm_num_embeddings, hidden_dim)
-                raise ValueError(
-                    "When using adaptive LayerNorm `use_adaptive_norm=True`, you must pass conditional id via `bandwidth_id`."
-                )
+        if cond_embedding_id is None:
+            # the index used to select the target bandwidth is used to index into Adaptive Normalization lookup table (adanorm_num_embeddings, hidden_dim)
+            raise ValueError(
+                "When using adaptive LayerNorm `use_adaptive_norm=True`, you must pass conditional id via `bandwidth_id`."
+            )
 
-            hidden_states = F.layer_norm(hidden_states, (self.hidden_dim,), weight=None, bias=None, eps=self.eps)
-            return hidden_states * self.weight[cond_embedding_id].unsqueeze(0) + self.bias[
-                cond_embedding_id
-            ].unsqueeze(0)
-
-        return F.layer_norm(hidden_states, (self.hidden_dim,), weight=self.weight, bias=self.bias, eps=self.eps)
+        hidden_states = F.layer_norm(hidden_states, (self.hidden_dim,), weight=None, bias=None, eps=self.eps)
+        return hidden_states * self.weight[cond_embedding_id].unsqueeze(0) + self.bias[cond_embedding_id].unsqueeze(0)
 
 
 class VocosConvNeXtBlock(nn.Module):
@@ -120,7 +109,10 @@ class VocosConvNeXtBlock(nn.Module):
             padding=config.padding,
             groups=config.hidden_dim,
         )
-        self.norm = VocosLayerNorm(config)
+        if config.use_adaptive_norm:
+            self.norm = VocosAdaptiveLayerNorm(config)
+        else:
+            self.norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
         self.pwconv1 = nn.Linear(config.hidden_dim, config.intermediate_dim)
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(config.intermediate_dim, config.hidden_dim)
@@ -135,7 +127,10 @@ class VocosConvNeXtBlock(nn.Module):
         residual = hidden_states
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.norm(hidden_states, cond_embedding_id=bandwidth_id)
+        if isinstance(self.norm, VocosAdaptiveLayerNorm):
+            hidden_states = self.norm(hidden_states, cond_embedding_id=bandwidth_id)
+        else:
+            hidden_states = self.norm(hidden_states)
         hidden_states = self.pwconv1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.pwconv2(hidden_states)
@@ -154,14 +149,20 @@ class VocosBackbone(nn.Module):
         self.embed = nn.Conv1d(
             config.input_channels, config.hidden_dim, kernel_size=config.kernel_size, padding=config.padding
         )
-        self.norm = VocosLayerNorm(config)
+        if config.use_adaptive_norm:
+            self.norm = VocosAdaptiveLayerNorm(config)
+        else:
+            self.norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, bandwidth_id=None):
         hidden_states = self.embed(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.norm(hidden_states, bandwidth_id)
+        if isinstance(self.norm, VocosAdaptiveLayerNorm):
+            hidden_states = self.norm(hidden_states, bandwidth_id)
+        else:
+            hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
         for layer in self.layers:
             hidden_states = layer(hidden_states, bandwidth_id)
@@ -178,8 +179,6 @@ class VocosISTFTHead(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.out_proj = nn.Linear(config.hidden_dim, config.n_fft + 2)
-        if config.spec_padding not in ["center", "same"]:
-            raise ValueError("padding must be `center` or `same`")
         self.padding = config.spec_padding
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
@@ -232,7 +231,7 @@ class VocosPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, VocosLayerNorm):
+        elif isinstance(module, VocosAdaptiveLayerNorm):
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
             if hasattr(module, "weight") and module.weight is not None:
