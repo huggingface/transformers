@@ -27,7 +27,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
@@ -136,7 +136,7 @@ class DINOv3ConvNextLayer(nn.Module):
         x = self.pointwise_conv1(x)
         x = self.activation_fn(x)
         x = self.pointwise_conv2(x)
-        x = self.gamma * x
+        x = x * self.gamma
         x = x.permute(0, 3, 1, 2)  # back to channels first
         x = residual + self.drop_path(x)
         return x
@@ -191,9 +191,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
     _no_split_modules = ["DINOv3ConvNextLayer"]
-    _can_record_outputs = {
-        "hidden_states": DINOv3ConvNextLayer,
-    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -218,32 +215,41 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         self.config = config
         self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
         self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
-        self.pooling = nn.AdaptiveAvgPool2d(1)
+        self.pool = nn.AdaptiveAvgPool2d(1)
         self.post_init()
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> BaseModelOutputWithPoolingAndNoAttention:
+    def forward(
+        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
+
+        output_hidden_states = output_hidden_states or self.config.output_hidden_states
+        all_hidden_states = []
+
         for stage in self.stages:
             hidden_states = stage(hidden_states)
 
-        # Make global representation, a.k.a [CLS] token
-        pooled_output = self.pooling(hidden_states)
+            # store intermediate stage outputs
+            if output_hidden_states:
+                all_hidden_states.append(hidden_states)
 
-        # (batch_size, channels, 1, 1) -> (batch_size, channels)
+        # make global representation, a.k.a [CLS] token
+        pooled_output = self.pool(hidden_states)
+
+        # (batch_size, channels, height, width) -> (batch_size, height * width, channels)
         pooled_output = pooled_output.flatten(2).transpose(1, 2)
-
-        # (batch_size, channels, height, width) -> (batch_size, channels, height * width)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
-        # concat [CLS] and "patch tokens" as (batch_size, 1 + height * width, channels)
+        # concat "cls" and "patch tokens" as (batch_size, 1 + height * width, channels)
         hidden_states = torch.cat([pooled_output, hidden_states], dim=1)
         hidden_states = self.layer_norm(hidden_states)
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states[:, 0],
+            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
         )
 
 

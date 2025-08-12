@@ -43,24 +43,20 @@ class DINOv3ConvNextModelTester:
         batch_size=13,
         image_size=32,
         num_channels=3,
-        num_stages=4,
         hidden_sizes=[10, 20, 30, 40],
         depths=[2, 2, 3, 2],
-        is_training=True,
+        is_training=False,
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
         num_labels=10,
         initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
-        out_indices=[2, 3, 4],
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.num_stages = num_stages
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.is_training = is_training
@@ -69,8 +65,6 @@ class DINOv3ConvNextModelTester:
         self.hidden_act = hidden_act
         self.num_labels = num_labels
         self.initializer_range = initializer_range
-        self.out_features = out_features
-        self.out_indices = out_indices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -88,12 +82,9 @@ class DINOv3ConvNextModelTester:
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
-            num_stages=self.num_stages,
             hidden_act=self.hidden_act,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            out_features=self.out_features,
-            out_indices=self.out_indices,
             num_labels=self.num_labels,
         )
 
@@ -176,8 +167,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_stages = self.model_tester.num_stages
-            self.assertEqual(len(hidden_states), expected_num_stages)
+            self.assertEqual(len(hidden_states), 4)
 
             # DINOv3ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
@@ -199,7 +189,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/convnext-tiny-224"
+        model_name = "converted_models/convnext_tiny"
         model = DINOv3ConvNextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -215,4 +205,30 @@ def prepare_img():
 class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("converted_models/convnext_tiny") if is_vision_available() else None
+
+    @slow
+    def test_inference_no_head(self):
+        model = DINOv3ConvNextModel.from_pretrained("converted_models/convnext_tiny").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the last hidden states
+        _, _, height, width = inputs["pixel_values"].shape
+        expected_seq_length = (height * width) // 4 ** (model.config.num_stages + 1) + 1  # +1 for the "CLS" token
+        expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_sizes[-1]))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        last_layer_cls_token = outputs.pooler_output
+        expected_slice = torch.tensor([-6.3721, 1.3008, 2.0743, -0.0800, 0.6072], device=torch_device)
+        torch.testing.assert_close(last_layer_cls_token[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+
+        last_layer_patch_tokens = outputs.last_hidden_state[:, 1:]
+        expected_slice = torch.tensor([0.4905, -3.7135, 1.8485, -1.0403, -1.0908], device=torch_device)
+        torch.testing.assert_close(last_layer_patch_tokens[0, 0, :5], expected_slice, rtol=1e-4, atol=1e-4)
