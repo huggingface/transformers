@@ -18,7 +18,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The [**GLM-4.5**](https://arxiv.org/abs/2508.06471) series models are foundation models designed for intelligent agents. GLM-4.5 has **355** billion total parameters with **32** billion active parameters, while GLM-4.5-Air adopts a more compact design with **106** billion total parameters and **12** billion active parameters. GLM-4.5 models unify reasoning, coding, and intelligent agent capabilities to meet the complex demands of intelligent agent applications.
+The [**GLM-4.5**](https://arxiv.org/abs/2508.06471) series models are foundation models designed for intelligent agents, MoE variants are documented here as Glm4Moe.
+
+GLM-4.5 has **355** billion total parameters with **32** billion active parameters, while GLM-4.5-Air adopts a more compact design with **106** billion total parameters and **12** billion active parameters. GLM-4.5 models unify reasoning, coding, and intelligent agent capabilities to meet the complex demands of intelligent agent applications.
 
 Both GLM-4.5 and GLM-4.5-Air are hybrid reasoning models that provide two modes: thinking mode for complex reasoning and tool usage, and non-thinking mode for immediate responses.
 
