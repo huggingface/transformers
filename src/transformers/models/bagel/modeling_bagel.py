@@ -940,9 +940,10 @@ class BagelTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
         # Is it required as we transpose in fa2 file
-        # key_states = key_states.transpose(1, 2).contiguous()
-        # query_states = query_states.transpose(1, 2).contiguous()
-        # value_states = value_states.transpose(1, 2).contiguous()
+        key_states = key_states.transpose(1, 2).contiguous()
+        query_states = query_states.transpose(1, 2).contiguous()
+        value_states = value_states.transpose(1, 2).contiguous()
+        print("kv shape before cache update:", key_states.shape, value_states.shape)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -1020,7 +1021,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         mode: Optional[str] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1043,7 +1044,7 @@ class BagelTextDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -1652,7 +1653,7 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         return v_t
 
     def generate_image(
-        self, pixel_values, input_ids, attention_mask, generation_config, image_shape=(1024, 1024), **kwargs
+        self, pixel_values, input_ids, attention_mask, generation_config, image_shape=(256, 256), **kwargs
     ):
         if pixel_values:
             _, _, height, width = pixel_values.shape
@@ -1661,6 +1662,9 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
 
         bsz = len(input_ids)
         num_sequences = generation_config["num_sequences"]
+        # pixel_values = pixel_values.repeat_interleave(num_sequences, dim=0)
+        # input_ids = input_ids.repeat_interleave(num_sequences, dim=0)
+        # attention_mask = attention_mask.repeat_interleave(num_sequences, dim=0)
 
         output = self.model(
             pixel_values=pixel_values,
@@ -1671,8 +1675,6 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         past_key_values = output.past_key_values
-
-        print(past_key_values.layers[0].keys.shape)
 
         latents, vae_position_ids = self.prepare_vae_latent(height, width)
         print("latents shape:", latents.shape)
