@@ -81,11 +81,46 @@ def get_commit_hash(commit_hash: str | None) -> str:
     return commit_hash[:7]
 
 
-def get_arguments(args: argparse.Namespace) -> tuple[Path, str, str]:
+def get_arguments(args: argparse.Namespace) -> tuple[Path, str, str, str, str]:
     path = get_path(args.path)
     gpu_name = get_gpu_name(args.gpu_name)
     commit_hash = get_commit_hash(args.commit_hash)
-    return path, gpu_name, commit_hash
+    job = args.job
+    report_repo_id = args.report_repo_id
+    return path, gpu_name, commit_hash, job, report_repo_id
+
+
+def upload_collated_report(job: str, report_repo_id: str, filename: str):
+    # Alternatively we can check for the existence of the collated_reports file and upload in notification_service.py
+    import os
+
+    from get_previous_daily_ci import get_last_daily_ci_run
+    from huggingface_hub import HfApi
+
+    api = HfApi()
+
+    # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
+    report_repo_subfolder = ""
+    if os.getenv("GITHUB_EVENT_NAME") != "schedule":
+        report_repo_subfolder = f"{os.getenv('GITHUB_RUN_NUMBER')}-{os.getenv('GITHUB_RUN_ID')}"
+        report_repo_subfolder = f"runs/{report_repo_subfolder}"
+
+    workflow_run = get_last_daily_ci_run(
+        token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_run_id=os.getenv("GITHUB_RUN_ID")
+    )
+    workflow_run_created_time = workflow_run["created_at"]
+    report_repo_folder = workflow_run_created_time.split("T")[0]
+
+    if report_repo_subfolder:
+        report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
+
+    api.upload_file(
+        path_or_fileobj=f"ci_results_{job}/{filename}",
+        path_in_repo=f"{report_repo_folder}/ci_results_{job}/{filename}",
+        repo_id=report_repo_id,
+        repo_type="dataset",
+        token=os.getenv("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN"),
+    )
 
 
 if __name__ == "__main__":
@@ -93,8 +128,11 @@ if __name__ == "__main__":
     parser.add_argument("--path", "-p", help="Path to the reports folder")
     parser.add_argument("--gpu-name", "-g", help="GPU name", default=None)
     parser.add_argument("--commit-hash", "-c", help="Commit hash", default=None)
-
-    path, gpu_name, commit_hash = get_arguments(parser.parse_args())
+    parser.add_argument("--job", "-j", help="Optional job name required for uploading reports", default=None)
+    parser.add_argument(
+        "--report-repo-id", "-r", help="Optional report repository ID required for uploading reports", default=None
+    )
+    path, gpu_name, commit_hash, job, report_repo_id = get_arguments(parser.parse_args())
 
     # Initialize accumulators for collated report
     total_status_count = {
@@ -145,3 +183,6 @@ if __name__ == "__main__":
             f,
             indent=2,
         )
+
+    if job and report_repo_id:
+        upload_collated_report(job, report_repo_id, f"collated_reports_{commit_hash}.json")

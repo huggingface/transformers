@@ -6,9 +6,9 @@ on:
       job:
         required: true
         type: string
-
-env:
-  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+      report_repo_id:
+        required: true
+        type: string
 
 jobs:
   collate_reports:
@@ -24,8 +24,10 @@ jobs:
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_SHA: ${{ github.sha }}
-          CI_TEST_JOB: ${{ inputs.job }}
-        run: python3 utils/collated_reports.py --path /transformers/reports/ --commit-hash ${{ env.CI_SHA }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python3 utils/collated_reports.py --path /transformers/reports/ --commit-hash ${{ env.CI_SHA }} --job ${{ inputs.job }} --report-repo-id ${{ inputs.report_repo_id }}
 
       - name: Upload collated reports
         uses: actions/upload-artifact@v4
