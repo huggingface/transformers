@@ -17,12 +17,25 @@
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import PILImageResampling
-from ...utils import auto_docstring
+from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_utils import PILImageResampling, ChannelDimension
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available
+)
 
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 def squared_euclidean_distance_torch(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """
@@ -56,6 +69,42 @@ def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tenso
     """
     d = squared_euclidean_distance_torch(x, clusters)
     return torch.argmin(d, dim=1)
+
+class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    clusters (`np.ndarray` or `list[list[int]]`, *optional*):
+        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
+        in `preprocess`.
+    resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
+    return_tensors (`str` or `TensorType`, *optional*):
+        The type of tensors to return. Can be one of:
+            - Unset: Return a list of `torch.Tensor`.
+            - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+            - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+            - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+    data_format (`ChannelDimension` or `str`, *optional*):
+        The channel dimension format for the output image. If unset, the channel dimension format of the input
+        image is used. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+    input_data_format (`ChannelDimension` or `str`, *optional*):
+        The channel dimension format for the input image. If unset, the channel dimension format is inferred
+        from the input image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+    do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+        Whether to color quantize the image.
+    """
+
+    clusters: Optional[np.ndarray] = None
+    resample: Optional[PILImageResampling] = PILImageResampling.BILINEAR
+    return_tensors: Optional[Union[str, TensorType]] = None,
+    data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None
+    do_color_quantize: Optional[bool] = True
 
 
 @auto_docstring
