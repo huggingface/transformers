@@ -47,8 +47,6 @@ class DINOv3ViTConfig(PretrainedConfig):
             hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
                 The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
                 `"relu"`, `"selu"` and `"gelu_new"` are supported.
-            hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
             attention_dropout (`float`, *optional*, defaults to 0.0):
                 The dropout ratio for the attention probabilities.
             initializer_range (`float`, *optional*, defaults to 0.02):
@@ -114,7 +112,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         num_hidden_layers: int = 12,
         num_attention_heads: int = 6,
         hidden_act: str = "gelu",
-        hidden_dropout_prob: float = 0.0,
         attention_dropout: float = 0.0,
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-5,
@@ -146,7 +143,6 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
