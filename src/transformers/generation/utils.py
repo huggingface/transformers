@@ -1846,6 +1846,7 @@ class GenerationMixin(ContinuousMixin):
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
+            or (not hasattr(cache_to_check, "max_batch_size"))
             or cache_to_check.max_batch_size != batch_size
             or isinstance(
                 cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
