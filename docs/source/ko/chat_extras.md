@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 1. 함수는 기능을 잘 설명하는 이름을 가져야 합니다.
 2. 함수의 인수는 함수 헤더에 타입 힌트를 포함해야 합니다(`Args` 블록에는 포함하지 마세요).
-3. 함수에는 [Google 스타일](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) 의 독스트링(dockstring)이 포함되어야 합니다.
+3. 함수에는 [Google 스타일](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) 의 독스트링(docstring)이 포함되어야 합니다.
 4. 함수에 반환 타입과 `Returns` 블록을 포함할 수 있지만, 도구를 활용하는 대부분의 모델에서 이를 사용하지 않기 때문에 무시할 수 있습니다.
 
 주어진 위치의 현재 온도와 풍속을 가져오는 도구의 예시는 아래와 같습니다.
