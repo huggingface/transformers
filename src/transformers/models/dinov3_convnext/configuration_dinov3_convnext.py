@@ -79,12 +79,10 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         depths=None,
         hidden_act="gelu",
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-6,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
-        out_features=None,
-        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)

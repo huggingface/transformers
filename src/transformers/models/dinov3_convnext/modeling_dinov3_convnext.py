@@ -98,44 +98,46 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
 class DINOv3ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
-    There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
-    H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
+    There are two equivalent implementations: 
+     1) DwConv, LayerNorm (channels_first), Conv, GELU, Conv (all in (N, C, H, W) format)
+     2) DwConv, Permute, LayerNorm (channels_last), Linear, GELU, Linear, Permute
 
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
-        dim (`int`): Number of input channels.
-        drop_path (`float`): Stochastic depth rate. Default: 0.0.
+        config ([`DINOv3ConvNextConfig`]):
+            Model config.
+        dim (`int`):
+            Number of input (and output) channels.
+        drop_path (`float`):
+            Drop path rate. Default: 0.0.
     """
 
-    def __init__(self, config, dim, drop_path=0):
+    def __init__(self, config: DINOv3ConvNextConfig, dim: int, drop_path: float = 0.0):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.norm = DINOv3ConvNextLayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
-        self.act = ACT2FN[config.hidden_act]
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = (
-            nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
-            if config.layer_scale_init_value > 0
-            else None
-        )
+        self.depthwise_conv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
+        self.layer_norm = DINOv3ConvNextLayerNorm(dim, eps=config.layer_norm_eps)
+        self.pointwise_conv1 = nn.Linear(dim, 4 * dim)  # implemented with linear, but can be seen as a 1x1 conv
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.pointwise_conv2 = nn.Linear(4 * dim, dim)  # implemented with linear, but can be seen as a 1x1 conv
+        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
         self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, x):
-        input = x
-        x = self.dwconv(x)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.norm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        x = input + self.drop_path(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor of shape (batch_size, channels, height, width)
+        """
+        residual = x
+        x = self.depthwise_conv(x)
+        x = x.permute(0, 2, 3, 1)  # to channels last
+        x = self.layer_norm(x)
+        x = self.pointwise_conv1(x)
+        x = self.activation_fn(x)
+        x = self.pointwise_conv2(x)
+        x = self.gamma * x
+        x = x.permute(0, 3, 1, 2)  # back to channels first
+        x = residual + self.drop_path(x)
         return x
 
 
@@ -202,7 +204,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
             self.stages.append(stage)
             cur += config.depths[i]
 
-        self.norm = nn.LayerNorm(config.hidden_sizes[-1], eps=1e-6)  # final norm layer
+        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
         self.post_init()
 
     @auto_docstring
@@ -232,7 +234,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         hidden_states = torch.flatten(hidden_states, 2).transpose(1, 2)
 
         # concat [CLS] and patch tokens as (N, HW + 1, C), then normalize
-        hidden_states_norm = self.norm(torch.cat([pooled_output.unsqueeze(1), hidden_states], dim=1))
+        hidden_states_norm = self.layer_norm(torch.cat([pooled_output.unsqueeze(1), hidden_states], dim=1))
 
         if not return_dict:
             return (hidden_states_norm, hidden_states_norm[:, 0], all_hidden_states)

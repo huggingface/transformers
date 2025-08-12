@@ -33,7 +33,9 @@ HUB_CHECKPOINTS = {
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-
+    "dwconv": "depthwise_conv",
+    "pwconv": "pointwise_conv",
+    "norm": "layer_norm",
 }
 # fmt: on
 
