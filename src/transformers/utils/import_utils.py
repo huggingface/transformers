@@ -78,9 +78,14 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_exists = False
             elif pkg_name == "triton":
                 try:
-                    package_version = importlib.metadata.version("pytorch-triton")
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
                 except Exception:
-                    package_exists = False
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -1276,6 +1281,24 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
         ) >= version.parse(library_version)
     else:
         return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_quanto_greater(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("optimum-quanto"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
 
 
 def is_torchdistx_available():

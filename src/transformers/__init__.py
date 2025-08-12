@@ -377,24 +377,17 @@ else:
         "StaticLayer",
         "SlidingWindowLayer",
         "ChunkedSlidingLayer",
-        "CacheProcessor",
-        "OffloadedCacheProcessor",
-        "QuantizedCacheProcessor",
-        "QuantoQuantizedCacheProcessor",
-        "HQQQuantizedCacheProcessor",
+        "QuantoQuantizedLayer",
+        "HQQQuantizedLayer",
         "Cache",
-        "CacheConfig",
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
-        "HQQQuantizedCacheProcessor",
         "HybridCache",
         "HybridChunkedCache",
         "OffloadedCache",
         "OffloadedStaticCache",
         "QuantizedCache",
-        "QuantoQuantizedCacheProcessor",
-        "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
         "SlidingWindowCache",
@@ -585,20 +578,24 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .cache_utils import Cache as Cache
-    from .cache_utils import CacheConfig as CacheConfig
+    from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
+    from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import HybridCache as HybridCache
     from .cache_utils import MambaCache as MambaCache
     from .cache_utils import OffloadedCache as OffloadedCache
     from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantizedCacheConfig as QuantizedCacheConfig
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
+    from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
+    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticLayer as StaticLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
