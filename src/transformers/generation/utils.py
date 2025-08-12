@@ -1957,6 +1957,15 @@ class GenerationMixin(ContinuousMixin):
             )
             generation_config.cache_implementation = None
 
+        # assisted decoding and contrastive search need to roll-back the Cache, which is not supported if
+        # it has sliding layers - so if we use any of those 2, do not pass the config to DynamicCache, which
+        # will result in creating a Cache with only full layers even if model uses sliding window
+        generation_mode = generation_config.get_generation_mode(assistant_model)
+        dynamic_cache_kwargs = (
+            {"config": self.config}
+            if generation_mode not in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH)
+            else {}
+        )
         generation_config.cache_implementation = generation_config.cache_implementation or getattr(
             self.config.get_text_config(decoder=True), "cache_implementation", None
         )
@@ -2002,15 +2011,15 @@ class GenerationMixin(ContinuousMixin):
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
             elif generation_config.cache_implementation == "dynamic":
-                model_kwargs[cache_name] = DynamicCache()
+                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         else:
             model_kwargs[cache_name] = (
-                DynamicCache()
+                DynamicCache(**dynamic_cache_kwargs)
                 if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else EncoderDecoderCache(DynamicCache(**dynamic_cache_kwargs), DynamicCache(**dynamic_cache_kwargs))
             )
 
     def _supports_logits_to_keep(self) -> bool:
