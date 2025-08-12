@@ -504,7 +504,7 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
-### Reusing `generate`’s preparation steps by passing a callable
+### Reusing `generate`’s input preparation
 
 You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline (batch expansion, attention masks, logits processors, stopping criteria, etc.) while overriding only the decoding loop.
 
