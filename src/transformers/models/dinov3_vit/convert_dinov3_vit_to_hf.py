@@ -50,6 +50,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"blocks.(\d+).mlp.fc2":        r"layer.\1.mlp.down_proj",
     r"blocks.(\d+).mlp":            r"layer.\1.mlp",
     r"blocks.(\d+).norm":           r"layer.\1.norm",
+    r"w1":                          r"gate_proj",
+    r"w2":                          r"up_proj",
+    r"w3":                          r"down_proj",
 }
 # fmt: on
 
@@ -94,7 +97,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_attention_heads=6,
             proj_bias=True,
             num_register_tokens=4,
-            use_swiglu_ffn=False,
+            use_gated_mlp=False,
+            hidden_act="gelu",
         )
     elif model_name == "vitsplus":
         return DINOv3ViTConfig(
@@ -104,7 +108,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_hidden_layers=12,
             num_attention_heads=6,
             num_register_tokens=4,
-            use_swiglu_ffn=True,
+            use_gated_mlp=True,
+            hidden_act="silu",
         )
     elif model_name == "vitb":
         return DINOv3ViTConfig(
@@ -115,7 +120,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_attention_heads=12,
             proj_bias=True,
             num_register_tokens=4,
-            use_swiglu_ffn=False,
+            use_gated_mlp=False,
+            hidden_act="gelu",
         )
     elif model_name == "vitl":
         return DINOv3ViTConfig(
@@ -125,7 +131,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_hidden_layers=24,
             num_attention_heads=16,
             num_register_tokens=4,
-            use_swiglu_ffn=False,
+            use_gated_mlp=False,
+            hidden_act="gelu",
         )
     elif model_name == "vithplus":
         return DINOv3ViTConfig(
@@ -135,7 +142,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_hidden_layers=32,
             num_attention_heads=20,
             num_register_tokens=4,
-            use_swiglu_ffn=True,
+            use_gated_mlp=True,
+            hidden_act="silu",
         )
     elif model_name == "vit7b":
         return DINOv3ViTConfig(
@@ -147,7 +155,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             query_bias=False,
             value_bias=False,
             num_register_tokens=4,
-            use_swiglu_ffn=True,
+            use_gated_mlp=True,
+            hidden_act="silu",
         )
     else:
         raise ValueError("Model not supported")
@@ -198,7 +207,7 @@ def convert_and_test_dinov3_checkpoint(args):
 
     model = DINOv3ViTModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
-    original_state_dict = torch.load(state_dict_path)
+    original_state_dict = torch.load(state_dict_path, mmap=True)
 
     original_state_dict = split_qkv(original_state_dict)
     original_keys = list(original_state_dict.keys())
@@ -218,7 +227,7 @@ def convert_and_test_dinov3_checkpoint(args):
 
         converted_state_dict[new_key] = weight_tensor
 
-    model.load_state_dict(converted_state_dict, strict=True)
+    model.load_state_dict(converted_state_dict, strict=True, assign=True)
     model = model.eval()
 
     transform = get_transform()
@@ -276,7 +285,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model-name",
-        default="vits",
+        default="vithplus",
         type=str,
         choices=["vits", "vitsplus", "vitb", "vitl", "vithplus", "vit7b"],
         help="Name of the model you'd like to convert.",

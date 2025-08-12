@@ -29,6 +29,7 @@ from transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PreTrainedModel,
     eager_attention_forward,
 )
+from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
 from ...modeling_layers import GradientCheckpointingLayer
@@ -284,21 +285,8 @@ class DINOv3ViTMLP(ArceeMLP):
     pass
 
 
-class DINOv3ViTSwiGLUFFN(nn.Module):
-    def __init__(self, config: DINOv3ViTConfig):
-        super().__init__()
-        self.in_features = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.out_features = config.hidden_size
-        self.w1 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
-        self.w2 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
-        self.w3 = nn.Linear(self.intermediate_size, self.out_features, bias=config.mlp_bias)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        x1 = self.w1(hidden_state)
-        x2 = self.w2(hidden_state)
-        hidden_state = nn.functional.silu(x1) * x2
-        return self.w3(hidden_state)
+class DINOv3ViTGatedMLP(LlamaMLP):
+    pass
 
 
 class DINOv3ViTLayer(GradientCheckpointingLayer):
@@ -314,8 +302,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        if config.use_swiglu_ffn:
-            self.mlp = DINOv3ViTSwiGLUFFN(config)
+        if config.use_gated_mlp:
+            self.mlp = DINOv3ViTGatedMLP(config)
         else:
             self.mlp = DINOv3ViTMLP(config)
         self.layer_scale2 = DINOv3ViTLayerScale(config)

@@ -73,7 +73,7 @@ class DINOv3ViTConfig(PretrainedConfig):
                 Initial value to use for layer scale.
             drop_path_rate (`float`, *optional*, defaults to 0.0):
                 Stochastic depth rate per sample (when applied in the main path of residual layers).
-            use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            use_gated_mlp (`bool`, *optional*, defaults to `False`):
                 Whether to use the SwiGLU feedforward neural network.
             num_register_tokens (`int`, *optional*, defaults to 0):
                 The number of register tokens.
@@ -125,7 +125,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         mlp_bias: bool = True,
         layerscale_value: float = 1.0,
         drop_path_rate: float = 0.0,
-        use_swiglu_ffn: bool = False,
+        use_gated_mlp: bool = False,
         num_register_tokens: int = 0,
         # train augs
         pos_embed_shift: Optional[float] = None,
@@ -148,7 +148,7 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
+        self.use_gated_mlp = use_gated_mlp
         self.rope_theta = rope_theta
         self.query_bias = query_bias
         self.key_bias = key_bias

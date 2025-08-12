@@ -373,21 +373,20 @@ class DINOv3ViTMLP(nn.Module):
         return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
-class DINOv3ViTSwiGLUFFN(nn.Module):
-    def __init__(self, config: DINOv3ViTConfig):
+class DINOv3ViTGatedMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.in_features = config.hidden_size
+        self.config = config
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.out_features = config.hidden_size
-        self.w1 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
-        self.w2 = nn.Linear(self.in_features, self.intermediate_size, bias=config.mlp_bias)
-        self.w3 = nn.Linear(self.intermediate_size, self.out_features, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        x1 = self.w1(hidden_state)
-        x2 = self.w2(hidden_state)
-        hidden_state = nn.functional.silu(x1) * x2
-        return self.w3(hidden_state)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class DINOv3ViTLayer(GradientCheckpointingLayer):
@@ -403,8 +402,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        if config.use_swiglu_ffn:
-            self.mlp = DINOv3ViTSwiGLUFFN(config)
+        if config.use_gated_mlp:
+            self.mlp = DINOv3ViTGatedMLP(config)
         else:
             self.mlp = DINOv3ViTMLP(config)
         self.layer_scale2 = DINOv3ViTLayerScale(config)
