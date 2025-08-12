@@ -9,10 +9,13 @@ on:
       report_repo_id:
         required: true
         type: string
+      machine_type:
+        required: true
+        type: string
 
 jobs:
-  collate_reports:
-    name: Collate reports
+  collated_reports:
+    name: Collated reports
     runs-on: ubuntu-22.04
     if: always()
     steps:
@@ -27,7 +30,7 @@ jobs:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
         run: |
           pip install huggingface_hub
-          python3 utils/collated_reports.py --path /transformers/reports/ --commit-hash ${{ env.CI_SHA }} --job ${{ inputs.job }} --report-repo-id ${{ inputs.report_repo_id }}
+          python3 utils/collated_reports.py --path /transformers/reports/ --glob ${{ inputs.machine_type }}* --commit-hash ${{ env.CI_SHA }} --job ${{ inputs.job }} --report-repo-id ${{ inputs.report_repo_id }}
 
       - name: Upload collated reports
         uses: actions/upload-artifact@v4

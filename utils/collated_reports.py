@@ -45,11 +45,14 @@ def parse_short_summary_line(line: str) -> tuple[str | None, int]:
     return None, 0
 
 
-def get_path(s: str) -> Path:
-    # validate path
-    path = Path(s)
+def get_paths(p: str, glob_pattern: str | None) -> list[Path]:
+    # Validate path and apply glob pattern if provided
+    path = Path(p)
     assert path.is_dir(), f"Path {path} is not a directory"
-    return path
+    if glob_pattern is None:
+        return [path]
+
+    return [p for p in path.glob(glob_pattern) if p.is_dir()]
 
 
 def get_gpu_name(gpu_name: str | None) -> str:
@@ -81,13 +84,13 @@ def get_commit_hash(commit_hash: str | None) -> str:
     return commit_hash[:7]
 
 
-def get_arguments(args: argparse.Namespace) -> tuple[Path, str, str, str, str]:
-    path = get_path(args.path)
+def get_arguments(args: argparse.Namespace) -> tuple[list[Path], str, str, str, str]:
+    paths = get_paths(args.path, args.glob)
     gpu_name = get_gpu_name(args.gpu_name)
     commit_hash = get_commit_hash(args.commit_hash)
     job = args.job
     report_repo_id = args.report_repo_id
-    return path, gpu_name, commit_hash, job, report_repo_id
+    return paths, gpu_name, commit_hash, job, report_repo_id
 
 
 def upload_collated_report(job: str, report_repo_id: str, filename: str):
@@ -126,13 +129,14 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Post process models test reports.")
     parser.add_argument("--path", "-p", help="Path to the reports folder")
+    parser.add_argument("--glob", "-p", help="Glob pattern to access test reports folders", default=None)
     parser.add_argument("--gpu-name", "-g", help="GPU name", default=None)
     parser.add_argument("--commit-hash", "-c", help="Commit hash", default=None)
     parser.add_argument("--job", "-j", help="Optional job name required for uploading reports", default=None)
     parser.add_argument(
         "--report-repo-id", "-r", help="Optional report repository ID required for uploading reports", default=None
     )
-    path, gpu_name, commit_hash, job, report_repo_id = get_arguments(parser.parse_args())
+    paths, gpu_name, commit_hash, job, report_repo_id = get_arguments(parser.parse_args())
 
     # Initialize accumulators for collated report
     total_status_count = {
@@ -144,7 +148,7 @@ if __name__ == "__main__":
     }
     collated_report_buffer = []
 
-    for model_dir in sorted(path.iterdir()):
+    for model_dir in sorted(paths):
         # Create a new entry for the model
         model_name = model_dir.name.removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
