@@ -2145,7 +2145,7 @@ class GenerationMixin(ContinuousMixin):
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         use_model_defaults: Optional[bool] = None,
-        custom_generate: Optional[str] = None,
+        custom_generate: Optional[Union[str, Callable]] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -2215,11 +2215,13 @@ class GenerationMixin(ContinuousMixin):
                 generation configuration (`model.generation_config`), as opposed to the global defaults
                 (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
                 `True`.
-            custom_generate (`str`, *optional*):
-                A string containing the name of a huggingface.co repository. If provided, the custom `generate`
-                function defined in that reposity's `custom_generate/generate.py` file will be executed instead of the
-                standard `generate` method. Note that the logic is for generation is entirely defined in that
-                repository, and the return type may be different from the standard `generate` method.
+            custom_generate (`str` or `Callable`, *optional*):
+                A string containing the name of a huggingface.co repository, a local repository path, or a callable.
+                If a repository is provided, the custom `generate` function defined in that repository's
+                `custom_generate/generate.py` file will be executed instead of the standard `generate` method. Note
+                that the logic for generation will be entirely replaced by the repository, and the return type may be
+                different from the standard `generate` method. If a callable is provided, `generate` will still run the
+                standard preparation steps, but will call the provided callable to perform the decoding loop.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2243,7 +2245,7 @@ class GenerationMixin(ContinuousMixin):
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        if custom_generate is not None:
+        if custom_generate is not None and isinstance(custom_generate, str):
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
             # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
             # trigger the custom generation. They can access to methods from `GenerationMixin` through `model`.
@@ -2437,7 +2439,18 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["use_cache"] = generation_config.use_cache
 
         # 10. go into different generation modes
-        if generation_mode == GenerationMode.ASSISTED_GENERATION:
+        if custom_generate is not None and isinstance(custom_generate, Callable):
+            result = custom_generate(
+                self,
+                input_ids,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=synced_gpus,
+                streamer=streamer,
+                **model_kwargs,
+            )
+        elif generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "

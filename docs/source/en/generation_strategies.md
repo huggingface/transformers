@@ -504,6 +504,28 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
+### Custom decoding loops passing a callable
+
+Power users can also take advantage of the preparation steps in [`~GenerationMixin.generate`] and pass a callable to `custom_generate` instead of a string. Unlike when passing a repository, which replaces the entire generation logic, passing a callable will still run the standard preparation steps, but will call the provided callable to perform the decoding loop.
+
+```py
+def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+    next_tokens = input_ids
+    while input_ids.shape[1] < stopping_criteria[0].max_length:
+        logits = model(next_tokens, attention_mask=attention_mask, **model_kwargs).logits
+        next_token_logits = logits_processor(input_ids, logits[:, -1, :])
+        next_tokens = torch.argmax(next_token_logits, dim=-1)[:, None]
+        input_ids = torch.cat((input_ids, next_tokens), dim=-1)
+        attention_mask = torch.cat((attention_mask, torch.ones_like(next_tokens)), dim=-1)
+    return input_ids
+
+output = model.generate(
+    **inputs,
+    custom_generate=custom_loop,
+    max_new_tokens=10,
+)
+```
+
 
 ## Resources
 
