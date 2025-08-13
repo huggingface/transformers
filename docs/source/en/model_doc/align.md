@@ -62,23 +62,21 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotImageClassification, infer_device
-
-device = infer_device()
+from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
 
 processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
-model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base").to(device)
+model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base", device_map="auto")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = requests.get(url, stream=True)
 inputs = Image.open(image.raw).convert("RGB")
 
-image_inputs = processor(images=inputs, return_tensors="pt").to(device)
+image_inputs = processor(images=inputs, return_tensors="pt").to(model.device)
 with torch.no_grad():
     image_embeds = model.get_image_features(**image_inputs)
 
 candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
-text_inputs = processor(text=candidate_labels, padding=True, return_tensors="pt").to(device)
+text_inputs = processor(text=candidate_labels, padding=True, return_tensors="pt").to(model.device)
 with torch.no_grad():
     text_embeds = model.get_text_features(**text_inputs)
 
