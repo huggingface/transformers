@@ -1272,7 +1272,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
-        super().__init__(self, layer_idx)
+        super().__init__(config, layer_idx)
         self.mlp = AriaTextMoELayer(config)
 
 

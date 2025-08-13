@@ -131,7 +131,7 @@ class Starcoder2Attention(MistralAttention):
 
 class Starcoder2DecoderLayer(MistralDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
-        super().__init__(self, layer_idx)
+        super().__init__(config, layer_idx)
         self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
