@@ -1286,6 +1286,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         # 3. Fine-level refinement
         residual_features = features[1:]
+        coarse_features = coarse_features / self.config.hidden_size**0.5
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices
