@@ -108,7 +108,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 </hfoption>
 </hfoptions>
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여, 큰 모델의 메모리 부담을 줄여줍니다. 더 많은 사용 가능한 양자화 백엔드는 [양자화](../quantization/overview) 개요를 참고하세요.
+양자화는 가중치를 더 낮은 정밀도로 표현하여, 큰 모델의 메모리 부담을 줄여줍니다. 사용 가능한 양자화 백엔드에 대한 더 자세한 내용은 [양자화](../quantization/overview) 개요를 참고하세요.
 
 아래 예제에서는 [torchao](../quantization/torchao)를 사용하여 가중치를 int4로만 양자화합니다.
 
