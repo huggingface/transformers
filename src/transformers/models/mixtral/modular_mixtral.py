@@ -28,22 +28,26 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import (create_causal_mask,
-                              create_sliding_window_causal_mask)
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (MoeCausalLMOutputWithPast,
-                                 MoeModelOutputWithPast)
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
-from ..mistral.modeling_mistral import (MistralAttention, MistralForCausalLM,
-                                        MistralForQuestionAnswering,
-                                        MistralForSequenceClassification,
-                                        MistralForTokenClassification,
-                                        MistralModel, MistralPreTrainedModel,
-                                        MistralRMSNorm, MistralRotaryEmbedding)
+from ..mistral.modeling_mistral import (
+    MistralAttention,
+    MistralForCausalLM,
+    MistralForQuestionAnswering,
+    MistralForSequenceClassification,
+    MistralForTokenClassification,
+    MistralModel,
+    MistralPreTrainedModel,
+    MistralRMSNorm,
+    MistralRotaryEmbedding,
+)
 from .configuration_mixtral import MixtralConfig
+
 
 logger = logging.get_logger(__name__)
 
