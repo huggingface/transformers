@@ -354,6 +354,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         del model
         cleanup(torch_device, gc_collect=True)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

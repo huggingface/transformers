@@ -570,6 +570,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_read_token
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943

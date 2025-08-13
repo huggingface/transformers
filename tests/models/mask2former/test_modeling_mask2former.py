@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import AutoModelForImageClassification, Mask2FormerConfig, is_torch_available, is_vision_available
@@ -576,6 +577,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.loss is not None)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
