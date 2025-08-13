@@ -716,7 +716,7 @@ class DepthProPreActResidualLayer(nn.Module):
             Model configuration class defining the model architecture.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DepthProConfig):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual

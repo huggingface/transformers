@@ -17,7 +17,7 @@
 import collections.abc
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -28,8 +28,10 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -358,7 +360,7 @@ def eager_attention_forward(
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention ViT->ViTMAE
 class ViTMAESelfAttention(nn.Module):
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -379,37 +381,18 @@ class ViTMAESelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
     def forward(
-        self,
-        hidden_states,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        batch_size, seq_length, _ = hidden_states.shape
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -425,9 +408,7 @@ class ViTMAESelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTMAE
@@ -437,7 +418,7 @@ class ViTMAESelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -445,19 +426,18 @@ class ViTMAESelfOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
         return hidden_states
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ViTMAE
 class ViTMAEAttention(nn.Module):
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.attention = ViTMAESelfAttention(config)
         self.output = ViTMAESelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: set[int]) -> None:
+    def prune_heads(self, heads: set[int]):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -475,23 +455,15 @@ class ViTMAEAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, head_mask)
+        output = self.output(self_attn_output, hidden_states)
+        return output
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->ViTMAE
 class ViTMAEIntermediate(nn.Module):
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -502,13 +474,12 @@ class ViTMAEIntermediate(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-
         return hidden_states
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->ViTMAE
 class ViTMAEOutput(nn.Module):
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -516,9 +487,7 @@ class ViTMAEOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
         hidden_states = hidden_states + input_tensor
-
         return hidden_states
 
 
@@ -526,7 +495,7 @@ class ViTMAEOutput(nn.Module):
 class ViTMAELayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -536,19 +505,9 @@ class ViTMAELayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViTMAE, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        hidden_states_norm = self.layernorm_before(hidden_states)
+        attention_output = self.attention(hidden_states_norm, head_mask)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -560,53 +519,23 @@ class ViTMAELayer(GradientCheckpointingLayer):
         # second residual connection is done here
         layer_output = self.output(layer_output, hidden_states)
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ViTMAE
 class ViTMAEEncoder(nn.Module):
-    def __init__(self, config: ViTMAEConfig) -> None:
+    def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
+    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
+            hidden_states = layer_module(hidden_states, layer_head_mask)
 
-            layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -619,6 +548,10 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": ViTMAELayer,
+        "attentions": ViTMAESelfAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -663,17 +596,16 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[tuple, ViTMAEModelOutput]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ViTMAEModelOutput:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mainly used for testing purposes to control randomness and maintain the reproducibility
@@ -698,11 +630,6 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -718,30 +645,15 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
             pixel_values, noise=noise, interpolate_pos_encoding=interpolate_pos_encoding
         )
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, head_mask=head_mask)
+        sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
 
-        if not return_dict:
-            return (sequence_output, mask, ids_restore) + encoder_outputs[1:]
-
-        return ViTMAEModelOutput(
-            last_hidden_state=sequence_output,
-            mask=mask,
-            ids_restore=ids_restore,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        return ViTMAEModelOutput(last_hidden_state=sequence_output, mask=mask, ids_restore=ids_restore)
 
 
 class ViTMAEDecoder(nn.Module):
-    def __init__(self, config, num_patches):
+    def __init__(self, config: ViTMAEConfig, num_patches: int):
         super().__init__()
         self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
@@ -763,7 +675,7 @@ class ViTMAEDecoder(nn.Module):
             config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
         )  # encoder to decoder
         self.gradient_checkpointing = False
-        self.config = config
+        self.config = decoder_config
         self.initialize_weights(num_patches)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -816,63 +728,38 @@ class ViTMAEDecoder(nn.Module):
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
 
-    def forward(
-        self,
-        hidden_states,
-        ids_restore,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-        interpolate_pos_encoding: bool = False,
-    ):
-        # embed tokens
+    def forward(self, hidden_states: torch.Tensor, ids_restore: torch.Tensor, interpolate_pos_encoding: bool = False):
+        # Embed tokens
         x = self.decoder_embed(hidden_states)
 
-        # append mask tokens to sequence
+        # Append mask tokens to sequence
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        # unshuffle
+
+        # Unshuffle
         x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]).to(x_.device))
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
-        # add pos embed
+
+        # Add pos embed
         if interpolate_pos_encoding:
             decoder_pos_embed = self.interpolate_pos_encoding(x)
         else:
             decoder_pos_embed = self.decoder_pos_embed
         hidden_states = x + decoder_pos_embed
 
-        # apply Transformer layers (blocks)
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        for i, layer_module in enumerate(self.decoder_layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        # Apply Transformer layers (blocks)
+        for layer_module in self.decoder_layers:
+            hidden_states = layer_module(hidden_states, head_mask=None)
 
         hidden_states = self.decoder_norm(hidden_states)
 
-        # predictor projection
+        # Predictor projection
         logits = self.decoder_pred(hidden_states)
 
-        # remove cls token
+        # Remove cls token
         logits = logits[:, 1:, :]
 
-        if not return_dict:
-            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return ViTMAEDecoderOutput(
-            logits=logits,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return ViTMAEDecoderOutput(logits=logits)
 
 
 @auto_docstring(
@@ -888,7 +775,7 @@ class ViTMAEDecoder(nn.Module):
     """
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViTMAEConfig):
         super().__init__(config)
         self.config = config
 
@@ -1017,17 +904,16 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         noise: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[tuple, ViTMAEForPreTrainingOutput]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ViTMAEForPreTrainingOutput:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mainly used for testing purposes to control randomness and maintain the reproducibility
@@ -1054,30 +940,21 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         >>> mask = outputs.mask
         >>> ids_restore = outputs.ids_restore
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vit(
-            pixel_values,
-            noise=noise,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+        outputs: ViTMAEModelOutput = self.vit(
+            pixel_values, noise=noise, head_mask=head_mask, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
 
         latent = outputs.last_hidden_state
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
-        decoder_outputs = self.decoder(latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding)
+        decoder_outputs: ViTMAEDecoderOutput = self.decoder(
+            latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
 
         loss = self.forward_loss(pixel_values, logits, mask, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        if not return_dict:
-            output = (logits, mask, ids_restore) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return ViTMAEForPreTrainingOutput(
             loss=loss,

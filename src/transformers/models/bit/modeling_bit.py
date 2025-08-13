@@ -777,6 +777,8 @@ class BitForImageClassification(BitPreTrainedModel):
     """
 )
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
