@@ -5044,6 +5044,26 @@ class GenerationIntegrationTests(unittest.TestCase):
             )
             assert value == "success"
 
+    def test_custom_generate_callable(self):
+        """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+
+        def custom_loop(model, input_ids, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+            # Check that generate() correctly prepares the stopping criteria
+            assert stopping_criteria[0].max_length == input_ids.shape[1] + 3
+            return "callable_success"
+
+        value = model.generate(
+            **model_inputs,
+            max_new_tokens=3,
+            custom_generate=custom_loop,
+        )
+        self.assertEqual(value, "callable_success")
+
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):
         """
