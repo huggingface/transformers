@@ -21,7 +21,7 @@ import numpy as np
 import torch
 
 
-class MiniCPM_O_2_6FeatureExtractor(WhisperFeatureExtractor):
+class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -155,6 +155,6 @@ class MiniCPM_O_2_6FeatureExtractor(WhisperFeatureExtractor):
 
 
 AutoFeatureExtractor.register(
-    "MiniCPM_O_2_6FeatureExtractor", MiniCPM_O_2_6FeatureExtractor)
+    "MiniCPM_o_2_6FeatureExtractor", MiniCPM_o_2_6FeatureExtractor)
 
-__all__ = ["MiniCPM_O_2_6FeatureExtractor"]
+__all__ = ["MiniCPM_o_2_6FeatureExtractor"]
