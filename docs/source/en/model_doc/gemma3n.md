@@ -200,7 +200,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [altup]: https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html
 [attention-mask-viz]: https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
-[laurel]: https://arxiv.org/abs/2411.07501
-[matformer]: https://arxiv.org/abs/2310.07707
+[laurel]: https://huggingface.co/papers/2411.07501
+[matformer]: https://huggingface.co/papers/2310.07707
 [spark-transformer]: https://arxiv.org/abs/2506.06644
-[usm]: https://arxiv.org/abs/2303.01037
+[usm]: https://huggingface.co/papers/2303.01037

@@ -30,7 +30,7 @@ rendered properly in your Markdown viewer.
 You can find all the original OLMoE checkpoints under the [OLMoE](https://huggingface.co/collections/allenai/olmoe-november-2024-66cf678c047657a30c8cd3da) collection.
 
 > [!TIP]
-> This model was contributed by [Muennighoff](https://hf.co/Muennighoff).
+> This model was contributed by [Muennighoff](https://huggingface.co/Muennighoff).
 >
 > Click on the OLMoE models in the right sidebar for more examples of how to apply OLMoE to different language tasks.
 

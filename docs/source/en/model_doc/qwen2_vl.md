@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-08-29 added to Hugging Face Transformers on 2024-08-26.*
+*This model was released on 2024-08-29 and added to Hugging Face Transformers on 2024-08-26.*
 
 # Qwen2-VL
 
