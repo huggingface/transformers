@@ -127,18 +127,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             use_gated_mlp=False,
             hidden_act="gelu",
         )
-    elif model_name == "vitl16_lvd1689m":
-        return DINOv3ViTConfig(
-            patch_size=16,
-            hidden_size=1024,
-            intermediate_size=4096,
-            num_hidden_layers=24,
-            num_attention_heads=16,
-            num_register_tokens=4,
-            use_gated_mlp=False,
-            hidden_act="gelu",
-        )
-    elif model_name == "vitl16_sat493m":
+    elif model_name in ("vitl16_lvd1689m", "vitl16_sat493m"):
         return DINOv3ViTConfig(
             patch_size=16,
             hidden_size=1024,
@@ -160,20 +149,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             use_gated_mlp=True,
             hidden_act="silu",
         )
-    elif model_name == "vit7b16_lvd1689m":
-        return DINOv3ViTConfig(
-            patch_size=16,
-            hidden_size=4096,
-            intermediate_size=8192,
-            num_hidden_layers=40,
-            num_attention_heads=32,
-            query_bias=False,
-            value_bias=False,
-            num_register_tokens=4,
-            use_gated_mlp=True,
-            hidden_act="silu",
-        )
-    elif model_name == "vit7b16_sat493m":
+    elif model_name in ("vit7b16_lvd1689m", "vit7b16_sat493m"):
         return DINOv3ViTConfig(
             patch_size=16,
             hidden_size=4096,
