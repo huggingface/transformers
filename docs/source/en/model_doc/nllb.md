@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 [NLLB: No Language Left Behind](https://huggingface.co/papers/2207.04672) is a multilingual translation model. It's trained on data using data mining techniques tailored for low-resource languages and supports over 200 languages. NLLB features a conditional compute architecture using a Sparsely Gated Mixture of Experts.
 
-Unlike many previous systems, NLLB **prioritizes zero-shot performance** for any pair of 200 languages by **prefixing the source sequence with the source language** (rather than the target language). It’s trained on data mined specifically for low-resource languages and evaluated on over 40,000 translation directions using the Flores-200 benchmark.  
 
 You can find all the original [NLLB checkpoints](https://huggingface.co/models?sort=downloads&search=facebook/nllb) under the NLLB collection.
 
