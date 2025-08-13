@@ -1067,7 +1067,7 @@
         title: GraniteVision
       - local: in_translation
         title: (번역중) GIT
-      - local: model_doc/grounding_dino
+      - local: model_doc/grounding-dino
         title: Grounding DINO
       - local: in_translation
         title: GroupViT
