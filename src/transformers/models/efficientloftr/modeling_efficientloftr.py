@@ -753,8 +753,15 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     if border_margin <= 0:
         return tensor
 
-    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
-    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
+    tensor[:, :border_margin] = value
+    tensor[:, :, :border_margin] = value
+    tensor[:, :, :, :border_margin] = value
+    tensor[:, :, :, :, :border_margin] = value
+    tensor[:, -border_margin:] = value
+    tensor[:, :, -border_margin:] = value
+    tensor[:, :, :, -border_margin:] = value
+    tensor[:, :, :, :, -border_margin:] = value
+
     return tensor
 
 
