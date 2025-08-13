@@ -2243,7 +2243,7 @@ class GenerationMixin(ContinuousMixin):
                 - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
                 - `Callable`: `generate` will perform the usual preparation steps, then call the provided callable to
                   run the decoding loop. For more information, see
-                [the docs](https://huggingface.co/docs/transformers/en/generation_strategies#reusing-generate-s-preparation-steps-by-passing-a-callable).
+                [the docs](../../generation_strategies#reusing-generate-s-preparation-steps-by-passing-a-callable).
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
