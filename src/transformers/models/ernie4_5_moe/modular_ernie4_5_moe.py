@@ -95,6 +95,7 @@ class Ernie4_5_MoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
+# FIXME: update the expert
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     """
     This implementation is

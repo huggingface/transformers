@@ -65,6 +65,7 @@ class Qwen3MoeMLP(nn.Module):
         return down_proj
 
 
+# FIXME: needs changes
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
