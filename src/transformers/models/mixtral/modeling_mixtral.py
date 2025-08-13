@@ -72,7 +72,7 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         return current_hidden_states
 
 
-class MixtralMoe(nn.ModuleList):
+class MixtralNaiveMoe(nn.ModuleList):
     def __init__(self, config):
         for _ in range(config.num_experts):
             self += MixtralBlockSparseTop2MLP(config)
@@ -124,7 +124,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-        self.experts = MixtralMoe(config)
+        self.experts = MixtralNaiveMoe(config)
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
