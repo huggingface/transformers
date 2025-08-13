@@ -135,11 +135,6 @@ KEYS_TO_MODIFY_MAPPING = {
 }
 
 
-# permute for sliced rotary
-def permute(w, n_heads, dim1, dim2):
-    return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
-
-
 def replace_keys(state_dict, config):
     model_state_dict = {}
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
@@ -150,14 +145,7 @@ def replace_keys(state_dict, config):
     output_memory_encoder_projection_pattern = r"memory_encoder.o_proj.*"
     output_object_pointer_proj_pattern = r"object_pointer_proj.layers.(\d+).*"
     output_memory_encoder_mask_downsampler_pattern = r"memory_encoder.mask_downsampler.encoder.(\d+).*"
-    # memory_attention_self_attn_q_proj_pattern = r"memory_attention.(\d+).self_attn.q_proj.weight.*"
-    # memory_attention_self_attn_k_proj_pattern = r"memory_attention.(\d+).self_attn.k_proj.weight.*"
-    # memory_attention_cross_attn_image_q_proj_pattern = (
-    #     r"memory_attention.layers.(\d+).cross_attn_image.q_proj.weight.*"
-    # )
-    # memory_attention_cross_attn_image_k_proj_pattern = (
-    #     r"memory_attention.layers.(\d+).cross_attn_image.k_proj.weight.*"
-    # )
+
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
@@ -223,18 +211,6 @@ def replace_keys(state_dict, config):
                 key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.conv")
             elif layer_nb % 3 == 1:
                 key = key.replace(f"encoder.{layer_nb}", f"layers.{layer_nb // 3}.layer_norm")
-
-        # permute for sliced rotary
-        # if any(
-        #     re.match(pattern, key)
-        #     for pattern in [
-        #         memory_attention_self_attn_q_proj_pattern,
-        #         memory_attention_self_attn_k_proj_pattern,
-        #         memory_attention_cross_attn_image_q_proj_pattern,
-        #         memory_attention_cross_attn_image_k_proj_pattern,
-        #     ]
-        # ):
-        #     value = permute(value, config.memory_attention_num_attention_heads, *value.shape)
 
         model_state_dict[key] = value
 
