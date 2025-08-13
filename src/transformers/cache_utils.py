@@ -16,9 +16,6 @@ from .utils import (
 )
 
 
-if _is_quanto_greater_than_0_2_5 := is_quanto_greater("0.2.5", accept_dev=True):
-    from optimum.quanto import MaxOptimizer, qint2, qint4, quantize_weight
-
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
@@ -558,7 +555,7 @@ class QuantizedLayer(DynamicLayer):
         q_group_size: int = 64,
         residual_length: int = 128,
     ):
-        super().__init__(self)
+        super().__init__()
         self.nbits = nbits
         self.axis_key = axis_key
         self.axis_value = axis_value
@@ -635,10 +632,12 @@ class QuantoQuantizedLayer(QuantizedLayer):
             residual_length=residual_length,
         )
 
-        if not _is_quanto_greater_than_0_2_5:
+        # We need to import quanto here to avoid circular imports due to optimum/quanto/models/transformers_models.py
+        if is_quanto_greater("0.2.5", accept_dev=True):
+            from optimum.quanto import MaxOptimizer, qint2, qint4
+        else:
             raise ImportError(
                 "You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
-                "Detected version {optimum_quanto_version}."
             )
 
         if self.nbits not in [2, 4]:
@@ -656,6 +655,8 @@ class QuantoQuantizedLayer(QuantizedLayer):
         self.optimizer = MaxOptimizer()  # hardcode as it's the only one for per-channel quantization
 
     def _quantize(self, tensor, axis):
+        from optimum.quanto import quantize_weight
+
         scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
         qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
         return qtensor
