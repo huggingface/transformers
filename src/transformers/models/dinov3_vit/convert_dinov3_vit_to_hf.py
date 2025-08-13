@@ -247,18 +247,14 @@ def convert_and_test_dinov3_checkpoint(args):
     original_pixel_values = transform(image).unsqueeze(0)  # add batch dimension
     inputs = image_processor(image, return_tensors="pt")
 
-    torch.testing.assert_close(
-        original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6
-    )
+    torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float):
         model_output = model(**inputs)
 
     last_layer_class_token = model_output.pooler_output
-    last_layer_patch_tokens = model_output.last_hidden_state[
-        :, config.num_register_tokens + 1 :
-    ]
+    last_layer_patch_tokens = model_output.last_hidden_state[:, config.num_register_tokens + 1 :]
 
     actual_outputs = {}
     actual_outputs[f"{model_name}_cls"] = last_layer_class_token[0, :5].tolist()
