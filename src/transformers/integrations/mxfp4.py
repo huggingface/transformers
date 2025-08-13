@@ -314,12 +314,12 @@ def should_convert_module(current_key_name, patterns):
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
-    model = kwargs.get("model", None)
-    empty_param = kwargs.get("empty_param", None)
-    casting_dtype = kwargs.get("casting_dtype", None)
-    to_contiguous = kwargs.get("to_contiguous", None)
-    rank = kwargs.get("rank", None)
-    device_mesh = kwargs.get("device_mesh", None)
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
+    device_mesh = kwargs.get("device_mesh")
 
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
@@ -357,12 +357,12 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
-    model = kwargs.get("model", None)
-    empty_param = kwargs.get("empty_param", None)
-    casting_dtype = kwargs.get("casting_dtype", None)
-    to_contiguous = kwargs.get("to_contiguous", None)
-    rank = kwargs.get("rank", None)
-    device_mesh = kwargs.get("device_mesh", None)
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
+    device_mesh = kwargs.get("device_mesh")
 
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
