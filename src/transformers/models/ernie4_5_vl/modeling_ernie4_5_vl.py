@@ -13,11 +13,9 @@
 # limitations under the License.
 
 """Ernie VL model"""
-import itertools
 import math
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional
 
 import numpy as np
@@ -332,6 +330,7 @@ class Ernie4_5_MoeMLP(nn.Module):
         return down_proj
 
 
+# TODO: conversion to split these weights into two separate moes - then reuse the ernie 4.5 moe definition
 class Ernie4_5_MoEStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
@@ -342,7 +341,7 @@ class Ernie4_5_MoEStatics(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        num_experts_groups = 2  # lm and mm
+        num_experts_groups = 2  # text and vision
         num_experts = config.moe_num_experts[0]  # both have the same number
 
         self.e_score_correction_bias = nn.Parameter(
@@ -360,17 +359,12 @@ class Ernie4_5_MoEStatics(nn.Module):
 
 
 class Ernie4_5_VLGate(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, hidden_size, num_experts):
         super().__init__()
-        self.config = config  # TODO: weird cross dep somewhere
-
-        # lm
-        self.weight = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
-        # mm
-        self.weight_1 = nn.Parameter(torch.ones(size=(config.hidden_size, config.moe_num_experts[0],), dtype=torch.float32))
-
-    def get_capacity(self, num_tokens, is_multimodel=True):
-        return num_tokens if is_multimodel else num_tokens * 2
+        # moe text gate weights
+        self.weight = nn.Parameter(torch.ones(size=(hidden_size, num_experts,), dtype=torch.float32))
+        # moe vision gate weights
+        self.weight_1 = nn.Parameter(torch.ones(size=(hidden_size, num_experts,), dtype=torch.float32))
 
     def forward(
         self,
@@ -390,19 +384,29 @@ class Ernie4_5_VLGate(nn.Module):
 
 
 class Ernie4_5_MoESparseMoeBlock(nn.Module):
-    def __init__(self, config):#, statics, gate, experts, shared_experts):
+    """
+    Similar to `Ernie4_5_Moe` where we have modality isolated experts:
+        - A set of text experts that are only run on text tokens
+        - A set of vision experts that are only run on vision (image/video) tokens
+
+    This modality isolation is unique to the Ernie 4.5 VL models.
+    """
+
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts[0]  # always the same for lm and mm
+        self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
         self.moe_statics = Ernie4_5_MoEStatics(config)
 
         # gating
-        self.gate = Ernie4_5_VLGate(config=config)
+        self.gate = Ernie4_5_VLGate(hidden_size=config.hidden_size, num_experts=config.moe_num_experts[0])
         self.experts = nn.ModuleList(
+            # first half are text experts, second half are vision experts
             [Ernie4_5_MoeMLP(config, config.moe_intermediate_size[int(i >= config.moe_num_experts[0])]) for i in range(sum(config.moe_num_experts))]
         )
+        # TODO: set into config
         #self.norm_min = config.moe_norm_min
         self.norm_min = 1e-12
 
@@ -424,16 +428,21 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
 
         if token_type_ids is not None and token_type_ids.any():
             final_hidden_states = torch.zeros_like(hidden_states)
-            router_logits = torch.zeros(size=(batch_size * sequence_length, self.num_experts), device=final_hidden_states.device, dtype=torch.float)
+            router_logits = torch.zeros(
+                size=(batch_size * sequence_length, self.num_experts),
+                device=final_hidden_states.device, dtype=torch.float
+            )
 
             # True (1) == vision, False (0) == text tokens
             token_type_ids = token_type_ids[:, :-1].bool()
             token_type_ids_router = token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
             token_type_ids_states = token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
+            # extract and separate tokens into their modalities
             text_hidden_states = hidden_states[~token_type_ids_states].reshape(batch_size, -1, hidden_dim)
             vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
 
+            # run moe on each modality and assign their results to the original token positions
             final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.forward_moe(
                 hidden_states=text_hidden_states,
                 is_multimodal=False,
@@ -459,7 +468,7 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
     def forward_moe(
         self,
         hidden_states: torch.Tensor,
-        is_multimodal: bool = False,
+        is_multimodal: bool = False,  # key difference to other moe approaches
     ):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
@@ -506,25 +515,12 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
+        # moe results are changed to a flattened shape to ease the modality isolated assigning of results
         return final_hidden_states.flatten(), router_logits.flatten()
 
 
 class Ernie4_5_DecoderLayer(nn.Module):
-    """A single transformer decoder layer in ERNIE-MoE model.
-
-    Contains self-attention and feed-forward components with optional MoE (Mixture of Experts)
-    support, residual connections, and layer normalization.
-    """
-
-    _keep_in_fp32_modules = ["mlp.gate", "e_score_correction_bias"]
-
     def __init__(self, config, layer_idx):
-        """Initialize the decoder layer.
-
-        Args:
-            config (Ernie4_5_MoEConfig): Model configuration.
-            layer_idx (int): Index of this layer in the transformer stack
-        """
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -589,12 +585,6 @@ class Ernie4_5_DecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        if token_type_ids is not None:
-            is_multimodel_token = token_type_ids.any()
-            is_multimodel_token_cpu = is_multimodel_token.cpu()
-        else:
-            is_multimodel_token_cpu = None
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -616,16 +606,10 @@ class Ernie4_5_DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        #print(is_multimodel_token)
         if isinstance(self.mlp, Ernie4_5_MoESparseMoeBlock):
-            if is_multimodel_token_cpu:
-                hidden_states, _, router_loss, gate_logits = self.mlp(
-                    hidden_states, token_type_ids
-                )
-            else:
-                hidden_states, _, router_loss, gate_logits = self.mlp(
-                    hidden_states, None
-                )
+            hidden_states, _, router_loss, gate_logits = self.mlp(
+                hidden_states, token_type_ids
+            )
         else:
             hidden_states = self.mlp(hidden_states)
             gate_logits, router_loss = None, None
@@ -662,6 +646,8 @@ class Ernie4_5_PretrainedModel(PreTrainedModel):
     config_class = Ernie4_5_MoEConfig
     base_model_prefix = "ernie"
     _no_split_modules = ["Ernie4_5_DecoderLayer"]
+
+    _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
 
 
 class Ernie4_5_Model(Ernie4_5_PretrainedModel):
