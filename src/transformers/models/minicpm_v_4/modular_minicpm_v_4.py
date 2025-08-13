@@ -207,15 +207,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
                     else:
                         vision_hidden_states.append([])
             else: # no image
-                if self.training:
-                    dummy_image = torch.zeros(
-                        (1, 3, 224, 224),
-                        device=device, dtype=dtype
-                    )
-                    tgt_sizes = torch.Tensor([[(224 // self.config.patch_size), math.ceil(224 / self.config.patch_size)]]).type(torch.int32)
-                    dummy_feature = self.resampler(self.vpm(dummy_image).last_hidden_state, tgt_sizes)
-                else:
-                    dummy_feature = []
+                dummy_feature = []
                 for _ in range(len(pixel_values_list)):
                     vision_hidden_states.append(dummy_feature)
 
@@ -257,9 +249,6 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
                 updated_emb = cur_vllm_emb.scatter(0, indices_expanded, vision_features)
                 new_vllm_embeddings.append(updated_emb)
-            elif self.training:
-                dummy_term = cur_vs_hs[0].sum() * 0
-                new_vllm_embeddings.append(cur_vllm_emb + dummy_term)
             else:
                 new_vllm_embeddings.append(cur_vllm_emb)
 
