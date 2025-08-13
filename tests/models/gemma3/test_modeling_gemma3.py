@@ -850,3 +850,37 @@ class Gemma3IntegrationTest(unittest.TestCase):
         logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
         self.assertEqual(export_generated_text, eager_generated_text)
+
+    def test_dynamic_sliding_window_is_default(self):
+        """
+        Test that the dynamic sliding window cache (added in #40039) is the default cache implementation for Gemma3
+        models, despite the fact that Hub checkpoints may have `cache_implementation="hybrid"` (static sliding window).
+        """
+        model_id = "google/gemma-3-1b-it"
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        # the default cache is static sliding window
+        self.assertEqual(model.config.cache_implementation, "hybrid")
+        self.assertEqual(model.generation_config.cache_implementation, "hybrid")
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        prompt = "What is the capital of France?"
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        foward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+
+        generate_outputs = model.generate(
+            **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True
+        )
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+
+        # If we manually specify the cache implementation, it will work
+        generate_outputs = model.generate(
+            **model_inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            cache_implementation="hybrid",
+        )
+        self.assertNotIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
