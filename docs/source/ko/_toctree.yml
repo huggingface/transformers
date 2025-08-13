@@ -117,8 +117,8 @@
       title: 트레이너(Trainer)
     - local: training
       title: 사전 학습된 모델 미세 조정하기
-    - local: in_translation
-      title: (번역중) Optimizers
+    - local: optimizers
+      title: 옵티마이저(Optimizers)
     - local: hpo_train
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     title: Trainer API
