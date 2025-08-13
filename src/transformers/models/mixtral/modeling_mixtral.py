@@ -125,7 +125,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = MixtralMoe([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = MixtralMoe(config)
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
