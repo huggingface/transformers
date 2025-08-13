@@ -37,7 +37,8 @@ from ...configuration_utils import PretrainedConfig
 from ...generation.streamers import TextIteratorStreamer
 from ...integrations import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.siglip.configuration_siglip import SiglipVisionConfig
 from ...utils import (
@@ -256,7 +257,11 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
         return vllm_embedding, vision_hidden_states
 
-    def forward(self, data=None, **kwargs):
+    def forward(
+        self,
+        data: Union[dict, torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> BaseModelOutputWithPast:
         if isinstance(data, torch.Tensor):
             attention_mask = torch.ones_like(data, dtype=torch.bool)
             kwargs = {'attention_mask': attention_mask}
