@@ -119,35 +119,23 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.vpm = self.init_vision_module()
         self.vision_dim = self.vpm.embed_dim
         self.embed_dim = self.llm.config.hidden_size
-        self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
+        self.resampler = Resampler(
+            num_queries=self.config.query_num,
+            embed_dim=self.embed_dim,
+            num_heads=self.embed_dim // 128,
+            kv_dim=self.vision_dim,
+            adaptive=True,
+        )
         self.processor = None
 
         self.terminators = ['<|im_end|>', '</s>']
 
     def init_vision_module(self):
-        # same as HuggingFaceM4/siglip-so400m-14-980-flash-attn2-navit add tgt_sizes
-        if self.config._attn_implementation == 'flash_attention_2':
-            self.config.vision_config._attn_implementation = 'flash_attention_2'
-        else:
-            # not suport sdpa
-            self.config.vision_config._attn_implementation = 'eager'
-        model = MiniCPMVisionTransformer(self.config.vision_config)
+        model = MiniCPMVisionTransformer._from_config(self.config.vision_config)
         if self.config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
-        setattr(model, 'embed_dim', model.embeddings.embed_dim)
-        setattr(model, 'patch_size', model.embeddings.patch_size)
-
         return model
-
-    def init_resampler(self, embed_dim, vision_dim):
-        return Resampler(
-            num_queries=self.config.query_num,
-            embed_dim=embed_dim,
-            num_heads=embed_dim // 128,
-            kv_dim=vision_dim,
-            adaptive=True
-        )
 
     def get_input_embeddings(self):
         return self.llm.get_input_embeddings()
@@ -2031,7 +2019,9 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = MiniCPMVisionEmbeddings(config)
+        self.embed_dim = self.embeddings.embed_dim
         self.encoder = MiniCPMVisionEncoder(config)
+        self.patch_size = self.embeddings.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
