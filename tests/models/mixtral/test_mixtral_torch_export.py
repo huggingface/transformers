@@ -69,7 +69,7 @@ class MixtralTorchExportTest(unittest.TestCase):
             ):
                 self.fail(
                     f"torch.export failed with data-dependent operation error: {error_msg}\n"
-                    "This suggests the inference path fix is not working properly."
+                    "This suggests the inference path has data-dependent operations that need to be removed."
                 )
             else:
                 # Re-raise other unexpected errors
