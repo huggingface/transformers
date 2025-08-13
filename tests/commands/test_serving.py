@@ -282,6 +282,37 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
         outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
         self.assertListEqual(expected_outputs, outputs)
 
+        messages_with_type = [
+            {"role": "user", "content": [{"type": "text", "text": "How are you doing?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"}
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
+        self.assertListEqual(expected_outputs, outputs)
+
+        messages_multiple_text = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "How are you doing?"},
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"},
+                ],
+            },
+        ]
+        expected_outputs_multiple_text = [
+            {
+                "role": "user",
+                "content": "How are you doing? I'm doing great, thank you for asking! How can I assist you today?",
+            },
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
+        self.assertListEqual(expected_outputs_multiple_text, outputs)
+
     def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
         modality = Modality.VLM
         messages = [

@@ -670,7 +670,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             raise AssertionError("Model must have caching enabled.")
 
         # Initialize the HybridCache
-        self.cache = HybridCache(max_cache_len=generation_config.cache_config.get("max_cache_len"), config=config)
+        self.cache = HybridCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         max_batch_size = generation_config.cache_config.get("batch_size")
@@ -818,7 +818,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.config = model.config
 
         # Initialize static cache for decoder and DynamicCache for encoder
-        self.static_cache = StaticCache(max_cache_len=max_static_cache_length, config=self.config)
+        self.static_cache = StaticCache(config=self.config, max_cache_len=max_static_cache_length)
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, "cpu")
