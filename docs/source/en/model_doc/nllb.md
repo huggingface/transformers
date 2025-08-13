@@ -96,15 +96,17 @@ visualizer("UN Chief says there is no military solution in Syria")
 
 ## Notes
 
-- **Tokenizer behavior update (April 2023)**  
-  The tokenizer now prefixes the **source sequence** with the source language code instead of appending the target language code at the end.  
-  To restore the legacy behavior:  
-  ```python
-  from transformers import NllbTokenizer
-  tokenizer = NllbTokenizer.from_pretrained(
-      "facebook/nllb-200-distilled-600M", legacy_behaviour=True
-  )
-  ```
+- The tokenizer was updated in April 2023 to prefix the source sequence with the source language rather than the target language. This prioritizes zero-shot performance at a minor cost to supervised performance.
+
+   <add new behavior example here>
+   
+   To revert to the legacy behavior, use the code example below.
+   
+   <add legacy_behavior example here>
+   
+ - For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
+ 
+   <add code example from https://huggingface.co/docs/transformers/v4.53.3/en/model_doc/nllb#generating-from-any-other-language-than-english>
 
 
 ## Resources
