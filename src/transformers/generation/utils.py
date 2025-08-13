@@ -1742,6 +1742,13 @@ class GenerationMixin(ContinuousMixin):
             generation_config = self.generation_config
             using_model_generation_config = True
 
+            # Related to #40039: prior to this PR, models with sliding window attention were forced to have
+            # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
+            # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
+            # (if we're inside this branch, then it is because we're using default values from the Hub)
+            if generation_config.cache_implementation == "hybrid":
+                generation_config.cache_implementation = None
+
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
@@ -1953,10 +1960,6 @@ class GenerationMixin(ContinuousMixin):
                 f"'{generation_config.cache_implementation}'."
             )
             generation_config.cache_implementation = None
-
-        generation_config.cache_implementation = generation_config.cache_implementation or getattr(
-            self.config.get_text_config(decoder=True), "cache_implementation", None
-        )
 
         # assisted decoding and contrastive search need to roll-back the Cache, which is not supported if
         # it has sliding layers - so if we use any of those 2, do not pass the config to DynamicCache, which
