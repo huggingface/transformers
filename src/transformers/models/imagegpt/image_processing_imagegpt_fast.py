@@ -22,7 +22,7 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
 )
-from ...image_utils import PILImageResampling, ChannelDimension
+from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -31,6 +31,7 @@ from ...utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
 )
+
 
 if is_torch_available():
     import torch
@@ -128,12 +129,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     size = {"height": 256, "width": 256}
     do_resize = True
-    # We do NOT use the base normalization/rescale as ImageGPT expects (x/127.5 - 1)
+    # We do NOT want touse the base normalization/rescale as ImageGPT expects (x/127.5 - 1)
     do_rescale = False
     do_normalize = False
 
     do_color_quantize = True
-    clusters = None  # Must be set at instantiation
+    clusters = None
 
     def __init__(
         self,
@@ -183,7 +184,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         """
         # Run standard fast pipeline (resize, crop, batching) without rescale/normalize
         base_batch = super()._preprocess(images, return_tensors=return_tensors, **kwargs)
-        pixel_values = base_batch["pixel_values"]  # Tensor [B,C,H,W] or list of [C,H,W]
+        pixel_values = base_batch["pixel_values"]
 
         # Apply ImageGPT normalization when requested: [-1, 1]
         do_normalize = getattr(self, "_do_normalize_imagegpt", True)
@@ -205,7 +206,6 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError("Clusters must be provided for color quantization.")
             clusters_torch = torch.as_tensor(clusters, dtype=torch.float32)
 
-            # Helper for clarity: quantize a single image [C,H,W] -> [H*W]
             def _quantize_one_image(image_chw: torch.Tensor, clusters_ref: torch.Tensor) -> torch.Tensor:
                 device_clusters = clusters_ref.to(image_chw.device, dtype=image_chw.dtype)
                 img_hwc = image_chw.permute(1, 2, 0)
@@ -239,10 +239,6 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         output = super().to_dict()
         if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
             output["clusters"] = output["clusters"].tolist()
-        # ImageGPT does not use base mean/std normalization; keep these None for parity with slow processor
-        # output["image_mean"] = None
-        # output["image_std"] = None
-        # No rescaling in fast ImageGPT path
 
         # Need to set these valus to match with slow processor during testing
         output["rescale_factor"] = None
