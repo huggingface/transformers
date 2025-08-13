@@ -1537,8 +1537,9 @@ class CompileConfig:
 
     Args:
         fullgraph (`bool`, *optional*, defaults to `False`):
-            If `True`, requires that the whole forward be capturable in a single graph. Otherwise, allows
-            graph breaks (default).
+            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            that the entire function be capturable into a single graph. If this is not possible (that is, if there are
+            graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
