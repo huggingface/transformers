@@ -43,7 +43,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip freeze
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
