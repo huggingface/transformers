@@ -2229,14 +2229,13 @@ class GenerationMixin(ContinuousMixin):
                 `True`.
             custom_generate (`str` or `Callable`, *optional*):
                 One of the following:
-
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
                   `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
                   repository fully replaces the generation logic, and the return type may differ.
                 - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
                 - `Callable`: `generate` will perform the usual preparation steps, then call the provided callable to
                   run the decoding loop. For more information, see
-                [Reusing generate's preparation steps by passing a callable](https://huggingface.co/docs/transformers/en/generation_strategies#reusing-generate-s-preparation-steps-by-passing-a-callable).
+                [the docs](https://huggingface.co/docs/transformers/en/generation_strategies#reusing-generate-s-preparation-steps-by-passing-a-callable).
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
