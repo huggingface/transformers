@@ -146,7 +146,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             num_hidden_layers=24,
             num_attention_heads=16,
             num_register_tokens=4,
-            use_swiglu_ffn=False,
+            use_gated_mlp=False,
+            hidden_act="gelu",
         )
     elif model_name == "vith16plus_lvd1689m":
         return DINOv3ViTConfig(
@@ -169,7 +170,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             query_bias=False,
             value_bias=False,
             num_register_tokens=4,
-            use_swiglu_ffn=True,
+            use_gated_mlp=True,
+            hidden_act="silu",
         )
     elif model_name == "vit7b16_sat493m":
         return DINOv3ViTConfig(
@@ -279,7 +281,7 @@ def convert_and_test_dinov3_checkpoint(args):
         new_key = new_keys[key]
         weight_tensor = original_state_dict[key]
 
-        if "bias_mask" in key or "attn.k_proj.bias" in key:
+        if "bias_mask" in key or "attn.k_proj.bias" in key or "local_cls_norm" in key:
             continue
         if "embeddings.mask_token" in new_key:
             weight_tensor = weight_tensor.unsqueeze(1)
@@ -288,7 +290,7 @@ def convert_and_test_dinov3_checkpoint(args):
 
         converted_state_dict[new_key] = weight_tensor
 
-    model.load_state_dict(converted_state_dict, strict=False, assign=True)
+    model.load_state_dict(converted_state_dict, strict=True)
     model = model.eval()
 
     transform = get_transform()
