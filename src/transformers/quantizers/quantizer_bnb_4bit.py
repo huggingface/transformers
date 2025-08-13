@@ -230,17 +230,35 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     if unexpected_keys is not None and k in unexpected_keys:
                         unexpected_keys.remove(k)
 
-            param_kwargs = {}
-            if self.is_bnb_supports_quant_storage_module:
-                param_kwargs["module"] = module
+            if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
+                param_kwargs = {}
+                if self.is_bnb_supports_quant_storage_module:
+                    param_kwargs["module"] = module
 
-            module._parameters[tensor_name] = bnb.nn.Params4bit.from_prequantized(
-                data=param_value,
-                quantized_stats=quantized_stats,
-                requires_grad=False,
-                device=target_device,
-                **param_kwargs,
-            )
+                module._parameters[tensor_name] = bnb.nn.Params4bit.from_prequantized(
+                    data=param_value,
+                    quantized_stats=quantized_stats,
+                    requires_grad=False,
+                    device=target_device,
+                    **param_kwargs,
+                )
+            elif self.quantization_config.bnb_4bit_target_paarameters:
+                # Normal nn.Parameter, i.e. outside of a Linear4bit layer.
+                import bitsandbytes.nn.parametrize
+
+                # Load the parameter on the target device
+                module._parameters[tensor_name] = torch.nn.Parameter(
+                    param_value.to(target_device), requires_grad=False
+                )
+
+                # Apply the bitsandbytes parametrization to support dequantization
+                bitsandbytes.nn.parametrize.replace_parameter_4bit_prequantized(
+                    module,
+                    tensor_name,
+                    qs_dict=quantized_stats,
+                    device=target_device,
+                )
+
         else:
             new_value = param_value.to("cpu")
 
@@ -353,20 +371,17 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             ]
 
             if any(matched_params):
-                import bitsandbytes.nn.parametrize
-
                 for param_name in matched_params:
                     module, tensor_name = get_module_from_name(model, param_name)
 
-                    # Fake quantize/replace parameter - we're in `init_empty_weights`
-                    # TODO: we could probably just infer the dtype/shape
-                    quantized_data, quant_state = bitsandbytes.functional.quantize_4bit(
-                        model.get_parameter(param_name).data,
-                        compress_statistics=self.quantization_config.bnb_4bit_use_double_quant,
-                        quant_type=self.quantization_config.bnb_4bit_quant_type,
+                    param = model.get_parameter(param_name)
+
+                    quant_param = torch.nn.Parameter(
+                        torch.empty((param.numel() + 1) // 2, dtype=torch.uint8),
+                        requires_grad=False,
                     )
 
-                    setattr(module, tensor_name, torch.nn.Parameter(quantized_data, requires_grad=False))
+                    setattr(module, tensor_name, quant_param)
 
         model.config.quantization_config = self.quantization_config
 

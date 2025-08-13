@@ -581,9 +581,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
                 "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
             )
 
-        if self.bnb_4bit_target_parameters is not None and bnb_version < version.parse("0.47.0"):
+        if self.bnb_4bit_target_parameters is not None and bnb_version < version.parse("0.48.0"):
             raise ValueError(
-                "bnb_4bit_target_parameters requires bitsandbytes>=0.47.0 - please upgrade your bitsandbytes version"
+                "bnb_4bit_target_parameters requires bitsandbytes>=0.48.0 - please upgrade your bitsandbytes version"
             )
 
     def is_quantizable(self):
