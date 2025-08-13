@@ -633,10 +633,9 @@ class QuantoQuantizedLayer(QuantizedLayer):
         )
 
         # We need to import quanto here to avoid circular imports due to optimum/quanto/models/transformers_models.py
-        if _is_quanto_greater_than_0_2_5 := is_quanto_greater("0.2.5", accept_dev=True):
+        if is_quanto_greater("0.2.5", accept_dev=True):
             from optimum.quanto import MaxOptimizer, qint2, qint4
-
-        if not _is_quanto_greater_than_0_2_5:
+        else:
             raise ImportError(
                 "You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
             )
