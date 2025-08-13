@@ -2289,31 +2289,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
         self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
         for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
     @property
-    def tp_plan(self):
+    def tp_plan(self) -> dict[str, str]:
         """
         The full tp plan for the model's modules
         """
+        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+            return self._ep_plan
         return self._tp_plan
 
     @property
-    def pp_plan(self):
+    def pp_plan(self) -> dict[str, tuple[str, str]]:
         return self._pp_plan
 
     @tp_plan.setter
-    def tp_plan(self, plan):
+    def tp_plan(self, plan: dict[str, str]):
         self._tp_plan = plan
 
     @pp_plan.setter
-    def pp_plan(self, plan):
+    def pp_plan(self, plan: dict[str, tuple[str, str]]):
         self._pp_plan = plan
 
     def dequantize(self):
