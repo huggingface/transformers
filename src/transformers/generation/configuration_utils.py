@@ -1536,8 +1536,9 @@ class CompileConfig:
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-        fullgraph (`bool`, *optional*, defaults to `True`):
-            If `True`, requires that the whole forward be capturable in a single graph.
+        fullgraph (`bool`, *optional*, defaults to `False`):
+            If `True`, requires that the whole forward be capturable in a single graph. Otherwise, allows
+            graph breaks (default).
         dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
