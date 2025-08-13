@@ -203,6 +203,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# copy Llama after moving rope etc out
 class Ernie4_5_VLTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -523,27 +524,15 @@ class Ernie4_5_DecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.config = config
-        self.use_moe = config.use_moe
         self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
-        moe_layer_start_index = (
-            min(config.moe_layer_start_index)
-            if isinstance(config.moe_layer_start_index, (tuple, list))
-            else config.moe_layer_start_index
-        )
-        moe_layer_end_index = (
-            max(config.moe_layer_end_index)
-            if isinstance(config.moe_layer_end_index, (tuple, list))
-            else config.moe_layer_end_index
-        )
+        moe_layer_start_index = min(config.moe_layer_start_index)
+        moe_layer_end_index = max(config.moe_layer_end_index)
 
         if (
-            self.use_moe
-            and ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= moe_layer_start_index  # 3
-            and layer_idx <= moe_layer_end_index  # 53
+            ((layer_idx + 1) % config.moe_layer_interval == 0)
+            and layer_idx >= moe_layer_start_index
+            and layer_idx <= moe_layer_end_index
         ):
             self.mlp = Ernie4_5_MoESparseMoeBlock(config)
         else:
@@ -624,14 +613,13 @@ class Ernie4_5_DecoderLayer(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
-        if self.use_moe:
-            # Non-empty only if `use_moe`
-            if router_loss_attn:
-                router_loss_attn = router_loss_attn[0]
-                router_loss = router_loss + router_loss_attn
+        # Non-empty only if `use_moe`
+        if router_loss_attn:
+            router_loss_attn = router_loss_attn[0]
+            router_loss = router_loss + router_loss_attn
 
-            if output_gate_logits:
-                outputs += (gate_logits,)
+        if output_gate_logits:
+            outputs += (gate_logits,)
 
         # remove empty tuple for pipeline parallel
         if type(outputs) is tuple and len(outputs) == 1:
