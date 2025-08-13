@@ -354,7 +354,7 @@ class MistralIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = MistralForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, device_map=torch_device, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, device_map=torch_device, dtype=torch.float16
         )
 
         # Make sure prefill is larger than sliding window

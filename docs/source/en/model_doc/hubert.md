@@ -65,7 +65,7 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", spli
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 with torch.no_grad():
@@ -100,7 +100,7 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", spli
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 with torch.no_grad():

@@ -3496,7 +3496,7 @@ class ModelTesterMixin:
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # Some models have support for FA but not SDPA - making sure we have a valid attention
@@ -4346,7 +4346,7 @@ class ModelTesterMixin:
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation="flash_attention_2",
                     )
                     .to(torch_device)
