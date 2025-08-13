@@ -2408,7 +2408,7 @@ class OneFormerSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    @compile_compatible_method_lru_cache(maxsize=10)
+    @compile_compatible_method_lru_cache(maxsize=1)
     def forward(
         self,
         shape: torch.Size,
