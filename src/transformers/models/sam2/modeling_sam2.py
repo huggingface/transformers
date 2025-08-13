@@ -876,21 +876,12 @@ class Sam2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
         batch_size, point_batch_size = query.shape[:2]
-        query = (
-            self.q_proj(query)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        key = (
-            self.k_proj(key)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        value = (
-            self.v_proj(value)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]

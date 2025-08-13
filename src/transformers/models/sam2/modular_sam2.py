@@ -277,21 +277,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         """
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
             original_sizes = original_sizes.tolist()
-        # if max_hole_area > 0 or max_sprinkle_area > 0:
-        #     processed_masks = []
-        #     TODO: add connected components kernel for postprocessing
-        #     for mask in masks:
-        #         if mask.ndim == 3:
-        #             mask_flat = mask.flatten(0).unsqueeze(1)
-        #         elif mask.ndim == 4:
-        #             mask_flat = mask.flatten(0, 1).unsqueeze(1)
-        #         elif mask.ndim == 5:
-        #             mask_flat = mask.flatten(0, 1, 2).unsqueeze(1)
-        #         else:
-        #             raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-        #     else:
-        #         processed_masks = masks
-        #     masks = processed_masks
+        # TODO: add connected components kernel for postprocessing
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
@@ -940,21 +926,12 @@ class Sam2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
         batch_size, point_batch_size = query.shape[:2]
-        query = (
-            self.q_proj(query)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        key = (
-            self.k_proj(key)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        value = (
-            self.v_proj(value)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
+
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]

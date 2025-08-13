@@ -303,7 +303,7 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_attention_feed_forward_hidden_act="relu",
         memory_attention_dropout=0.1,
         memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=[64, 64],
+        memory_attention_rope_feat_sizes=None,
         memory_attention_rope_dropout=0.1,
         # memory encoder
         memory_encoder_hidden_size=256,
@@ -324,9 +324,13 @@ class Sam2VideoConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+        memory_attention_rope_feat_sizes = (
+            [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
+        )
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (

@@ -82,18 +82,18 @@ class Sam2HieraDetConfig(PretrainedConfig):
         hidden_size=96,
         num_attention_heads=1,
         num_channels=3,
-        image_size=[1024, 1024],
-        patch_kernel_size=[7, 7],
-        patch_stride=[4, 4],
-        patch_padding=[3, 3],
-        query_stride=[2, 2],
-        window_positional_embedding_background_size=[7, 7],
+        image_size=None,
+        patch_kernel_size=None,
+        patch_stride=None,
+        patch_padding=None,
+        query_stride=None,
+        window_positional_embedding_background_size=None,
         num_query_pool_stages=3,
-        blocks_per_stage=[1, 2, 7, 2],
-        embed_dim_per_stage=[96, 192, 384, 768],
-        num_attention_heads_per_stage=[1, 2, 4, 8],
-        window_size_per_stage=[8, 4, 14, 7],
-        global_attention_blocks=[5, 7, 9],
+        blocks_per_stage=None,
+        embed_dim_per_stage=None,
+        num_attention_heads_per_stage=None,
+        window_size_per_stage=None,
+        global_attention_blocks=None,
         mlp_ratio=4.0,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
@@ -101,6 +101,24 @@ class Sam2HieraDetConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        image_size = image_size if image_size is not None else [1024, 1024]
+        patch_kernel_size = patch_kernel_size if patch_kernel_size is not None else [7, 7]
+        patch_stride = patch_stride if patch_stride is not None else [4, 4]
+        patch_padding = patch_padding if patch_padding is not None else [3, 3]
+        query_stride = query_stride if query_stride is not None else [2, 2]
+        window_positional_embedding_background_size = (
+            window_positional_embedding_background_size
+            if window_positional_embedding_background_size is not None
+            else [7, 7]
+        )
+        blocks_per_stage = blocks_per_stage if blocks_per_stage is not None else [1, 2, 7, 2]
+        embed_dim_per_stage = embed_dim_per_stage if embed_dim_per_stage is not None else [96, 192, 384, 768]
+        num_attention_heads_per_stage = (
+            num_attention_heads_per_stage if num_attention_heads_per_stage is not None else [1, 2, 4, 8]
+        )
+        window_size_per_stage = window_size_per_stage if window_size_per_stage is not None else [8, 4, 14, 7]
+        global_attention_blocks = global_attention_blocks if global_attention_blocks is not None else [5, 7, 9]
 
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -171,13 +189,13 @@ class Sam2VisionConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone_channel_list=[768, 384, 192, 96],
-        backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
+        backbone_channel_list=None,
+        backbone_feature_sizes=None,
         fpn_hidden_size=256,
         fpn_kernel_size=1,
         fpn_stride=1,
         fpn_padding=0,
-        fpn_top_down_levels=[2, 3],
+        fpn_top_down_levels=None,
         num_feature_levels=3,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
@@ -185,6 +203,12 @@ class Sam2VisionConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        backbone_channel_list = [768, 384, 192, 96] if backbone_channel_list is None else backbone_channel_list
+        backbone_feature_sizes = (
+            [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
+        )
+        fpn_top_down_levels = [2, 3] if fpn_top_down_levels is None else fpn_top_down_levels
 
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = (

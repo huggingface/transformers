@@ -237,7 +237,7 @@ class Sam2VideoConfig(PretrainedConfig):
         memory_attention_feed_forward_hidden_act="relu",
         memory_attention_dropout=0.1,
         memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=[64, 64],
+        memory_attention_rope_feat_sizes=None,
         memory_attention_rope_dropout=0.1,
         # memory encoder
         memory_encoder_hidden_size=256,
@@ -258,9 +258,13 @@ class Sam2VideoConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+        memory_attention_rope_feat_sizes = (
+            [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
+        )
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
@@ -980,12 +984,13 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
         inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("pos_embeddings", torch.stack((inv_freq.cos(), inv_freq.sin())), persistent=False)
+        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
+        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
 
     @torch.no_grad()
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
         # As the feature map size is fixed, we can just return the pre-computed embeddings.
-        return self.pos_embeddings
+        return self.rope_embeddings_cos, self.rope_embeddings_sin
 
 
 def rotate_pairwise(x):
@@ -1012,6 +1017,7 @@ def apply_rotary_pos_emb_2d(
     k: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
+    num_k_exclude_rope: int = 0,
     repeat_freqs_k: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
@@ -1028,16 +1034,17 @@ def apply_rotary_pos_emb_2d(
     Returns:
         Rotated (q, k) tensors
     """
+    k_rot, k_pass = k[..., : k.shape[-2] - num_k_exclude_rope, :], k[..., k.shape[-2] - num_k_exclude_rope :, :]
     q_embed = q.float()  # force upscale to float32 as in the original implementation
     q_embed = (q_embed * cos) + (rotate_pairwise(q_embed) * sin)
-    if k.shape[-2] == 0:
+    if k_rot.shape[-2] == 0:
         # Handle case where keys might be empty due to dropout
-        return q_embed.type_as(q), k
+        return q_embed.type_as(q), torch.cat([k_rot, k_pass], dim=-2)
 
     # Handle key tensor - may need to repeat frequencies if different sequence length
-    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
+    if repeat_freqs_k and k_rot.shape[-2] != q.shape[-2]:
         # Repeat cos/sin to match key sequence length
-        repeat_factor = k.shape[-2] // q.shape[-2]
+        repeat_factor = k_rot.shape[-2] // q.shape[-2]
         cos_k = cos.repeat(1, 1, repeat_factor, 1)
         sin_k = sin.repeat(1, 1, repeat_factor, 1)
     else:
@@ -1045,9 +1052,11 @@ def apply_rotary_pos_emb_2d(
         sin_k = sin
 
     # Apply rotary embedding to keys
-    k_embed = k.float()  # force upscale to float32 as in the original implementation
+    k_embed = k_rot.float()  # force upscale to float32 as in the original implementation
     k_embed = (k_embed * cos_k) + (rotate_pairwise(k_embed) * sin_k)
-    return q_embed.type_as(q), k_embed.type_as(k)
+    # Concatenate back to full shape
+    k_embed = torch.cat([k_embed.type_as(k), k_pass], dim=-2)
+    return q_embed.type_as(q), k_embed
 
 
 class Sam2VideoRoPEAttention(nn.Module):
@@ -1075,7 +1084,6 @@ class Sam2VideoRoPEAttention(nn.Module):
         self.v_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
         self.o_proj = nn.Linear(self.internal_dim, self.hidden_size)
 
-        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
         self.rope_k_repeat = rope_k_repeat
         self.dropout_p = config.memory_attention_rope_dropout
 
@@ -1084,46 +1092,23 @@ class Sam2VideoRoPEAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         num_k_exclude_rope: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tensor:
         # Input projections
         batch_size, point_batch_size = query.shape[:2]
-        query = (
-            self.q_proj(query)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        key = (
-            self.k_proj(key)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        value = (
-            self.v_proj(value)
-            .view(batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
-            .transpose(1, 2)
-        )
+        new_shape = (batch_size * point_batch_size, -1, self.num_attention_heads, self.head_dim)
 
-        # get position embeddings (always the same as fixed feature shape)
-        cos, sin = self.rotary_emb()
+        query = self.q_proj(query).view(*new_shape).transpose(1, 2)
+        key = self.k_proj(key).view(*new_shape).transpose(1, 2)
+        value = self.v_proj(value).view(*new_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
         # Apply rotary position encoding, excluding some keys if specified
-        if num_k_exclude_rope > 0:
-            # Split keys into rope and non-rope parts
-            k_rope = key[:, :, :-num_k_exclude_rope]
-            k_no_rope = key[:, :, -num_k_exclude_rope:]
-
-            # Apply rope only to the rope part
-            q_rope, k_rope = apply_rotary_pos_emb_2d(query, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-            # Concatenate back
-            key = torch.cat([k_rope, k_no_rope], dim=-2)
-            query = q_rope
-        else:
-            # Apply rope to all queries and keys
-            query, key = apply_rotary_pos_emb_2d(query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat)
-
-        scale = query.shape[-1] ** -0.5
+        query, key = apply_rotary_pos_emb_2d(
+            query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat, num_k_exclude_rope=num_k_exclude_rope
+        )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1136,7 +1121,7 @@ class Sam2VideoRoPEAttention(nn.Module):
             value,
             attention_mask=None,
             dropout=0.0 if not self.training else self.dropout_p,
-            scaling=scale,
+            scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
         )
@@ -1172,12 +1157,13 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
         self,
         queries: Tensor,
         keys: Tensor,
-        key_point_embedding: Optional[Tensor] = None,
+        key_point_embedding: Tensor,
+        rope_position_embeddings: tuple[Tensor, Tensor],
         num_k_exclude_rope: int = 0,
     ) -> torch.Tensor:
         # Self-Attention
         query = self.layer_norm1(queries)
-        query, _ = self.self_attn(query=query, key=query, value=query)
+        query, _ = self.self_attn(query=query, key=query, value=query, position_embeddings=rope_position_embeddings)
         queries = queries + self.dropout1(query)
 
         # Cross-Attention
@@ -1186,6 +1172,7 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
             query=query,
             key=keys + key_point_embedding,
             value=keys,
+            position_embeddings=rope_position_embeddings,
             num_k_exclude_rope=num_k_exclude_rope,
         )
         queries = queries + self.dropout2(query)
@@ -1203,6 +1190,7 @@ class Sam2VideoMemoryAttention(nn.Module):
             [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
+        self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -1233,12 +1221,13 @@ class Sam2VideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-
+        rope_position_embeddings = self.rotary_emb()
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
                 keys=memory,
                 key_point_embedding=memory_posision_embeddings,
+                rope_position_embeddings=rope_position_embeddings,
                 num_k_exclude_rope=num_object_pointer_tokens,
             )
 
