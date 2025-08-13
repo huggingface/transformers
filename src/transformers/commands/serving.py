@@ -634,8 +634,7 @@ class ServeCommand(BaseTransformersCLICommand):
             )
         else:
             logger.warning_once(
-                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see "
-                "errors."
+                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
             )
 
         @app.post("/v1/chat/completions")
