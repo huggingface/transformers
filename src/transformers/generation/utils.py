@@ -57,6 +57,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
