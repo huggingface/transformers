@@ -77,6 +77,7 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [BitsAndBytes quantization](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) to quantize the weights to `int8`:
 
 ```python
+import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
