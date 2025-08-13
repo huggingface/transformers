@@ -14,46 +14,42 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BARTpho
-
-<div style="float: right;">
-<div class="flex flex-wrap space-x-1">
-<img alt="Hugging Face Model" src="https://img.shields.io/badge/Model%20Hub-BARTpho-blue">
-<img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-green">
-<img alt="Language" src="https://img.shields.io/badge/Language-Vietnamese-orange">
-</div>
-</div>
 
 # BARTpho
 
-[BARTpho](https://arxiv.org/abs/2109.09701) is the first large-scale, monolingual sequence-to-sequence model pre-trained exclusively for Vietnamese, developed by [VinAI Research](https://huggingface.co/vinai).
-It’s based on the **BART** denoising autoencoder architecture, with adaptations from **mBART**, and comes in two variants — **word** and **syllable** — to handle the unique way Vietnamese uses whitespace.
-Think of it like a supercharged summarizer and text generator that really “gets” Vietnamese — both at the word and syllable level.
+[BARTpho](https://huggingface.co/papers/2109.09701) is a large-scale Vietnamese sequence-to-sequence model. It offers a word-based and syllable-based version. This model is built on the [BART](./bart) large architecture with its denoising pretraining.
 
-You can find all official checkpoints in the [BARTpho collection](https://huggingface.co/collections/vinai/bartpho-66f8a74775316eaa77d59969).
+You can find all the original checkpoints under the [VinAI](https://huggingface.co/vinai/models?search=bartpho) organization.
 
-> \[!TIP]
-> This model was contributed by [VinAI Research](https://huggingface.co/vinai).
-> Check out the `bartpho-word` and `bartpho-syllable` variants in the right sidebar for examples of summarization, punctuation restoration, and capitalization restoration.
+> [!TIP]
+> This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen).
+> Check out the right sidebar for examples of how to apply BARTpho to different language tasks.
 
-The example below demonstrates how to run summarization with \[`pipeline`] or load the model via \[`AutoModel`].
+The example below demonstrates how to summarize text with [`Pipeline`] or the [`AutoModel`] class.
+
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
+
+
 ```python
+import torch
 from transformers import pipeline
 
-# Ensure tone normalization + word segmentation for bartpho-word
-summarizer = pipeline(
-"summarization",
-model="vinai/bartpho-word",
-tokenizer="vinai/bartpho-word"
+pipeline = pipeline(
+   task="summarization",
+   model="vinai/bartpho-word",
+   torch_dtype=torch.float16,
+   device=0
 )
 
-ARTICLE = "BARTpho là mô_hình Xử_lý ngôn_ngữ tự_nhiên đơn_ngữ cho tiếng Việt..."
-summary = summarizer(ARTICLE, max_length=25, min_length=10, do_sample=False)
-print(summary[0]['summary_text'])
+text = """
+Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật, 
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật 
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
+"""
+pipeline(text)
 ```
 
 </hfoption>
@@ -61,79 +57,44 @@ print(summary[0]['summary_text'])
 
 ```python
 import torch
-from transformers import AutoModel, AutoTokenizer
+from transformers import BartForConditionalGeneration, AutoTokenizer
 
-model_checkpoint = "vinai/bartpho-word"
-tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-model = AutoModel.from_pretrained(model_checkpoint)
+tokenizer = AutoTokenizer.from_pretrained(
+    "vinai/bartpho-word",
+)
+model = BartForConditionalGeneration.from_pretrained(
+    "vinai/bartpho-word",
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
 
-TXT = "Chúng_tôi là những nghiên_cứu_viên."
-inputs = tokenizer(TXT, return_tensors="pt")
-features = model(**inputs)
-print("Shape:", features.last_hidden_state.shape)
+text = """
+Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật, 
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật 
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
+"""
+inputs = tokenizer(text, return_tensors="pt").to("cuda")
+
+outputs = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
+tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-transformers-cli download vinai/bartpho-word
+echo -e "Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận và chuyển hóa năng lượng ánh sáng Mặt trời của thực vật, 
+tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật 
+trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ" | \
+transformers run --task summarization --model vinai/bartpho-word --device 0
 ```
 
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory footprint of large models by storing weights in lower precision. See the [BitsAndBytes Quantization guide](https://huggingface.co/docs/transformers/quantization/bitsandbytes) for details.
-
-Example: 4-bit quantization with `bitsandbytes`:
-
-```python
-import torch
-from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
-
-quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
-tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-word")
-model = AutoModel.from_pretrained("vinai/bartpho-word", quantization_config=quant_config, device_map="auto")
-```
-
-Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py) to see what tokens the model attends to.
-
-```python
-from transformers.utils.attention_visualizer import AttentionMaskVisualizer
-
-visualizer = AttentionMaskVisualizer("vinai/bartpho-word")
-visualizer("Chúng_tôi là những nghiên_cứu_viên.")
-```
 
 
 ## Notes
 
-* **Preprocessing is non-negotiable**:
-
-* All inputs must undergo Vietnamese tone normalization.
-* For `bartpho-word` variants, text must also be segmented with [VnCoreNLP](https://github.com/vncorenlp/VnCoreNLP).
-* The model is trained on a 20GB corpus (\~145M sentences), so domain-specific performance may vary.
-* `bartpho-word` consistently outperforms `bartpho-syllable` on Vietnamese generative tasks.
-
-```python
-# Example: Masked language modeling with bartpho-syllable
-from transformers import MBartForConditionalGeneration, AutoTokenizer
-import torch
-
-model = MBartForConditionalGeneration.from_pretrained("vinai/bartpho-syllable")
-tokenizer = AutoTokenizer.from_pretrained("vinai/bartpho-syllable")
-
-TXT = "Chúng tôi là <mask> nghiên cứu viên."
-input_ids = tokenizer(TXT, return_tensors="pt")["input_ids"]
-logits = model(input_ids).logits
-masked_index = (input_ids == tokenizer.mask_token_id).nonzero().item()
-predicted_ids = torch.topk(logits[0, masked_index], 5).indices
-print(tokenizer.decode(predicted_ids, skip_special_tokens=True))
-```
-
-## Resources
-
-* [BARTpho GitHub](https://github.com/VinAIResearch/BARTpho)
-* [BARTpho Paper (INTERSPEECH 2022)](https://arxiv.org/abs/2109.09701)
-* [VinAI Hugging Face Organization](https://huggingface.co/vinai)
-* [BitsAndBytes Quantization Guide](https://huggingface.co/docs/transformers/quantization/bitsandbytes)
+- BARTpho uses the large architecture of BART with an additional layer-normalization layer on top of the encoder and decoder. The BART-specific classes should be replaced with the mBART-specific classes.
+- This implementation only handles tokenization through the `monolingual_vocab_file` file. This is a Vietnamese-specific subset of token types taken from that multilingual vocabulary. If you want to use this tokenizer for another language, replace the `monolingual_vocab_file` with one specialized for your target language.
