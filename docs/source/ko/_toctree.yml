@@ -92,6 +92,10 @@
       title: (번역중) Tools and RAG
     title: 모델을 사용해 대화하기
   - sections:
+    - local: tiny_agents
+      title: Tiny-Agents CLI 및 MCP 도구
+    title: 서빙(Serving)
+  - sections:
     - local: in_translation
       title: (번역중) torch.compile
     - local: perf_infer_gpu_one
@@ -408,20 +412,22 @@
       title: 텍스트 생성
     - local: main_classes/onnx
       title: ONNX
-    - local: in_translation
-      title: (번역중) Optimization
+    - local: main_classes/optimizer_schedules
+      title: 최적화
     - local: main_classes/output
       title: 모델 출력
     - local: main_classes/peft
       title: PEFT
     - local: main_classes/pipelines
       title: 파이프라인
-    - local: main_classes/tokenizer
-      title: 토크나이저
+    - local: main_classes/processors
+      title: 프로세서
     - local: main_classes/quantization
       title: 양자화
     - local: in_translation
       title: (번역중) Tokenizer
+    - local: main_classes/tokenizer
+      title: 토크나이저
     - local: main_classes/trainer
       title: Trainer
     - local: in_translation
@@ -591,7 +597,7 @@
         title: HGNet-V2
       - local: in_translation
         title: I-BERT
-      - local: in_translation
+      - local: model_doc/jamba
         title: Jamba
       - local: in_translation
         title: JetMoe
