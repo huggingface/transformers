@@ -629,7 +629,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
-            logger.warning(
+            logger.warn_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
         else:
