@@ -39,10 +39,10 @@ class MixtralTorchExportTest(unittest.TestCase):
         )
 
     def test_moe_block_torch_export(self):
-        """Test that MixtralSparseMoeBlock can be exported with torch.export."""
+        """Test that MixtralSparseMoeBlock can be exported with torch.export in inference mode."""
         # Create MoE block
         moe_block = MixtralSparseMoeBlock(self.config)
-        moe_block.eval()
+        moe_block.eval()  # Set to eval mode for inference path
 
         # Move to meta device for export testing
         moe_block = moe_block.to("meta")
@@ -69,7 +69,7 @@ class MixtralTorchExportTest(unittest.TestCase):
             ):
                 self.fail(
                     f"torch.export failed with data-dependent operation error: {error_msg}\n"
-                    "This suggests the .nonzero() fix is not working properly."
+                    "This suggests the inference path fix is not working properly."
                 )
             else:
                 # Re-raise other unexpected errors
