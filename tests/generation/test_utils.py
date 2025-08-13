@@ -2745,6 +2745,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    @pytest.mark.torch_export_test
     def test_cache_dependant_input_preparation_exporting(self):
         self.assertFalse(
             is_torchdynamo_exporting()
@@ -4948,6 +4949,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")

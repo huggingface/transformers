@@ -367,6 +367,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
 
+    @pytest.mark.torch_compile_test
     def test_saved_config_excludes_reference_compile(self):
         config = ModernBertConfig(reference_compile=True)
         with tempfile.TemporaryDirectory() as tmpdirname:

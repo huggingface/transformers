@@ -356,6 +356,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2

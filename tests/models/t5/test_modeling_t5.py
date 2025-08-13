@@ -1612,6 +1612,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
@@ -1652,6 +1653,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache_encoder(self):
         prompts = [
             "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "

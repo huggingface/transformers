@@ -279,6 +279,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
         output = compiled_model(torch.tensor(10), return_dict=False)
         self.assertIsInstance(output, tuple)
 
+    @pytest.mark.torch_export_test
     def test_decorator_torch_export(self):
         """Test that the can_return_tuple decorator works with torch.export."""
         config = PretrainedConfig()

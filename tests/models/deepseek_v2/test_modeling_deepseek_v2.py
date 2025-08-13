@@ -180,6 +180,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 
@@ -193,6 +194,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Dynamic control flow in MoE")
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         pass
 
