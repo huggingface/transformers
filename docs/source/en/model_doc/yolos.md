@@ -71,7 +71,7 @@ model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_d
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-inputs = processor(images=image, return_tensors="pt").to(device)
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

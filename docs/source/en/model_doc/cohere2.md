@@ -47,9 +47,7 @@ pipeline(messages)
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
-
-device = infer_device()
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
@@ -61,7 +59,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(device)
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -89,9 +87,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quanti
 
 ```python
 import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM, infer_device
-
-device = infer_device()
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
@@ -105,7 +101,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(device)
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,

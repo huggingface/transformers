@@ -88,9 +88,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 import torch
-from transformers import AutoTokenizer, FalconMambaForCausalLM, BitsAndBytesConfig, infer_device
-
-device = infer_device()
+from transformers import AutoTokenizer, FalconMambaForCausalLM, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -107,7 +105,7 @@ model = FalconMambaForCausalLM.from_pretrained(
     quantization_config=quantization_config,
 )
 
-inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to(device)
+inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

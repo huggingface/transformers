@@ -56,9 +56,7 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 # pip install datasets
 import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, MoonshineForConditionalGeneration, infer_device
-
-device = infer_device()
+from transformers import AutoProcessor, MoonshineForConditionalGeneration
 
 processor = AutoProcessor.from_pretrained(
     "UsefulSensors/moonshine-base",
@@ -78,7 +76,7 @@ input_features = processor(
     sampling_rate=audio_sample["sampling_rate"],
     return_tensors="pt"
 )
-input_features = input_features.to(device, dtype=torch.float16)
+input_features = input_features.to(model.device, dtype=torch.float16)
 
 predicted_ids = model.generate(**input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)

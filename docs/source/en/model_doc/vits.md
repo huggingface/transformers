@@ -60,13 +60,11 @@ write("hello.wav", sampling_rate, audio_data.squeeze())
 import torch
 import scipy
 from IPython.display import Audio
-from transformers import AutoTokenizer, infer_device, VitsModel, set_seed
-
-device = infer_device()
+from transformers import AutoTokenizer, VitsModel, set_seed
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto", torch_dtype=torch.float16)
-inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(device)
+inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)
 

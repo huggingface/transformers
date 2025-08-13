@@ -37,7 +37,7 @@ device = infer_device()
 model_path = "ibm-granite/granite-vision-3.1-2b-preview"
 processor = LlavaNextProcessor.from_pretrained(model_path)
 
-model = LlavaNextForConditionalGeneration.from_pretrained(model_path, device_map="auto")
+model = LlavaNextForConditionalGeneration.from_pretrained(model_path.to(device)
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
@@ -57,7 +57,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 
 # autoregressively complete prompt
