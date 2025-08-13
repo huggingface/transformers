@@ -234,7 +234,7 @@ def insert_dates(model_card_list):
 
 def get_all_model_cards():
     """Get all model cards from the docs path"""
-    
+
     all_files = os.listdir(DOCS_PATH)
     model_cards = []
     for file in all_files:
