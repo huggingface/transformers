@@ -783,38 +783,38 @@ class MOELayer(nn.Module):
 
 
 class Ernie4_5_MoESparseMoeBlock(nn.Module):
-    def __init__(self, config, statics, gate, experts, shared_experts):
+    def __init__(self, config):#, statics, gate, experts, shared_experts):
         super().__init__()
         self.num_experts = config.moe_num_experts[0]  # always the same for lm and mm
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
-        #self.moe_statics = Ernie4_5_MoEStatics(config)
-        self.moe_statics = statics
+        self.moe_statics = Ernie4_5_MoEStatics(config)
+        #self.moe_statics = statics
 
         # gating
-        #self.gate = Ernie4_5_VLGate(config=config)
-        self.gate = gate
-        """self.experts = nn.ModuleList(
+        self.gate = Ernie4_5_VLGate(config=config)
+        #self.gate = gate
+        #"""
+        self.experts = nn.ModuleList(
             [Ernie4_5_MoeMLP(config, config.moe_intermediate_size[int(i >= config.moe_num_experts[0])]) for i in range(sum(config.moe_num_experts))]
-        )"""
-        self.experts = experts
+        )#"""
+        #self.experts = experts
         #self.norm_min = config.moe_norm_min
         self.norm_min = 1e-12
 
         # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            #self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
-            self.shared_experts = shared_experts
+            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
+            #self.shared_experts = shared_experts
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         token_type_ids: Optional[torch.Tensor] = None,
-        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, _ = hidden_states.shape
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
 
         # (Optional) shared experts
         if self.shared_experts is not None:
@@ -822,21 +822,21 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
 
         if token_type_ids is not None and token_type_ids.any():
             final_hidden_states = torch.zeros_like(hidden_states)
-            router_logits = torch.zeros(size=(batch_size * sequence_length, self.num_experts * 2), device=final_hidden_states.device, dtype=torch.float())
+            router_logits = torch.zeros(size=(batch_size * sequence_length, self.num_experts), device=final_hidden_states.device, dtype=torch.float)
 
             # True (1) == vision, False (0) == text tokens
-            token_type_ids = token_type_ids.bool()
-            token_type_ids_flattened = token_type_ids.reshape(-1, token_type_ids.shape[-1])
-            token_type_ids = token_type_ids[:, None]
+            token_type_ids = token_type_ids[:, :-1].bool()
+            token_type_ids_router = token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
+            token_type_ids_states = token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
-            text_hidden_states = hidden_states[~token_type_ids]
-            vision_hidden_states = hidden_states[token_type_ids]
+            text_hidden_states = hidden_states[~token_type_ids_states].reshape(batch_size, -1, hidden_dim)
+            vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
 
-            final_hidden_states[~token_type_ids], text_router_logits = self.forward_moe(
+            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.forward_moe(
                 hidden_states=text_hidden_states,
                 is_multimodel=False,
             )
-            final_hidden_states[token_type_ids], vision_router_logits = self.forward_moe(
+            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.forward_moe(
                 hidden_states=vision_hidden_states,
                 is_multimodel=True,
             )
@@ -845,6 +845,8 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
                 hidden_states=hidden_states,
                 is_multimodel=False,
             )
+            final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+            router_logits = router_logits.reshape(-1, self.num_experts)
 
         # Add (optional) shared experts to the result
         if self.shared_experts is not None:
@@ -887,8 +889,7 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
 
         # Loop over all available experts in the model and perform the computation on each expert
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        #experts = self.experts[ : self.num_experts_lm] if not is_multimodel else self.experts[self.num_experts_lm : ]
-        experts = self.experts
+        experts = self.experts[ : self.num_experts] if not is_multimodel else self.experts[self.num_experts : ]
         for expert_idx in expert_hit:
             expert_layer = experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
@@ -903,8 +904,7 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, router_logits
+        return final_hidden_states.flatten(), router_logits.flatten()
 
 
 class MOEAllGatherLayerV2(MOELayer):
@@ -1553,7 +1553,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
             else config.moe_layer_end_index
         )
 
-        moe_statics = Ernie4_5_MoEStatics(self.config)
+        """moe_statics = Ernie4_5_MoEStatics(self.config)
 
         experts = nn.ModuleList(
             [Ernie4_5_MoeMLP(self.config, self.config.moe_intermediate_size[int(i >= self.config.moe_num_experts[0])]) for i in range(sum(self.config.moe_num_experts))]
@@ -1564,7 +1564,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
 
         shared_experts = None
         if config.moe_num_shared_experts > 0:
-            shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
+            shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)"""
 
         if (
             self.use_moe
@@ -1572,6 +1572,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
             and layer_idx >= moe_layer_start_index  # 3
             and layer_idx <= moe_layer_end_index  # 53
         ):
+            self.mlp = Ernie4_5_MoESparseMoeBlock(config)
+
             moe_cls = partial(
                 MOEAllGatherLayerV2,
                 use_expert_out_alltoall="alltoall"
@@ -1581,7 +1583,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 dense_token_type=config.moe_dense_experts_token_type_id,  # 3
             )
 
-            #"""
+            """
             self.mlp = moe_cls(
                 gate=gate,
                 experts=experts,
@@ -1597,9 +1599,9 @@ class Ernie4_5_DecoderLayer(nn.Module):
             )#"""
             #self.mlp = Ernie4_5_MoESparseMoeBlock(config)
 
-            _mlp_text = Ernie4_5_MoESparseMoeBlock(
-                config, moe_statics, gate, lm_experts, shared_experts
-            )
+            #_mlp_text = Ernie4_5_MoESparseMoeBlock(
+            #    config, moe_statics, gate, lm_experts, shared_experts
+            #)
             """_mlp_text = MOELayer(
                 gate=lm_gate,
                 experts=lm_experts,
@@ -1613,9 +1615,9 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 moe_statics=moe_statics,
                 moe_num_experts=config.moe_num_experts,
             )"""
-            self.mlp_text = (
-                lambda: _mlp_text
-            )  # This lambda prevents the text parameter from being scanned into the state-dict
+            #self.mlp_text = (
+            #    lambda: _mlp_text
+            #)  # This lambda prevents the text parameter from being scanned into the state-dict
         else:
             self.mlp = Ernie4_5_MoeMLP(config)
 
@@ -1690,8 +1692,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
                 )
             else:
                 #"""
-                hidden_states, _, router_loss, gate_logits = self.mlp_text()(
-                    hidden_states, None, is_multimodel=False
+                hidden_states, _, router_loss, gate_logits = self.mlp(
+                    hidden_states, None#, is_multimodel=False
                 )#"""
                 """hidden_states, _, router_loss, gate_logits = self.mlp(
                     hidden_states, None, is_mm=False
