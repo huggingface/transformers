@@ -101,6 +101,14 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
+            has_dtensor = 0
+            for name, parameter in model.named_parameters():
+                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+                    has_dtensor = 1
+                    break
+
+            assert has_dtensor == 1, "TP model must has DTensor"
+
             tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
             prompt = "Can I help"
 
@@ -110,8 +118,7 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
-            print(response)
-            # assert response == "with"
+            assert response == "with"
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
@@ -135,6 +142,14 @@ class TestTensorParallel(TestCasePlus):
             torch.distributed.barrier()
 
             model.forward = torch.compile(model.forward)
+
+            has_dtensor = 0
+            for name, parameter in model.named_parameters():
+                if isinstance(parameter.data, torch.distributed.tensor.DTensor):
+                    has_dtensor = 1
+                    break
+
+            assert has_dtensor == 1, "TP model must has DTensor"
 
             tokenizer = AutoTokenizer.from_pretrained(model_id)
             prompt = "Can I help"

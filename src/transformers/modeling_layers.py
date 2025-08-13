@@ -70,6 +70,7 @@ class GradientCheckpointingLayer(nn.Module):
                 do_warn = True
 
             # different names for the same thing in different layers
+            # TODO cyril: this one without `S` can be removed after deprection cycle
             if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
                 kwargs["past_key_value"] = None
                 message += " `past_key_value=None`,"
@@ -88,7 +89,7 @@ class GradientCheckpointingLayer(nn.Module):
             # warn if anything was changed
             if do_warn:
                 message = message.rstrip(",") + "."
-                logger.warning(message)
+                logger.warning_once(message)
 
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
         return super().__call__(*args, **kwargs)

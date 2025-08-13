@@ -51,6 +51,7 @@ if is_torchao_available():
     from torchao.quantization import Int4WeightOnlyConfig
 
 from .configuration_utils import PretrainedConfig
+from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
@@ -73,6 +74,7 @@ from .integrations.tensor_parallel import (
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -194,7 +196,7 @@ def is_local_dist_rank_0():
     return (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
-        and int(os.environ.get("LOCAL_RANK", -1)) == 0
+        and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
 
 
@@ -709,6 +711,7 @@ def _infer_parameter_dtype(
         if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
+            QuantizationMethod.MXFP4,
         }:
             return True, None
         else:
@@ -778,9 +781,8 @@ def _load_state_dict_into_meta_model(
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
     for param_name, empty_param in state_dict.items():
-        if param_name not in expected_keys:
+        if param_name not in expected_keys:  # when loading from ckpt, we skip param if doesnt exist in modeling
             continue
-
         # we need to use serialized_param_name as file pointer is untouched
         if is_meta_state_dict:
             # This is the name of the parameter as it appears on disk file
@@ -788,7 +790,6 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(serialized_param_name)
         else:
             param = empty_param.to(tensor_device)  # It is actually not empty!
-
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
             param_name,
@@ -797,17 +798,47 @@ def _load_state_dict_into_meta_model(
             hf_quantizer,
         )
 
-        if device_mesh is not None:  # In this case, the param is already on the correct device!
-            shard_and_distribute_module(
-                model,
-                param,
-                empty_param,
-                param_name,
-                casting_dtype,
-                to_contiguous,
-                device_mesh.get_local_rank(),
-                device_mesh,
-            )
+        if device_mesh is not None:
+            if (
+                not is_quantized
+                or (not hf_quantizer.requires_parameters_quantization)
+                or (
+                    not hf_quantizer.check_quantized_param(
+                        model,
+                        param,
+                        param_name,
+                        state_dict,
+                        device_map=device_map,
+                    )
+                )
+            ):  # In this case, the param is already on the correct device!
+                shard_and_distribute_module(
+                    model,
+                    param,
+                    empty_param,
+                    param_name,
+                    casting_dtype,
+                    to_contiguous,
+                    device_mesh.get_local_rank(),
+                    device_mesh,
+                )
+            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+                sharding_kwargs = {
+                    "empty_param": empty_param,
+                    "casting_dtype": casting_dtype,
+                    "to_contiguous": to_contiguous,
+                    "rank": device_mesh.get_local_rank(),
+                    "device_mesh": device_mesh,
+                }
+                hf_quantizer.create_quantized_param(
+                    model,
+                    param,
+                    param_name,
+                    device_mesh.get_local_rank(),
+                    state_dict,
+                    unexpected_keys,
+                    **sharding_kwargs,
+                )
         else:
             param = param[...]
             if casting_dtype is not None:
@@ -852,17 +883,24 @@ def _load_state_dict_into_meta_model(
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )
+
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                    param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
+                    # special case for GptOssForCausalLM, we wait for the param to be leave the meta device before casting it to cpu
+                    if model.__class__.__name__ == "GptOssForCausalLM" and value.device.type == "meta":
+                        continue
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         param_to = "meta"
                     val_kwargs = {}
-                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (
+                        value.dtype == torch.uint8 or value.dtype == torch.int8
+                    ):
                         val_kwargs["requires_grad"] = False
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, param_type, value)
@@ -917,7 +955,7 @@ def load_shard_file(args):
             or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
         )
     ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -2089,7 +2127,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _pp_plan = None
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
-    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
@@ -2446,8 +2484,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
-            # package `flash-attn` can not be installed on Ascend NPU, ignore related validation logi
-            if importlib.util.find_spec("flash_attn") is None and not is_torch_npu_available():
+            # package `flash-attn` can not be installed on Ascend NPU, following validation logics can be ignored.
+            if is_torch_npu_available():
+                logger.info("Detect using FlashAttention2 on Ascend NPU.")
+                return True
+
+            if importlib.util.find_spec("flash_attn") is None:
                 raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
                 # Check FA2 installed version compatibility
@@ -2680,7 +2722,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
+        if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
@@ -2697,12 +2739,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
+            # extract the rev after the @ if it exists
+            repo_id, _, rev = repo_id.partition("@")
+            repo_id = repo_id.strip()
+            rev = rev.strip() if rev else None
             try:
-                kernel = get_kernel(repo_id)
+                kernel = get_kernel(repo_id, revision=rev)
                 if hasattr(kernel, "flash_attn_varlen_func"):
                     if attention_wrapper is None:
                         attention_wrapper = flash_attention_forward
                     kernel_function = partial(attention_wrapper, implementation=kernel)
+                    lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
                 ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
@@ -2718,7 +2765,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
             return attn_implementation
         else:
-            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+            attn_implementation = self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+
+            # preload flash attention here to allow compile with fullgraph
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
+
+            return attn_implementation
 
     def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
         requested_attention = "sdpa" if _requested_attention is None else _requested_attention
@@ -2951,9 +3004,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weights(self):
+    def tie_embeddings_and_encoder_decoder(self):
         """
-        Tie the weights between the input embeddings and the output embeddings.
+        If set in the config, tie the weights between the input embeddings and the output embeddings,
+        and the encoder and decoder.
 
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
@@ -2974,7 +3028,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
 
+    def tie_weights(self):
+        """
+        Recursively (for all submodels) tie all the weights of the model.
+        """
+        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
         for module in self.modules():
+            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+            if isinstance(module, PreTrainedModel):
+                module.tie_embeddings_and_encoder_decoder()
+            # Additionally, if it has a custom `_tie_weights`, honor it
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
@@ -4087,16 +4150,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and getattr(self, "_device_mesh", None) is not None:
-                    plan = _get_parameter_tp_plan(tensor, self._tp_plan)
-                    full_tensor = state_dict[tensor]
-                    if isinstance(state_dict[tensor], DTensor):
-                        full_tensor = full_tensor.full_tensor()
-                    elif plan is not None:
-                        shard_dim = -1 if "rowwise" in plan else 0
-                        gather_list = [torch.empty_like(full_tensor) for _ in range(self._device_mesh.size())]
-                        torch.distributed.all_gather(gather_list, full_tensor)
-                        full_tensor = torch.cat(gather_list, dim=shard_dim)
+                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
+                    full_tensor = state_dict[tensor].full_tensor()
+                    # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
@@ -4450,6 +4506,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
+                Accept HF kernel references in the form:
+                  <namespace>/<repo_name>[@<revision>][:<kernel_name>]
+
+                - <namespace> and <repo_name> are any non-"/" and non-":" sequences.
+                - "@<revision>" is optional (branch, tag, or commit-ish), e.g. "@main", "@v1.2.0", "@abc123".
+                - ":<kernel_name>" is optional and selects a function inside the kernel repo.
+                - Both options can appear together and in this order only: @revision first, then :kernel_name.
+                - We intentionally allow a leading "<wrapper>|" prefix (e.g., "flash|...") because the code
+                  strips it before loading; '|' is not excluded in the character classes here.
+
+                Examples that match:
+                  "org/model"
+                  "org/model@main"
+                  "org/model:custom_kernel"
+                  "org/model@v1.2.3:custom_kernel"
+
             > Parameters for big model inference
 
             torch_dtype (`str` or `torch.dtype`, *optional*):
@@ -4585,7 +4657,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
-        distributed_config = kwargs.pop("distributed_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -4595,6 +4666,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4629,7 +4701,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", 0)):
+        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
                 "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
                 "If your plan is to load the model on each device, you should set device_map={"
@@ -4858,10 +4930,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config = hf_quantizer.update_tp_plan(config)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-            else:
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
+            if not getattr(hf_quantizer.quantization_config, "dequantize", False):
+                quant_method = hf_quantizer.quantization_config.quant_method
+                user_agent["quant"] = getattr(quant_method, "value", quant_method)
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -4956,9 +5027,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-        if _torch_distributed_available and device_mesh is not None:
-            model = distribute_model(model, distributed_config, device_mesh, tp_size)
-
         # Make sure to tie the weights correctly
         model.tie_weights()
 
@@ -4987,7 +5055,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
-                model=model, device_map=device_map, keep_in_fp32_modules=model._keep_in_fp32_modules, config=config
+                model=model,
+                device_map=device_map,
+                keep_in_fp32_modules=model._keep_in_fp32_modules,
+                config=config,
+                use_kernels=use_kernels,
             )
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
@@ -5003,6 +5075,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             config._pre_quantization_dtype = original_dtype
             _assign_original_dtype(model)
+
+        if _torch_distributed_available and device_mesh is not None:
+            model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
         if device_map is not None:
@@ -5050,6 +5125,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # check if using kernels
         if use_kernels:
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+
             from kernels import Device, kernelize
 
             kernelize(model, device=Device(type=model.device.type))
@@ -5123,8 +5203,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
-            hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
+            hf_quantizer.postprocess_model(model, config=config)
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
@@ -5803,7 +5883,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
-                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"`loss_type={loss_type}` was set in the config but it is unrecognized. "
                 f"Using the default loss: `ForCausalLMLoss`."
             )
             loss_type = "ForCausalLM"
@@ -6036,7 +6116,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if param_name in tied_param_names:
             continue
 
-        param = model.get_parameter_or_buffer(param_name)
+        # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
+        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
+        if hf_quantizer is not None:
+            param_name = hf_quantizer.update_param_name(param_name)
+
+        try:
+            param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            raise AttributeError(f"Parameter {param_name} not found in model")
+
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
         param_byte_count = param.numel() * param.element_size()
 

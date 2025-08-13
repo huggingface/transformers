@@ -4085,16 +4085,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         #     )
         #     results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
-        # deduced from the device_map : layer 0 on device 0 and layer 1 on device 1
-        layer_device_map = {0: 0, 1: 1}
-        past_key_values = StaticCache(
-            config=model.config,
-            max_batch_size=1,
-            max_cache_len=30,
-            device=torch_device,
-            dtype=model.dtype,
-            layer_device_map=layer_device_map,
-        )
+        past_key_values = StaticCache(config=model.config, max_cache_len=30)
         results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
         # check device of each layer
@@ -4289,13 +4280,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         max_cache_len = 10
         batch_size = 2
         query_length = input_ids.shape[-1] - init_input_ids.shape[-1]
-        static_cache = StaticCache(
-            config=config,
-            max_batch_size=batch_size,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=torch.float32,
-        )
+        static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
         static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
         model_inputs = model.prepare_inputs_for_generation(
             input_ids, past_key_values=static_cache, cache_position=cache_position, attention_mask=attention_mask
@@ -5062,6 +5047,26 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_callable(self):
+        """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+
+        def custom_loop(model, input_ids, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+            # Check that generate() correctly prepares the stopping criteria
+            assert stopping_criteria[0].max_length == input_ids.shape[1] + 3
+            return "callable_success"
+
+        value = model.generate(
+            **model_inputs,
+            max_new_tokens=3,
+            custom_generate=custom_loop,
+        )
+        self.assertEqual(value, "callable_success")
 
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):
