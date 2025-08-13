@@ -1091,7 +1091,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
     """
 
     def __init__(self, config: AriaTextConfig):
-        super().__init__(self)
+        super().__init__(config)
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
