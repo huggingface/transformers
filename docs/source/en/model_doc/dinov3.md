@@ -24,7 +24,7 @@ specific language governing permissions and limitations under the License.
 
 <TODO: DESCRIPTION>
 
-You can find all the original DINOv3 checkpoints under the [DINOv3](https://huggingface.co/collections/facebook/dinov2-6526c98554b3d2576e071ce3) collection.
+You can find all the original DINOv3 checkpoints under the [DINOv3](https://huggingface.co/collections/facebook/dinov3-68924841bd6b561778e31009) collection.
 
 > [!TIP]
 > Click on the DINOv3 models in the right sidebar for more examples of how to apply DINOv3 to different vision tasks.
@@ -41,8 +41,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="image-feature-extraction", 
     model="facebook/dinov3-vits16-pretrain-lvd1689m",
-    torch_dtype=torch.float16,
-    device=0
+    torch_dtype=torch.bfloat16,
 )
 
 pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -84,6 +83,7 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```py
 # pip install torchao
+import torch
 from transformers import TorchAoConfig, AutoImageProcessor, AutoModel
 from torchao.quantization import Int4WeightOnlyConfig
 from transformers.image_utils import load_image
@@ -92,19 +92,19 @@ from transformers.image_utils import load_image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = load_image(url)
 
-processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
+processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitsplus-pretrain-lvd1689m")
 
-quant_config = Int4WeightOnlyConfig(group_size=128)
-quantization_config = TorchAoConfig(quant_type=quant_config)
+quant_type = Int4WeightOnlyConfig(group_size=128)
+quantization_config = TorchAoConfig(quant_type=quant_type)
 
-model = AutoModelForImageClassification.from_pretrained(
-    "facebook/dinov3-vits16-pretrain-lvd1689m",
+model = AutoModel.from_pretrained(
+    "facebook/dinov3-vit7b16-pretrain-lvd1689m",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
