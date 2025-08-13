@@ -89,7 +89,7 @@ class MixtralMoe(nn.ModuleList):
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
-            expert_layer = self.experts[expert_idx]
+            expert_layer = self[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
@@ -101,6 +101,7 @@ class MixtralMoe(nn.ModuleList):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return final_hidden_states
 
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -122,9 +123,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
 
-        # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-
         self.experts = MixtralMoe(config)
 
         # Jitter parameters
