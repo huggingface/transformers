@@ -35,7 +35,7 @@ from typing import Any, Optional, Union
 
 from packaging import version
 
-from . import logging
+from . import logging, strtobool
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -659,6 +659,18 @@ def is_torch_bf16_available():
         FutureWarning,
     )
     return is_torch_bf16_gpu_available()
+
+
+def is_fsdp_enabled():
+    if is_torch_available():
+        import torch
+
+        return (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+            and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
+        )
 
 
 @lru_cache
