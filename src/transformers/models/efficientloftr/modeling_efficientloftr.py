@@ -477,12 +477,16 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
         hidden_states = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        encoder_hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
-        encoder_hidden_states = encoder_hidden_states.flip(1)
-        encoder_hidden_states = encoder_hidden_states.reshape(-1, embed_dim, height, width)
-
-        hidden_states = self.cross_attention(hidden_states, encoder_hidden_states, **kwargs)
-        hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
+        ###
+        # Implementation of a bug in the original implementation regarding the cross-attention
+        # See : https://github.com/zju3dv/MatchAnything/issues/26
+        hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
+        features_0 = hidden_states[:, 0]
+        features_1 = hidden_states[:, 1]
+        features_0 = self.cross_attention(features_0, features_1, **kwargs)
+        features_1 = self.cross_attention(features_1, features_0, **kwargs)
+        hidden_states = torch.stack((features_0, features_1), dim=1)
+        ###
 
         return hidden_states
 
