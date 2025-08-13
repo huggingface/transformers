@@ -211,9 +211,7 @@ class Sam2VisionConfig(PretrainedConfig):
         fpn_top_down_levels = [2, 3] if fpn_top_down_levels is None else fpn_top_down_levels
 
         if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = (
-                backbone_config.get("model_type", "sam2_hiera_det_model")
-            )
+            backbone_config["model_type"] = backbone_config.get("model_type", "sam2_hiera_det_model")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, Sam2HieraDetConfig):
             backbone_config = backbone_config
@@ -434,9 +432,7 @@ class Sam2Config(PretrainedConfig):
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config.get("model_type", "sam2_vision_model")
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif isinstance(vision_config, PretrainedConfig):
             vision_config = vision_config
