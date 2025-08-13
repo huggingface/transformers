@@ -106,23 +106,6 @@ visualizer("UN Chief says there is no military solution in Syria")
   )
   ```
 
-- **Using Flash Attention 2** for faster attention computation:  
-  ```python
-  model = AutoModelForSeq2SeqLM.from_pretrained(
-      "facebook/nllb-200-distilled-600M",
-      torch_dtype=torch.float16,
-      attn_implementation="flash_attention_2"
-  ).to("cuda").eval()
-  ```
-
-- **Using PyTorch Scaled Dot Product Attention (SDPA)**:  
-  ```python
-  model = AutoModelForSeq2SeqLM.from_pretrained(
-      "facebook/nllb-200-distilled-600M",
-      torch_dtype=torch.float16,
-      attn_implementation="sdpa"
-  )
-  ```
 
 ## Resources
 
