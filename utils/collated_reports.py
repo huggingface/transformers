@@ -15,10 +15,11 @@
 import argparse
 import json
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_GPU_NAMES = ["mi300", "mi355", "h100", "a10"]
+DEFAULT_GPU_NAMES = ["mi300", "mi325", "mi355", "h100", "a10"]
 
 
 def simplify_gpu_name(gpu_name: str, simplified_names: list[str]) -> str:
@@ -45,14 +46,11 @@ def parse_short_summary_line(line: str) -> tuple[str | None, int]:
     return None, 0
 
 
-def get_paths(p: str, glob_pattern: str | None) -> list[Path]:
+def validate_path(p: str) -> Path:
     # Validate path and apply glob pattern if provided
     path = Path(p)
     assert path.is_dir(), f"Path {path} is not a directory"
-    if glob_pattern is None:
-        return [path]
-
-    return [p for p in path.glob(glob_pattern) if p.is_file()]
+    return path
 
 
 def get_gpu_name(gpu_name: str | None) -> str:
@@ -84,13 +82,24 @@ def get_commit_hash(commit_hash: str | None) -> str:
     return commit_hash[:7]
 
 
-def get_arguments(args: argparse.Namespace) -> tuple[list[Path], str, str, str, str]:
-    paths = get_paths(args.path, args.glob)
+@dataclass
+class Args:
+    path: Path
+    machine_type: str
+    gpu_name: str
+    commit_hash: str
+    job: str | None
+    report_repo_id: str | None
+
+
+def get_arguments(args: argparse.Namespace) -> Args:
+    path = validate_path(args.path)
+    machine_type = args.machine_type
     gpu_name = get_gpu_name(args.gpu_name)
     commit_hash = get_commit_hash(args.commit_hash)
     job = args.job
     report_repo_id = args.report_repo_id
-    return paths, gpu_name, commit_hash, job, report_repo_id
+    return Args(path, machine_type, gpu_name, commit_hash, job, report_repo_id)
 
 
 def upload_collated_report(job: str, report_repo_id: str, filename: str):
@@ -129,14 +138,16 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Post process models test reports.")
     parser.add_argument("--path", "-p", help="Path to the reports folder")
-    parser.add_argument("--glob", "-g", help="Glob pattern to access test reports folders", default=None)
-    parser.add_argument("--gpu-name", "-gpu", help="GPU name", default=None)
+    parser.add_argument(
+        "--machine-type", "-m", help="Process single or multi GPU results", choices=["single-gpu", "multi-gpu"]
+    )
+    parser.add_argument("--gpu-name", "-g", help="GPU name", default=None)
     parser.add_argument("--commit-hash", "-c", help="Commit hash", default=None)
     parser.add_argument("--job", "-j", help="Optional job name required for uploading reports", default=None)
     parser.add_argument(
         "--report-repo-id", "-r", help="Optional report repository ID required for uploading reports", default=None
     )
-    paths, gpu_name, commit_hash, job, report_repo_id = get_arguments(parser.parse_args())
+    args = get_arguments(parser.parse_args())
 
     # Initialize accumulators for collated report
     total_status_count = {
@@ -148,14 +159,29 @@ if __name__ == "__main__":
     }
     collated_report_buffer = []
 
-    for summary_path in sorted(paths):
+    path = args.path
+    machine_type = args.machine_type
+    gpu_name = args.gpu_name
+    commit_hash = args.commit_hash
+    job = args.job
+    report_repo_id = args.report_repo_id
+
+    # Find the origin directory based on machine type
+    origin = path
+    for p in path.iterdir():
+        if machine_type in p.name:
+            origin = p
+            break
+
+    # Loop through model directories and create collated reports
+    for model_dir in sorted(origin.iterdir()):
         # Create a new entry for the model
-        model_name = summary_path.parent.name.removesuffix("_test_reports")
+        model_name = model_dir.name.removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
         results = []
 
         # Read short summary
-        with open(summary_path, "r") as f:
+        with open(model_dir / "summary_short.txt", "r") as f:
             short_summary_lines = f.readlines()
 
         # Parse short summary
@@ -180,6 +206,7 @@ if __name__ == "__main__":
         json.dump(
             {
                 "gpu_name": gpu_name,
+                "machine_type": machine_type,
                 "commit_hash": commit_hash,
                 "total_status_count": total_status_count,
                 "results": collated_report_buffer,
