@@ -20,14 +20,12 @@ from typing import Union
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-import PIL
-import PIL.Image
-import torch
+import torchvision.transforms as transforms
 from PIL import Image
 from transformers import AutoImageProcessor
 from transformers.image_processing_utils import BaseImageProcessor
-from transformers.image_transforms import to_channel_dimension_format, to_pil_image
-from transformers.image_utils import ChannelDimension, infer_channel_dimension_format, to_numpy_array, valid_images, make_nested_list_of_images
+from transformers.image_transforms import to_pil_image
+from transformers.image_utils import valid_images, make_nested_list_of_images
 from transformers.utils import (
     TensorType,
     IMAGENET_DEFAULT_MEAN,
@@ -264,6 +262,12 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
     ) -> MiniCPMOBatchFeature:
         images_list = make_nested_list_of_images(images)
 
+        to_tensor = transforms.ToTensor()
+        normalize_transform = transforms.Normalize(
+            mean=self.image_mean.tolist(),
+            std=self.image_std.tolist()
+        )
+
         new_images_list = []
         image_sizes_list = []
         tgt_sizes_list = []
@@ -275,28 +279,29 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
                     "torch.Tensor, tf.Tensor or jax.ndarray."
                 )
 
-            _images = [to_pil_image(image).convert("RGB")
-                       for image in _images]
-            input_data_format = infer_channel_dimension_format(
-                np.array(_images[0]))
+            # Convert to PIL and RGB using torchvision
+            _images = [to_pil_image(image).convert("RGB") for image in _images]
 
             new_images = []
             image_sizes = [image.size for image in _images]
             tgt_sizes = []
             for image in _images:
                 image_patches = self.get_sliced_images(image, max_slice_nums)
-                image_patches = [to_numpy_array(image).astype(
-                    np.float32) / 255 for image in image_patches]
-                image_patches = [
-                    self.normalize(image=image, mean=self.image_mean,
-                                   std=self.image_std, input_data_format=input_data_format)
-                    for image in image_patches
-                ]
-                image_patches = [
-                    to_channel_dimension_format(
-                        image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-                    for image in image_patches
-                ]
+
+                # Convert PIL images to torch tensors and normalize using torchvision
+                image_patches_tensors = []
+                for patch in image_patches:
+                    # Convert PIL to tensor (0-1 range) and normalize
+                    # Shape: [C, H, W], range [0, 1]
+                    tensor_patch = to_tensor(patch)
+                    normalized_patch = normalize_transform(
+                        tensor_patch)  # Apply normalization
+                    image_patches_tensors.append(normalized_patch)
+
+                # Convert back to numpy for compatibility with existing code
+                image_patches = [patch.numpy()
+                                 for patch in image_patches_tensors]
+
                 for slice_image in image_patches:
                     new_images.append(self.reshape_by_patch(slice_image))
                     tgt_sizes.append(
