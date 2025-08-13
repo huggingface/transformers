@@ -16,9 +16,6 @@ from .utils import (
 )
 
 
-if _is_quanto_greater_than_0_2_5 := is_quanto_greater("0.2.5", accept_dev=True):
-    from optimum.quanto import MaxOptimizer, qint2, qint4, quantize_weight
-
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
@@ -36,22 +33,25 @@ class CacheLayerMixin(ABC):
     def __init__(self):
         self.keys, self.values = None, None
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}"
+
+    @abstractmethod
+    def lazy_initialization(self, key_states: torch.Tensor): ...
+
     @abstractmethod
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
     ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
-    def lazy_initialization(self, key_states: torch.Tensor): ...
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]: ...
 
     @abstractmethod
-    def get_seq_length(self, cache_position=None) -> int: ...
+    def get_seq_length(self) -> int: ...
 
     @abstractmethod
     def get_max_cache_shape(self) -> int: ...
-
-    @abstractmethod
-    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -70,23 +70,21 @@ class CacheLayerMixin(ABC):
         if self.keys is not None:
             self.keys.zero_()
             self.values.zero_()
+        # This attribute is set on several Layers
+        if hasattr(self, "cumulative_length"):
+            self.cumulative_length = 0
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
-        if self.keys.numel():
-            device = self.keys.device
-            self.keys = self.keys.index_select(0, beam_idx.to(device))
-        if self.values.numel():
-            device = self.values.device
-            self.values = self.values.index_select(0, beam_idx.to(device))
+        if self.get_seq_length() > 0:
+            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
+            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
 
 class DynamicLayer(CacheLayerMixin):
     """
     A cache layer that grows dynamically as more tokens are generated. This is the default for generative models.
-    It stores the Key and Value states as tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    It stores the key and value states as tensors of shape `[batch_size, num_heads, seq_len, head_dim]`.
     """
 
     is_sliding = False
@@ -103,18 +101,15 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the cache with the new `key_states` and `value_states`.
+        Update the key and value caches in-place, and return the necesary kes and value states.
 
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            cache_kwargs (`dict[str, Any]`, *optional*):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicLayer`.
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
-        Return:
-            A tuple containing the updated key and value states.
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
         if self.keys is None:
@@ -124,7 +119,15 @@ class DynamicLayer(CacheLayerMixin):
         self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
 
-    def get_seq_length(self, cache_position=None) -> int:
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length()
+        kv_length = query_length + past_seen_tokens
+        return kv_length, kv_offset
+
+    def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         if self.keys is None or self.keys.numel() == 0:
             return 0
@@ -134,16 +137,10 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        """Reorders the cache for beam search, given the selected beam indices."""
-        if self.keys is not None and self.keys.numel():
-            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
-            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
-
     def crop(self, max_length: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens.
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative
+        to remove `max_length` tokens.
         """
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
@@ -151,58 +148,108 @@ class DynamicLayer(CacheLayerMixin):
         if self.get_seq_length() <= max_length:
             return
 
-        if self.keys is not None and self.keys.numel():
-            self.keys = self.keys[..., :max_length, :]
-            self.values = self.values[..., :max_length, :]
+        self.keys = self.keys[..., :max_length, :]
+        self.values = self.values[..., :max_length, :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
-        if self.keys is not None and self.keys.numel():
+        if self.get_seq_length() > 0:
             self.keys = self.keys.repeat_interleave(repeats, dim=0)
             self.values = self.values.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         """Only keep the `indices` in the batch dimension of the cache."""
-        if self.keys is not None and self.keys.numel():
+        if self.get_seq_length() > 0:
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
 
-    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
-        """Return the length and offset of the cache, used to generate the mask"""
-        kv_offset = 0
-        query_length = cache_position.shape[0]
-        past_seen_tokens = self.get_seq_length()
-        kv_length = query_length + past_seen_tokens
-        return kv_length, kv_offset
 
-    @classmethod
-    def from_tensors(cls, keys: torch.Tensor, values: torch.Tensor) -> "DynamicLayer":
+class DynamicSlidingWindowLayer(DynamicLayer):
+    """
+    A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
+    It stores the key and value states as tensors of shape `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+    """
+
+    is_sliding = True
+
+    def __init__(self, sliding_window: int):
+        super().__init__()
+        self.sliding_window = sliding_window
+        self.cumulative_length = 0
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Build a `DynamicLayer` instance from pre-existing key/value tensors.
+        Update the key and value caches in-place, and return the necesary kes and value states.
 
         Args:
-            keys (`torch.Tensor`):
-                Key cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
-            values (`torch.Tensor`):
-                Value cache tensor of shape ``[batch_size, num_heads, seq_len, head_dim]``.
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            `DynamicLayer`: The newly constructed layer whose internal cache directly references
-            the supplied tensors.
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
-        layer = cls()
-        layer.dtype, layer.device = keys.dtype, keys.device
-        layer.keys = keys
-        layer.values = values
-        return layer
+        # Lazy initialization
+        if self.keys is None:
+            self.lazy_initialization(key_states)
+
+        self.cumulative_length += key_states.shape[-2]
+
+        # Compute the full states
+        full_key_states = torch.cat([self.keys, key_states], dim=-2)
+        full_value_states = torch.cat([self.values, value_states], dim=-2)
+        # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
+        self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
+        self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+
+        # Return the full states
+        return full_key_states, full_value_states
+
+    def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
+        query_length = cache_position.shape[0]
+        first_cache_position = cache_position[0]
+
+        kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
+
+        if self.get_seq_length() >= self.sliding_window:
+            kv_length = self.sliding_window - 1 + query_length
+        else:
+            kv_length = self.get_seq_length() + query_length
+
+        return kv_length, kv_offset
+
+    def get_seq_length(self) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
+
+    def get_max_cache_shape(self) -> int:
+        """Return the maximum cache shape of the cache"""
+        return self.sliding_window
+
+    def crop(self, max_length: int) -> None:
+        """
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens.
+        """
+        if self.get_seq_length() >= self.sliding_window:
+            raise ValueError(
+                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
+                "sliding window (otherwise some states are lost)"
+            )
+        super().crop(max_length)
+        self.cumulative_length = self.keys.shape[-2]
 
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the Key and Value states as static tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
-    It allocates its full backing tensors up-front and mutates them in-place. Built for `torch.compile` support.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
     """
 
     is_compileable = True
@@ -259,7 +306,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the static cache tensors in place.
+        Update the key and value caches in-place, and return the necesary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -267,7 +314,7 @@ class StaticLayer(CacheLayerMixin):
             cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
         if self.keys is None:
@@ -290,38 +337,28 @@ class StaticLayer(CacheLayerMixin):
             self.values[:, :, cache_position] = value_states
         return self.keys, self.values
 
-    def get_max_cache_shape(self) -> int:
-        """Return the maximum cache shape of the cache"""
-        return self.max_cache_len
-
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        if cache_position is not None:
-            return int(cache_position[-1] + 1)
-        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
-        # limit the check to the first batch member and head dimension.
-        seq_length = (self.keys[0, 0].any(dim=-1)).sum() if self.keys is not None else 0
-        return seq_length
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        """Reorders the cache for beam search, given the selected beam indices."""
-        dev = self.keys.device
-        beam_idx_dev = beam_idx.to(dev)
-        self.keys = self.keys.index_select(0, beam_idx_dev)
-        self.values = self.values.index_select(0, beam_idx_dev)
-
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         kv_offset = 0
         kv_length = self.max_cache_len
         return kv_length, kv_offset
 
+    def get_seq_length(self) -> int:
+        """Returns the sequence length of the cached states."""
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        return (self.keys[0, 0].any(dim=-1)).sum() if self.keys is not None else 0
+
+    def get_max_cache_shape(self) -> int:
+        """Return the maximum cache shape of the cache"""
+        return self.max_cache_len
+
 
 class SlidingWindowLayer(StaticLayer):
     """
-    A static cache layer that implements sliding window attention caching.
-
-    See `CacheLayerMixin` for details on common methods that are implemented by all cache layers.
+    A static cache layer that stores the key and value states as static tensors of shape
+    `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`. It lazily allocates its full backing
+    tensors, and then mutates them in-place. Built for `torch.compile` support.
     """
 
     is_sliding = True
@@ -345,7 +382,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the sliding window cache tensors in place.
+        Update the key and value caches in-place, and return the necesary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -353,7 +390,7 @@ class SlidingWindowLayer(StaticLayer):
             cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
         Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value states.
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         # Lazy initialization
         if self.keys is None:
@@ -407,11 +444,7 @@ class SlidingWindowLayer(StaticLayer):
         kv_length = max(query_length, self.max_cache_len)
         return kv_length, kv_offset
 
-    def reset(self) -> None:
-        super().reset()
-        self.cumulative_length = 0
-
-    def get_seq_length(self, cache_position=None) -> int:
+    def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
 
@@ -419,8 +452,6 @@ class SlidingWindowLayer(StaticLayer):
 class ChunkedSlidingLayer(SlidingWindowLayer):
     """
     An extended SlidingWindowLayer that supports prefill chunking, originally implemented for Llama 4.
-
-    See `SlidingWindowLayer` for details on common methods that are implemented by all cache layers.
     """
 
     def update(
@@ -429,6 +460,17 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         value_states: torch.Tensor,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the key and value caches in-place, and return the necesary kes and value states.
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
         # Lazy initialization
         if self.keys is None:
             self.lazy_initialization(key_states)
@@ -474,6 +516,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the attention mask"""
         query_length = cache_position.shape[0]
         first_cache_position = cache_position[0]
         sliding_window = self.max_cache_len
@@ -495,7 +538,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
 class QuantizedLayer(DynamicLayer):
     """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
-    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by
+    It allows the model to generate longer sequence length without allocating too much memory for the key and value caches by
     applying quantization.
 
     The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length`
@@ -512,7 +555,7 @@ class QuantizedLayer(DynamicLayer):
         q_group_size: int = 64,
         residual_length: int = 128,
     ):
-        super().__init__(self)
+        super().__init__()
         self.nbits = nbits
         self.axis_key = axis_key
         self.axis_value = axis_value
@@ -527,18 +570,15 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the cache with the new `key_states` and `value_states`.
+        Update the key and value caches in-place, and return the necesary kes and value states.
 
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            cache_kwargs (`dict[str, Any]`, *optional*):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicLayer`.
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+            cache_kwargs (`dict[str, Any]`, *optional*): Additional arguments for the cache.
 
-        Return:
-            A tuple containing the updated key and value states.
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         self.cumulative_length += key_states.shape[-2]
 
@@ -564,15 +604,15 @@ class QuantizedLayer(DynamicLayer):
 
         return keys_to_return, values_to_return
 
-    def get_seq_length(self, cache_position=None) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length
-
     @abstractmethod
     def _quantize(self, tensor, axis): ...
 
     @abstractmethod
     def _dequantize(self, q_tensor): ...
+
+    def get_seq_length(self) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
 
 
 class QuantoQuantizedLayer(QuantizedLayer):
@@ -592,10 +632,12 @@ class QuantoQuantizedLayer(QuantizedLayer):
             residual_length=residual_length,
         )
 
-        if not _is_quanto_greater_than_0_2_5:
+        # We need to import quanto here to avoid circular imports due to optimum/quanto/models/transformers_models.py
+        if is_quanto_greater("0.2.5", accept_dev=True):
+            from optimum.quanto import MaxOptimizer, qint2, qint4
+        else:
             raise ImportError(
                 "You need optimum-quanto package version to be greater or equal than 0.2.5 to use `QuantoQuantizedCache`. "
-                "Detected version {optimum_quanto_version}."
             )
 
         if self.nbits not in [2, 4]:
@@ -613,6 +655,8 @@ class QuantoQuantizedLayer(QuantizedLayer):
         self.optimizer = MaxOptimizer()  # hardcode as it's the only one for per-channel quantization
 
     def _quantize(self, tensor, axis):
+        from optimum.quanto import quantize_weight
+
         scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
         qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
         return qtensor
@@ -675,7 +719,7 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
-LAYER_CLASS_MAP: dict[str, type[CacheLayerMixin]] = {
+STATIC_LAYER_CLASS_MAPPING: dict[str, type[CacheLayerMixin]] = {
     "full_attention": StaticLayer,
     "sliding_attention": SlidingWindowLayer,
     "chunked_attention": ChunkedSlidingLayer,
@@ -814,11 +858,11 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: int = 0, cache_position=None) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
-        return self.layers[layer_idx].get_seq_length(cache_position)
+        return self.layers[layer_idx].get_seq_length()
 
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         """
@@ -924,45 +968,85 @@ class Cache:
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
-
-    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
-    `[batch_size, num_heads, seq_len, head_dim]`.
+    It stores the key and value states as a list of `CacheLayer`, one for each layer. The expected shape for each tensor
+    in the `CacheLayer`s is `[batch_size, num_heads, seq_len, head_dim]`.
+    If a config is passed, it will additionally check for sliding or hybrid cache structure, greatly reducing the
+    memory requirement of the cached tensors to `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = DynamicCache()
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        DynamicCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = DynamicCache(config=model.config)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    DynamicCache()
+    ```
     """
 
-    # Specialized constructor for DDP cache data, needed for BC
-    def __init__(self, ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None):
-        # `ddp_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
-        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
-        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
-        # (shape=[global batch size, num_heads, seq_len, head_dim]).
-        if ddp_cache_data is not None:
-            layers = []
-            for key_states, value_states in ddp_cache_data:
-                layers.append(DynamicLayer.from_tensors(key_states, value_states))
-            super().__init__(layers=layers)
-        else:
-            super().__init__(layer_class_to_replicate=DynamicLayer)
+    def __init__(
+        self,
+        ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
+        config: Optional[PretrainedConfig] = None,
+    ):
+        """
+        Create a `DynamicCache`. Specialized constructor for DDP cache data, needed for BC.
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor], ...]:
+        Args:
+            ddp_cache_data (`Iterable[tuple[torch.Tensor, torch.Tensor]]`, *optional*):
+                It was originally added for compatibility with `torch.distributed` (DDP). In a nutshell, it is
+                `map(gather_map, zip(*caches))`, i.e. each item in the iterable contains the key and value states
+                for a layer gathered across replicas by torch.distributed (shape=[global batch size, num_heads, seq_len, head_dim]).
+                Note: it needs to be the 1st arg as well to work correctly
+            config (`PretrainedConfig`, *optional*):
+                The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
+                or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
+                `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+        """
+        layers = []
+        # If a config is passed, use it to infer the layer types and initialize accordingly
+        if config is not None:
+            config = config.get_text_config()
+            sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
+            layer_types = getattr(config, "layer_types", None)
+            if layer_types is None:
+                layer_types = [
+                    "sliding_attention" if sliding_window is not None else "full_attention"
+                    for _ in range(config.num_hidden_layers)
+                ]
+
+            for layer_type in layer_types:
+                if layer_type in ("sliding_attention", "chunked_attention"):
+                    layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                else:
+                    layers.append(DynamicLayer())
+
+        # In this case, use the passed data to already fill in the Cache
+        if ddp_cache_data is not None:
+            # Init all the layers with the data
+            for layer_idx, (key_states, value_states) in enumerate(ddp_cache_data):
+                # If the config was not passed above, initialize a DynamicLayer for each entry of the ddp_data
+                if config is None:
+                    layers.append(DynamicLayer())
+                # Update the layer with the data
+                _, _ = layers[layer_idx].update(key_states, value_states)
+
+        # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
+        if len(layers) == 0:
+            super().__init__(layer_class_to_replicate=DynamicLayer)
+        else:
+            super().__init__(layers=layers)
+
+    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility.
@@ -973,7 +1057,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]) -> "Cache":
+    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]]) -> "DynamicCache":
         """
         Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
         backward compatibility.
@@ -991,7 +1075,7 @@ class DynamicCache(Cache):
 if is_torch_greater_or_equal("2.3"):
 
     def _get_cache_dict(cache: DynamicCache):
-        if any(not isinstance(layer, DynamicLayer) for layer in cache.layers):
+        if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
             raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
 
         if not is_torch_greater_or_equal_than_2_6:
@@ -1054,26 +1138,26 @@ class StaticCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-        >>> inputs = tokenizer(text="My name is Llama", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Llama", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = StaticCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        StaticCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = StaticCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    StaticCache()
+    ```
     """
 
-    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
-    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
+    # Pass-in args and kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
@@ -1089,25 +1173,26 @@ class OffloadedStaticCache(Cache):
     See `Cache` for details on common methods that are implemented by all cache classes.
 
     Example:
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, OffloadedStaticCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, OffloadedStaticCache
 
-        >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
-        >>> # Prepare a cache class with offloading
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = OffloadedStaticCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache with offloaded layers
-        OffloadedStaticCache()
-        ```
+    >>> inputs = tokenizer(text="My name is GPT2", return_tensors="pt")
+
+    >>> # Prepare a cache class with offloading
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = OffloadedStaticCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache with offloaded layers
+    OffloadedStaticCache()
+    ```
     """
 
-    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
-    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
+    # Pass-in args and kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers, offloading=True)
 
@@ -1119,26 +1204,26 @@ class SlidingWindowCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SlidingWindowCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+    >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+    >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
-        >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Mistral", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = SlidingWindowCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        SlidingWindowCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = SlidingWindowCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    SlidingWindowCache()
+    ```
     """
 
-    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
-    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
+    # Pass-in args and kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         layers = [SlidingWindowLayer(max_cache_len, config.sliding_window) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
@@ -1154,26 +1239,26 @@ class HybridCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HybridCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
+    >>> model = AutoModelForCausalLM.from_pretrained("google/gemma-2-2b")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 
-        >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
-        >>> max_generated_length = inputs.input_ids.shape[1] + 10
-        >>> past_key_values = HybridCache(max_cache_len=max_generated_length, config=model.config)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HybridCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
+    >>> max_generated_length = inputs.input_ids.shape[1] + 10
+    >>> past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    HybridCache()
+    ```
     """
 
-    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
-    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
+    # Pass-in args and kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         if hasattr(config, "layer_types"):
             layers = []
             for layer_type in config.layer_types:
@@ -1182,7 +1267,7 @@ class HybridCache(Cache):
                     init_kwargs["sliding_window"] = config.sliding_window
                 elif layer_type == "chunked_attention":
                     init_kwargs["sliding_window"] = config.attention_chunk_size
-                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
+                layers.append(STATIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
         else:
             # In this case, fall back to StaticCache
             layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
@@ -1204,8 +1289,8 @@ class OffloadedHybridCache(Cache):
     See `Cache` for details on common methods that are implemented by all cache classes.
     """
 
-    # Pass-in kwargs as well to avoid crashing for BC (it used more arguments before)
-    def __init__(self, max_cache_len: int, config: PretrainedConfig, **kwargs):
+    # Pass-in args and kwargs as well to avoid crashing for BC (it used more arguments before)
+    def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         if hasattr(config, "layer_types"):
             layers = []
             for layer_type in config.layer_types:
@@ -1214,7 +1299,7 @@ class OffloadedHybridCache(Cache):
                     init_kwargs["sliding_window"] = config.sliding_window
                 elif layer_type == "chunked_attention":
                     init_kwargs["sliding_window"] = config.attention_chunk_size
-                layers.append(LAYER_CLASS_MAP[layer_type](**init_kwargs))
+                layers.append(STATIC_LAYER_CLASS_MAPPING[layer_type](**init_kwargs))
         else:
             # In this case, fall back to StaticCache
             layers = [StaticLayer(max_cache_len) for _ in range(config.num_hidden_layers)]
@@ -1276,21 +1361,21 @@ class QuantoQuantizedCache(QuantizedCache):
 
     Example:
 
-        ```python
-        >>> # Run pip install quanto first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
+    ```python
+    >>> # Run pip install quanto first if you don't have it yet
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoQuantizedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = QuantoQuantizedCache(config=model.config, nbits=4)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        QuantoQuantizedCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = QuantoQuantizedCache(config=model.config, nbits=4)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    QuantoQuantizedCache()
+    ```
     """
 
     def __init__(
@@ -1321,21 +1406,21 @@ class HQQQuantizedCache(QuantizedCache):
 
     Example:
 
-        ```python
-        >>> # Run pip install hqq first if you don't have it yet
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
+    ```python
+    >>> # Run pip install hqq first if you don't have it yet
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, HQQQuantizedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+    >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
+    >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = HQQQuantizedCache(config=model.config, nbits=4, axis_key=1, axis_value=1)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        HQQQuantizedCache()
-        ```
+    >>> # Prepare a cache class and pass it to model's forward
+    >>> past_key_values = HQQQuantizedCache(config=model.config, nbits=4, axis_key=1, axis_value=1)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    HQQQuantizedCache()
+    ```
     """
 
     def __init__(
@@ -1359,32 +1444,27 @@ class EncoderDecoderCache(Cache):
 
     Example:
 
-        ```python
-        >>> from transformers import AutoProcessor, AutoModelForCausalLM, DynamicCache, EncoderDecoderCache
+    ```python
+    >>> from transformers import AutoProcessor, AutoModelForCausalLM, DynamicCache, EncoderDecoderCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("openai/whisper-small")
-        >>> processor = AutoProcessor.from_pretrained("openai/whisper-small")
+    >>> model = AutoModelForCausalLM.from_pretrained("openai/whisper-small")
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-small")
 
-        >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
+    >>> inputs = processor(audio=YOUR-AUDIO, return_tensors="pt")
 
-        >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
-        >>> self_attention_cache = DynamicCache()
-        >>> cross_attention_cache = DynamicCache()
-        >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        EncoderDecoderCache()
-        ```
+    >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
+    >>> self_attention_cache = DynamicCache()
+    >>> cross_attention_cache = DynamicCache()
+    >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
+    >>> outputs.past_key_values # access cache filled with key/values from generation
+    EncoderDecoderCache()
+    ```
     """
-
-    # Override @property from Cache -> this will be set in __init__ on the instances
-    is_compileable = False
 
     def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
-        # Override @property from Cache
-        self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache)):
@@ -1456,23 +1536,13 @@ class EncoderDecoderCache(Cache):
                     cache.is_updated[layer_idx] = True
         return cache
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0, cache_position=None) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # check if empty list because in case of static cache it will be a tensors and we can't check `if not torch.Tensor`
-        return self.self_attention_cache.get_seq_length(layer_idx, cache_position)
+        return self.self_attention_cache.get_seq_length(layer_idx)
 
     def reset(self):
-        if hasattr(self.self_attention_cache, "reset"):
-            self.self_attention_cache.reset()
-        if hasattr(self.cross_attention_cache, "reset"):
-            self.cross_attention_cache.reset()
-        elif not hasattr(self.self_attention_cache, "reset") and not hasattr(self.cross_attention_cache, "reset"):
-            raise ValueError(
-                "Neither self nor cross-attention cache have valid `.reset()` methods. `.reset()` should "
-                "only be called on compatible cache classes, such as `StaticCache` or `SlidingWindowCache`. "
-                f"Got {self.self_attention_cache.__str__()} for the self attention cache and "
-                f"{self.cross_attention_cache.__str__()} for the cross attention cache."
-            )
+        self.self_attention_cache.reset()
+        self.cross_attention_cache.reset()
         for layer_idx in self.is_updated:
             self.is_updated[layer_idx] = False
 
@@ -1533,13 +1603,21 @@ class EncoderDecoderCache(Cache):
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
 
+    @property
+    def is_sliding(self):
+        return self.self_attention_cache.is_sliding
+
+    @property
+    def is_compileable(self) -> bool:
+        return self.self_attention_cache.is_compileable
+
 
 ### Deprecated classes
 
 
 class SinkCache(Cache):
     """
-    Is its now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
+    It is now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
     See [these docs](https://huggingface.co/docs/transformers/generation_strategies#custom-decoding-methods) for
     general `custom_generate`usage.
     """
