@@ -2241,9 +2241,9 @@ class GenerationMixin(ContinuousMixin):
                   `custom_generate/generate.py` in that repository instead of the standard `generate` method. The
                   repository fully replaces the generation logic, and the return type may differ.
                 - `str` (local repository path): same as above but from a local path, `trust_remote_code` not required.
-                - `Callable`: `generate` will perform the usual preparation steps, then call the provided callable to
-                  run the decoding loop. For more information, see
-                [the docs](../../generation_strategies#reusing-generate-s-input-preparation).
+                - `Callable`: `generate` will perform the usual input preparation steps, then call the provided callable to
+                  run the decoding loop. 
+                For more information, see [the docs](../../generation_strategies#custom-generation-methods).
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
