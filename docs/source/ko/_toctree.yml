@@ -420,12 +420,14 @@
       title: PEFT
     - local: in_translation
       title: (번역중) Pipelines
-    - local: main_classes/tokenizer
-      title: 토크나이저
+    - local: main_classes/processors
+      title: 프로세서
     - local: main_classes/quantization
       title: 양자화
     - local: in_translation
       title: (번역중) Tokenizer
+    - local: main_classes/tokenizer
+      title: 토크나이저
     - local: main_classes/trainer
       title: Trainer
     - local: in_translation
