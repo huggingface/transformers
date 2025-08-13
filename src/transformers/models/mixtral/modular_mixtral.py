@@ -28,26 +28,22 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import (create_causal_mask,
+                              create_sliding_window_causal_mask)
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (MoeCausalLMOutputWithPast,
+                                 MoeModelOutputWithPast)
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
-from ..mistral.modeling_mistral import (
-    MistralAttention,
-    MistralForCausalLM,
-    MistralForQuestionAnswering,
-    MistralForSequenceClassification,
-    MistralForTokenClassification,
-    MistralModel,
-    MistralPreTrainedModel,
-    MistralRMSNorm,
-    MistralRotaryEmbedding,
-)
+from ..mistral.modeling_mistral import (MistralAttention, MistralForCausalLM,
+                                        MistralForQuestionAnswering,
+                                        MistralForSequenceClassification,
+                                        MistralForTokenClassification,
+                                        MistralModel, MistralPreTrainedModel,
+                                        MistralRMSNorm, MistralRotaryEmbedding)
 from .configuration_mixtral import MixtralConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -245,11 +241,11 @@ class MixtralSparseMoeBlock(nn.Module):
             for expert_idx in range(self.num_experts):
                 expert_layer = self.experts[expert_idx]
                 idx, top_x = torch.where(expert_mask[expert_idx])
-                
+
                 # Skip if no tokens are assigned to this expert
                 if top_x.shape[0] == 0:
                     continue
-                    
+
                 # Index the correct hidden states and compute the expert hidden state for
                 # the current expert. We need to make sure to multiply the output hidden
                 # states by `routing_weights` on the corresponding tokens (top-1 and top-2)

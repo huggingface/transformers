@@ -36,15 +36,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import (create_causal_mask,
+                              create_sliding_window_causal_mask)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_layers import (GenericForQuestionAnswering,
+                                GenericForSequenceClassification,
+                                GenericForTokenClassification,
+                                GradientCheckpointingLayer)
+from ...modeling_outputs import (MoeCausalLMOutputWithPast,
+                                 MoeModelOutputWithPast)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -159,11 +159,11 @@ class MixtralSparseMoeBlock(nn.Module):
             for expert_idx in range(self.num_experts):
                 expert_layer = self.experts[expert_idx]
                 idx, top_x = torch.where(expert_mask[expert_idx])
-                
+
                 # Skip if no tokens are assigned to this expert
                 if top_x.shape[0] == 0:
                     continue
-                    
+
                 # Index the correct hidden states and compute the expert hidden state for
                 # the current expert. We need to make sure to multiply the output hidden
                 # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
