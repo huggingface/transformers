@@ -1990,19 +1990,20 @@ class GenerationMixin(ContinuousMixin):
                         "cache, please open an issue and tag @zucchini-nlp."
                     )
 
-                cache_config = (
-                    generation_config.cache_config
-                    if generation_config.cache_config is not None
-                    else {"backend": "quanto"}
-                )
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config["backend"]]
+                cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+                # Add the config if it was not provided, as it's a required argument
+                if "config" not in cache_config:
+                    cache_config["config"] = self.config.get_text_config()
+                # Pop the backend from the config (defaults to quanto if not defined)
+                backend = cache_config.pop("backend", "quanto")
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[backend]
 
-                if cache_config["backend"] == "quanto" and not is_optimum_quanto_available():
+                if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
                     )
-                elif cache_config["backend"] == "HQQ" and not is_hqq_available():
+                elif backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"

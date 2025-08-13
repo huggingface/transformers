@@ -1053,7 +1053,7 @@
         title: Emu3
       - local: in_translation
         title: FLAVA
-      - local: in_translation
+      - local: model_doc/gemma3
         title: Gemma3
       - local: in_translation
         title: Gemma3n
@@ -1067,7 +1067,7 @@
         title: GraniteVision
       - local: in_translation
         title: (번역중) GIT
-      - local: model_doc/grounding_dino
+      - local: model_doc/grounding-dino
         title: Grounding DINO
       - local: in_translation
         title: GroupViT
