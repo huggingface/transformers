@@ -7,8 +7,8 @@ import torch
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
+from .integrations import is_fsdp_enabled
 from .utils import (
-    is_fsdp_enabled,
     is_hqq_available,
     is_quanto_greater,
     is_torch_greater_or_equal,
