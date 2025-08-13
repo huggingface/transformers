@@ -212,7 +212,7 @@ class Sam2VisionConfig(PretrainedConfig):
 
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = (
-                backbone_config["model_type"] if "model_type" in backbone_config else "sam2_hiera_det_model"
+                backbone_config.get("model_type", "sam2_hiera_det_model")
             )
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
         elif isinstance(backbone_config, Sam2HieraDetConfig):
@@ -435,7 +435,7 @@ class Sam2Config(PretrainedConfig):
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "sam2_vision_model"
+                vision_config.get("model_type", "sam2_vision_model")
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif isinstance(vision_config, PretrainedConfig):

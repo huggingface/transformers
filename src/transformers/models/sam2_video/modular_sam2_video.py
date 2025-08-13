@@ -268,7 +268,7 @@ class Sam2VideoConfig(PretrainedConfig):
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "sam2_vision_model"
+                vision_config.get("model_type", "sam2_vision_model")
             )
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif isinstance(vision_config, PretrainedConfig):
@@ -326,8 +326,80 @@ class Sam2VideoConfig(PretrainedConfig):
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
 
+class Sam2VideoInferenceCache:
+    """Cache for vision features and model constants."""
+
+    def __init__(
+        self,
+        inference_device: Union[torch.device, str] = "cpu",
+        inference_state_device: Union[torch.device, str] = "cpu",
+        max_vision_features_cache_size: int = 1,
+    ):
+        self.inference_device = inference_device
+        self.inference_state_device = inference_state_device
+        self.max_vision_features_cache_size = max_vision_features_cache_size
+
+        self._vision_features = {}
+
+    def cache_vision_features(self, frame_idx: int, features: dict):
+        """Cache vision features with automatic device management."""
+        cached = {}
+        if len(self._vision_features) >= self.max_vision_features_cache_size:
+            # remove the oldest frame
+            self._vision_features.pop(min(self._vision_features.keys()))
+
+        for key, value in features.items():
+            if isinstance(value, torch.Tensor):
+                cached[key] = value.to(self.inference_state_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
+            else:
+                cached[key] = value
+        self._vision_features[frame_idx] = cached
+
+    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+        """Get cached vision features, automatically moved to inference device."""
+        if frame_idx not in self._vision_features:
+            return None
+
+        cached = self._vision_features[frame_idx]
+        moved = {}
+        for key, value in cached.items():
+            if isinstance(value, torch.Tensor):
+                moved[key] = value.to(self.inference_device, non_blocking=True)
+            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
+                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
+            else:
+                moved[key] = value
+        return moved
+
+    def clear_all(self):
+        """Clear all cached data."""
+        self._vision_features.clear()
+
+
 class Sam2VideoInferenceSession:
-    """Manages video inference session parameters, state and cache."""
+    r"""
+    Manages video inference session parameters, state and cache.
+
+    Args:
+        video (`torch.FloatTensor`, *optional*):
+            The video to process. No need to provide when streaming.
+        video_height (`int`, *optional*):
+            The height of the video.
+        video_width (`int`, *optional*):
+            The width of the video.
+        inference_device (`torch.device`, *optional*):
+            The device to use for inference.
+        inference_state_device (`torch.device`, *optional*):
+            The device to store the inference state on.
+        video_storage_device (`torch.device`, *optional*):
+            The device to store the video on.
+        torch_dtype (`torch.dtype`, *optional*):
+            The dtype to use for the video.
+        max_vision_features_cache_size (`int`, *optional*):
+            The maximum number of vision features to cache.
+    """
 
     def __init__(
         self,
@@ -1367,85 +1439,6 @@ class Sam2VideoMemoryEncoder(nn.Module):
         vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
         return vision_features, vision_pos_enc
-
-
-class Sam2VideoInferenceCache:
-    """Cache for vision features and model constants."""
-
-    def __init__(
-        self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        max_vision_features_cache_size: int = 1,
-    ):
-        self.inference_device = inference_device
-        self.inference_state_device = inference_state_device
-        self.max_vision_features_cache_size = max_vision_features_cache_size
-
-        self._vision_features = {}
-        self._model_constants = {}
-
-    def cache_vision_features(self, frame_idx: int, features: dict):
-        """Cache vision features with automatic device management."""
-        cached = {}
-        if len(self._vision_features) >= self.max_vision_features_cache_size:
-            # remove the oldest frame
-            self._vision_features.pop(min(self._vision_features.keys()))
-
-        for key, value in features.items():
-            if isinstance(value, torch.Tensor):
-                cached[key] = value.to(self.inference_state_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                cached[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-            else:
-                cached[key] = value
-        self._vision_features[frame_idx] = cached
-
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
-        """Get cached vision features, automatically moved to inference device."""
-        if frame_idx not in self._vision_features:
-            return None
-
-        cached = self._vision_features[frame_idx]
-        moved = {}
-        for key, value in cached.items():
-            if isinstance(value, torch.Tensor):
-                moved[key] = value.to(self.inference_device, non_blocking=True)
-            elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-                moved[key] = [v.to(self.inference_device, non_blocking=True) for v in value]
-            else:
-                moved[key] = value
-        return moved
-
-    def cache_model_constant(self, key: str, value):
-        """Cache model constants that are reused across frames."""
-        if isinstance(value, torch.Tensor):
-            self._model_constants[key] = value.to(self.inference_state_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            self._model_constants[key] = [v.to(self.inference_state_device, non_blocking=True) for v in value]
-        else:
-            self._model_constants[key] = value
-
-    def get_model_constant(self, key: str):
-        """Get cached model constant, automatically moved to inference device if needed."""
-        if key not in self._model_constants:
-            return None
-
-        value = self._model_constants[key]
-        if isinstance(value, torch.Tensor):
-            return value.to(self.inference_device, non_blocking=True)
-        elif isinstance(value, (list, tuple)) and value and isinstance(value[0], torch.Tensor):
-            return [v.to(self.inference_device, non_blocking=True) for v in value]
-        return value
-
-    def clear_vision_cache(self):
-        """Clear vision feature cache (but keep model constants)."""
-        self._vision_features.clear()
-
-    def clear_all(self):
-        """Clear all cached data."""
-        self._vision_features.clear()
-        self._model_constants.clear()
 
 
 # a large negative value as a placeholder score for missing objects

@@ -55,8 +55,9 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 >>> from transformers import Sam2VideoModel, Sam2VideoProcessor
 >>> import torch
 
->>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-large")
->>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-large")
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf").to(device, dtype=torch.bfloat16)
+>>> processor = Sam2VideoProcessor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
 >>> # video_frames = [Image.open(f"frame_{i:05d}.jpg") for i in range(num_frames)]
@@ -69,7 +70,8 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 >>> # Initialize video inference session
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
+...     inference_device=device,
+...     torch_dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -120,8 +122,8 @@ Track multiple objects simultaneously across video frames:
 >>> # Add multiple objects on the first frame
 >>> ann_frame_idx = 0
 >>> obj_ids = [2, 3]
->>> input_points = [[[[200, 300]]], [[[400, 150]]]]  # Points for two objects
->>> input_labels = [[[1]], [[1]]]
+>>> input_points = [[[[200, 300]], [[400, 150]]]]  # Points for two objects (batched)
+>>> input_labels = [[[1], [1]]]
 
 >>> processor.add_inputs_to_inference_session(
 ...     inference_session=inference_session,
@@ -187,12 +189,13 @@ For real-time applications, SAM2 supports processing video frames as they arrive
 ```python
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
+...     inference_device=device,
+...     torch_dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
 >>> for frame_idx, frame in enumerate(video_frames[:10]):  # Process first 10 frames
-...     inputs = processor(images=frame, device="cuda" if torch.cuda.is_available() else "cpu", return_tensors="pt")
+...     inputs = processor(images=frame, device=device, return_tensors="pt")
 ...
 ...     if frame_idx == 0:
 ...         # Add point input on first frame
@@ -222,20 +225,19 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> # Initialize video session
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
-...     inference_device="cuda" if torch.cuda.is_available() else "cpu"
+...     inference_device=device,
+...     torch_dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing
 >>> ann_frame_idx = 0
 >>> obj_ids = [2, 3]  # Track two different objects
 >>> input_points = [
-...     [[[200, 300], [230, 250], [275, 175]]],  # Object 2: 3 points (2 positive, 1 negative)
-...     [[[400, 150]]]                           # Object 3: 1 point
-... ]
+...     [[[200, 300], [230, 250], [275, 175]], [[400, 150]]]
+... ]  # Object 2: 3 points (2 positive, 1 negative); Object 3: 1 point
 >>> input_labels = [
-...     [[1, 1, 0]],  # Object 2: positive, positive, negative for refinement
-...     [[1]]         # Object 3: positive
-... ]
+...     [[1, 1, 0], [1]]
+... ]  # Object 2: positive, positive, negative; Object 3: positive
 
 >>> processor.add_inputs_to_inference_session(
 ...     inference_session=inference_session,
@@ -292,6 +294,7 @@ Tracked 2 objects through 180 frames
 ## Sam2VideoProcessor
 
 [[autodoc]] Sam2VideoProcessor
+    - __call__
     - post_process_masks
     - init_video_session
     - add_inputs_to_inference_session

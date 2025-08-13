@@ -333,9 +333,7 @@ class Sam2VideoConfig(PretrainedConfig):
         )
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "sam2_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif isinstance(vision_config, PretrainedConfig):
             vision_config = vision_config

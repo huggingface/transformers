@@ -52,7 +52,7 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 ```python
 >>> from transformers import pipeline
 
->>> generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
+>>> generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_large_hf", device=0)
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> outputs = generator(image_url, points_per_batch=64)
 
@@ -72,8 +72,10 @@ You can segment objects by providing a single point click on the object you want
 >>> from PIL import Image
 >>> import requests
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large")
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+>>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
+>>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
 
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
@@ -81,7 +83,7 @@ You can segment objects by providing a single point click on the object you want
 >>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
 >>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -89,8 +91,8 @@ You can segment objects by providing a single point click on the object you want
 >>> masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
 
 >>> # The model outputs multiple mask predictions ranked by quality score
->>> print(f"Generated {masks.shape[0]} masks with shape {masks.shape}")
-Generated 3 masks with shape torch.Size([3, 1500, 2250])
+>>> print(f"Generated {masks.shape[1]} masks with shape {masks.shape}")
+Generated 3 masks with shape torch.Size(1, 3, 1500, 2250)
 ```
 
 #### Multiple Points for Refinement
@@ -102,7 +104,7 @@ You can provide multiple points to refine the segmentation:
 >>> input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
 >>> input_labels = [[[1, 1]]]  # Both positive clicks
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -118,7 +120,7 @@ SAM2 also supports bounding box inputs for segmentation:
 >>> # Define bounding box as [x_min, y_min, x_max, y_max]
 >>> input_boxes = [[[75, 275, 1725, 850]]]
 
->>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -135,7 +137,7 @@ You can segment multiple objects simultaneously:
 >>> input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
 >>> input_labels = [[[1], [1]]]  # Positive clicks for both objects
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
@@ -158,8 +160,10 @@ Process multiple images simultaneously for improved efficiency:
 >>> from PIL import Image
 >>> import requests
 
->>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large")
->>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+>>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
+>>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
 
 >>> # Load multiple images
 >>> image_urls = [
@@ -172,7 +176,7 @@ Process multiple images simultaneously for improved efficiency:
 >>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
 >>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
@@ -198,14 +202,12 @@ Segment multiple objects within each image using batch inference:
 ...     [[1]]  # Dog image: positive click for the object
 ... ]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
 
 >>> all_masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])
->>> print(f"Truck image: {all_masks[0].shape[0]} objects, Dog image: {all_masks[1].shape[0]} objects")
-Truck image: 2 objects, Dog image: 1 objects
 ```
 
 #### Batched Images with Batched Objects and Multiple Points
@@ -228,7 +230,7 @@ Handle complex batch scenarios with multiple points per object:
 ...     [[1], [1, 1]]  # Groceries image: positive clicks for refinement
 ... ]
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
@@ -250,7 +252,7 @@ Process multiple images with bounding box inputs:
 >>> # Update images for this example
 >>> raw_images = [raw_images[0], groceries_image]  # truck and groceries
 
->>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt")
+>>> inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)
@@ -268,13 +270,13 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 >>> # Get initial segmentation
 >>> input_points = [[[[500, 375]]]]
 >>> input_labels = [[[1]]]
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt")
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
 >>> # Use the best mask as input for refinement
->>> mask_input = outputs.pred_masks[:, torch.argmax(outputs.iou_scores)]
+>>> mask_input = outputs.pred_masks[:, :, torch.argmax(outputs.iou_scores.squeeze())]
 
 >>> # Add additional points with the mask input
 >>> new_input_points = [[[[500, 375], [450, 300]]]]
@@ -284,21 +286,22 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 ...     input_labels=new_input_labels,
 ...     original_sizes=inputs["original_sizes"],
 ...     return_tensors="pt",
-... )
+... ).to(device)
 
 >>> with torch.no_grad():
 ...     refined_outputs = model(
 ...         **inputs,
 ...         input_masks=mask_input,
+...         image_embeddings=outputs.image_embeddings,
 ...         multimask_output=False,
 ...     )
 ```
 
-## Resources
 <!-- TODO replace with sam2 resources -->
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+<!-- ## Resources -->
+<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
 
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model.
+- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model. -->
 
 ## Sam2Config
 
@@ -329,10 +332,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## Sam2ImageProcessorFast
 
 [[autodoc]] Sam2ImageProcessorFast
-
-## Sam2VideoInferenceSession
-
-[[autodoc]] Sam2VideoInferenceSession
 
 ## Sam2HieraDetModel
 
