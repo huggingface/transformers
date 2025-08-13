@@ -451,6 +451,7 @@ extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporte
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
+    deps["jinja2"],  # for chat templating and other template rendering
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
