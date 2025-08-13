@@ -15,7 +15,11 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
+from ...image_processing_utils import (
+    BatchFeature,
+    get_patch_output_size,
+    select_best_resolution,
+)
 from ...image_processing_utils_fast import BaseImageProcessorFast, divide_to_patches
 from ...image_utils import ChannelDimension, PILImageResampling
 from ...utils import auto_docstring, is_torch_available, is_torchvision_available
@@ -56,7 +60,27 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
         self.min_image_size = min_image_size
         self.split_image = split_image
         if split_resolutions is None:
-            split_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)]
+            split_resolutions = [
+                (1, 2),
+                (1, 3),
+                (1, 4),
+                (1, 5),
+                (1, 6),
+                (1, 7),
+                (1, 8),
+                (2, 4),
+                (2, 3),
+                (2, 2),
+                (2, 1),
+                (3, 1),
+                (3, 2),
+                (4, 1),
+                (4, 2),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
+            ]
             split_resolutions = [(el[0] * 490, el[1] * 490) for el in split_resolutions]
         self.split_resolutions = split_resolutions
         self.do_convert_rgb = do_convert_rgb
@@ -95,7 +119,9 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
 
         for image in images:
             if split_image:
-                crop_images = self._get_image_patches_fast(image, self.split_resolutions, max_image_size)
+                crop_images = self._get_image_patches_fast(
+                    image, self.split_resolutions, max_image_size
+                )
             else:
                 crop_images = [image]
 
@@ -111,44 +137,71 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
                 else:
                     new_size = (max_image_size, max(int(w * scale), min_image_size))
 
-                crop_image_resized = F_tv.resize(crop_image, new_size, interpolation=F_tv.InterpolationMode.BICUBIC)
+                crop_image_resized = F_tv.resize(
+                    crop_image, new_size, interpolation=F_tv.InterpolationMode.BICUBIC
+                )
 
                 padding_bottom = max_image_size - new_size[0]
                 padding_right = max_image_size - new_size[1]
-                crop_image_padded = F.pad(crop_image_resized, (0, padding_right, 0, padding_bottom))
+                crop_image_padded = F.pad(
+                    crop_image_resized, (0, padding_right, 0, padding_bottom)
+                )
 
-                pixel_mask = torch.zeros((max_image_size, max_image_size), dtype=torch.bool)
-                pixel_mask[:new_size[0], :new_size[1]] = True
+                pixel_mask = torch.zeros(
+                    (max_image_size, max_image_size), dtype=torch.bool
+                )
+                pixel_mask[: new_size[0], : new_size[1]] = True
                 pixel_masks.append(pixel_mask)
 
                 if do_rescale:
                     crop_image_padded = crop_image_padded * rescale_factor
 
                 if do_normalize:
-                    mean = torch.tensor(self.image_mean, device=crop_image_padded.device, dtype=crop_image_padded.dtype).view(-1, 1, 1)
-                    std = torch.tensor(self.image_std, device=crop_image_padded.device, dtype=crop_image_padded.dtype).view(-1, 1, 1)
+                    mean = torch.tensor(
+                        self.image_mean,
+                        device=crop_image_padded.device,
+                        dtype=crop_image_padded.dtype,
+                    ).view(-1, 1, 1)
+                    std = torch.tensor(
+                        self.image_std,
+                        device=crop_image_padded.device,
+                        dtype=crop_image_padded.dtype,
+                    ).view(-1, 1, 1)
                     crop_image_padded = (crop_image_padded - mean) / std
 
                 pixel_values.append(crop_image_padded)
 
-        return BatchFeature(data={
-            "pixel_values": torch.stack(pixel_values, dim=0),
-            "pixel_mask": torch.stack(pixel_masks, dim=0),
-            "num_crops": num_crops,
-        })
+        return BatchFeature(
+            data={
+                "pixel_values": torch.stack(pixel_values, dim=0),
+                "pixel_mask": torch.stack(pixel_masks, dim=0),
+                "num_crops": num_crops,
+            }
+        )
 
-    def _get_image_patches_fast(self, image: torch.Tensor, grid_pinpoints: list[tuple[int, int]], patch_size: int) -> list[torch.Tensor]:
+    def _get_image_patches_fast(
+        self,
+        image: torch.Tensor,
+        grid_pinpoints: list[tuple[int, int]],
+        patch_size: int,
+    ) -> list[torch.Tensor]:
         h, w = image.shape[-2:]
         best_resolution = select_best_resolution((h, w), grid_pinpoints)
 
-        new_height, new_width = get_patch_output_size(image, best_resolution, ChannelDimension.FIRST)
-        resized_image = F_tv.resize(image, (new_height, new_width), interpolation=F_tv.InterpolationMode.BICUBIC)
+        new_height, new_width = get_patch_output_size(
+            image, best_resolution, ChannelDimension.FIRST
+        )
+        resized_image = F_tv.resize(
+            image, (new_height, new_width), interpolation=F_tv.InterpolationMode.BICUBIC
+        )
 
         target_height, target_width = best_resolution
         paste_x, r_x = divmod(target_width - new_width, 2)
         paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = F.pad(resized_image, (paste_x, paste_x + r_x, paste_y, paste_y + r_y))
+        padded_image = F.pad(
+            resized_image, (paste_x, paste_x + r_x, paste_y, paste_y + r_y)
+        )
 
         return divide_to_patches(padded_image, patch_size)
 
