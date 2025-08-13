@@ -32,7 +32,7 @@ You can find all the original NLLB checkpoints under the [AI at Meta](https://hu
 > This model was contributed by [Lysandre](https://huggingface.co/lysandre).  
 > Click on the NLLB models in the right sidebar for more examples of how to apply NLLB to different translation tasks.
 
-The example below demonstrates how to translate text with [`pipeline`] or the [`AutoModelForSeq2SeqLM`] class.
+The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
