@@ -39,8 +39,12 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.import_utils import is_torch_available
+from ...utils.import_utils import is_torch_available, is_torchvision_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+
+
+if is_torchvision_available():
+    from .image_processing_aria_fast import AriaImageProcessorFast  # noqa: F401
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -1613,7 +1617,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return model_inputs
 
 
-__all__ = [
+_aria_all = [
     "AriaConfig",
     "AriaTextConfig",
     "AriaImageProcessor",
@@ -1625,3 +1629,8 @@ __all__ = [
     "AriaModel",
     "AriaTextForCausalLM",
 ]
+
+if is_torchvision_available():
+    _aria_all.append("AriaImageProcessorFast")
+
+__all__ = _aria_all

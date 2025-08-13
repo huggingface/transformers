@@ -119,9 +119,7 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
 
         for image in images:
             if split_image:
-                crop_images = self._get_image_patches_fast(
-                    image, self.split_resolutions, max_image_size
-                )
+                crop_images = self._get_image_patches_fast(image, self.split_resolutions, max_image_size)
             else:
                 crop_images = [image]
 
@@ -137,19 +135,13 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
                 else:
                     new_size = (max_image_size, max(int(w * scale), min_image_size))
 
-                crop_image_resized = F_tv.resize(
-                    crop_image, new_size, interpolation=F_tv.InterpolationMode.BICUBIC
-                )
+                crop_image_resized = F_tv.resize(crop_image, new_size, interpolation=F_tv.InterpolationMode.BICUBIC)
 
                 padding_bottom = max_image_size - new_size[0]
                 padding_right = max_image_size - new_size[1]
-                crop_image_padded = F.pad(
-                    crop_image_resized, (0, padding_right, 0, padding_bottom)
-                )
+                crop_image_padded = F.pad(crop_image_resized, (0, padding_right, 0, padding_bottom))
 
-                pixel_mask = torch.zeros(
-                    (max_image_size, max_image_size), dtype=torch.bool
-                )
+                pixel_mask = torch.zeros((max_image_size, max_image_size), dtype=torch.bool)
                 pixel_mask[: new_size[0], : new_size[1]] = True
                 pixel_masks.append(pixel_mask)
 
@@ -188,20 +180,14 @@ class AriaImageProcessorFast(BaseImageProcessorFast):
         h, w = image.shape[-2:]
         best_resolution = select_best_resolution((h, w), grid_pinpoints)
 
-        new_height, new_width = get_patch_output_size(
-            image, best_resolution, ChannelDimension.FIRST
-        )
-        resized_image = F_tv.resize(
-            image, (new_height, new_width), interpolation=F_tv.InterpolationMode.BICUBIC
-        )
+        new_height, new_width = get_patch_output_size(image, best_resolution, ChannelDimension.FIRST)
+        resized_image = F_tv.resize(image, (new_height, new_width), interpolation=F_tv.InterpolationMode.BICUBIC)
 
         target_height, target_width = best_resolution
         paste_x, r_x = divmod(target_width - new_width, 2)
         paste_y, r_y = divmod(target_height - new_height, 2)
 
-        padded_image = F.pad(
-            resized_image, (paste_x, paste_x + r_x, paste_y, paste_y + r_y)
-        )
+        padded_image = F.pad(resized_image, (paste_x, paste_x + r_x, paste_y, paste_y + r_y))
 
         return divide_to_patches(padded_image, patch_size)
 
