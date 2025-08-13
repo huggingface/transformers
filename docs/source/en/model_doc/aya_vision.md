@@ -59,8 +59,8 @@ print(outputs)
 
 ```python
 # pip install 'git+https://github.com/huggingface/transformers.git@v4.49.0-Aya Vision'
-from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model_id = "CohereLabs/aya-vision-8b"
 
@@ -104,11 +104,8 @@ import torch
 from transformers import (
     AutoProcessor,
     AutoModelForImageTextToText,
-    BitsAndBytesConfig,
-    infer_device
+    BitsAndBytesConfig
 )
-
-device = infer_device()
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -135,7 +132,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 generated = model.generate(**inputs, max_new_tokens=50)
 print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
@@ -150,10 +147,8 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - The example below demonstrates inference with multiple images.
   
     ```py
-    from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
     import torch
-
-    device = infer_device()
+    from transformers import AutoProcessor, AutoModelForImageTextToText
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
@@ -182,7 +177,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
     
     inputs = processor.apply_chat_template(
         messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to(device)
+    ).to(model.device)
     
     gen_tokens = model.generate(
         **inputs, 
@@ -198,8 +193,8 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - The example below demonstrates inference with batched inputs.
   
     ```py
-    from transformers import AutoProcessor, AutoModelForImageTextToText
     import torch
+    from transformers import AutoProcessor, AutoModelForImageTextToText
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
