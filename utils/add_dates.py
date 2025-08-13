@@ -60,8 +60,8 @@ def get_paper_link(model_card=None, path=None):
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    if "blog" in content:
-        print(f"Insert the release date of the blog post at the top of {model_card}")
+    if "blog" in content or "report" in content:
+        print(f"Insert the release date of the blog post or technical report at the top of {model_card}")
         return "blog"
 
     # Find known paper links
@@ -234,6 +234,7 @@ def insert_dates(model_card_list):
 
 def get_all_model_cards():
     """Get all model cards from the docs path"""
+    
     all_files = os.listdir(DOCS_PATH)
     model_cards = []
     for file in all_files:
