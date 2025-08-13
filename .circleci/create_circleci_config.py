@@ -105,7 +105,8 @@ class CircleCIJob:
         else:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
-            self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
+            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
+                self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
@@ -319,7 +320,7 @@ doc_test_job = CircleCIJob(
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
-        "pip install .",
+        "uv pip install .",
         "touch dummy.py",
         command,
         "cat pr_documentation_tests_temp.txt",
