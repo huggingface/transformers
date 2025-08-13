@@ -462,7 +462,7 @@ install_requires = [
 ]
 
 setup(
-    name="transformers",
+    name="transformers-v4.55.0-GLM-4.5V-preview",
     version="4.56.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
