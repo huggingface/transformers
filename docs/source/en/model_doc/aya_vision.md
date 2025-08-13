@@ -104,8 +104,11 @@ import torch
 from transformers import (
     AutoProcessor,
     AutoModelForImageTextToText,
-    BitsAndBytesConfig
+    BitsAndBytesConfig,
+    infer_device
 )
+
+device = infer_device()
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -132,7 +135,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_tensors="pt"
-).to("cuda")
+).to(device)
 
 generated = model.generate(**inputs, max_new_tokens=50)
 print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
@@ -147,12 +150,14 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - The example below demonstrates inference with multiple images.
   
     ```py
-    from transformers import AutoProcessor, AutoModelForImageTextToText
+    from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
     import torch
+
+    device = infer_device()
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto", torch_dtype=torch.float16
     )
     
     messages = [
@@ -177,7 +182,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
     
     inputs = processor.apply_chat_template(
         messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to("cuda")
+    ).to(device)
     
     gen_tokens = model.generate(
         **inputs, 
@@ -198,7 +203,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto", torch_dtype=torch.float16
     )
     
     batch_messages = [

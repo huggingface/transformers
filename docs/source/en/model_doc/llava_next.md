@@ -69,30 +69,32 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 <hfoption id="AutoModel">
 
 ```python
-import torch  
-import requests  
-from PIL import Image  
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration  
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration, infer_device
 
-processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")  
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16).to("cuda")  
+device = infer_device()
 
-url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"  
-image = Image.open(requests.get(url, stream=True).raw)  
+processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16).to(device)
 
-conversation = [  
-    {  
-        "role": "user",  
-        "content": [  
-            {"type": "image"},  
-            {"type": "text", "text": "What is shown in this image?"},  
-        ],  
-    },  
-]  
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
-inputs = processor(image, prompt, return_tensors="pt").to("cuda")  
-output = model.generate(**inputs, max_new_tokens=100)  
-print(processor.decode(output[0], skip_special_tokens=True))  
+url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+image = Image.open(requests.get(url, stream=True).raw)
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ],
+    },
+]
+prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
+inputs = processor(image, prompt, return_tensors="pt").to(device)
+output = model.generate(**inputs, max_new_tokens=100)
+print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -107,13 +109,15 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 import torch  
 import requests  
 from PIL import Image  
-from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig  
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig, infer_device 
+
+device = infer_device()
 
 quant_config = BitsAndBytesConfig(  
     load_in_4bit=True,  
     bnb_4bit_compute_dtype=torch.float16,  
     bnb_4bit_quant_type="nf4"  
-)  
+)
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")  
 model = AutoModelForImageTextToText.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=quant_config, device_map="auto")  
@@ -131,7 +135,7 @@ conversation = [
     },  
 ]  
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
-inputs = processor(image, prompt, return_tensors="pt").to("cuda")  
+inputs = processor(image, prompt, return_tensors="pt").to(device)  
 
 with torch.inference_mode():  
     output = model.generate(**inputs, max_new_tokens=100)  
@@ -160,14 +164,16 @@ processor.tokenizer.padding_side = "left"
 * The example below demonstrates inference with multiple input images.
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
 from PIL import Image
 import requests, torch
 
+device = infer_device()
+
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16
-).to("cuda")
+    "llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto"
+)
 
 # Load multiple images
 url1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
@@ -180,7 +186,7 @@ conversation = [
     {"role": "user", "content": [{"type": "image"}, {"type": "image"}, {"type": "text", "text": "Compare these two images and describe the differences."}]}
 ]
 prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor([image1, image2], prompt, return_tensors="pt").to("cuda")
+inputs = processor([image1, image2], prompt, return_tensors="pt").to(device)
 
 output = model.generate(**inputs, max_new_tokens=100)
 print(processor.decode(output[0], skip_special_tokens=True))

@@ -53,7 +53,9 @@ pipeline("translate English to French: The weather is nice today")
 
 ```python
 import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/byt5-small"
@@ -64,7 +66,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     device_map="auto"
 )
 
-input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to(device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -89,7 +91,9 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 ```python
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import TorchAoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, infer_device
+
+device = infer_device()
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
@@ -101,7 +105,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("google/byt5-xl")
-input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to(device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

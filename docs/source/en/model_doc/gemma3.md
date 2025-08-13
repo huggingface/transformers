@@ -59,7 +59,9 @@ pipeline(
 
 ```py
 import torch
-from transformers import AutoProcessor, Gemma3ForConditionalGeneration
+from transformers import AutoProcessor, Gemma3ForConditionalGeneration, infer_device
+
+device = infer_device()
 
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-4b-it",
@@ -92,7 +94,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -115,7 +117,9 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 ```py
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProcessor
+from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProcessor, infer_device
+
+device = infer_device()
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Gemma3ForConditionalGeneration.from_pretrained(
@@ -149,7 +153,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -206,13 +210,15 @@ visualizer("<img>What is shown in this image?")
         return_tensors="pt",
         add_generation_prompt=True,
     +   do_pan_and_scan=True,
-        ).to("cuda")
+        ).to(device)
     ```
 - For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
     ```py
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+
+    device = infer_device()
 
     tokenizer = AutoTokenizer.from_pretrained(
         "google/gemma-3-1b-pt",
@@ -223,7 +229,7 @@ visualizer("<img>What is shown in this image?")
         device_map="auto",
         attn_implementation="sdpa"
     )
-    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))

@@ -30,12 +30,14 @@ Tips:
 
 Sample inference:
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
+
+device = infer_device()
 
 model_path = "ibm-granite/granite-vision-3.1-2b-preview"
 processor = LlavaNextProcessor.from_pretrained(model_path)
 
-model = LlavaNextForConditionalGeneration.from_pretrained(model_path).to("cuda")
+model = LlavaNextForConditionalGeneration.from_pretrained(model_path, device_map="auto")
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
@@ -55,7 +57,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to("cuda")
+).to(device)
 
 
 # autoregressively complete prompt
