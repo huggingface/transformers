@@ -80,7 +80,13 @@ def handle_test_results(test_results):
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
-    time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    # It could be `'71.60s', '(0:01:11)', '====\n'` or `'in', '35.01s', '================\n'`.
+    # Let always select the one with `s`.
+    time_spent = expressions[-1]
+    if "=" in time_spent:
+        time_spent = expressions[-2]
+    if "(" in time_spent:
+        time_spent = expressions[-3]
 
     for i, expression in enumerate(expressions):
         if "failed" in expression:
@@ -193,18 +199,12 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
-        total_secs = 0
 
-        for time in time_spent:
-            time_parts = time.split(":")
-
-            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-            if len(time_parts) == 1:
-                time_parts = [0, 0, time_parts[0]]
-
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-            total_secs += hours * 3600 + minutes * 60 + seconds
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend(r["time_spent"])
+        total_secs = sum(time_spent)
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -1197,7 +1197,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "failures": {},
             "job_link": {},
         }
@@ -1225,7 +1225,7 @@ if __name__ == "__main__":
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["time_spent"].append(float(time_spent[:-1]))
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
@@ -1330,7 +1330,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
@@ -1360,7 +1360,7 @@ if __name__ == "__main__":
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
             additional_results[key]["skipped"] += skipped
-            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+            additional_results[key]["time_spent"].append(float(time_spent[:-1]))
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True
@@ -1397,8 +1397,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
@@ -1443,7 +1443,7 @@ if __name__ == "__main__":
         default_result = {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
             "success": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
