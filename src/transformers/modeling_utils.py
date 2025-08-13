@@ -54,7 +54,7 @@ from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -110,7 +110,6 @@ from .utils import (
     is_bitsandbytes_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_fsdp_enabled,
     is_kernels_available,
     is_offline_mode,
     is_optimum_available,
