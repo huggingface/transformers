@@ -1744,10 +1744,10 @@ class GenerationMixin(ContinuousMixin):
 
             # Related to #40039: prior to this PR, models with sliding window attention were forced to have
             # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
-            # the dynamic sliding window cache, so we change `cache_implementation` if it is a default value.
-            # (if we're inside this branch, then it is because we're using default values)
+            # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
+            # (if we're inside this branch, then it is because we're using default values from the Hub)
             if generation_config.cache_implementation == "hybrid":
-                generation_config.cache_implementation = "dynamic"
+                generation_config.cache_implementation = None
 
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.

@@ -500,7 +500,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -545,7 +546,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -599,7 +601,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
@@ -654,7 +657,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
         EXPECTED_TEXTS = Expectations(
@@ -708,7 +712,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
@@ -729,7 +734,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -763,7 +769,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -803,7 +810,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        # cache_implementation="hybrid" an in the original transformers implementation
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="hybrid")[
+            :, input_size:
+        ]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
@@ -844,6 +854,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 **input_text,
                 max_new_tokens=max_new_tokens_to_generate,
                 do_sample=False,  # Use greedy decoding to match the exported model
+                cache_implementation="hybrid",
             )
 
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
@@ -875,7 +886,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         )
         self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
 
-        # If we manually specify the cache implementation, it will work
+        # If we manually specify the cache implementation = "hybrid", it will use the static sliding window cache
         generate_outputs = model.generate(
             **model_inputs,
             max_new_tokens=2,
