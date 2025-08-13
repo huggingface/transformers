@@ -111,15 +111,15 @@ class Sam2VideoInferenceSession:
             The height of the video.
         video_width (`int`, *optional*):
             The width of the video.
-        inference_device (`torch.device`, *optional*):
+        inference_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to use for inference.
-        inference_state_device (`torch.device`, *optional*):
+        inference_state_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to store the inference state on.
-        video_storage_device (`torch.device`, *optional*):
+        video_storage_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to store the video on.
-        torch_dtype (`torch.dtype`, *optional*):
+        torch_dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
             The dtype to use for the video.
-        max_vision_features_cache_size (`int`, *optional*):
+        max_vision_features_cache_size (`int`, *optional*, defaults to 1):
             The maximum number of vision features to cache.
     """
 
