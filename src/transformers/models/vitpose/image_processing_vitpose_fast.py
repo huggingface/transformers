@@ -14,15 +14,15 @@
 # limitations under the License.
 """Fast Image processor class for VitPose."""
 
-import math
 import itertools
-from typing import Optional, Union, Tuple, List
+import math
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 
-from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.image_processing_utils import BatchFeature
+from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -30,6 +30,7 @@ from transformers.image_utils import (
     ImageInput,
 )
 from transformers.utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -77,8 +78,8 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[List[float]] = None,
-        image_std: Optional[List[float]] = None,
+        image_mean: Optional[list[float]] = None,
+        image_std: Optional[list[float]] = None,
         normalize_factor: float = 200.0,
         **kwargs,
     ):
@@ -147,7 +148,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         image_height: int,
         normalize_factor: float = 200.0,
         padding_factor: float = 1.25,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if box.shape[-1] != 4:
             raise ValueError(
                 f"Box must have 4 elements (top_left_x, top_left_y, width, height), got shape {box.shape}"
@@ -175,7 +176,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def get_keypoint_predictions(
         self,
         heatmaps: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, num_keypoints, height, width = heatmaps.shape
         heatmaps_reshaped = heatmaps.view(batch_size, num_keypoints, -1)
         maxvals, idx = torch.max(heatmaps_reshaped, dim=2)
@@ -269,7 +270,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         coords: torch.Tensor,
         center: torch.Tensor,
         scale: torch.Tensor,
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
     ) -> torch.Tensor:
         if coords.shape[1] not in (2, 3):
             raise ValueError("Coordinates must have 2 (x, y) or 3 (x, y, confidence) dimensions.")
@@ -290,8 +291,8 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def affine_transform(
         self,
         image: torch.Tensor,
-        center: Tuple[float, float],
-        scale: Tuple[float, float],
+        center: tuple[float, float],
+        scale: tuple[float, float],
         rotation: float,
         size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
@@ -351,14 +352,14 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: Union[List[List[float]], torch.Tensor],
+        boxes: Union[list[list[float]], torch.Tensor],
         do_affine_transform: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -465,7 +466,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         center: torch.Tensor,
         scale: torch.Tensor,
         kernel: int = 11,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, _, height, width = heatmaps.shape
 
         coords, scores = self.get_keypoint_predictions(heatmaps)
@@ -480,10 +481,10 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def post_process_pose_estimation(
         self,
         outputs,
-        boxes: Union[List[List[List[float]]], torch.Tensor],
+        boxes: Union[list[list[list[float]]], torch.Tensor],
         kernel_size: int = 11,
         threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, List[Tuple[int, int]]] = None,
+        target_sizes: Union[TensorType, list[tuple[int, int]]] = None,
     ):
         if not hasattr(outputs, "heatmaps"):
             raise ValueError("Outputs must have a 'heatmaps' attribute")
