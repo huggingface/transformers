@@ -12,6 +12,7 @@
 
 import math
 import os
+
 import torch
 
 from ..utils.import_utils import is_torch_npu_available
