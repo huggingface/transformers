@@ -81,7 +81,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", quantization_config=bnb_config)
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config)
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
 ```
 
