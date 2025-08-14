@@ -41,9 +41,6 @@ from ...image_utils import (
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
-# Import the fast image processor
-from .image_processing_tvp_fast import TvpImageProcessorFast
-
 
 if is_vision_available():
     import PIL
@@ -482,4 +479,4 @@ class TvpImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["TvpImageProcessor", "TvpImageProcessorFast"]
+__all__ = ["TvpImageProcessor"]

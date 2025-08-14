@@ -124,6 +124,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     def _prepare_images_structure(
         self,
         images: ImageInput,
+        **kwargs,
     ) -> ImageInput:
         """
         Prepare the images structure for processing.
@@ -135,7 +136,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_nested_list_of_images(images)
+        return make_nested_list_of_images(images, **kwargs)
 
     def _pad_frames(
         self,
@@ -224,10 +225,9 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         - Channel 1: Green
         - Channel 2: Red (originally Blue)
         """
-        # Assuming frames are in channels_first format (C, H, W)
-        if frames.shape[0] == 3:  # 3 channels in the first dimension
-            # Use indexing to match the exact channel order of the slow processor
-            return torch.stack([frames[2], frames[1], frames[0]], dim=0)
+        # Assuming frames are in channels_first format (..., C, H, W)
+        frames = frames.flip(-3)
+
         return frames
 
     def _preprocess(

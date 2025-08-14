@@ -158,10 +158,9 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"longest_edge": 12})
 
     def test_call_pil(self):
-        # Only test PIL with slow processor since fast processor only accepts tensors
-        if self.image_processing_class is not None:
+        for image_processing_class in self.image_processor_list:
             # Initialize image_processing
-            image_processing = self.image_processing_class(**self.image_processor_dict)
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL videos
             video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
             for video in video_inputs:
@@ -197,48 +196,6 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     expected_width,
                 ),
             )
-
-    def test_call_tensor_fast(self):
-        """Test that the fast processor only accepts tensor inputs."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
-
-        # Initialize fast image_processing
-        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # Create tensor video inputs
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
-        for video in video_inputs:
-            self.assertIsInstance(video, list)
-            self.assertIsInstance(video[0], torch.Tensor)
-
-        # Test not batched input
-        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
-        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_videos.shape,
-            (
-                1,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
-
-        # Test batched
-        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs, batched=True)
-        encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_videos.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_frames,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
 
     def test_call_numpy(self):
         # Test numpy with both processors
@@ -390,76 +347,27 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-    def test_slow_fast_equivalence(self):
-        """Test that the slow and fast image processors produce equivalent results."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
-
-        # Initialize both processors
-        slow_processor = self.image_processing_class(**self.image_processor_dict)
-        fast_processor = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # Create test video inputs (PIL images)
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
-
-        # Convert PIL images to tensors for fast processor
-        tensor_video_inputs = []
-        for video in video_inputs:
-            tensor_video = []
-            for frame in video:
-                # Convert PIL to tensor using torchvision
-                import torchvision.transforms as transforms
-
-                to_tensor = transforms.ToTensor()
-                tensor_frame = to_tensor(frame)
-                tensor_video.append(tensor_frame)
-            tensor_video_inputs.append(tensor_video)
-
-        # Process with both processors
-        slow_output = slow_processor(video_inputs[0], return_tensors="pt")
-        fast_output = fast_processor(tensor_video_inputs[0], return_tensors="pt")
-
-        # Compare outputs with very relaxed tolerance for video processing
-        torch.testing.assert_close(
-            slow_output.pixel_values,
-            fast_output.pixel_values,
-            atol=1000.0,  # Extremely relaxed for video processing
-            rtol=10.0,  # Extremely relaxed for video processing
-        )
-
+    @require_vision
+    @require_torch
     def test_slow_fast_equivalence_batched(self):
-        """Test that the slow and fast image processors produce equivalent results for batched inputs."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
 
-        # Initialize both processors
-        slow_processor = self.image_processing_class(**self.image_processor_dict)
-        fast_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        # Create test video inputs (PIL images)
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
 
-        # Convert PIL images to tensors for fast processor
-        tensor_video_inputs = []
-        for video in video_inputs:
-            tensor_video = []
-            for frame in video:
-                # Convert PIL to tensor using torchvision
-                import torchvision.transforms as transforms
+        dummy_images = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-                to_tensor = transforms.ToTensor()
-                tensor_frame = to_tensor(frame)
-                tensor_video.append(tensor_frame)
-            tensor_video_inputs.append(tensor_video)
-
-        # Process with both processors
-        slow_output = slow_processor(video_inputs, return_tensors="pt")
-        fast_output = fast_processor(tensor_video_inputs, return_tensors="pt")
-
-        # Compare outputs with very relaxed tolerance for video processing
-        torch.testing.assert_close(
-            slow_output.pixel_values,
-            fast_output.pixel_values,
-            atol=1000.0,  # Extremely relaxed for video processing
-            rtol=10.0,  # Extremely relaxed for video processing
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+        # Higher max atol for video processing, mean_atol still 5e-3 -> 1e-2
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.pixel_values, encoding_fast.pixel_values, atol=10.0, mean_atol=1e-2
         )
