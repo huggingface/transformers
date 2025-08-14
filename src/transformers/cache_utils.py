@@ -1060,7 +1060,11 @@ class DynamicCache(Cache):
             return
 
         # Pytree registration causes memory leak for FSDP runs, see here: https://github.com/huggingface/transformers/issues/39795
-        if is_torch_greater_or_equal("2.3") and not is_fsdp_enabled():
+        if (
+            is_torch_greater_or_equal("2.3")
+            and not is_fsdp_enabled()
+            and not torch.utils._pytree._is_leaf(DynamicCache)
+        ):
             torch.utils._pytree.register_pytree_node(
                 DynamicCache,
                 lambda dynamic_cache: torch.utils._pytree._dict_flatten(cls._get_cache_dict(dynamic_cache)),
