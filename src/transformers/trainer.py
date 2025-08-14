@@ -3872,6 +3872,22 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
+        if self.args.n_gpu > 1:
+            if "labels" in inputs and isinstance(inputs["labels"], torch.Tensor):
+                actual_bs = inputs["labels"].shape[0]
+                loss_bs = loss.shape[0] if isinstance(loss, torch.Tensor) else len(loss)
+                if actual_bs >= self.args.n_gpu:
+                    assert loss_bs == self.args.n_gpu, (
+                        f"Expected loss to have {self.args.n_gpu} elements, but got {loss_bs} elements. "
+                        "This usually happens when the model does not return a loss for each device."
+                    )
+                else:
+                    assert loss_bs == actual_bs, (
+                        f"Expected loss to have {actual_bs} elements, but got {loss_bs} elements. "
+                        "This usually happens when the model does not return a loss for each device."
+                    )
+            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
         del inputs
         if (
             self.args.torch_empty_cache_steps is not None
@@ -3894,21 +3910,17 @@ class Trainer:
             else:
                 torch.cuda.empty_cache()
 
-        kwargs = {}
-
-        # For LOMO optimizers you need to explicitly use the learnign rate
-        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            kwargs["learning_rate"] = self._get_learning_rate()
-
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
         if self.use_apex:
             from apex import amp
 
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
+            kwargs = {}
+            # For LOMO optimizers you need to explicitly use the learnign rate
+            if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+                kwargs["learning_rate"] = self._get_learning_rate()
+
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
                 # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
@@ -5464,8 +5476,8 @@ class Trainer:
                 num_items_in_batch = num_items_in_batch.to(device)
 
                 if self.args.n_gpu > 1 and num_items_in_batch.dim() == 0:
-                    # In the DataParallel case, convert the scalar tensor into a 1-dim tensor
-                    num_items_in_batch = num_items_in_batch.unsqueeze(0)
+                    # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with bs = n_gpu
+                    num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
 
         return batch_samples, num_items_in_batch
 
