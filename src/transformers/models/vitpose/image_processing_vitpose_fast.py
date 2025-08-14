@@ -29,35 +29,14 @@ from transformers.image_utils import (
     ChannelDimension,
     ImageInput,
 )
-from transformers.utils import TensorType, logging
+from transformers.utils import TensorType, logging, auto_docstring
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class VitPoseImageProcessorFast(BaseImageProcessorFast):
-    """
-    Fast PyTorch VitPose image processor.
-
-    Args:
-        do_affine_transform (bool, optional, defaults to True):
-            Whether to apply affine transform on input images.
-        size (dict[str, int], optional, defaults to {"height": 20, "width": 20}):
-            Resolution of output image after affine transform.
-        do_rescale (bool, optional, defaults to True):
-            Whether to scale pixel values to [0, 1].
-        rescale_factor (float, optional, defaults to 1/255):
-            Rescaling factor if do_rescale is True.
-        do_normalize (bool, optional, defaults to True):
-            Whether to normalize images.
-        image_mean (list[float], optional, defaults to ImageNet mean):
-            Mean for normalization per channel.
-        image_std (list[float], optional, defaults to ImageNet std):
-            Std dev for normalization per channel.
-        normalize_factor (float, optional, defaults to 200.0):
-            Normalization factor for scaling in box_to_center_and_scale and transform_preds.
-    """
-
     model_input_names = ["pixel_values"]
 
     resample = None  # Not used in fast version, placeholder for interface
@@ -71,27 +50,8 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     do_normalize: bool = True
     normalize_factor = 200.0
 
-    def __init__(
-        self,
-        do_affine_transform: bool = True,
-        size: Optional[dict[str, int]] = None,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[list[float]] = None,
-        image_std: Optional[list[float]] = None,
-        normalize_factor: float = 200.0,
-        **kwargs,
-    ):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.do_affine_transform = do_affine_transform
-        self.size = size if size is not None else self.size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else self.image_mean
-        self.image_std = image_std if image_std is not None else self.image_std
-        self.normalize_factor = normalize_factor
 
     def to_dict(self):
         """
