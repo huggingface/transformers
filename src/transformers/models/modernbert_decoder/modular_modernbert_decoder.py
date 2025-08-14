@@ -155,7 +155,7 @@ class ModernBertDecoderConfig(ModernBertConfig):
         del self.local_attention
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
+        self.sliding_window = local_attention // 2 if local_attention else -1
 
 
 def eager_attention_forward(

@@ -216,7 +216,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         rope_config_validation(self)
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
+        self.sliding_window = local_attention // 2 if local_attention else -1
 
     def to_dict(self):
         output = super().to_dict()

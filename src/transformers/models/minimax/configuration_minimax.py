@@ -217,17 +217,6 @@ class MiniMaxConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
 
-        # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
-        rope_config_validation(self)
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
@@ -242,6 +231,10 @@ class MiniMaxConfig(PretrainedConfig):
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = getattr(self, "rope_theta", 1000000.0)
         linear_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
@@ -252,6 +245,8 @@ class MiniMaxConfig(PretrainedConfig):
                 full_attention_rope.update(**rope_scaling)
 
         rope_scaling = {"full_attention": full_attention_rope, "linear_attention": linear_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 __all__ = ["MiniMaxConfig"]
