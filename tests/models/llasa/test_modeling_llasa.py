@@ -14,44 +14,33 @@
 """Testing suite for the PyTorch Llasa model."""
 
 import copy
-import pathlib
-import tempfile
 import unittest
 
-import pytest
 
+from parameterized import parameterized
 from transformers.models.llasa import LlasaConfig
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
-from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
-from transformers.utils.import_utils import is_datasets_available
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+# TODO remove when `XCodec2Model` is integrated into `transformers`
+from xcodec2.modeling_xcodec2 import XCodec2Model
 
-if is_datasets_available():
-    from datasets import Audio, load_dataset
 
 if is_torch_available():
     import torch
 
-    from transformers import LlasaModel, LlasaForCausalLM
-
-if is_torchaudio_available():
-    import torchaudio
-
-if is_soundfile_available():
-    import soundfile as sf
+    from transformers import LlasaModel, LlasaForCausalLM, LlasaTokenizer, LlasaProcessor
 
 
 @require_torch
@@ -62,7 +51,7 @@ class LlasaModelTester:
         batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=7,
         max_length=50,
-        is_training=True,    # TODO, making True work
+        is_training=True,
         vocab_size=100,
         hidden_size=16,
         intermediate_size=37,
@@ -163,11 +152,65 @@ class LlasaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         return inputs_dict
 
 
-class LlasaForCausalLMIntegrationTest(unittest.TestCase):
+"""
+Gist to reproduce expected outputs for integration tests: https://gist.github.com/ebezzam/1863ec8eb7ec4afff02c26bdcb7691f9
+"""
 
-    def setUp(self):
-        # TODO exchange with official checkpoint
-        self.model_checkpoint = "bezzam/Llasa-1B"
+# fmt: off
+input_text = "How much wood would a woodchuck chuck if a woodchuck could chuck speech tokens?"
+EXPECTED_OUTPUT = {
+    "bezzam/Llasa-1B": torch.tensor([168962, 172806, 193286, 188417, 184321, 167938, 167937, 173058, 189447,
+        148418, 172641, 172642, 172978, 156321, 173042, 168578, 135208, 136200,
+        150625, 165080, 131293, 151880, 131554, 134602, 188927, 187895, 190151,
+        161262, 128750, 149197, 132828, 191964, 163363, 138639, 144335, 140246,
+        156704, 179808, 186739, 185651, 186050, 186674, 186095, 150951, 151983,
+        145749, 151789, 152213, 135384]),
+    "bezzam/Llasa-3B": torch.tensor([152563, 140021, 135905, 140260, 172790, 167539, 189298, 193077, 173123,
+        193378, 193714, 189495, 168769, 155437, 150284, 138253, 151564, 139297,
+        167772, 152752, 169048, 131520, 147864, 128690, 145114, 165359, 157083,
+        166250, 141662, 182586, 169250, 181566, 169361, 191175, 182706, 145882,
+        147970, 167326, 128433, 138696, 171372, 193411, 131711, 155406, 144339,
+        144598, 143457, 166944, 179244]),
+    "bezzam/Llasa-8B": torch.tensor([152562, 135925, 152545, 140260, 168694, 168562, 193718, 193137, 173187,
+        193463, 193479, 152385, 139293, 152584, 150625, 185240, 131485, 129481,
+        129502, 182687, 165255, 185734, 161129, 128346, 152973, 136664, 192062,
+        193279, 148035, 159818, 139158, 155424, 163872, 189493, 191047, 190851,
+        174499, 167611, 147111, 146938, 166373, 149976, 137560, 190849, 178759,
+        170784, 186678, 191047, 185911])
+}
+MAX_LENGTH = 50
+TEMPERATURE = 0.8
+# fmt: on
+
+class LlasaForCausalLMIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    @slow
+    @require_torch_accelerator
+    @parameterized.expand([(model_repo,) for model_repo in EXPECTED_OUTPUT.keys()])
+    def test_generate(self, model_repo):
+        # load processor (tokenizer + audio codec)
+        processor = LlasaProcessor(
+            LlasaTokenizer.from_pretrained(model_repo),
+            XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval().to(torch_device)
+        )
+        # # -- TODO: use below when `XCodec2Model` integrated into `transformers`
+        # processor = LlasaProcessor.from_pretrained(model_repo)
+
+        model = LlasaForCausalLM.from_pretrained(model_repo)
+        model.eval().to(torch_device)
+
+        with torch.no_grad():
+            encoded_text = processor(input_text).to(torch_device)
+            outputs = model.generate(
+                encoded_text["input_ids"],
+                do_sample=False,
+                max_new_tokens=MAX_LENGTH,
+                top_p=1,
+                temperature=TEMPERATURE,
+            )
+            generated_ids = outputs[0][encoded_text["input_ids"].shape[1]:-1]
+        
+        assert torch.equal(generated_ids, EXPECTED_OUTPUT[model_repo].to(torch_device))
