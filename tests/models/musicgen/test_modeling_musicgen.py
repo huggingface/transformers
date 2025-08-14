@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from pytest import mark
 
 from transformers import (
@@ -64,7 +65,7 @@ if is_torch_available():
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
+    for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
@@ -781,11 +782,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_tie_model_weights(self):
         pass
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tied_model_weights_key_ignore(self):
-        pass
-
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
+    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
@@ -1239,6 +1236,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason=("MusicGen has a set of composite models which might not have SDPA themselves, e.g. T5."))
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

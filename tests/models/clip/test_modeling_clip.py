@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 from pytest import mark
@@ -502,8 +503,10 @@ class CLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return CLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return CLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -639,8 +642,8 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -706,6 +709,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.skipTest(reason="CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
 
     @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
