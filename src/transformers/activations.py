@@ -216,12 +216,12 @@ class XIELUActivation(nn.Module):
             import xielu.ops  # noqa: F401
 
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
-            msg = f"Using experimental xIELU CUDA."
+            msg = "Using experimental xIELU CUDA."
             try:
                 from torch._dynamo import allow_in_graph
 
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
-                msg += f" Enabled torch._dynamo for xIELU CUDA."
+                msg += " Enabled torch._dynamo for xIELU CUDA."
             except Exception as err:
                 msg += f" Could not enable torch._dynamo for xIELU ({err}) - this may result in slower performance."
                 self._xielu_cuda_fn = self._xielu_cuda

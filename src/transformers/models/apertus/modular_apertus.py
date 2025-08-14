@@ -22,6 +22,9 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -33,12 +36,9 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    eager_attention_forward,
     apply_rotary_pos_emb,
+    eager_attention_forward,
 )
-from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
 
 
 logger = logging.get_logger(__name__)
