@@ -81,9 +81,7 @@ class AyaVisionConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["siglip_vision_model"](
@@ -99,7 +97,7 @@ class AyaVisionConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "cohere2"
+            text_config["model_type"] = text_config.get("model_type", "cohere2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["cohere2"]()
