@@ -43,7 +43,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -70,7 +70,7 @@ from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -123,7 +123,7 @@ from transformers import TorchAoConfig, Qwen2_5_VLForConditionalGeneration, Auto
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-VL-7B-Instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -166,7 +166,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2.5-VL-7B-Instruct",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )

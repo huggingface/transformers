@@ -126,17 +126,17 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16` due to "
+                "Overriding dtype=%s with `dtype=torch.bfloat16` due to "
                 "requirements of `fbgemm-gpu` to enable model loading in fp4. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.bfloat16 to remove this warning.",
+                dtype,
             )
-        return torch_dtype
+        return dtype
 
     def check_quantized_param(
         self,

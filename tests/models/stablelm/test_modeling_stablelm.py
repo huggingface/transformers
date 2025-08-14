@@ -159,7 +159,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         model = StableLmForCausalLM.from_pretrained(
             "stabilityai/stablelm-3b-4e1t",
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
         )

@@ -50,7 +50,7 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-generator = pipeline(task="text-generation", model="openai-community/gpt", torch_dtype=torch.float16, device=0)
+generator = pipeline(task="text-generation", model="openai-community/gpt", dtype=torch.float16, device=0)
 output = generator("The future of AI is", max_length=50, do_sample=True)
 print(output[0]["generated_text"])
 ```
@@ -62,7 +62,7 @@ print(output[0]["generated_text"])
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt")
-model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", dtype=torch.float16)
 
 inputs = tokenizer("The future of AI is", return_tensors="pt")
 outputs = model.generate(**inputs, max_length=50)

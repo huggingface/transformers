@@ -37,7 +37,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to("cuda")
 # explicitly set to default length because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -57,7 +57,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to("cuda")
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=1)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -80,7 +80,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to("cuda")
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, num_beams=2)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -125,7 +125,7 @@ pipe = pipeline(
     "text-generation",
     model="meta-llama/Llama-3.1-8B",
     assistant_model="meta-llama/Llama-3.2-1B",
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
 pipe_output[0]["generated_text"]
@@ -163,8 +163,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to("cuda")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype=torch.float16).to("cuda")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
 outputs = model.generate(**inputs, assistant_model=assistant_model, max_new_tokens=20, prompt_lookup_num_tokens=5)
@@ -231,7 +231,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to("cuda")
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=100, penalty_alpha=0.6, top_k=4)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -265,7 +265,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to("cuda")
 inputs = tokenizer("What is the highest peak in the world??", return_tensors="pt").to("cuda")
 
 outputs = model.generate(**inputs, max_new_tokens=50, dola_layers="high", do_sample=False)
@@ -283,7 +283,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to("cuda")
 inputs = tokenizer("What is the highest peak in the world?", return_tensors="pt").to("cuda")
 
 outputs = model.generate(**inputs, max_new_tokens=50, dola_layers=[18,20], do_sample=False, repetition_penalty=1.2)
@@ -307,7 +307,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to("cuda")
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype=torch.float16).to("cuda")
 # explicitly set to 100 because Llama2 generation length is 4096
 outputs = model.generate(**inputs, max_new_tokens=50, num_beams=6, num_beam_groups=3, diversity_penalty=1.0, do_sample=False)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)

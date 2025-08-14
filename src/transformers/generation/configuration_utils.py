@@ -1092,17 +1092,17 @@ class GenerationConfig(PushToHubMixin):
         else:
             return config
 
-    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
+    def dict_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        Checks whether the passed dictionary and its nested dicts have a *dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype") is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("dtype") is not None and not isinstance(d["dtype"], str):
+            d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
+                self.dict_dtype_to_str(value)
 
     def to_diff_dict(self) -> dict[str, Any]:
         """
@@ -1124,7 +1124,7 @@ class GenerationConfig(PushToHubMixin):
             if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
-        self.dict_torch_dtype_to_str(serializable_config_dict)
+        self.dict_dtype_to_str(serializable_config_dict)
         return serializable_config_dict
 
     def to_dict(self) -> dict[str, Any]:
@@ -1147,7 +1147,7 @@ class GenerationConfig(PushToHubMixin):
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
 
-        self.dict_torch_dtype_to_str(output)
+        self.dict_dtype_to_str(output)
         return output
 
     def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:

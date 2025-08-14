@@ -265,7 +265,7 @@ def write_model(
 
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    GptOssForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    GptOssForCausalLM.from_pretrained(model_path, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config

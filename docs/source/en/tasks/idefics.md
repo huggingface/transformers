@@ -76,7 +76,7 @@ preparing text and image inputs for the model.
 
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 ```
 
 Setting `device_map` to `"auto"` will automatically determine how to load and store the model weights in the most optimized 
@@ -390,7 +390,7 @@ The use and prompting for the conversational use is very similar to using the ba
 
 >>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16).to(device)
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
 >>> prompts = [

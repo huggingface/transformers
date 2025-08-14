@@ -46,7 +46,7 @@ from transformers import BarkModel
 import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
 #### Using CPU offload
@@ -91,7 +91,7 @@ pip install -U flash-attn --no-build-isolation
 To load a model using Flash Attention 2, we can pass the `attn_implementation="flash_attention_2"` flag to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 ```
 
 ##### Performance comparison
@@ -119,7 +119,7 @@ import torch
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load in fp16 and use Flash Attention 2
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
 
 # enable CPU offload
 model.enable_cpu_offload()

@@ -35,7 +35,7 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
 
 - To load [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) in float32 one would need at least 2x model size
   RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB
-  RAM to just load the model. To reduce the RAM usage there are a few options. The `torch_dtype` argument can be
+  RAM to just load the model. To reduce the RAM usage there are a few options. The `dtype` argument can be
   used to initialize the model in half-precision on a CUDA device only. There is also a fp16 branch which stores the fp16 weights,
   which could be used to further minimize the RAM usage:
 
@@ -47,7 +47,7 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
 >>> model = GPTJForCausalLM.from_pretrained(
 ...     "EleutherAI/gpt-j-6B",
 ...     revision="float16",
-...     torch_dtype=torch.float16,
+...     dtype=torch.float16,
 ... ).to(device)
 ```
 
@@ -99,7 +99,7 @@ model.
 >>> import torch
 
 >>> device = "cuda"
->>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16).to(device)
+>>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
 >>> prompt = (

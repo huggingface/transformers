@@ -93,7 +93,7 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
 >>> prompt = "My favourite condiment is"

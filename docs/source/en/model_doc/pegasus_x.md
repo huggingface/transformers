@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="google/pegasus-x-large",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-x-large",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -101,7 +101,7 @@ quantization_config = BitsAndBytesConfig(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-x-large",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

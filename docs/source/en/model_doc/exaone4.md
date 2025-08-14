@@ -70,7 +70,7 @@ model_name = "LGAI-EXAONE/EXAONE-4.0-32B"
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype="bfloat16",
+    dtype="bfloat16",
     device_map="auto"
 )
 tokenizer = AutoTokenizer.from_pretrained(model_name)

@@ -142,7 +142,7 @@ def main():
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
         tp_plan="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     logger.info(f"Model loaded onto device mesh: {tp_mesh}")
     device = torch.device(f"cuda:{local_rank}")

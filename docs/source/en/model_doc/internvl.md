@@ -88,7 +88,7 @@ This example demonstrates how to perform inference on a single image with the In
 >>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -120,7 +120,7 @@ This example shows how to generate text using the InternVL model without providi
 >>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -150,7 +150,7 @@ InternVL models also support batched image and text inputs.
 >>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -194,7 +194,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 >>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -277,7 +277,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 >>> torch_device = "cuda"
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [

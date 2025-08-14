@@ -46,7 +46,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 pipeline = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 results = pipeline(image)

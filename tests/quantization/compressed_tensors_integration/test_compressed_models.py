@@ -65,13 +65,13 @@ class StackCompressedModelTest(unittest.TestCase):
                 uncompressed = AutoModelForCausalLM.from_pretrained(
                     uncompressed_model,
                     device_map="auto",
-                    torch_dtype="auto",
+                    dtype="auto",
                     quantization_config=CompressedTensorsConfig(run_compressed=False),
                 )
                 compressed_decompressed = AutoModelForCausalLM.from_pretrained(
                     compressed_model,
                     device_map="auto",
-                    torch_dtype="auto",
+                    dtype="auto",
                     quantization_config=CompressedTensorsConfig(run_compressed=False),
                 )
 
@@ -100,7 +100,7 @@ class StackCompressedModelTest(unittest.TestCase):
         uncompressed = AutoModelForCausalLM.from_pretrained(
             self.sparse_uncompressed_model,
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
 
@@ -109,7 +109,7 @@ class StackCompressedModelTest(unittest.TestCase):
         decompressed = AutoModelForCausalLM.from_pretrained(
             self.sparse_compressed_model,
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
         output_decompressed = decompressed.generate(input_ids.to(decompressed.device), max_new_tokens=100)
@@ -132,7 +132,7 @@ class StackCompressedModelTest(unittest.TestCase):
                     AutoModelForCausalLM.from_pretrained(
                         model_stub,
                         device_map="auto",
-                        torch_dtype="auto",
+                        dtype="auto",
                         quantization_config=CompressedTensorsConfig(run_compressed=False),
                     )
                     for warning in caught_warnings:

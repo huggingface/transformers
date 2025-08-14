@@ -46,7 +46,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="fill-mask",
     model="junnyu/roformer_chinese_base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 output = pipe("水在零度时会[MASK]")
@@ -63,7 +63,7 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 model = AutoModelForMaskedLM.from_pretrained(
-    "junnyu/roformer_chinese_base", torch_dtype=torch.float16
+    "junnyu/roformer_chinese_base", dtype=torch.float16
 )
 tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
 

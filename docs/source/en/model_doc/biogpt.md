@@ -43,7 +43,7 @@ from transformers import pipeline
 generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
@@ -60,7 +60,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/biogpt",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -104,7 +104,7 @@ tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/BioGPT-Large", 
     quantization_config=bnb_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto"
 )
 

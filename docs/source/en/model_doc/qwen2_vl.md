@@ -270,7 +270,7 @@ from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2-VL-7B-Instruct", 
-    torch_dtype=torch.bfloat16, 
+    dtype=torch.bfloat16, 
     attn_implementation="flash_attention_2",
 )
 ```

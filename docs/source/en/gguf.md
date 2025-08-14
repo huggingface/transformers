@@ -38,9 +38,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
 filename = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
 
-torch_dtype = torch.float32 # could be torch.float16 or torch.bfloat16 too
+dtype = torch.float32 # could be torch.float16 or torch.bfloat16 too
 tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
-model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, torch_dtype=torch_dtype)
+model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, dtype=dtype)
 ```
 
 Once you're done tinkering with the model, save and convert it back to the GGUF format with the [convert-hf-to-gguf.py](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py) script.

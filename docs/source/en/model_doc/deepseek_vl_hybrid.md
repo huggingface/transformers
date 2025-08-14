@@ -43,7 +43,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="deepseek-community/deepseek-vl-7b-chat",
     device=0,
-    torch_dtype=torch.float16
+    dtype=torch.float16
 )
 
 messages = [
@@ -71,7 +71,7 @@ from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -131,7 +131,7 @@ quantization_config = TorchAoConfig(
 
 model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-7b-chat",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -145,7 +145,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
     model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
         "deepseek-community/deepseek-vl-7b-chat",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )

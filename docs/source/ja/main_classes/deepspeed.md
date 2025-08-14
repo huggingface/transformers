@@ -1776,7 +1776,7 @@ ZeRO-3 設定を有効にすると、これがサンプル スクリプトの記
 この方法とその他の関連機能の詳細については、[大規模モデルの構築](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) を参照してください。
 
 また、fp16 で事前訓練されたモデルをロードするときは、`from_pretrained` に使用するように指示する必要があります。
-`torch_dtype=torch.float16`。詳細については、[from_pretrained-torch-dtype](#from_pretrained-torch-dtype) を参照してください。
+`dtype=torch.float16`。詳細については、[from_pretrained-torch-dtype](#from_pretrained-torch-dtype) を参照してください。
 
 #### Gathering Parameters
 

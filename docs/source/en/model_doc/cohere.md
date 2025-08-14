@@ -30,7 +30,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="CohereForAI/c4ai-command-r-v01",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -44,7 +44,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
@@ -64,7 +64,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```bash
 # pip install -U flash-attn --no-build-isolation
-transformers chat CohereForAI/c4ai-command-r-v01 --torch_dtype auto --attn_implementation flash_attention_2
+transformers chat CohereForAI/c4ai-command-r-v01 --dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -80,7 +80,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", torch_dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
@@ -110,7 +110,7 @@ visualizer("Plants create energy through a process known as")
 
 
 ## Notes
-- Don’t use the torch_dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
+- Don’t use the dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
 ## CohereConfig
 

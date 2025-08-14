@@ -46,7 +46,7 @@ model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
 
 processor = LlavaProcessor.from_pretrained(model_id)
 
-model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.float16)
+model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype=torch.float16)
 model.to("cuda") # can also be xpu, mps, npu etc. depending on your hardware accelerator
 ```
 
