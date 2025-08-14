@@ -182,3 +182,8 @@ error, it means NCCL was probably not loaded.
 
 [[autodoc]] DeepseekV3ForCausalLM
     - forward
+
+## DeepseekV3ForSequenceClassification
+
+[[autodoc]] DeepseekV3ForSequenceClassification
+    - forward
