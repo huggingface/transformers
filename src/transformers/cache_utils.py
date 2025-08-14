@@ -101,7 +101,7 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -184,7 +184,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -306,7 +306,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -382,7 +382,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -461,7 +461,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -570,7 +570,7 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -783,7 +783,7 @@ class Cache:
             # Try to find next non-sliding, starting at `layer_idx`
             try:
                 layer_idx = layer_idx + self.is_sliding[layer_idx:].index(False)
-            # In this case, we need to circle back to the begining
+            # In this case, we need to circle back to the beginning
             except ValueError:
                 layer_idx = self.is_sliding.index(False)
         else:
