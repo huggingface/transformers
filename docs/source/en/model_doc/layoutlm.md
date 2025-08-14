@@ -28,16 +28,6 @@ rendered properly in your Markdown viewer.
 
 [LayoutLM](https://huggingface.co/papers/1912.13318) jointly learns text and the document layout rather than focusing only on text. It incorporates positional layout information and visual features of words from the document images.
 
-E.g., if you're looking at a receipt, you know the price is next to the "Total" label because of its position. LayoutLM learns this exact kind of spatial relationship. It takes a standard model like [BERT](https://huggingface.co/docs/transformers/v4.53.3/en/model_doc/bert) for text embedding, but adds two more things: it feeds the model not just the text, but also 1. the location of every single word in the document (2-D position embedding via bounding boxes for each word) and 2. the whole document as an image (image embedding of scanned document images). 
-
-It's also pre-trained using two unique approaches:
-
-- **Masked Visual-Language Model (MVLM)**: It's like a fill-in-the-blanks test. The model sees a document with some words blacked out, and it has to guess what's missing by looking at the other words and their positions on the page.
-
-- **Multi-label Document Classification (MDC)**: It also learns to categorize entire documents (like "this is a tax form" or "this is a resume"). This helps it get a better overall understanding of the document's structure and purpose.
-
-So, in a nutshell, it's a model that understands both the words and the layout, making it a great tool for reading and understanding documents.
-
 You can find all the original LayoutLM checkpoints under the [LayoutLM](https://huggingface.co/collections/microsoft/layoutlm-6564539601de72cb631d0902) collection.
 
 > [!TIP]
@@ -55,26 +45,43 @@ Note, that the original LayoutLM version cannot be readily used with the [`Pipel
 <hfoption id="AutoModel">
 
 ```py
-from transformers import AutoTokenizer, AutoModelForTokenClassification
-from datasets import load_dataset
+import torch  
+from datasets import load_dataset  
+from transformers import AutoTokenizer, LayoutLMForQuestionAnswering  
 
-# Load a sample dataset to get an example
-dataset = load_dataset("nielsr/funsd")
-example = dataset["train"][0]
-words = example["words"] # provides already pre-processed inputs for demonstration purposes
-boxes = example["bboxes"] # provides already pre-processed inputs for demonstration purposes
+tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)  
+model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", torch_dtype=torch.float16)  
 
-# Load model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", use_fast=False)
-model = AutoModelForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
+dataset = load_dataset("nielsr/funsd", split="train")  
+example = dataset[0]  
+question = "what's his name?"  
+words = example["words"]  
+boxes = example["bboxes"]  
 
-# Process inputs
-encoding = tokenizer(words, boxes=boxes, is_split_into_words=True, return_tensors="pt")
+encoding = tokenizer(  
+    question.split(), 
+    words, 
+    is_split_into_words=True, 
+    return_token_type_ids=True, 
+    return_tensors="pt"  
+)  
+bbox = []  
+for i, s, w in zip(encoding.input_ids[0], encoding.sequence_ids(0), encoding.word_ids(0)):  
+    if s == 1:  
+        bbox.append(boxes[w])  
+    elif i == tokenizer.sep_token_id:  
+        bbox.append([1000] * 4)  
+    else:  
+        bbox.append([0] * 4)  
+encoding["bbox"] = torch.tensor([bbox])  
 
-# Get predictions
-outputs = model(**encoding)
-
-print(outputs.logits.shape) # (1, 148, 7) - batch_size, sequence_length, num_labels
+word_ids = encoding.word_ids(0)  
+outputs = model(**encoding)  
+loss = outputs.loss  
+start_scores = outputs.start_logits  
+end_scores = outputs.end_logits  
+start, end = word_ids[start_scores.argmax(-1)], word_ids[end_scores.argmax(-1)]  
+print(" ".join(words[start : end + 1]))  
 ```
 
 </hfoption>
@@ -84,40 +91,6 @@ For the original LayoutLM version, `transformers-cli` usage is not readily appli
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. 
-
-The example below uses `TorchAoConfig` to only quantize the weights to `int8`.
-
-```python
-# pip install torchao accelerate
-import torch
-from transformers import TorchAoConfig, LayoutLMForTokenClassification, AutoTokenizer
-from datasets import load_dataset
-
-# Define the quantization configuration
-quantization_config = TorchAoConfig("int8_weight_only", group_size=128)
-
-# Load the model with 8-bit quantization
-model = LayoutLMForTokenClassification.from_pretrained(
-    "microsoft/layoutlm-base-uncased",
-    torch_dtype=torch.bfloat16,
-    quantization_config=quantization_config
-)
-
-# Load the tokenizer
-tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", use_fast=False)
-
-# Example input
-dataset = load_dataset("nielsr/funsd")
-example = dataset["train"][0]
-encoding = tokenizer(example["words"], boxes=example["bboxes"], is_split_into_words=True, return_tensors="pt")
-inputs = encoding
-
-# Perform inference
-outputs = model(**inputs)
-print(outputs)
-```
 
 ## Notes
 
@@ -145,10 +118,6 @@ image = Image.open(name_of_your_document).convert("RGB")
 
 width, height = image.size
 ```
-
-
-- [**AttentionMaskVisualizer**](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) is not directly compatible with LayoutLM's multi-modal output (text and layout) and attention structure (as opposed to text-based models like BERT with standard attention mechanisms).  
-
 
 ### LayoutLMConfig
 
@@ -217,33 +186,9 @@ width, height = image.size
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-<PipelineTag pipeline="document-question-answering" />
-
-- A blog post on [fine-tuning
-  LayoutLM for document-understanding using Keras & Hugging Face
-  Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras).
-
-- A blog post on how to [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm).
-
-- A notebook on how to [fine-tune LayoutLM on the FUNSD dataset with image embeddings](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb).
-
-- See also: [Document question answering task guide](../tasks/document_question_answering)
-
-<PipelineTag pipeline="text-classification" />
-
-- A notebook on how to [fine-tune LayoutLM for sequence classification on the RVL-CDIP dataset](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb).
-- [Text classification task guide](../tasks/sequence_classification)
-
-<PipelineTag pipeline="token-classification" />
-
-- A notebook on how to [ fine-tune LayoutLM for token classification on the FUNSD dataset](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb).
-- [Token classification task guide](../tasks/token_classification)
-
-**Other resources**
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-
-- [The official GitHub repository for LayoutLM](https://github.com/microsoft/unilm/tree/master/layoutlm)
-
-🚀 Deploy
-
-- A blog post on how to [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm).
+- Read [fine-tuning LayoutLM for document-understanding using Keras & Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras) to learn more.  
+- Read [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm) for more information.  
+- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb) for a practical example of how to fine-tune LayoutLM.  
+- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb) for an example of how to fine-tune LayoutLM for sequence classification.  
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb) for an example of how to fine-tune LayoutLM for token classification.  
+- Read [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm) to learn how to deploy LayoutLM.  
