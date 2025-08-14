@@ -1261,7 +1261,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 num_requests=len(self.input_queue.queue),
-                tp_size=getattr(self.model, "_tp_size", 8),  # TODO quantized converted don't set this
+                tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
 
             scheduler = None
