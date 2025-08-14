@@ -4880,7 +4880,6 @@ class ModelTesterMixin:
             # Check everything was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                # print(subconfig_key, getattr(model.config, subconfig_key)._attn_implementation)
                 self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
             # Check we cannot set it to random values, and it raises an error
