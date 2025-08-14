@@ -1060,26 +1060,28 @@ class DynamicCache(Cache):
             return
 
         # Pytree registration causes memory leak for FSDP runs, see here: https://github.com/huggingface/transformers/issues/39795
-        if (
-            is_torch_greater_or_equal("2.3")
-            and not is_fsdp_enabled()
-            and not torch.utils._pytree._is_leaf(DynamicCache)
-        ):
-            torch.utils._pytree.register_pytree_node(
-                DynamicCache,
-                lambda dynamic_cache: torch.utils._pytree._dict_flatten(cls._get_cache_dict(dynamic_cache)),
-                cls._unflatten_dynamic_cache,
-                serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-                flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                    cls._get_cache_dict(dynamic_cache)
-                ),
-            )
-            # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
-            torch.fx._pytree.register_pytree_flatten_spec(
-                DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(cls._get_cache_dict(cache), spec)
-            )
+        if is_torch_greater_or_equal("2.3") and not is_fsdp_enabled():
+            try:
+                torch.utils._pytree.register_pytree_node(
+                    DynamicCache,
+                    lambda dynamic_cache: torch.utils._pytree._dict_flatten(cls._get_cache_dict(dynamic_cache)),
+                    cls._unflatten_dynamic_cache,
+                    serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+                    flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
+                        cls._get_cache_dict(dynamic_cache)
+                    ),
+                )
+                # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+                torch.fx._pytree.register_pytree_flatten_spec(
+                    DynamicCache,
+                    lambda cache, spec: torch.fx._pytree._dict_flatten_spec(cls._get_cache_dict(cache), spec),
+                )
 
-            cls._export_registered = True
+                cls._export_registered = True
+            # Catching this in case there are multiple runs for some test runs
+            except ValueError as e:
+                if "already registered as pytree node" not in str(e):
+                    raise
 
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
