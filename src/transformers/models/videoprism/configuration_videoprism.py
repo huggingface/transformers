@@ -85,6 +85,10 @@ class VideoPrismConfig(PretrainedConfig):
         qkv_bias=True,
         _attn_implementation="eager",
         atten_logit_cap=50.0,
+        num_auxiliary_layers=2,
+        enable_causal_atten=True,  #! vv imp but only for text encoder
+        num_unimodal_layers=12,
+        vocabulary_size=32000,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -106,6 +110,10 @@ class VideoPrismConfig(PretrainedConfig):
         self.num_temporal_layers = num_temporal_layers
         self._attn_implementation = _attn_implementation
         self.atten_logit_cap = atten_logit_cap
+        self.num_auxiliary_layers = num_auxiliary_layers
+        self.enable_causal_atten = enable_causal_atten  #! todo
+        self.num_unimodal_layers = num_unimodal_layers
+        self.vocabulary_size = vocabulary_size
 
 
 __all__ = ["VideoPrismConfig"]

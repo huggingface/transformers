@@ -205,7 +205,7 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
             print(f"Key: {k}, Value shape: {shape}, values: {v[new_shape]} ")
     
         #first = state_dict["params/patch_projection/linear/bias"]
-        transform_state(state_dict, checkpoint_info)
+        #transform_state(state_dict, checkpoint_info)
 
     if upload:
         api = HfApi()
@@ -278,4 +278,4 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
 
 
 if __name__ == "__main__":
-    convert(model_size='large', convert=False, upload=True, load_model=False, load_video=False, inference=False)
+    convert(model_type='lvt', model_size='large', convert=True, upload=False, load_model=False, load_video=False, inference=False)

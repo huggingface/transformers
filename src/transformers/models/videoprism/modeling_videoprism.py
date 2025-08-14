@@ -5,6 +5,7 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
@@ -459,6 +460,10 @@ class VideoPrismEncoder(nn.Module):
             self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_spatial_layers)])
         elif mode == "temporal":
             self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_temporal_layers)])
+        elif mode == "auxiliary":
+            self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_auxiliary_layers)])
+        elif mode == "unimodal":
+            self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_unimodal_layers)])
         else:
             raise ValueError(f"Unknown mode: {mode}. Supported modes are: spatial, temporal.")
 
@@ -662,4 +667,190 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
         )  # ? returns (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
 
 
-__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel"]
+class PerDimScale(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        dim = int(config.intermediate_size / config.num_attention_heads)
+        self.per_dim_scale = nn.Parameter(torch.zeros(dim))
+
+    def forward(self, inputs):
+        print(f"{inputs.shape=} -----------------------------------------------")
+        print(f"{self.per_dim_scale.shape=} -----------------------------------------------")
+        dim = inputs.shape[-1]  # ? dim is 256 for large lvt as inputs is (B, 1, N, H) = (1, 1, 16, 64)
+
+        # ? original comments
+        # 1.0/jax.nn.softplus(0.0) = 1.442695041. Hard code this number so that we
+        # can avoid unnecessary XLA op fusion mess on TPU.
+
+        r_softplus_0 = 1.442695041
+
+        scale = torch.tensor(r_softplus_0 / (dim ** 0.5), dtype=inputs.dtype)
+        params = nn.Softplus()(self.per_dim_scale)
+        scale = scale * params.unsqueeze(0).unsqueeze(0).unsqueeze(-1)  # ? (1, 1, 1, 256) 
+        print("all good here")
+        ret = inputs * scale
+        print(f"{ret.shape=} -----------------------------------------------")
+        return ret
+
+
+class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__()
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.intermediate_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.query = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
+        self.projection = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.qkv_bias)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states,
+        head_mask=None,
+        output_attentions=False,
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+        batch_size, seq_length, hidden_size = hidden_states.shape
+        query = self.pooling_attention_query.expand(batch_size, -1, -1)  # Expand to (B, 1, D)
+        query_layer = (
+            self.query(query)  # Transform query to (B, 1, D')
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+
+        query_layer = PerDimScale(self.config)(query_layer)
+
+        key_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+
+        value_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        attention_interface: Callable = eager_attention_forward
+        # attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,  #! need to confirm
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        # outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        outputs = self.projection(context_layer)
+
+        outputs = self.layernorm(outputs)
+
+        return outputs  # ? (B, 1, 768)
+
+
+class VideoPrismTextEncoder(nn.Module):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__()
+        self.config = config
+        self.config.hidden_act = "relu"
+        if self.config.enable_causal_atten:
+            self.config.is_causal = True
+        self.unimodal_encoder = VideoPrismEncoder(config, mode="unimodal")
+        self.pos_embeddings = nn.Parameter(torch.zeros(config.hidden_size))
+        self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
+        self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self, text_token_ids, padding, head_mask, output_attentions=False, output_hidden_states=False, return_dict=True
+    ):
+        input_embeds = self.token_embeddings(text_token_ids)  # ? text_token_ids = (B, 64)
+        # ? the shape of input_embeds is (B, 64, 768)
+        features = input_embeds + self.pos_embeddings  # ? add positional embeddings
+        cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
+        cls_emb = cls_emb.expand(features.shape[0], -1, -1)  # ? expand to (B, 1, 768)
+        features = torch.cat((features, cls_emb), dim=1)  # ? features shape (B, 65, 768)
+        features = self.unimodal_encoder(
+            features,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        features = features[0]  # ? features shape (B, 65, 768)
+
+        features = self.layernorm(features)  # ? layernorm the features
+
+        return features
+
+
+def _l2_normalize(x: torch.Tensor, axis: int | Sequence[int] = -1, epsilon: float = 1e-12) -> torch.Tensor:
+    """L2-normalizes a torch.Tensor along certain dimension.
+
+    Args:
+      x: An input jax.Array.
+      axis: An integer or a sequence of integers for the axis to normalize.
+      epsilon: A small constant for numerical stability.
+
+    Returns:
+      Normalized torch.Tensor.
+    """
+    norm = torch.sqrt(torch.sum(x**2, dim=axis, keepdims=True) + epsilon)
+    return x / norm
+
+
+class VideoPrismClip(nn.Module):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__()
+        self.config = config
+        self.backbone = VideoPrismModel(config)
+        self.auxiliary_encoder = VideoPrismEncoder(config, mode="auxiliary")
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.text_encoder = VideoPrismTextEncoder(config)
+        self.l2norm = _l2_normalize
+        self.normalize = True  #! need to store in config
+
+    def forward(self, pixel_values: torch.FloatTensor, text_token_ids, text_padding):
+        video_features = self.backbone(pixel_values=pixel_values)
+
+        vision_features = self.auxiliary_encoder(
+            video_features.last_hidden_state, output_attentions=False, output_hidden_states=False, return_dict=True
+        ).last_hidden_state
+
+        video_embeddings = self.contrastive_vision_pooler(vision_features)[0]
+
+        if self.normalize:
+            video_embeddings = self.l2norm(video_embeddings, axis=-1)
+
+        text_features = self.text_encoder(
+            text_token_ids,
+            padding=text_padding,
+            head_mask=None,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=True,
+        )
+        text_embeddings = text_features[:, -1]  # ? (B, 1, 768)
+        if self.normalize:
+            text_embeddings = self.l2norm(text_embeddings, axis=-1)
+
+        return video_embeddings, text_embeddings
+
+
+__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel", "VideoPrismClip"]
