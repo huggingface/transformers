@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
@@ -446,6 +447,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
