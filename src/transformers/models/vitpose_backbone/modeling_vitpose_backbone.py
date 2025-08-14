@@ -259,6 +259,7 @@ class VitPoseBackboneAttention(nn.Module):
         return outputs
 
 
+# FIXME: refactor?
 class VitPoseBackboneMoeMLP(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()

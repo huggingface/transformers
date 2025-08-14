@@ -840,6 +840,7 @@ class JambaMLP(nn.Module):
         return down_proj
 
 
+# FIXME: update the experts and use modular?
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralSparseMoeBlock with Mistral->Jamba
 class JambaSparseMoeBlock(nn.Module):
     """

@@ -731,6 +731,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
+# FIXME: update moe layer + use modular
 class PhimoeSparseMoeBlock(nn.Module):
     """
     This implementation is
