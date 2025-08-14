@@ -23,7 +23,6 @@ if is_torch_npu_available():
 
     import torch_npu
     from einops import rearrange, repeat
-    from torch_npu import npu_rotary_mul
 
 
 # FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask by default.
@@ -251,4 +250,3 @@ def npu_flash_attn_varlen_func(
         )[0]
 
     return output
-
