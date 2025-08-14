@@ -275,6 +275,10 @@ class Llama4TextConfig(PretrainedConfig):
         "layers.*.feed_forward.down_proj": "local_rowwise",
         "layers.*.feed_forward.router": "ep_router",
     }
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "top_k": "num_experts_per_tok",
+    }
 
     def __init__(
         self,
