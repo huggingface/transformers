@@ -67,7 +67,7 @@ print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 <hfoption id="transformers-cli">
 
 ```bash
-transformers-cli translate   --model facebook/nllb-200-distilled-600M   --src_lang eng_Latn   --tgt_lang fra_Latn   --text "UN Chief says there is no military solution in Syria"
+echo -e "UN Chief says there is no military solution in Syria" | transformers run --task "translation_en_to_fr" --model facebook/nllb-200-distilled-600M --device 0
 ```
 
 </hfoption>
