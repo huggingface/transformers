@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-03 and added to Hugging Face Transformers on 2024-09-03.*
 
 <div style="float: right;">
 <div class="flex flex-wrap space-x-1">
@@ -29,7 +30,7 @@ rendered properly in your Markdown viewer.
 You can find all the original OLMoE checkpoints under the [OLMoE](https://huggingface.co/collections/allenai/olmoe-november-2024-66cf678c047657a30c8cd3da) collection.
 
 > [!TIP]
-> This model was contributed by [Muennighoff](https://hf.co/Muennighoff).
+> This model was contributed by [Muennighoff](https://huggingface.co/Muennighoff).
 >
 > Click on the OLMoE models in the right sidebar for more examples of how to apply OLMoE to different language tasks.
 
