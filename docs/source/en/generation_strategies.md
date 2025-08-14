@@ -504,6 +504,31 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
+### Reusing `generate`’s input preparation
+
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
+
+```py
+def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+    next_tokens = input_ids
+    while input_ids.shape[1] < stopping_criteria[0].max_length:
+        logits = model(next_tokens, attention_mask=attention_mask, **model_kwargs).logits
+        next_token_logits = logits_processor(input_ids, logits[:, -1, :])
+        next_tokens = torch.argmax(next_token_logits, dim=-1)[:, None]
+        input_ids = torch.cat((input_ids, next_tokens), dim=-1)
+        attention_mask = torch.cat((attention_mask, torch.ones_like(next_tokens)), dim=-1)
+    return input_ids
+
+output = model.generate(
+    **inputs,
+    custom_generate=custom_loop,
+    max_new_tokens=10,
+)
+```
+
+> [!TIP]
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
+
 ### Finding custom generation methods
 
 You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:

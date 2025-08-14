@@ -829,13 +829,22 @@ class ServeCommand(BaseTransformersCLICommand):
             parsed_message = {"role": message["role"], "content": []}
 
             if modality == Modality.LLM:
-                # If we're working with LLMs, then "content" is a single string.
-                content = message["content"] if isinstance(message["content"], str) else message["content"]["text"]
-                parsed_message["content"] = content
+                # Input: `content` is a string or a list of dictionaries with a "text" key.
+                # Output: `content` is a string.
+                if isinstance(message["content"], str):
+                    parsed_content = message["content"]
+                elif isinstance(message["content"], list):
+                    parsed_content = []
+                    for content in message["content"]:
+                        if content["type"] == "text":
+                            parsed_content.append(content["text"])
+                    parsed_content = " ".join(parsed_content)
+                parsed_message["content"] = parsed_content
 
             elif modality == Modality.VLM:
-                # If we're working with VLMs, then "content" is a dictionary, containing a "type" key indicating
-                # which other key will be present and the type of the value of said key.
+                # Input: `content` is a string or a list of dictionaries with a "type" key (possible types: "text",
+                # "image_url").
+                # Output: `content` is a list of dictionaries with a "type" key
                 if isinstance(message["content"], str):
                     parsed_message["content"].append({"type": "text", "text": message["content"]})
                 else:
