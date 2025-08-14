@@ -154,6 +154,7 @@ class ApertusConfig(LlamaConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "apertus"
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -188,7 +189,7 @@ class ApertusConfig(LlamaConfig):
             "factor": 8.0,
             "original_max_position_embeddings": 8192,
             "low_freq_factor": 1.0,
-            "high_freq_factor": 4.0
+            "high_freq_factor": 4.0,
         },
         attention_bias=False,
         attention_dropout=0.0,
@@ -388,6 +389,7 @@ class ApertusForCausalLM(LlamaForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
         return super().forward(**super_kwargs)
+
     pass
 
 
@@ -397,8 +399,6 @@ class ApertusForTokenClassification(LlamaForTokenClassification):
 
 class ApertusModel(LlamaModel):
     pass
-
-
 
 
 __all__ = [
