@@ -28,7 +28,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel
+from transformers import Dinov3VitConfig, Dinov3VitImageProcessorFast, Dinov3VitModel
 
 
 HUB_MODELS = {
@@ -104,10 +104,10 @@ def split_qkv(state_dict: dict):
     return state_dict
 
 
-def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
+def get_dinov3_config(model_name: str) -> Dinov3VitConfig:
     # size of the architecture
     if model_name == "vits16_lvd1689m":
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=384,
             intermediate_size=1536,
@@ -119,7 +119,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             hidden_act="gelu",
         )
     elif model_name == "vits16plus_lvd1689m":
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=384,
             intermediate_size=1536,
@@ -130,7 +130,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             hidden_act="silu",
         )
     elif model_name == "vitb16_lvd1689m":
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=768,
             intermediate_size=3072,
@@ -142,7 +142,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             hidden_act="gelu",
         )
     elif model_name in ("vitl16_lvd1689m", "vitl16_sat493m"):
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=1024,
             intermediate_size=4096,
@@ -153,7 +153,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             hidden_act="gelu",
         )
     elif model_name == "vith16plus_lvd1689m":
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=1280,
             intermediate_size=5120,
@@ -164,7 +164,7 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
             hidden_act="silu",
         )
     elif model_name in ("vit7b16_lvd1689m", "vit7b16_sat493m"):
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             patch_size=16,
             hidden_size=4096,
             intermediate_size=8192,
@@ -197,7 +197,7 @@ def get_transform(resize_size: int = 224):
 
 
 def get_image_processor(resize_size: int = 224):
-    return DINOv3ViTImageProcessorFast(
+    return Dinov3VitImageProcessorFast(
         do_resize=True,
         size={"height": resize_size, "width": resize_size},
         resample=2,  # BILINEAR
@@ -228,7 +228,7 @@ def convert_and_test_dinov3_checkpoint(args):
     model_name = args.model_name
     config = get_dinov3_config(model_name)
 
-    model = DINOv3ViTModel(config).eval()
+    model = Dinov3VitModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
     original_state_dict = torch.load(state_dict_path, mmap=True)
 

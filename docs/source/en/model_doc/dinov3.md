@@ -157,25 +157,25 @@ print("Pooled output shape:", pooled_output.shape)
   patch_features = patch_features_flat.unflatten(1, (num_patches_height, num_patches_width))
   ```
 
-## DINOv3ViTConfig
+## Dinov3VitConfig
 
-[[autodoc]] DINOv3ViTConfig
+[[autodoc]] Dinov3VitConfig
 
-## DINOv3ConvNextConfig
+## Dinov3ConvNextConfig
 
-[[autodoc]] DINOv3ConvNextConfig
+[[autodoc]] Dinov3ConvNextConfig
 
-## DINOv3ViTModel
+## Dinov3VitModel
 
-[[autodoc]] DINOv3ViTModel
+[[autodoc]] Dinov3VitModel
     - forward
 
-## DINOv3ConvNextModel
+## Dinov3ConvNextModel
 
-[[autodoc]] DINOv3ConvNextModel
+[[autodoc]] Dinov3ConvNextModel
     - forward
 
-## DINOv3ViTImageProcessorFast
+## Dinov3VitImageProcessorFast
 
-[[autodoc]] DINOv3ViTImageProcessorFast
+[[autodoc]] Dinov3VitImageProcessorFast
     - preprocess

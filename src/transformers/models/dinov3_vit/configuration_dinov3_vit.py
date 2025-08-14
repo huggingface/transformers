@@ -23,9 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ViTConfig(PretrainedConfig):
+class Dinov3VitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DINOv3Model`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`Dinov3Model`]. It is used to instantiate an
     DINOv3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DINOv3
     [facebook/dinov3-vits16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m) architecture.
@@ -90,13 +90,13 @@ class DINOv3ViTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DINOv3ViTConfig, DINOv3ViTModel
+    >>> from transformers import Dinov3VitConfig, Dinov3VitModel
 
     >>> # Initializing a DINOv3 ViT-small style configuration
-    >>> config = DINOv3ViTConfig()
+    >>> config = Dinov3VitConfig()
 
     >>> # Initializing a model (with random weights) from the config
-    >>> model = DINOv3ViTModel(config)
+    >>> model = Dinov3VitModel(config)
 
     >>> # Accessing the model config
     >>> config = model.config
@@ -163,4 +163,4 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.pos_embed_rescale = pos_embed_rescale
 
 
-__all__ = ["DINOv3ViTConfig"]
+__all__ = ["Dinov3VitConfig"]

@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import DINOv3ConvNextConfig
+from transformers import Dinov3ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -27,7 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DINOv3ConvNextModel
+    from transformers import Dinov3ConvNextModel
 
 
 if is_vision_available():
@@ -36,7 +36,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class DINOv3ConvNextModelTester:
+class Dinov3ConvNextModelTester:
     def __init__(
         self,
         parent,
@@ -78,7 +78,7 @@ class DINOv3ConvNextModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return DINOv3ConvNextConfig(
+        return Dinov3ConvNextConfig(
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
@@ -89,7 +89,7 @@ class DINOv3ConvNextModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = DINOv3ConvNextModel(config=config)
+        model = Dinov3ConvNextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -111,14 +111,14 @@ class DINOv3ConvNextModelTester:
 
 
 @require_torch
-class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Dinov3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ConvNextModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": DINOv3ConvNextModel} if is_torch_available() else {}
+    all_model_classes = (Dinov3ConvNextModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-feature-extraction": Dinov3ConvNextModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False
@@ -128,10 +128,10 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = DINOv3ConvNextModelTester(self)
+        self.model_tester = Dinov3ConvNextModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=DINOv3ConvNextConfig,
+            config_class=Dinov3ConvNextConfig,
             has_text_modality=False,
             hidden_size=37,
             common_properties=["num_channels", "hidden_sizes"],
@@ -140,15 +140,15 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="DINOv3ConvNext does not use inputs_embeds")
+    @unittest.skip(reason="Dinov3ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="DINOv3ConvNext does not support input and output embeddings")
+    @unittest.skip(reason="Dinov3ConvNext does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="DINOv3ConvNext does not use feedforward chunking")
+    @unittest.skip(reason="Dinov3ConvNext does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -169,7 +169,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
             self.assertEqual(len(hidden_states), 5)
 
-            # DINOv3ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
+            # Dinov3ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[1].shape[-2:]),
                 [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
@@ -190,10 +190,10 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
-        model = DINOv3ConvNextModel.from_pretrained(model_name)
+        model = Dinov3ConvNextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="DINOv3ConvNext does not retain grads for first hidden state (original pixel_values)")
+    @unittest.skip(reason="Dinov3ConvNext does not retain grads for first hidden state (original pixel_values)")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -206,7 +206,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
+class Dinov3ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -217,7 +217,7 @@ class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = DINOv3ConvNextModel.from_pretrained("facebook/dinov3-convnext-tiny-pretrain-lvd1689m").to(torch_device)
+        model = Dinov3ConvNextModel.from_pretrained("facebook/dinov3-convnext-tiny-pretrain-lvd1689m").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

@@ -28,7 +28,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel, DINOv3ViTImageProcessorFast
+from transformers import Dinov3ConvNextConfig, Dinov3ConvNextModel, Dinov3VitImageProcessorFast
 
 
 HUB_MODELS = {
@@ -56,25 +56,25 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
+def get_dinov3_config(model_name: str) -> Dinov3ConvNextConfig:
     # size of the architecture
     if model_name == "convnext_tiny":
-        return DINOv3ConvNextConfig(
+        return Dinov3ConvNextConfig(
             depths=[3, 3, 9, 3],
             hidden_sizes=[96, 192, 384, 768],
         )
     elif model_name == "convnext_small":
-        return DINOv3ConvNextConfig(
+        return Dinov3ConvNextConfig(
             depths=[3, 3, 27, 3],
             hidden_sizes=[96, 192, 384, 768],
         )
     elif model_name == "convnext_base":
-        return DINOv3ConvNextConfig(
+        return Dinov3ConvNextConfig(
             depths=[3, 3, 27, 3],
             hidden_sizes=[128, 256, 512, 1024],
         )
     elif model_name == "convnext_large":
-        return DINOv3ConvNextConfig(
+        return Dinov3ConvNextConfig(
             depths=[3, 3, 27, 3],
             hidden_sizes=[192, 384, 768, 1536],
         )
@@ -99,7 +99,7 @@ def get_transform(resize_size: int = 224):
 
 
 def get_image_processor(resize_size: int = 224):
-    return DINOv3ViTImageProcessorFast(
+    return Dinov3VitImageProcessorFast(
         do_resize=True,
         size={"height": resize_size, "width": resize_size},
         resample=2,  # BILINEAR
@@ -140,7 +140,7 @@ def convert_and_test_dinov3_checkpoint(args):
     config = get_dinov3_config(model_name)
     # print(config)
 
-    model = DINOv3ConvNextModel(config).eval()
+    model = Dinov3ConvNextModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
     original_state_dict = torch.load(state_dict_path)
     original_keys = list(original_state_dict.keys())
