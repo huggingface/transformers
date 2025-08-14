@@ -289,7 +289,7 @@ extras["tf-cpu"] = deps_list(
     "tensorflow-probability",
 )
 
-extras["torch"] = deps_list("torch", "accelerate")
+extras["torch"] = deps_list("torch", "accelerate", "Pillow")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
