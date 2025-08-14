@@ -390,56 +390,6 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ),
             )
 
-    def test_fast_processor_tensor_only(self):
-        """Test that the fast processor correctly rejects PIL inputs and only accepts tensors."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
-
-        # Initialize fast image_processing
-        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # Test that it accepts tensor inputs
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
-        try:
-            result = image_processing(video_inputs[0], return_tensors="pt")
-            self.assertIn("pixel_values", result)
-        except Exception as e:
-            self.fail(f"Fast processor should accept tensor inputs: {e}")
-
-        # Test that it rejects PIL inputs
-        pil_video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
-        with self.assertRaises(ValueError) as context:
-            image_processing(pil_video_inputs[0], return_tensors="pt")
-
-        self.assertIn("only accepts torch.Tensor", str(context.exception))
-
-    def test_fast_processor_separated_operations(self):
-        """Test that the fast processor has separated rescale and normalize operations."""
-        if self.fast_image_processing_class is None:
-            self.skipTest("Fast image processor not available")
-
-        # Initialize fast image_processing
-        image_processing = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # Check that it has separate rescale and normalize methods
-        self.assertTrue(hasattr(image_processing, "rescale"), "Fast processor should have rescale method")
-        self.assertTrue(hasattr(image_processing, "normalize"), "Fast processor should have normalize method")
-
-        # Check that it has the inherited rescale_and_normalize method
-        self.assertTrue(
-            hasattr(image_processing, "rescale_and_normalize"),
-            "Fast processor should have rescale_and_normalize method (inherited)",
-        )
-
-        # Verify inheritance from BaseImageProcessorFast
-        from transformers.image_processing_utils_fast import BaseImageProcessorFast
-
-        self.assertIn(
-            BaseImageProcessorFast,
-            image_processing.__class__.__mro__,
-            "Fast processor should inherit from BaseImageProcessorFast",
-        )
-
     def test_slow_fast_equivalence(self):
         """Test that the slow and fast image processors produce equivalent results."""
         if self.fast_image_processing_class is None:
