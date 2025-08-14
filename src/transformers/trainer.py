@@ -3807,6 +3807,9 @@ class Trainer:
             )
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
+        # Trainer does not support yet Cache classes, so we pass an empty tuple to force legacy tuples output
+        if inputs.get("past_key_values", None) is None:
+            inputs["past_key_values"] = ()
 
         return inputs
 
