@@ -2854,13 +2854,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                 )
             else:
-                applicable_attn_implementation = self._check_and_adjust_attn_implementation(
+                requested_implementation = self._check_and_adjust_attn_implementation(
                     requested_implementation, is_init_check=False
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
-                self.config._attn_implementation_internal = applicable_attn_implementation
+                self.config._attn_implementation_internal = requested_implementation
 
-        subconfigs_changed = set()
         # Apply it to all submodels as well
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
@@ -2869,53 +2868,65 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                # If it was already changed, no need to do it again
+                and not hasattr(submodule.config, "_attn_was_changed")
             ):
-                if not submodule._can_set_attn_implementation:
+                # In this case, warn and skip
+                if not submodule._can_set_attn_implementation():
                     logger.warning(
-                        f"{self.__class__.__name__} does not support setting its attention implementation dynamically, because it "
+                        f"{submodule.__class__.__name__} does not support setting its attention implementation dynamically, because it "
                         "does not follow the functional approach based on AttentionInterface "
                         "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                     )
+                # Set the attn on the submodule
+                else:
+                    sub_implementation = requested_implementation
+                    if isinstance(attn_implementation, dict):
+                        for subconfig_key in self.config.sub_configs:
+                            # We need to check for exact object match here, with `is`
+                            if getattr(self.config, subconfig_key) is submodule.config:
+                                sub_implementation = attn_implementation.get(
+                                    subconfig_key, submodule.config._attn_implementation
+                                )
+                                break
+                    # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
+                    sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
+                    submodule.config._attn_implementation_internal = sub_implementation
 
-                sub_implementation = applicable_attn_implementation
-                if isinstance(attn_implementation, dict):
-                    for subconfig_key in self.config.sub_configs:
-                        # We need to check for exact object match here, with `is`
-                        if getattr(self.config, subconfig_key) is submodule.config:
-                            sub_implementation = attn_implementation.get(
-                                subconfig_key, submodule.config._attn_implementation
-                            )
-                            break
-                # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
-                sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                submodule.config._attn_implementation_internal = sub_implementation
-                subconfigs_changed.add(submodule.config.__class__)
+                # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
+                # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
+                submodule.config._attn_was_changed = True
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
             subconfig = getattr(self.config, subconfig_key)
-            requested_implementation = (
-                attn_implementation
+            sub_implementation = (
+                requested_implementation
                 if not isinstance(attn_implementation, dict)
                 else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
             )
             # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
-                subconfig.__class__ not in subconfigs_changed
-                or requested_implementation != subconfig._attn_implementation
+                not hasattr(subconfig, "_attn_was_changed")
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
             ):
-                if requested_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
                     raise ValueError(
-                        f'Specified `attn_implementation="{requested_implementation}"` is not supported for {subconfig_key}. '
+                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
                         'The only possible arguments are "eager" (manual attention implementation)'
                         f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
                     )
-                subconfig._attn_implementation_internal = requested_implementation
+                subconfig._attn_implementation_internal = sub_implementation
                 logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` "
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
                     "without finding the associated sub-model. For this reason we could not check if the model supports it. "
                     "You may encounter undefined behavior."
                 )
+            # Unset the attribute in this case, to avoid issues in the future
+            else:
+                if hasattr(subconfig, "_attn_was_changed"):
+                    del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """
