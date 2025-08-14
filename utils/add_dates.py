@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import subprocess
+from typing import Optional
 
 from huggingface_hub import paper_info
 
@@ -32,7 +33,7 @@ ARXIV_PAPERS_NOT_IN_HF_PAPERS = {
 }
 
 
-def get_modified_cards():
+def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
     result = subprocess.check_output(["git", "status", "--porcelain"], text=True)
@@ -50,7 +51,7 @@ def get_modified_cards():
     return model_names
 
 
-def get_paper_link(model_card=None, path=None):
+def get_paper_link(model_card: Optional[str], path: Optional[str]) -> str:
     """Get the first paper link from the model card content."""
 
     if model_card is not None and not model_card.endswith(".md"):
@@ -60,7 +61,7 @@ def get_paper_link(model_card=None, path=None):
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    if "blog" in content or "report" in content:
+    if "blog" in content or "report" in content or "post" in content:
         print(f"Insert the release date of the blog post or technical report at the top of {model_card}")
         return "blog"
 
@@ -93,7 +94,7 @@ def get_paper_link(model_card=None, path=None):
     return paper_ids[0]
 
 
-def get_first_commit_date(model_name=None):
+def get_first_commit_date(model_name: Optional[str]) -> str:
     """Get the first commit date of the model's init file or model.md. This date is considered as the date the model was added to HF transformers"""
 
     if model_name.endswith(".md"):
@@ -114,7 +115,7 @@ def get_first_commit_date(model_name=None):
     return result.strip().split("\n")[0][:10]
 
 
-def get_release_date(link):
+def get_release_date(link: str) -> str:
     if link.startswith("https://huggingface.co/papers/"):
         link = link.replace("https://huggingface.co/papers/", "")
 
@@ -125,11 +126,11 @@ def get_release_date(link):
             print(f"Error fetching release date for the paper https://huggingface.co/papers/{link}: {e}")
 
     elif link.startswith("https://arxiv.org/abs/"):
-        print(f"This paper {link} is not yet available in Hugging Face papers")
+        print(f"This paper {link} is not yet available in Hugging Face papers, skipping the release date attachment.")
         return r"{release_date}"
 
 
-def replace_paper_links(file_path):
+def replace_paper_links(file_path: str) -> bool:
     """Replace arxiv links with huggingface links if valid, and replace hf.co with huggingface.co"""
 
     with open(file_path, "r", encoding="utf-8") as f:
@@ -167,8 +168,8 @@ def replace_paper_links(file_path):
     return False
 
 
-def insert_dates(model_card_list):
-    """Insert release and commit dates into model cards."""
+def insert_dates(model_card_list: list[str]):
+    """Insert release and commit dates into model cards"""
 
     for model_card in model_card_list:
         if not model_card.endswith(".md"):
@@ -188,11 +189,13 @@ def insert_dates(model_card_list):
             r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
         )
 
+        # Check if the copyright disclaimer sections exists, if not, add one with 2025
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        markers = list(re.finditer(r"-->", content))
+        markers = list(re.finditer(r"-->", content))  # Dates info is placed right below this marker
         if len(markers) == 0:
             print(f"No marker found in {model_card}. Adding copyright disclaimer to the top.")
+
             # Add copyright disclaimer to the very top of the file
             content = COPYRIGHT_DISCLAIMER + "\n\n" + content
             with open(file_path, "w", encoding="utf-8") as f:
@@ -203,6 +206,7 @@ def insert_dates(model_card_list):
 
         match = re.search(pattern, content)
 
+        # If the dates info line already exists, only check and update the hf_commit_date, don't modify the existing release date
         if match:
             release_date = match.group(1)  # The release date part
             existing_hf_date = match.group(2)  # The existing HF date part
@@ -214,6 +218,7 @@ def insert_dates(model_card_list):
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
 
+        # If the dates info line does not exist, add it
         else:
             paper_link = get_paper_link(path=file_path)
             release_date = ""
@@ -245,7 +250,24 @@ def get_all_model_cards():
     return sorted(model_cards)
 
 
-def main():
+def main(all=False, auto=True, models=None):
+    if all:
+        model_cards = get_all_model_cards()
+        print(f"Processing all {len(model_cards)} model cards from docs directory")
+    elif auto:
+        model_cards = get_modified_cards()
+        if not model_cards:
+            print("No modified model cards found.")
+            return
+        print(f"Processing modified model cards: {model_cards}")
+    else:
+        model_cards = models
+        print(f"Processing specified model cards: {model_cards}")
+
+    insert_dates(model_cards)
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Add release and commit dates to model cards")
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
@@ -257,21 +279,4 @@ def main():
     parser.set_defaults(auto=True)
     args = parser.parse_args()
 
-    if args.all:
-        model_cards = get_all_model_cards()
-        print(f"Processing all {len(model_cards)} model cards from docs directory")
-    elif args.auto:
-        model_cards = get_modified_cards()
-        if not model_cards:
-            print("No modified model cards found.")
-            return
-        print(f"Processing modified model cards: {model_cards}")
-    else:
-        model_cards = args.models
-        print(f"Processing specified model cards: {model_cards}")
-
-    insert_dates(model_cards)
-
-
-if __name__ == "__main__":
-    main()
+    main(args.all, args.auto, args.models)
