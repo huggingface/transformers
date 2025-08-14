@@ -339,7 +339,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.vpm = self.init_vision_module()
         self.vision_dim = self.vpm.embed_dim
         self.embed_dim = self.language_model.config.hidden_size
-        self.resampler = Resampler(
+        self.resampler = MiniCPM4VResampler(
             num_queries=self.config.query_num,
             embed_dim=self.embed_dim,
             num_heads=self.embed_dim // 128,
@@ -351,6 +351,8 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.terminators = ["<|im_end|>", "</s>"]
 
     def init_vision_module(self):
+        if self.config._attn_implementation == 'flash_attention_2':
+            self.config.vision_config._attn_implementation = 'flash_attention_2'
         model = MiniCPMVisionTransformer._from_config(self.config.vision_config)
         if self.config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
@@ -873,7 +875,7 @@ def get_1d_sincos_pos_embed_from_grid_new(embed_dim, pos):
     return emb
 
 
-class Resampler(nn.Module):
+class MiniCPM4VResampler(nn.Module):
     """
     A 2D perceiver-resampler network with one cross attention layers by
        given learnable queries and 2d sincos pos_emb
@@ -915,8 +917,6 @@ class Resampler(nn.Module):
         self._set_2d_pos_cache(self.max_size)
 
     def _set_2d_pos_cache(self, max_size, device="cpu"):
-        if is_deepspeed_zero3_enabled():
-            device = "cuda"
         pos_embed = torch.from_numpy(get_2d_sincos_pos_embed(self.embed_dim, max_size)).float().to(device)
         self.register_buffer("pos_embed", pos_embed, persistent=False)
 
@@ -960,15 +960,15 @@ class Resampler(nn.Module):
             1, 0, 2
         )  # BLD => L * B * D
 
-        x = self.kv_proj(x)  # B * L * D
-        x = self.ln_kv(x).permute(1, 0, 2)  # L * B * D
+        key_value = self.kv_proj(x)  # B * L * D
+        key_value = self.ln_kv(key_value).permute(1, 0, 2)  # L * B * D
 
-        q = self.ln_q(self.query)  # Q * D
+        query = self.ln_q(self.query)  # Q * D
 
         out = self.attn(
-            self._repeat(q, bs),  # Q * B * D
-            x + pos_embed,  # L * B * D +  L * B * D
-            x,
+            self._repeat(query, bs),  # Q * B * D
+            key_value + pos_embed,  # L * B * D +  L * B * D
+            key_value,
             key_padding_mask=key_padding_mask,
         )[0]
         #  out: Q * B * D
