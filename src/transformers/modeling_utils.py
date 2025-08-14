@@ -121,7 +121,6 @@ from .utils import (
     is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
-    is_torch_sdpa_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
@@ -2641,14 +2640,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        if not self._supports_sdpa and not is_init_check:
+        if not self._supports_sdpa:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
-        if not is_torch_sdpa_available():
-            raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1.")
 
         if (
             torch.version.hip is not None
@@ -2721,22 +2718,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
+        # Register kernel if relevant
+        if attn_implementation is not None and re.match(
+            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation
+        ):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
             # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            if "|" in applicable_attn_implementation:
-                attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
+            actual_attn_name = attn_implementation
+            if "|" in attn_implementation:
+                attention_wrapper, actual_attn_name = attn_implementation.split("|")
                 # `transformers` has wrapper for sdpa, paged, flash, flex etc.
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
-            if ":" in applicable_attn_implementation:
-                repo_id, kernel_name = attn_implementation.split(":")
+            if ":" in actual_attn_name:
+                repo_id, kernel_name = actual_attn_name.split(":")
                 kernel_name = kernel_name.strip()
             else:
-                repo_id = applicable_attn_implementation
+                repo_id = actual_attn_name
                 kernel_name = None
             repo_id = repo_id.strip()
             # extract the rev after the @ if it exists
@@ -2761,56 +2761,53 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
-
-                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            return attn_implementation
+                try:
+                    self._sdpa_can_dispatch(is_init_check)
+                    attn_implementation = "sdpa"
+                except (ValueError, ImportError) as e:
+                    attn_implementation = "eager"
         else:
-            attn_implementation = self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
-
+            attn_implementation = self.get_correct_attn_implementation(attn_implementation, is_init_check)
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(applicable_attn_implementation)
+            if attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(attn_implementation)
 
-            return attn_implementation
+        return attn_implementation
 
-    def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
-        requested_attention = "sdpa" if _requested_attention is None else _requested_attention
-        if is_init_check and requested_attention == "sdpa":
-            if not self._supports_sdpa:
-                requested_attention = "eager"
-        if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+    def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
+        applicable_attention = "sdpa" if requested_attention is None else requested_attention
+
+        if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
-                f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
-                '`attn_implementation="eager"` (manual attention implementation)'
+                f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
+                '`attn_implementation="eager"`'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += (
-                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
-                )
+                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                message += ', `"attn_implementation=sdpa"'
             if self._supports_flex_attn:
-                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+                message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if requested_attention == "flash_attention_2":
+        if applicable_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif requested_attention == "flash_attention_3":
+        elif applicable_attention == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif requested_attention == "flex_attention":
+        elif applicable_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
-        elif requested_attention == "sdpa":
+        elif applicable_attention == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                if _requested_attention == "sdpa":
+                if requested_attention == "sdpa":
                     raise e
-                requested_attention = "eager"
-        return requested_attention
+                applicable_attention = "eager"
+
+        return applicable_attention
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2880,7 +2877,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                     )
 
-                sub_implementation = attn_implementation
+                sub_implementation = applicable_attn_implementation
                 if isinstance(attn_implementation, dict):
                     for subconfig_key in self.config.sub_configs:
                         # We need to check for exact object match here, with `is`
