@@ -242,7 +242,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     device=target_device,
                     **param_kwargs,
                 )
-            elif self.quantization_config.bnb_4bit_target_paarameters:
+            elif self.quantization_config.bnb_4bit_target_parameters:
                 # Normal nn.Parameter, i.e. outside of a Linear4bit layer.
                 import bitsandbytes.nn.parametrize
 
