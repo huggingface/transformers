@@ -16,20 +16,22 @@ rendered properly in your Markdown viewer.
 
 # Multimodal templates
 
-Multimodal model chat templates expect a similar [template](./chat_templating) as text-only models. It needs `messages` that includes a dictionary of the `role` and `content`.
+Multimodal chat models are similar to normal chat models, but they can also accept non-text inputs like images, audio or video.
 
-Multimodal templates are included in the [Processor](./processors) class and require an additional `type` key for specifying whether the included content is an image, video, or text.
+Chatting with multimodal models is very similar to chatting with text-only models, with the key difference being the `content` key of the messages. Instead of a single string,
+as it is for text-only models, `content` can be a list containing multiple items of different types.
 
-This guide will show you how to format chat templates for multimodal models as well as some best practices for configuring the template
+In the same way that the [Tokenizer](./tokenizer_summary.md) class handles chat templates and tokenization for text-only models, 
+the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Methods like [`ProcessorMixin.apply_chat_template`] are almost identical.
+
+This guide will show you how to chat with multimodal models, first at a high level using the [`ImageTextToTextPipeline`] and then at a lower level using the [`ProcessorMixin.apply_chat_template`] and [`GenerationMixin.generate`] methods.
 
 ## ImageTextToTextPipeline
 
-[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
+[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format). You can think of this pipeline
+as the equivalent of the [`TextGenerationPipeline`] for multimodal vision-language models (VLMs).
 
-Start by building a chat history with the following two roles.
-
-- `system` describes how the model should behave and respond when you’re chatting with it. This role isn’t supported by all chat models.
-- `user` is where you enter your first message to the model.
+We can see this pipeline in action by building a sample chat. Note how `content` is a list here!
 
 ```py
 messages = [
@@ -47,39 +49,37 @@ messages = [
 ]
 ```
 
-Create a [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Changing the data type to [torch.bfloat16](./models#model-data-type) also helps save memory.
-
-> [!TIP]
-> The [`ImageTextToTextPipeline`] accepts chats in the OpenAI format to make inference easier and more accessible. 
+Next, we create an [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Setting the data type to [auto](./models#model-data-type) also helps save memory and improve speed.
 
 ```python
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map="auto", dtype=torch.float16)
-pipeline(text=messages, max_new_tokens=50, return_full_text=False)
-[{'input_text': [{'role': 'system',
-    'content': [{'type': 'text',
-      'text': 'You are a friendly chatbot who always responds in the style of a pirate'}]},
-   {'role': 'user',
-    'content': [{'type': 'image',
-      'url': 'http://images.cocodataset.org/val2017/000000039769.jpg'},
-     {'type': 'text', 'text': 'What are these?'}]}],
-  'generated_text': 'The image shows two cats lying on a pink surface, which appears to be a cushion or a soft blanket. The cat on the left has a striped coat, typical of tabby cats, and is lying on its side with its head resting on the'}]
+pipe = pipeline("image-text-to-text", model="Qwen/Qwen2.5-VL-3B-Instruct", device_map="auto", dtype="auto")
+out = pipe(text=messages, max_new_tokens=128)
+print(out[0]['generated_text'][-1]['content'])
 ```
 
-## Image inputs
+And we get:
 
-For multimodal models that accept images like [LLaVA](./model_doc/llava), include the following in `content` as shown below.
+```
+Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
+```
 
-- The content `"type"` can be an `"image"` or `"text"`.
-- For images, it can be a link to the image (`"url"`), a file path (`"path"`), or `"base64"`. Images are automatically loaded, processed, and prepared into pixel values as inputs to the model.
+Aside from the gradual descent from pirate-speak into modern American English (it **is** only a 3B model, after all), this is correct!
+
+## Using `apply_chat_template` directly
+
+Similarly to [text-only models](./chat_templating.md), you can use the [`ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models. 
+This method handles the tokenization and formatting of the chat messages, including images and other media types. You can then pass the resulting inputs to the model for generation.
+
+Let's see the example above, but using the low-level methods directly instead of a `pipeline`:
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
-processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct", device_map="auto", torch_dtype="auto")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-3B-Instruct")
 
 messages = [
     {
@@ -96,14 +96,32 @@ messages = [
 ]
 ```
 
-Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content and return the `input_ids` and `pixel_values`.
+Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. Note that, unlike text models, the output of `apply_chat_template` will
+contain a `pixel_values` key with the preprocessed image data, in addition to the tokenized text.
 
 ```py
 processed_chat = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
-print(processed_chat.keys())
+print(list(processed_chat.keys()))
 ```
 
-These inputs are now ready to be used in [`~GenerationMixin.generate`].
+and you should see:
+
+```
+['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
+```
+
+These inputs are now ready to be used in [`~GenerationMixin.generate`]:
+
+```python
+out = model.generate(**processed_chat.to(model.device), max_new_tokens=128)
+print(processor.decode(out[0]))
+```
+
+If you try this, note that because we used lower-level methods the decoded output is the full conversation so far, including
+the user message and the placeholder tokens that contain the image information. As a result, I won't paste it all here,
+as it might blow up the document a bit! Just be aware that if you want to use the lower-level methods in practice,
+you may need to trim the previous conversation from the output before displaying it to the user.
+
 
 ## Video inputs
 
