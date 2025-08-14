@@ -106,3 +106,7 @@ transformers run --task summarization --model vinai/bartpho-word --device 0
 
 - BARTpho uses the large architecture of BART with an additional layer-normalization layer on top of the encoder and decoder. The BART-specific classes should be replaced with the mBART-specific classes.
 - This implementation only handles tokenization through the `monolingual_vocab_file` file. This is a Vietnamese-specific subset of token types taken from that multilingual vocabulary. If you want to use this tokenizer for another language, replace the `monolingual_vocab_file` with one specialized for your target language.
+
+## BartphoTokenizer
+
+[[autodoc]] BartphoTokenizer
