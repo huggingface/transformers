@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import gc
-from tempfile import tempdir
 import unittest
+from tempfile import tempdir
 from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
@@ -496,15 +496,15 @@ class Mxfp4ModelTest(unittest.TestCase):
             device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        with TemporaryDirectory() as tempdir:
+        with tempdir.TemporaryDirectory() as tmp:
             # Save the model in mxfp4 format
-            model.save_pretrained(tempdir, quantization_config=quantization_config)
+            model.save_pretrained(tmp, quantization_config=quantization_config)
             torch.cuda.empty_cache()
             gc.collect()
 
             # Load the model back from the saved directory
             loaded_model = GptOssForCausalLM.from_pretrained(
-                tempdir,
+                tmp,
                 quantization_config=quantization_config,
                 torch_dtype=torch.bfloat16,
                 device_map="auto",
