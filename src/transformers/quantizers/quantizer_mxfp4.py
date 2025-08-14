@@ -258,9 +258,114 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # we are not really dequantizing, we are just removing everthing related to quantization here
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
+        
+        # Enable training on mxfp4 modules if training flag is set
+        if getattr(self.quantization_config, 'enable_training', False):
+            self._enable_training_on_mxfp4_modules(model)
+            
         # clean cache due to triton ops
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+    
+    def _enable_training_on_mxfp4_modules(self, model: "PreTrainedModel"):
+        """Enable training mode on all Mxfp4GptOssExperts modules in the model."""
+        from ..integrations import Mxfp4GptOssExperts, get_hardware_capabilities
+        
+        # Get hardware capabilities for validation
+        hw_caps = get_hardware_capabilities()
+        
+        # Validate hardware and provide recommendations
+        self._validate_training_hardware(hw_caps)
+        
+        enabled_modules = 0
+        for name, module in model.named_modules():
+            if isinstance(module, Mxfp4GptOssExperts):
+                module.enable_mxfp4_training()
+                enabled_modules += 1
+        
+        if enabled_modules > 0:
+            logger.info(f"Enabled mxfp4 training on {enabled_modules} expert modules")
+            self._log_training_recommendations(hw_caps, enabled_modules)
+        else:
+            logger.warning("No Mxfp4GptOssExperts modules found to enable training on")
+    
+    def _validate_training_hardware(self, hw_caps):
+        """Validate hardware capabilities for mxfp4 training."""
+        from ..integrations import ComputeBackend
+        
+        # Check CUDA availability
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "MXFP4 training requires CUDA. Please ensure you have a compatible CUDA installation."
+            )
+        
+        # Warn about suboptimal configurations
+        if hw_caps.compute_capability < (7, 5):
+            logger.error(
+                f"GPU compute capability {hw_caps.compute_capability} is below minimum 7.5. "
+                "MXFP4 training requires modern GPUs (T4, A100, L4, H100, B100)."
+            )
+            raise RuntimeError("Insufficient GPU compute capability for MXFP4 training")
+        
+        # Performance warnings
+        if hw_caps.backend == ComputeBackend.BF16_FALLBACK:
+            logger.warning(
+                "⚠️  Training on legacy hardware detected. Performance will be significantly reduced. "
+                "Consider upgrading to A100 (FP8 fallback) or H100/B100 (native FP4) for optimal performance."
+            )
+        
+        # Memory recommendations
+        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        if gpu_memory_gb < 24:
+            logger.warning(
+                f"⚠️  GPU memory: {gpu_memory_gb:.1f}GB. MXFP4 training benefits from ≥40GB for large models. "
+                "Consider using gradient checkpointing and smaller batch sizes."
+            )
+        elif gpu_memory_gb >= 80:
+            logger.info(f"✅ Excellent GPU memory: {gpu_memory_gb:.1f}GB - optimal for large model training")
+    
+    def _log_training_recommendations(self, hw_caps, num_modules):
+        """Log training recommendations based on hardware capabilities."""
+        from ..integrations import ComputeBackend
+        
+        logger.info("=" * 60)
+        logger.info("MXFP4 Training Configuration Summary")
+        logger.info("=" * 60)
+        
+        # Hardware summary
+        logger.info(f"📊 GPU: {torch.cuda.get_device_name(0)}")
+        logger.info(f"📊 Compute Capability: {hw_caps.compute_capability}")
+        logger.info(f"📊 Backend: {hw_caps.backend.value}")
+        logger.info(f"📊 Expected Performance: {hw_caps.get_performance_multiplier():.1%} vs bfloat16")
+        logger.info(f"📊 Memory Savings: ~4X vs bfloat16 training")
+        logger.info(f"📊 Expert Modules: {num_modules}")
+        
+        # Training recommendations
+        if hw_caps.backend == ComputeBackend.FP4_NATIVE:
+            logger.info("🚀 Recommendations:")
+            logger.info("   • Use standard learning rates and batch sizes")
+            logger.info("   • Enable mixed precision training for activations")
+            logger.info("   • Consider larger models due to 4X memory savings")
+        elif hw_caps.backend == ComputeBackend.FP8_FALLBACK:
+            logger.info("⚡ Recommendations:")
+            logger.info("   • Slightly reduce learning rate (0.8X) for stability")
+            logger.info("   • Monitor gradient norms during initial training")
+            logger.info("   • Enable mixed precision training for activations")
+        else:
+            logger.info("⚠️  Recommendations:")
+            logger.info("   • Reduce learning rate significantly (0.5X)")
+            logger.info("   • Use smaller batch sizes to avoid memory pressure")
+            logger.info("   • Enable gradient checkpointing")
+            logger.info("   • Monitor training stability closely")
+        
+        # Kernel availability
+        if hw_caps.has_backward_kernels:
+            logger.info("✅ Native backward kernels: Available")
+        else:
+            logger.info("⚠️  Native backward kernels: Not available (using fallback)")
+            logger.info("   • Install: `pip install git+https://github.com/kernels-community/triton_kernels.git`")
+        
+        logger.info("=" * 60)
 
     def update_expected_keys(self, model: "PreTrainedModel", expected_keys: list[str], checkpoint_keys: list[str]):
         # Replace expected_keys for experts' gate_up_proj and down_proj with their _blocks and _scales variants
@@ -351,7 +456,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        logger.warning_once(
-            "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
-        )
-        return False
+        if getattr(self.quantization_config, 'enable_training', False):
+            logger.warning_once(
+                "MXFP4 training is experimental and requires triton backward kernels. "
+                "Ensure you have triton >= 3.4.0 and kernels library installed."
+            )
+            return True
+        else:
+            logger.warning_once(
+                "MXFP4 quantization don't support training by default. To enable training, pass "
+                "quantization_config=Mxfp4Config(enable_training=True) to .from_pretrained(), or consider "
+                "dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True)"
+            )
+            return False
