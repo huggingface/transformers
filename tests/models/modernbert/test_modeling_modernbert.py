@@ -390,6 +390,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
 
+    @pytest.mark.torch_compile_test
     def test_saved_config_excludes_reference_compile(self):
         config = ModernBertConfig(reference_compile=True)
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -501,6 +502,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
