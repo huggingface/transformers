@@ -21,7 +21,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -151,27 +151,27 @@ class AriaTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
         intermediate_size: int = 4096,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
         pad_token_id=2,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        pretraining_tp: Optional[int] = 1,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        head_dim: Optional[int] = None,
         moe_num_experts: int = 8,
         moe_topk: int = 2,
         moe_num_shared_experts: int = 2,

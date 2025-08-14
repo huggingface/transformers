@@ -14,8 +14,10 @@
 # limitations under the License.
 """GPTNeoX model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -144,26 +146,26 @@ class GPTNeoXConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50432,
-        hidden_size=6144,
-        num_hidden_layers=44,
-        num_attention_heads=64,
-        intermediate_size=24576,
-        hidden_act="gelu",
-        rotary_pct=0.25,
-        attention_dropout=0.0,
-        hidden_dropout=0.0,
-        classifier_dropout=0.1,
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=0,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        use_parallel_residual=True,
-        rope_scaling=None,
-        attention_bias=True,
+        vocab_size: Optional[int] = 50432,
+        hidden_size: Optional[int] = 6144,
+        num_hidden_layers: Optional[int] = 44,
+        num_attention_heads: Optional[int] = 64,
+        intermediate_size: Optional[int] = 24576,
+        hidden_act: Optional[str] = "gelu",
+        rotary_pct: Optional[float] = 0.25,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_dropout: Optional[float] = 0.0,
+        classifier_dropout: Optional[float] = 0.1,
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        use_parallel_residual: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = True,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

@@ -24,7 +24,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -175,27 +175,27 @@ class Cohere2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256000,
-        hidden_size=8192,
-        intermediate_size=22528,
-        logit_scale=0.0625,
-        num_hidden_layers=40,
-        num_attention_heads=64,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=5,
-        eos_token_id=255001,
-        tie_word_embeddings=True,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        sliding_window=4096,
-        layer_types=None,
+        vocab_size: Optional[int] = 256000,
+        hidden_size: Optional[int] = 8192,
+        intermediate_size: Optional[int] = 22528,
+        logit_scale: Optional[float] = 0.0625,
+        num_hidden_layers: Optional[int] = 40,
+        num_attention_heads: Optional[int] = 64,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[int] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 5,
+        eos_token_id: Optional[int] = 255001,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

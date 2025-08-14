@@ -19,8 +19,10 @@
 # limitations under the License.
 """GraniteMoeShared model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -119,33 +121,33 @@ class GraniteMoeSharedConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        embedding_multiplier=1.0,
-        logits_scaling=1.0,
-        residual_multiplier=1.0,
-        attention_multiplier=1.0,
-        num_local_experts=8,
-        num_experts_per_tok=2,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        shared_intermediate_size=0,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        embedding_multiplier: Optional[float] = 1.0,
+        logits_scaling: Optional[float] = 1.0,
+        residual_multiplier: Optional[float] = 1.0,
+        attention_multiplier: Optional[float] = 1.0,
+        num_local_experts: Optional[int] = 8,
+        num_experts_per_tok: Optional[int] = 2,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
+        shared_intermediate_size: Optional[int] = 0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

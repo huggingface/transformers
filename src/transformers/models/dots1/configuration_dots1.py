@@ -12,8 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -132,33 +134,33 @@ class Dots1Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=4608,
-        intermediate_size=10944,
-        moe_intermediate_size=1408,
-        num_hidden_layers=62,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        n_shared_experts=None,
-        n_routed_experts=None,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=None,
-        first_k_dense_replace=0,
-        norm_topk_prob=False,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        routed_scaling_factor=1.0,
-        sliding_window=4096,
-        max_window_layers=62,
-        layer_types=None,
+        vocab_size: Optional[int] = 152064,
+        hidden_size: Optional[int] = 4608,
+        intermediate_size: Optional[int] = 10944,
+        moe_intermediate_size: Optional[int] = 1408,
+        num_hidden_layers: Optional[int] = 62,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        n_shared_experts: Optional[int] = None,
+        n_routed_experts: Optional[int] = None,
+        n_group: Optional[int] = 1,
+        topk_group: Optional[int] = 1,
+        num_experts_per_tok: Optional[int] = None,
+        first_k_dense_replace: Optional[int] = 0,
+        norm_topk_prob: Optional[bool] = False,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        routed_scaling_factor: Optional[float] = 1.0,
+        sliding_window: Optional[int] = 4096,
+        max_window_layers: Optional[int] = 62,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

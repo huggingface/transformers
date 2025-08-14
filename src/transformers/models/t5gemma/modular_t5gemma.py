@@ -144,12 +144,12 @@ class T5GemmaConfig(PretrainedConfig):
         self,
         encoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
         decoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        is_encoder_decoder: bool = True,
-        dropout_rate: float = 0.0,
-        classifier_dropout_rate: float = 0.0,
-        attention_dropout: float = 0.0,
-        tie_word_embeddings: bool = True,
-        vocab_size: int = 256000,
+        is_encoder_decoder: Optional[bool] = True,
+        dropout_rate: Optional[float] = 0.0,
+        classifier_dropout_rate: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        tie_word_embeddings: Optional[bool] = True,
+        vocab_size: Optional[int] = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):

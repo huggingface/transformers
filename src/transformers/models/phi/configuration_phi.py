@@ -15,8 +15,10 @@
 
 """Phi model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -153,26 +155,26 @@ class PhiConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=51200,
-        hidden_size=2048,
-        intermediate_size=8192,
-        num_hidden_layers=24,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        resid_pdrop=0.0,
-        embd_pdrop=0.0,
-        attention_dropout=0.0,
-        hidden_act="gelu_new",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        partial_rotary_factor=0.5,
-        qk_layernorm=False,
-        bos_token_id=1,
-        eos_token_id=2,
+        vocab_size: Optional[int] = 51200,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 8192,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        resid_pdrop: Optional[float] = 0.0,
+        embd_pdrop: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "gelu_new",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        partial_rotary_factor: Optional[float] = 0.5,
+        qk_layernorm: Optional[bool] = False,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size

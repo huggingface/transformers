@@ -30,7 +30,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -262,22 +262,22 @@ class Glm4vTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        tie_word_embeddings=False,
-        attention_dropout=0.0,
-        rope_scaling=None,
-        image_token_id=None,
-        video_token_id=None,
+        vocab_size: Optional[int] = 151552,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 13696,
+        num_hidden_layers: Optional[int] = 40,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-05,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        rope_scaling: Optional[RopeParameters] = None,
+        image_token_id: Optional[int] = None,
+        video_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

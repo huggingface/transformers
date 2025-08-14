@@ -19,8 +19,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class Exaone4Config(PretrainedConfig):
@@ -161,25 +164,25 @@ class Exaone4Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=102400,
-        hidden_size=4096,
-        intermediate_size=16384,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=0,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_dropout=0.0,
-        sliding_window=4096,
-        sliding_window_pattern=4,
-        layer_types=None,
+        vocab_size: Optional[int] = 102400,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 16384,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_dropout: Optional[float] = 0.0,
+        sliding_window: Optional[int] = 4096,
+        sliding_window_pattern: Optional[int] = 4,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

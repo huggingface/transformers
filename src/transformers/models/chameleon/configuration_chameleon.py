@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -192,29 +192,29 @@ class ChameleonConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=65536,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        model_parallel_size=1,
-        swin_norm=False,
-        vq_config=None,
-        vocabulary_map=None,
-        mlp_bias=False,
+        vocab_size: Optional[int] = 65536,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        hidden_act: Optional[int] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-05,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[int] = False,
+        attention_dropout: Optional[float] = 0.0,
+        model_parallel_size: Optional[int] = 1,
+        swin_norm: Optional[bool] = False,
+        vq_config: Optional[dict] = None,
+        vocabulary_map: Optional[dict] = None,
+        mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class Lfm2Config(PretrainedConfig):
@@ -101,26 +101,26 @@ class Lfm2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int = 65536,
-        hidden_size: int = 2560,
-        intermediate_size: int = 12288,
-        num_hidden_layers: int = 32,
-        num_attention_heads: int = 32,
-        num_key_value_heads: int = 8,
-        max_position_embeddings: int = 128_000,
-        initializer_range: float = 0.02,
-        norm_eps: float = 0.00001,
-        use_cache: bool = True,
-        pad_token_id: int = 0,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
-        tie_word_embeddings: bool = True,
-        rope_scaling=None,
-        conv_bias: bool = False,
-        conv_L_cache: int = 3,
-        block_multiple_of: int = 256,
-        block_ffn_dim_multiplier: float = 1.0,
-        block_auto_adjust_ff_dim: bool = True,
+        vocab_size: Optional[int] = 65536,
+        hidden_size: Optional[int] = 2560,
+        intermediate_size: Optional[int] = 12288,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        max_position_embeddings: Optional[int] = 128_000,
+        initializer_range: Optional[float] = 0.02,
+        norm_eps: Optional[float] = 0.00001,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        conv_bias: Optional[bool] = False,
+        conv_L_cache: Optional[int] = 3,
+        block_multiple_of: Optional[int] = 256,
+        block_ffn_dim_multiplier: Optional[float] = 1.0,
+        block_auto_adjust_ff_dim: Optional[bool] = True,
         full_attn_idxs: Optional[list[int]] = None,
         layer_types: Optional[list[str]] = None,
         **kwargs,

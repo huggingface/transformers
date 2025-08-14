@@ -14,8 +14,10 @@
 # limitations under the License.
 """Falcon configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -142,28 +144,28 @@ class FalconConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=65024,
-        hidden_size=4544,
-        num_hidden_layers=32,
-        num_attention_heads=71,
-        num_ln_in_parallel_attn=None,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        use_cache=True,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        num_kv_heads=None,
-        alibi=False,
-        new_decoder_architecture=False,
-        multi_query=True,
-        parallel_attn=True,
-        bias=False,
-        max_position_embeddings=2048,
-        rope_scaling=None,
-        bos_token_id=11,
-        eos_token_id=11,
-        ffn_hidden_size=None,
-        activation="gelu",
+        vocab_size: Optional[int] = 65024,
+        hidden_size: Optional[int] = 4544,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 71,
+        num_ln_in_parallel_attn: Optional[int] = None,
+        layer_norm_epsilon: Optional[int] = 1e-5,
+        initializer_range: Optional[float] = 0.02,
+        use_cache: Optional[bool] = True,
+        hidden_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        num_kv_heads: Optional[int] = None,
+        alibi: Optional[bool] = False,
+        new_decoder_architecture: Optional[bool] = False,
+        multi_query: Optional[bool] = True,
+        parallel_attn: Optional[bool] = True,
+        bias: Optional[bool] = False,
+        max_position_embeddings: Optional[int] = 2048,
+        rope_scaling: Optional[RopeParameters] = None,
+        bos_token_id: Optional[int] = 11,
+        eos_token_id: Optional[int] = 11,
+        ffn_hidden_size: Optional[int] = None,
+        activation: Optional[str] = "gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size

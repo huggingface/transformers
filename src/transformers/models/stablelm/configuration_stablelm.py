@@ -14,8 +14,10 @@
 # limitations under the License.
 """StableLM model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -138,27 +140,27 @@ class StableLmConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50304,
-        intermediate_size=6912,
-        hidden_size=2560,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        layer_norm_eps=1.0e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        use_qkv_bias=False,
-        qk_layernorm=False,
-        use_parallel_residual=False,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        partial_rotary_factor=0.25,
-        bos_token_id=0,
-        eos_token_id=0,
+        vocab_size: Optional[int] = 50304,
+        intermediate_size: Optional[int] = 6912,
+        hidden_size: Optional[int] = 2560,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[float] = 1.0e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_qkv_bias: Optional[bool] = False,
+        qk_layernorm: Optional[bool] = False,
+        use_parallel_residual: Optional[bool] = False,
+        hidden_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        partial_rotary_factor: Optional[float] = 0.25,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

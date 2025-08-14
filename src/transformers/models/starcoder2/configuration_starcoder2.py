@@ -14,8 +14,10 @@
 # limitations under the License.
 """Starcoder2 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -149,25 +151,25 @@ class Starcoder2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=49152,
-        hidden_size=3072,
-        intermediate_size=12288,
-        num_hidden_layers=30,
-        num_attention_heads=24,
-        num_key_value_heads=2,
-        hidden_act="gelu_pytorch_tanh",
-        max_position_embeddings=4096,
-        initializer_range=0.018042,
-        norm_epsilon=1e-5,
-        use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        rope_scaling=None,
-        sliding_window=None,
-        attention_dropout=0.0,
-        residual_dropout=0.0,
-        embedding_dropout=0.0,
-        use_bias=True,
+        vocab_size: Optional[int] = 49152,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 12288,
+        num_hidden_layers: Optional[int] = 30,
+        num_attention_heads: Optional[int] = 24,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.018042,
+        norm_epsilon: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 50256,
+        eos_token_id: Optional[int] = 50256,
+        rope_scaling: Optional[RopeParameters] = None,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[float] = 0.0,
+        residual_dropout: Optional[float] = 0.0,
+        embedding_dropout: Optional[float] = 0.0,
+        use_bias: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size

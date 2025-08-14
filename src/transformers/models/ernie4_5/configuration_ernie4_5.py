@@ -13,8 +13,10 @@
 # limitations under the License.
 """Ernie 4.5 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class Ernie4_5Config(PretrainedConfig):
@@ -141,24 +143,24 @@ class Ernie4_5Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=103424,
-        hidden_size=1024,
-        intermediate_size=3072,
-        num_hidden_layers=18,
-        num_attention_heads=16,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=True,
-        rope_scaling=None,
-        use_bias=False,
-        head_dim=128,
+        vocab_size: Optional[int] = 103424,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 3072,
+        num_hidden_layers: Optional[int] = 18,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-05,
+        use_cache: Optional[int] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_bias: Optional[bool] = False,
+        head_dim: Optional[int] = 128,
         **kwargs,
     ):
         self.vocab_size = vocab_size

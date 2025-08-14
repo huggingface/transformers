@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...processing_utils import Unpack
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
@@ -100,6 +100,10 @@ class GemmaConfig(PretrainedConfig):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -133,26 +137,26 @@ class GemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256000,
-        hidden_size=3072,
-        intermediate_size=24576,
-        num_hidden_layers=28,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        head_dim=256,
-        hidden_act="gelu_pytorch_tanh",
-        hidden_activation=None,
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 256000,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 24576,
+        num_hidden_layers: Optional[int] = 28,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 16,
+        head_dim: Optional[int] = 256,
+        hidden_act: Optional[str] = "gelu_pytorch_tanh",
+        hidden_activation: Optional[int] = None,
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

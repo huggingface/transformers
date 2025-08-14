@@ -46,7 +46,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
@@ -384,24 +384,24 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=3584,
-        intermediate_size=18944,
-        num_hidden_layers=28,
-        num_attention_heads=28,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        use_sliding_window=False,
-        sliding_window=32768,
-        max_window_layers=28,
-        layer_types=None,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 152064,
+        hidden_size: Optional[int] = 3584,
+        intermediate_size: Optional[int] = 18944,
+        num_hidden_layers: Optional[int] = 28,
+        num_attention_heads: Optional[int] = 28,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = 32768,
+        max_window_layers: Optional[int] = 28,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -764,7 +764,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         sliding_window=32768,
         max_window_layers=28,
         attention_dropout=0.0,
-        rope_scaling=None,
+        rope_scaling: Optional[RopeParameters] = None,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -904,7 +904,7 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
-        rope_scaling=None,
+        rope_scaling: Optional[RopeParameters] = None,
         max_position_embeddings=32768,
         block_size=24,
         look_ahead_layers=[10],

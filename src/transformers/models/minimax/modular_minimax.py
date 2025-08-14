@@ -28,7 +28,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -158,15 +158,15 @@ class MiniMaxConfig(MixtralConfig):
 
     def __init__(
         self,
-        layer_types=None,
-        block_size=256,
-        full_attn_alpha_factor=1,
-        full_attn_beta_factor=1,
-        linear_attn_alpha_factor=1,
-        linear_attn_beta_factor=1,
-        mlp_alpha_factor=1,
-        mlp_beta_factor=1,
-        rope_scaling=None,
+        layer_types: Optional[list[str]] = None,
+        block_size: Optional[int] = 256,
+        full_attn_alpha_factor: Optional[int] = 1,
+        full_attn_beta_factor: Optional[int] = 1,
+        linear_attn_alpha_factor: Optional[int] = 1,
+        linear_attn_beta_factor: Optional[int] = 1,
+        mlp_alpha_factor: Optional[int] = 1,
+        mlp_beta_factor: Optional[int] = 1,
+        rope_scaling: Optional[RopeParameters] = None,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)

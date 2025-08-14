@@ -13,8 +13,10 @@
 # limitations under the License.
 """Pixtral model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -33,27 +35,28 @@ class PixtralVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-            hidden_size (`int`, *optional*, defaults to 1024):
-                Dimension of the hidden representations.
-            intermediate_size (`int`, *optional*, defaults to 4096):
-                Dimension of the MLP representations.
-            num_hidden_layers (`int`, *optional*, defaults to 24):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 16):
-                Number of attention heads in the Transformer encoder.
-            num_channels (`int`, *optional*, defaults to 3):
-                Number of input channels in the input images.
-            image_size (`int`, *optional*, defaults to 1024):
-                Max dimension of the input images.
-            patch_size (`int`, *optional*, defaults to 16):
-                Size of the image patches.
-            hidden_act (`str`, *optional*, defaults to `"gelu"`):
-                Activation function used in the hidden layers.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for the attention layers.
-            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of input channels in the input images.
+        image_size (`int`, *optional*, defaults to 1024):
+            Max dimension of the input images.
+        patch_size (`int`, *optional*, defaults to 16):
+            Size of the image patches.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            Activation function used in the hidden layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for the attention layers.
+        rope_scaling (`RopeParameters`, *optional*):
+            The RopeParameters
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -74,17 +77,17 @@ class PixtralVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=1024,
-        intermediate_size=4096,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        attention_dropout=0.0,
-        rope_scaling=None,
-        initializer_range=0.02,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 4096,
+        num_hidden_layers: Optional[int] = 24,
+        num_attention_heads: Optional[int] = 16,
+        num_channels: Optional[int] = 3,
+        image_size: Optional[int] = 1024,
+        patch_size: Optional[int] = 16,
+        hidden_act: Optional[str] = "gelu",
+        attention_dropout: Optional[float] = 0.0,
+        rope_scaling: Optional[RopeParameters] = None,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)

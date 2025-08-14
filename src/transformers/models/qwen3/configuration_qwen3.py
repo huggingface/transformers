@@ -14,8 +14,10 @@
 # limitations under the License.
 """Qwen3 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -152,26 +154,26 @@ class Qwen3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151936,
-        hidden_size=4096,
-        intermediate_size=22016,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=False,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=28,
-        layer_types=None,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 151936,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 22016,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = 4096,
+        max_window_layers: Optional[int] = 28,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

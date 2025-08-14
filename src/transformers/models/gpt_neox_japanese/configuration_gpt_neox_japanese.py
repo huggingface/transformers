@@ -14,8 +14,10 @@
 # limitations under the License.
 """GPTNeoX Japanese model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -118,22 +120,22 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=2560,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        intermediate_multiple_size=4,
-        hidden_act="gelu",
-        rotary_pct=1.00,
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=31996,
-        eos_token_id=31999,
-        rope_scaling=None,
-        attention_dropout=0.1,
-        hidden_dropout=0.0,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 2560,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        intermediate_multiple_size: Optional[int] = 4,
+        hidden_act: Optional[str] = "gelu",
+        rotary_pct: Optional[float] = 1.00,
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 31996,
+        eos_token_id: Optional[int] = 31999,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_dropout: Optional[float] = 0.1,
+        hidden_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

@@ -14,8 +14,10 @@
 # limitations under the License.
 """Persimmon model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -118,25 +120,25 @@ class PersimmonConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=262144,
-        hidden_size=4096,
-        intermediate_size=16384,
-        num_hidden_layers=36,
-        num_attention_heads=64,
-        hidden_act="relu2",
-        max_position_embeddings=16384,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        qk_layernorm=True,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        partial_rotary_factor=0.5,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        vocab_size: Optional[int] = 262144,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 16384,
+        num_hidden_layers: Optional[int] = 36,
+        num_attention_heads: Optional[int] = 64,
+        hidden_act: Optional[str] = "relu2",
+        max_position_embeddings: Optional[int] = 16384,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        qk_layernorm: Optional[bool] = True,
+        hidden_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        partial_rotary_factor: Optional[float] = 0.5,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size

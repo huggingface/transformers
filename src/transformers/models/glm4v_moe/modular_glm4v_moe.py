@@ -19,7 +19,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -168,31 +168,31 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, nn.Module):
 
     def __init__(
         self,
-        vocab_size=151424,
-        hidden_size=4096,
-        intermediate_size=10944,
-        num_hidden_layers=46,
-        num_attention_heads=96,
-        partial_rotary_factor=0.5,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=65536,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        attention_bias=True,
-        attention_dropout=0.0,
-        moe_intermediate_size=1408,
-        num_experts_per_tok=8,
-        n_shared_experts=1,
-        n_routed_experts=128,
-        routed_scaling_factor=1.0,
-        n_group=1,
-        topk_group=1,
-        first_k_dense_replace=1,
-        norm_topk_prob=True,
+        vocab_size: Optional[int] = 151424,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 10944,
+        num_hidden_layers: Optional[int] = 46,
+        num_attention_heads: Optional[int] = 96,
+        partial_rotary_factor: Optional[float] = 0.5,
+        num_key_value_heads: Optional[int] = 8,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 65536,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = True,
+        attention_dropout: Optional[float] = 0.0,
+        moe_intermediate_size: Optional[int] = 1408,
+        num_experts_per_tok: Optional[int] = 8,
+        n_shared_experts: Optional[int] = 1,
+        n_routed_experts: Optional[int] = 128,
+        routed_scaling_factor: Optional[float] = 1.0,
+        n_group: Optional[int] = 1,
+        topk_group: Optional[int] = 1,
+        first_k_dense_replace: Optional[int] = 1,
+        norm_topk_prob: Optional[bool] = True,
         **kwargs,
     ):
         nn.Module().__init__(

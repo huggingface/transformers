@@ -23,7 +23,7 @@ import warnings
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -95,43 +95,10 @@ class Gemma3TextConfig(PretrainedConfig):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -163,30 +130,30 @@ class Gemma3TextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=262_208,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=131_072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        layer_types=None,
-        final_logit_softcapping=None,
-        attn_logit_softcapping=None,
-        rope_scaling=None,
+        vocab_size: Optional[int] = 262_208,
+        hidden_size: Optional[int] = 2304,
+        intermediate_size: Optional[int] = 9216,
+        num_hidden_layers: Optional[int] = 26,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = 4,
+        head_dim: Optional[int] = 256,
+        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 131_072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        bos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        query_pre_attn_scalar: Optional[int] = 256,
+        sliding_window: Optional[int] = 4096,
+        layer_types: Optional[list[str]] = None,
+        final_logit_softcapping: Optional[float] = None,
+        attn_logit_softcapping: Optional[float] = None,
+        rope_scaling: Optional[RopeParameters] = None,
         **kwargs,
     ):
         super().__init__(

@@ -16,8 +16,10 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
@@ -152,40 +154,40 @@ class DeepseekV3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=129280,
-        hidden_size=7168,
-        intermediate_size=18432,
-        moe_intermediate_size=2048,
-        num_hidden_layers=61,
-        num_attention_heads=128,
-        num_key_value_heads=128,
-        n_shared_experts=1,
-        n_routed_experts=256,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        n_group=8,
-        topk_group=4,
-        num_experts_per_tok=8,
-        first_k_dense_replace=3,
-        norm_topk_prob=True,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=0,
-        eos_token_id=1,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_scaling=None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 129280,
+        hidden_size: Optional[int] = 7168,
+        intermediate_size: Optional[int] = 18432,
+        moe_intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 61,
+        num_attention_heads: Optional[int] = 128,
+        num_key_value_heads: Optional[int] = 128,
+        n_shared_experts: Optional[int] = 1,
+        n_routed_experts: Optional[int] = 256,
+        routed_scaling_factor: Optional[float] = 2.5,
+        kv_lora_rank: Optional[int] = 512,
+        q_lora_rank: Optional[int] = 1536,
+        qk_rope_head_dim: Optional[int] = 64,
+        v_head_dim: Optional[int] = 128,
+        qk_nope_head_dim: Optional[int] = 128,
+        n_group: Optional[int] = 8,
+        topk_group: Optional[int] = 4,
+        num_experts_per_tok: Optional[int] = 8,
+        first_k_dense_replace: Optional[int] = 3,
+        norm_topk_prob: Optional[bool] = True,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 1,
+        pretraining_tp: Optional[int] = 1,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        rope_interleave: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

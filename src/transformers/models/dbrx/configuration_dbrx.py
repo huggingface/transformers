@@ -17,6 +17,7 @@
 from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -182,19 +183,19 @@ class DbrxConfig(PretrainedConfig):
 
     def __init__(
         self,
-        d_model: int = 2048,
-        n_heads: int = 16,
-        n_layers: int = 24,
-        max_seq_len: int = 2048,
-        vocab_size: int = 32000,
-        resid_pdrop: float = 0.0,
-        emb_pdrop: float = 0.0,
+        d_model: Optional[int] = 2048,
+        n_heads: Optional[int] = 16,
+        n_layers: Optional[int] = 24,
+        max_seq_len: Optional[int] = 2048,
+        vocab_size: Optional[int] = 32000,
+        resid_pdrop: Optional[float] = 0.0,
+        emb_pdrop: Optional[float] = 0.0,
         attn_config: Optional[DbrxAttentionConfig] = None,
         ffn_config: Optional[DbrxFFNConfig] = None,
-        use_cache: bool = True,
-        initializer_range: float = 0.02,
-        output_router_logits: bool = False,
-        rope_scaling=None,
+        use_cache: Optional[bool] = True,
+        initializer_range: Optional[float] = 0.02,
+        output_router_logits: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
         **kwargs: Any,
     ):
         if attn_config is None:

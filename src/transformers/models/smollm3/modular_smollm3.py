@@ -20,7 +20,7 @@ import torch
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -177,29 +177,29 @@ class SmolLM3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=2048,
-        intermediate_size=11008,
-        num_hidden_layers=36,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=128004,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        rope_scaling=None,
-        use_sliding_window=False,
-        sliding_window=None,
-        no_rope_layers=None,
-        no_rope_layer_interval=4,
-        layer_types=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
+        vocab_size: Optional[int] = 128256,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 36,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 128004,
+        bos_token_id: Optional[int] = 128000,
+        eos_token_id: Optional[int] = 128001,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        no_rope_layers: Optional[int] = None,
+        no_rope_layer_interval: Optional[int] = 4,
+        layer_types: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(

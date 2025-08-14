@@ -20,8 +20,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class DogeConfig(PretrainedConfig):
@@ -164,31 +166,31 @@ class DogeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=1024,
-        intermediate_size=2048,
-        num_hidden_layers=32,
-        hidden_dropout=0.0,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        tie_word_embeddings=False,
-        max_position_embeddings=2048,
-        rope_scaling=None,
-        num_attention_heads=8,
-        num_key_value_heads=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        sliding_window=None,
-        keep_window_size=2048,
-        is_moe=False,
-        num_experts=16384,
-        num_experts_per_tok=64,
-        norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        vocab_size: Optional[int] = 32768,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 32,
+        hidden_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-06,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        max_position_embeddings: Optional[int] = 2048,
+        rope_scaling: Optional[RopeParameters] = None,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        keep_window_size: Optional[int] = 2048,
+        is_moe: Optional[bool] = False,
+        num_experts: Optional[int] = 16384,
+        num_experts_per_tok: Optional[int] = 64,
+        norm_topk_prob: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size

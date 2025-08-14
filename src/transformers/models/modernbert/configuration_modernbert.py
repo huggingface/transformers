@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal
+from typing import Literal, Optional
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class ModernBertConfig(PretrainedConfig):
@@ -168,40 +168,40 @@ class ModernBertConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50368,
-        hidden_size=768,
-        intermediate_size=1152,
-        num_hidden_layers=22,
-        num_attention_heads=12,
-        hidden_activation="gelu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        initializer_cutoff_factor=2.0,
-        norm_eps=1e-5,
-        norm_bias=False,
-        pad_token_id=50283,
-        eos_token_id=50282,
-        bos_token_id=50281,
-        cls_token_id=50281,
-        sep_token_id=50282,
-        attention_bias=False,
-        attention_dropout=0.0,
-        layer_types=None,
-        rope_scaling=None,
-        local_attention=128,
-        embedding_dropout=0.0,
-        mlp_bias=False,
-        mlp_dropout=0.0,
-        decoder_bias=True,
+        vocab_size: Optional[int] = 50368,
+        hidden_size: Optional[int] = 768,
+        intermediate_size: Optional[int] = 1152,
+        num_hidden_layers: Optional[int] = 22,
+        num_attention_heads: Optional[int] = 12,
+        hidden_activation: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        norm_eps: Optional[int] = 1e-5,
+        norm_bias: Optional[bool] = False,
+        pad_token_id: Optional[int] = 50283,
+        eos_token_id: Optional[int] = 50282,
+        bos_token_id: Optional[int] = 50281,
+        cls_token_id: Optional[int] = 50281,
+        sep_token_id: Optional[int] = 50282,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        layer_types: Optional[list[str]] = None,
+        rope_scaling: Optional[RopeParameters] = None,
+        local_attention: Optional[int] = 128,
+        embedding_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        mlp_dropout: Optional[float] = 0.0,
+        decoder_bias: Optional[bool] = True,
         classifier_pooling: Literal["cls", "mean"] = "cls",
-        classifier_dropout=0.0,
-        classifier_bias=False,
-        classifier_activation="gelu",
-        deterministic_flash_attn=False,
-        sparse_prediction=False,
-        sparse_pred_ignore_index=-100,
-        reference_compile=None,
-        repad_logits_with_grad=False,
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
+        classifier_activation: Optional[str] = "gelu",
+        deterministic_flash_attn: Optional[bool] = False,
+        sparse_prediction: Optional[bool] = False,
+        sparse_pred_ignore_index: Optional[int] = -100,
+        reference_compile: Optional[bool] = None,
+        repad_logits_with_grad: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(

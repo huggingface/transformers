@@ -142,47 +142,11 @@ class ModernBertDecoderConfig(ModernBertConfig):
 
     def __init__(
         self,
-        vocab_size=50368,
-        hidden_size=768,
-        intermediate_size=1152,
-        num_hidden_layers=22,
-        num_attention_heads=12,
-        hidden_activation="gelu",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        initializer_cutoff_factor=2.0,
-        norm_eps=1e-5,
-        norm_bias=False,
-        pad_token_id=50283,
-        eos_token_id=50282,
-        bos_token_id=50281,
-        cls_token_id=50281,
-        sep_token_id=50282,
-        attention_bias=False,
-        attention_dropout=0.0,
-        embedding_dropout=0.0,
-        mlp_bias=False,
-        mlp_dropout=0.0,
-        decoder_bias=True,
-        classifier_dropout=0.0,
-        classifier_bias=False,
-        classifier_activation="gelu",
-        use_cache=True,
-        local_attention=128,
-        global_attn_every_n_layers=3,
-        layer_types=None,
-        reference_compile=False,
-        rope_scaling=None,
-        **kwargs,
+        local_attention: Optional[int] = 128,
+        reference_compile: Optional[bool] = False,
+        **super_kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**super_kwargs)
         del self.classifier_pooling
         del self.deterministic_flash_attn
         del self.sparse_prediction
@@ -191,7 +155,7 @@ class ModernBertDecoderConfig(ModernBertConfig):
         del self.local_attention
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = local_attention // 2 if local_attention else -1
+        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
 
 
 def eager_attention_forward(
