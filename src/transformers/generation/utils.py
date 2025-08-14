@@ -46,7 +46,6 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
-from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -678,24 +677,12 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
-        # 7. Prepare kwargs for flash attention to avoid recomputations
-        if "flash" in self.config._attn_implementation and self._supports_attention_backend:
-            (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(
-                model_inputs["position_ids"], is_packed_sequence=False
-            )
-            model_inputs.update(
-                cu_seq_lens_q=cu_seq_lens_q.to(self.device),
-                cu_seq_lens_k=cu_seq_lens_k.to(self.device),
-                max_length_q=max_length_q,
-                max_length_k=max_length_k,
-            )
-
-        # 8. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
             if key not in model_inputs:
                 model_inputs[key] = value
 
-        # 9. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
+        # 8. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
         model_inputs.pop("labels", None)
         return model_inputs
 
@@ -1990,19 +1977,20 @@ class GenerationMixin(ContinuousMixin):
                         "cache, please open an issue and tag @zucchini-nlp."
                     )
 
-                cache_config = (
-                    generation_config.cache_config
-                    if generation_config.cache_config is not None
-                    else {"backend": "quanto"}
-                )
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config["backend"]]
+                cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+                # Add the config if it was not provided, as it's a required argument
+                if "config" not in cache_config:
+                    cache_config["config"] = self.config.get_text_config()
+                # Pop the backend from the config (defaults to quanto if not defined)
+                backend = cache_config.pop("backend", "quanto")
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[backend]
 
-                if cache_config["backend"] == "quanto" and not is_optimum_quanto_available():
+                if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
                         "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
                         "Please install it via  with `pip install optimum-quanto`"
                     )
-                elif cache_config["backend"] == "HQQ" and not is_hqq_available():
+                elif backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"
