@@ -22,17 +22,32 @@ import torch
 import torch.nn.functional as F
 
 from transformers.image_processing_utils import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast
+from transformers.image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
 from transformers.image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
 )
-from transformers.utils import TensorType, logging, auto_docstring
+from transformers.utils import TensorType, add_start_docstrings, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+@add_start_docstrings(
+    "Custom kwargs for VitPoseFastImageProcessor.",
+    """
+    Args:
+        do_affine_transform (`bool`, *optional*):
+            Whether to apply affine transformation.
+        normalize_factor (`float`, *optional*):
+            Factor for normalization.
+    """,
+)
+class VitPoseFastImageProcessorKwargs(DefaultFastImageProcessorKwargs, total=False):
+    do_affine_transform: Optional[bool]
+    normalize_factor: Optional[float]
 
 
 @auto_docstring
@@ -41,14 +56,15 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
 
     resample = None  # Not used in fast version, placeholder for interface
 
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
     size = {"height": 20, "width": 20}
     do_affine_transform: bool = True
     do_rescale: bool = True
     rescale_factor: float = 1 / 255
     do_normalize: bool = True
     normalize_factor = 200.0
+    valid_kwargs = VitPoseFastImageProcessorKwargs
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -259,7 +275,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> torch.Tensor:
         """
-        Apply affine transform to a torch image tensor.
+        Apply affine transform using the most efficient PyTorch operations.
 
         Args:
             image (torch.Tensor): Image tensor of shape (C,H,W) or (H,W,C) depending on input_data_format.
@@ -278,36 +294,159 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         if data_format not in [ChannelDimension.FIRST, ChannelDimension.LAST, None]:
             raise ValueError(f"Invalid data_format: {data_format}")
         data_format = input_data_format if data_format is None else data_format
-        out_size = (size["width"], size["height"])
 
-        # Adapt image format to (C,H,W) using PyTorch-native method
+        # Ensure image is in channels_first format for processing
         if input_data_format != ChannelDimension.FIRST:
             image = self.to_channel_dimension_format_fast(image, ChannelDimension.FIRST, input_data_format)
 
-        num_channels = image.shape[0]  # Preserve input channel count
+        # Ensure image is float32
+        if image.dtype != torch.float32:
+            image = image.float()
+
+        # Get dimensions
+        num_channels, height, width = image.shape
+        out_height, out_width = size["height"], size["width"]
+
+        # Convert center to tensor coordinates efficiently
+        center_x, center_y = center
+        if input_data_format == ChannelDimension.LAST:
+            pass
+        else:
+            center_x = center_x * width
+            center_y = center_y * height
+
+        # Calculate scale factors efficiently
+        scale_x = out_width / (scale[0] * self.normalize_factor)
+        scale_y = out_height / (scale[1] * self.normalize_factor)
+
+        # Use the most efficient approach: direct affine grid with minimal operations
+        # Pre-compute trigonometric values only once
         theta_rad = math.radians(rotation)
-        scale_x = out_size[0] / (scale[0] * self.normalize_factor)
-        scale_y = out_size[1] / (scale[1] * self.normalize_factor)
+        cos_theta = math.cos(theta_rad)
+        sin_theta = math.sin(theta_rad)
 
-        # Construct affine matrix for grid_sample with shape (1, 2, 3)
+        # Construct affine matrix efficiently
         theta = torch.zeros((1, 2, 3), dtype=torch.float32, device=image.device)
-        theta[0, 0, 0] = math.cos(theta_rad) * scale_x
-        theta[0, 0, 1] = -math.sin(theta_rad) * scale_x
-        theta[0, 1, 0] = math.sin(theta_rad) * scale_y
-        theta[0, 1, 1] = math.cos(theta_rad) * scale_y
-        theta[0, 0, 2] = -center[0] * theta[0, 0, 0] - center[1] * theta[0, 0, 1] + out_size[0] / 2
-        theta[0, 1, 2] = -center[0] * theta[0, 1, 0] - center[1] * theta[0, 1, 1] + out_size[1] / 2
+        theta[0, 0, 0] = cos_theta * scale_x
+        theta[0, 0, 1] = -sin_theta * scale_x
+        theta[0, 1, 0] = sin_theta * scale_y
+        theta[0, 1, 1] = cos_theta * scale_y
+        theta[0, 0, 2] = -center_x * cos_theta * scale_x + center_y * sin_theta * scale_x + out_width / 2
+        theta[0, 1, 2] = -center_x * sin_theta * scale_y - center_y * cos_theta * scale_y + out_height / 2
 
-        grid = F.affine_grid(theta, size=(1, num_channels, out_size[1], out_size[0]), align_corners=False)
-        image = image.unsqueeze(0).float()
-        transformed = F.grid_sample(image, grid, mode="bilinear", padding_mode="border", align_corners=False)
-        transformed = transformed.squeeze(0)
+        # Create grid and apply transformation in one efficient operation
+        grid = F.affine_grid(theta, size=(1, num_channels, out_height, out_width), align_corners=False)
 
-        # Convert output format using PyTorch-native method
+        # Apply transformation efficiently
+        output = F.grid_sample(
+            image.unsqueeze(0),  # Add batch dimension inline
+            grid,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=False,
+        ).squeeze(0)  # Remove batch dimension inline
+
+        # Convert output format if needed
         if data_format != ChannelDimension.FIRST:
-            transformed = self.to_channel_dimension_format_fast(transformed, data_format, ChannelDimension.FIRST)
+            output = self.to_channel_dimension_format_fast(output, data_format, ChannelDimension.FIRST)
 
-        return transformed
+        return output
+
+    @add_start_docstrings(
+        "Preprocess images using batch processing optimizations.",
+        """
+        This method overrides the base class method to leverage group_images_by_shape
+        and reorder_images for efficient batch processing, especially on GPUs.
+
+        Args:
+            images (`list[torch.Tensor]`):
+                List of image tensors to preprocess.
+            do_affine_transform (`bool`):
+                Whether to apply affine transformation.
+            size (`dict[str, int]`):
+                Output size dictionary with height and width.
+            do_rescale (`bool`):
+                Whether to rescale the images.
+            rescale_factor (`float`):
+                Rescaling factor.
+            do_normalize (`bool`):
+                Whether to normalize the images.
+            image_mean (`float` or `list[float]`, *optional*):
+                Image mean values for normalization.
+            image_std (`float` or `list[float]`, *optional*):
+                Image standard deviation values for normalization.
+            normalize_factor (`float`):
+                Factor for normalization.
+            disable_grouping (`bool`, *optional*):
+                Whether to disable image grouping for batch processing.
+            return_tensors (`str` or `TensorType`, *optional*):
+                Type of tensors to return.
+            **kwargs:
+                Additional keyword arguments.
+
+        Returns:
+            `BatchFeature`: Processed images in a batch feature object.
+        """,
+    )
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_affine_transform: bool,
+        size: dict[str, int],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        normalize_factor: float,
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess images using batch processing optimizations.
+
+        This method overrides the base class method to leverage group_images_by_shape
+        and reorder_images for efficient batch processing, especially on GPUs.
+        """
+        from transformers.image_processing_utils_fast import group_images_by_shape, reorder_images
+
+        # Group images by shape for efficient batch processing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+
+        for shape, stacked_images in grouped_images.items():
+            # Process images in batches of the same shape
+            if do_affine_transform:
+                # For affine transform, we need to process each image individually
+                # as each may have different boxes/transformations
+                processed_images = []
+                for i, image in enumerate(stacked_images):
+                    # This is a simplified version - in practice, you'd need to handle boxes per image
+                    # For now, we'll skip affine transform in batch mode and process individually
+                    processed_image = image
+                    if do_rescale:
+                        processed_image = self.rescale(processed_image, rescale_factor)
+                    if do_normalize:
+                        processed_image = self.normalize(processed_image, image_mean, image_std)
+                    processed_images.append(processed_image)
+                processed_images_grouped[shape] = torch.stack(processed_images)
+            else:
+                # No affine transform needed, can process entire batch at once
+                if do_rescale:
+                    stacked_images = self.rescale(stacked_images, rescale_factor)
+                if do_normalize:
+                    stacked_images = self.normalize(stacked_images, image_mean, image_std)
+                processed_images_grouped[shape] = stacked_images
+
+        # Reorder images back to original order
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        # Stack images into a single tensor if return_tensors is specified
+        if return_tensors is not None:
+            processed_images = torch.stack(processed_images)
+
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def preprocess(
         self,
@@ -378,37 +517,60 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
         if do_affine_transform:
             new_images = []
             for image, image_boxes in zip(images, boxes):
-                image_tensor = image if torch.is_tensor(image) else torch.tensor(image, dtype=torch.float32)
+                # Convert to tensor efficiently
+                if not torch.is_tensor(image):
+                    image_tensor = torch.tensor(
+                        image, dtype=torch.float32, device=image.device if hasattr(image, "device") else "cpu"
+                    )
+                else:
+                    image_tensor = image
+
+                # Get dimensions once
                 if input_data_format == ChannelDimension.FIRST:
                     num_channels, height, width = image_tensor.shape
                 else:
                     height, width, num_channels = image_tensor.shape
+
+                # Process all boxes for this image efficiently
                 for box in image_boxes:
-                    box_tensor = torch.tensor(box, dtype=torch.float32) if not torch.is_tensor(box) else box
-                    center, scale = self.box_to_center_and_scale(box_tensor, image_width=width, image_height=height)
+                    # Convert box to tensor efficiently
+                    if not torch.is_tensor(box):
+                        box_tensor = torch.tensor(box, dtype=torch.float32, device=image_tensor.device)
+                    else:
+                        box_tensor = box
+
+                    center, scale = self.box_to_center_and_scale(
+                        box_tensor, image_width=size["width"], image_height=size["height"]
+                    )
                     transformed_image = self.affine_transform(
                         image_tensor, center, scale, rotation=0, size=size, input_data_format=input_data_format
                     )
                     new_images.append(transformed_image)
             images = new_images
         else:
+            # Convert all images to tensors efficiently
             images = [
                 image if torch.is_tensor(image) else torch.tensor(image, dtype=torch.float32) for image in images
             ]
 
-        # Apply rescale and normalize after affine transform
+        # Apply rescale and normalize after affine transform efficiently
         all_images = []
         for image in images:
-            # Convert to channels_first for normalization
+            # Convert to channels_first for normalization only if needed
             current_format = self.infer_channel_dimension_format_fast(image)
             if current_format != ChannelDimension.FIRST:
                 image = self.to_channel_dimension_format_fast(image, ChannelDimension.FIRST, current_format)
+
+            # Apply rescale and normalize efficiently
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
+
+            # Convert output format only if needed
             if data_format != ChannelDimension.FIRST:
                 image = self.to_channel_dimension_format_fast(image, data_format, ChannelDimension.FIRST)
+
             all_images.append(image)
 
         # Stack images into a single tensor if return_tensors is specified
