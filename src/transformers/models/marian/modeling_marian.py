@@ -1569,6 +1569,191 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
+    def export_decoder_to_onnx(
+        self,
+        output_path: str,
+        opset_version: int = 17,
+        input_shape: tuple = (1, 64),
+        device: str = "cpu",
+    ):
+        """
+        Export the decoder part of the Marian model to ONNX format.
+        
+        This method properly handles the decoder export by:
+        1. Creating a wrapper that maintains the correct input/output structure
+        2. Ensuring proper handling of attention masks and positional embeddings
+        3. Maintaining the encoder-decoder coupling through encoder_hidden_states
+        
+        Args:
+            output_path: Path where the ONNX model will be saved
+            opset_version: ONNX opset version to use
+            input_shape: Input shape for dummy inputs (batch_size, seq_length)
+            device: Device to use for export
+        """
+        import torch
+        
+        class MarianDecoderForExport(torch.nn.Module):
+            def __init__(self, model):
+                super().__init__()
+                self.decoder = model.model.decoder
+                self.lm_head = model.lm_head
+                self.final_logits_bias = model.final_logits_bias
+                self.config = model.config
+                
+            def forward(
+                self,
+                input_ids: torch.Tensor,
+                encoder_hidden_states: torch.Tensor,
+                encoder_attention_mask: torch.Tensor,
+                decoder_attention_mask: Optional[torch.Tensor] = None,
+            ):
+                # Ensure proper input shapes and types
+                batch_size, seq_length = input_ids.shape
+                
+                # Create proper attention mask if not provided
+                if decoder_attention_mask is None:
+                    decoder_attention_mask = torch.ones(batch_size, seq_length, device=input_ids.device, dtype=torch.long)
+                
+                # Forward through decoder
+                decoder_outputs = self.decoder(
+                    input_ids=input_ids,
+                    attention_mask=decoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    use_cache=False,  # Disable cache for export
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                
+                # Get hidden states and apply language model head
+                hidden_states = decoder_outputs.last_hidden_state
+                logits = self.lm_head(hidden_states) + self.final_logits_bias
+                
+                return logits
+        
+        # Create export wrapper
+        export_model = MarianDecoderForExport(self)
+        export_model.eval()
+        
+        # Move to device
+        export_model = export_model.to(device)
+        
+        # Create dummy inputs
+        batch_size, seq_length = input_shape
+        dummy_input_ids = torch.randint(0, self.config.vocab_size, input_shape, device=device)
+        dummy_encoder_hidden_states = torch.randn(
+            batch_size, seq_length, self.config.d_model, device=device
+        )
+        dummy_encoder_attention_mask = torch.ones(batch_size, seq_length, device=device, dtype=torch.long)
+        
+        # Export to ONNX
+        torch.onnx.export(
+            export_model,
+            args=(
+                dummy_input_ids,
+                dummy_encoder_hidden_states,
+                dummy_encoder_attention_mask,
+            ),
+            f=output_path,
+            input_names=[
+                "input_ids",
+                "encoder_hidden_states", 
+                "encoder_attention_mask",
+            ],
+            output_names=["logits"],
+            dynamic_axes={
+                "input_ids": {0: "batch_size", 1: "sequence_length"},
+                "encoder_hidden_states": {0: "batch_size", 1: "encoder_sequence_length"},
+                "encoder_attention_mask": {0: "batch_size", 1: "encoder_sequence_length"},
+                "logits": {0: "batch_size", 1: "sequence_length"},
+            },
+            opset_version=opset_version,
+            do_constant_folding=True,
+            export_params=True,
+            verbose=False,
+        )
+        
+        return output_path
+
+    def export_encoder_to_onnx(
+        self,
+        output_path: str,
+        opset_version: int = 17,
+        input_shape: tuple = (1, 64),
+        device: str = "cpu",
+    ):
+        """
+        Export the encoder part of the Marian model to ONNX format.
+        
+        This method properly handles the encoder export by:
+        1. Creating a wrapper that maintains the correct input/output structure
+        2. Ensuring proper handling of attention masks and positional embeddings
+        3. Providing the correct output format expected by the decoder
+        
+        Args:
+            output_path: Path where the ONNX model will be saved
+            opset_version: ONNX opset version to use
+            input_shape: Input shape for dummy inputs (batch_size, seq_length)
+            device: Device to use for export
+        """
+        import torch
+        
+        class MarianEncoderForExport(torch.nn.Module):
+            def __init__(self, model):
+                super().__init__()
+                self.encoder = model.model.encoder
+                self.config = model.config
+                
+            def forward(
+                self,
+                input_ids: torch.Tensor,
+                attention_mask: torch.Tensor,
+            ):
+                # Forward through encoder
+                encoder_outputs = self.encoder(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                
+                # Return hidden states
+                return encoder_outputs.last_hidden_state
+        
+        # Create export wrapper
+        export_model = MarianEncoderForExport(self)
+        export_model.eval()
+        
+        # Move to device
+        export_model = export_model.to(device)
+        
+        # Create dummy inputs
+        batch_size, seq_length = input_shape
+        dummy_input_ids = torch.randint(0, self.config.vocab_size, input_shape, device=device)
+        dummy_attention_mask = torch.ones(input_shape, device=device, dtype=torch.long)
+        
+        # Export to ONNX
+        torch.onnx.export(
+            export_model,
+            args=(dummy_input_ids, dummy_attention_mask),
+            f=output_path,
+            input_names=["input_ids", "attention_mask"],
+            output_names=["hidden_states"],
+            dynamic_axes={
+                "input_ids": {0: "batch_size", 1: "sequence_length"},
+                "attention_mask": {0: "batch_size", 1: "sequence_length"},
+                "hidden_states": {0: "batch_size", 1: "sequence_length"},
+            },
+            opset_version=opset_version,
+            do_constant_folding=True,
+            export_params=True,
+            verbose=False,
+        )
+        
+        return output_path
+
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Marian
 class MarianDecoderWrapper(MarianPreTrainedModel):
