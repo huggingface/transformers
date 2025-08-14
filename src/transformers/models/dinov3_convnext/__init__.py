@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_tvp import *
-    from .image_processing_tvp import *
-    from .image_processing_tvp_fast import *
-    from .modeling_tvp import *
-    from .processing_tvp import *
+    from .configuration_dinov3_convnext import *
+    from .modeling_dinov3_convnext import *
 else:
     import sys
 
