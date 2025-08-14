@@ -152,14 +152,18 @@ class DINOv3ConvNextStage(nn.Module):
         out_channels = config.hidden_sizes[stage_idx]
 
         if stage_idx == 0:
-            self.downsample_layers = nn.Sequential(
-                nn.Conv2d(config.num_channels, out_channels, kernel_size=4, stride=4),
-                DINOv3ConvNextLayerNorm(out_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+            self.downsample_layers = nn.ModuleList(
+                [
+                    nn.Conv2d(config.num_channels, out_channels, kernel_size=4, stride=4),
+                    DINOv3ConvNextLayerNorm(out_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+                ]
             )
         else:
-            self.downsample_layers = nn.Sequential(
-                DINOv3ConvNextLayerNorm(in_channels, eps=config.layer_norm_eps, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2),
+            self.downsample_layers = nn.ModuleList(
+                [
+                    DINOv3ConvNextLayerNorm(in_channels, eps=config.layer_norm_eps, data_format="channels_first"),
+                    nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2),
+                ]
             )
 
         num_stage_layers = config.depths[stage_idx]
@@ -179,7 +183,8 @@ class DINOv3ConvNextStage(nn.Module):
         Args:
             features: Tensor of shape (batch_size, channels, height, width)
         """
-        features = self.downsample_layers(features)
+        for layer in self.downsample_layers:
+            features = layer(features)
         for layer in self.layers:
             features = layer(features)
         return features
