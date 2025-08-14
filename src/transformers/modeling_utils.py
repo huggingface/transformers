@@ -2838,7 +2838,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             break
                 # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                 sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                submodule.config._attn_implementation = sub_implementation
+                submodule.config._attn_implementation_internal = sub_implementation
                 subconfigs_changed.add(submodule.config.__class__)
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
