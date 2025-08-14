@@ -139,6 +139,8 @@
       title: FullyShardedDataParallel
     - local: deepspeed
       title: DeepSpeed
+    - local: skypilot
+      title: SkyPilot
     - local: debugging
       title: Multi-GPU debugging
     - local: perf_train_cpu_many
