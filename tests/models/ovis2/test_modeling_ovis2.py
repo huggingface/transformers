@@ -27,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_bitsandbytes,
     require_torch,
     slow,
     torch_device,

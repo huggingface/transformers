@@ -489,25 +489,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (Ovis2RMSNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-
 
 def hard_softmax(logits: torch.Tensor, dim: int):
     y_soft = logits.softmax(dim)
@@ -520,6 +501,8 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
+    config: Ovis2VisionConfig
+
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__(config)
         self.config = config
@@ -542,7 +525,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
             hidden_stride = self.config.hidden_stride
 
             sqrt_l = int(math.sqrt(seq_len))
-            assert sqrt_l * sqrt_l == seq_len, "Token sequence length must be a perfect square"
+            if sqrt_l * sqrt_l != seq_len:
+                raise ValueError("Token sequence length must be a perfect square")
+
             pad_size = (hidden_stride - (sqrt_l % hidden_stride)) % hidden_stride
             last_hidden_state = nn.functional.pad(last_hidden_state, (0, 0, 0, pad_size, 0, pad_size), "constant", 0)
             sqrt_l += pad_size
