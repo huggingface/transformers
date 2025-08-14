@@ -19,9 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
@@ -96,9 +96,13 @@ class ModernBertDecoderConfig(PretrainedConfig):
             the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        layer_types (`list`, *optional*):
+        layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
 
     Examples:
 
@@ -139,22 +143,18 @@ class ModernBertDecoderConfig(PretrainedConfig):
         sep_token_id: Optional[int] = 50282,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
-        layer_types: Optional[list[str]] = None,
-        rope_scaling: Optional[RopeParameters] = None,
-        local_attention: Optional[int] = 128,
         embedding_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
         mlp_dropout: Optional[float] = 0.0,
         decoder_bias: Optional[bool] = True,
-        classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout: Optional[float] = 0.0,
         classifier_bias: Optional[bool] = False,
         classifier_activation: Optional[str] = "gelu",
-        deterministic_flash_attn: Optional[bool] = False,
-        sparse_prediction: Optional[bool] = False,
-        sparse_pred_ignore_index: Optional[int] = -100,
-        reference_compile: Optional[bool] = False,
-        repad_logits_with_grad: Optional[bool] = False,
+        use_cache: Optional[bool] = True,
+        local_attention: Optional[int] = 128,
+        global_attn_every_n_layers: Optional[int] = 3,
+        layer_types: Optional[list[str]] = None,
+        rope_scaling: Optional[RopeParameters] = None,
         **kwargs,
     ):
         super().__init__(
@@ -185,18 +185,21 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
-        self.reference_compile = reference_compile
+        self.use_cache = use_cache
+        self.global_attn_every_n_layers = global_attn_every_n_layers
+        # for consistency with ModernBert
+        self.reference_compile = False
+
+        # Set up layer_types for standardized layer type detection
         self.layer_types = layer_types
-
-        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self.global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
-
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention" if bool((i + 1) % self.global_attn_every_n_layers) else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types)
+            # Create layer_types based on the alternating pattern
+            self.layer_types = []
+            for layer_id in range(num_hidden_layers):
+                if layer_id % global_attn_every_n_layers != 0:
+                    self.layer_types.append("sliding_attention")
+                else:
+                    self.layer_types.append("full_attention")
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
@@ -217,11 +220,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("reference_compile", None)
-        return output
 
 
 __all__ = ["ModernBertDecoderConfig"]

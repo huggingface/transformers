@@ -23,7 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -33,7 +33,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
-from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
     MixtralDecoderLayer,
@@ -52,7 +51,7 @@ from ..mixtral.modeling_mixtral import (
 logger = logging.get_logger(__name__)
 
 
-class MiniMaxConfig(MixtralConfig):
+class MiniMaxConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -156,8 +155,50 @@ class MiniMaxConfig(MixtralConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "minimax"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
+        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
     def __init__(
         self,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 14336,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        head_dim: Optional[int] = None,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096 * 32,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[float] = 0.0,
+        num_experts_per_tok: Optional[int] = 2,
+        num_local_experts: Optional[int] = 8,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
+        router_jitter_noise: Optional[float] = 0.0,
+        rope_scaling: Optional[RopeParameters] = None,
         layer_types: Optional[list[str]] = None,
         block_size: Optional[int] = 256,
         full_attn_alpha_factor: Optional[int] = 1,
@@ -166,10 +207,41 @@ class MiniMaxConfig(MixtralConfig):
         linear_attn_beta_factor: Optional[int] = 1,
         mlp_alpha_factor: Optional[int] = 1,
         mlp_beta_factor: Optional[int] = 1,
-        rope_scaling: Optional[RopeParameters] = None,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.sliding_window = sliding_window
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_dropout = attention_dropout
+        self.head_dim = head_dim
+
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_local_experts = num_local_experts
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.router_jitter_noise = router_jitter_noise
+
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor

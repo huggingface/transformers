@@ -21,13 +21,13 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.models.modernbert.configuration_modernbert import ModernBertConfig
-
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.modernbert.modeling_modernbert import (
     ModernBertEmbeddings,
@@ -46,7 +46,7 @@ from ...utils.generic import check_model_inputs
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(ModernBertConfig):
+class ModernBertDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -117,9 +117,13 @@ class ModernBertDecoderConfig(ModernBertConfig):
             the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
         global_attn_every_n_layers (`int`, *optional*, defaults to 3):
             Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        layer_types (`list`, *optional*):
+        layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
+        rope_scaling (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
 
     Examples:
 
@@ -142,17 +146,98 @@ class ModernBertDecoderConfig(ModernBertConfig):
 
     def __init__(
         self,
+        vocab_size: Optional[int] = 50368,
+        hidden_size: Optional[int] = 768,
+        intermediate_size: Optional[int] = 1152,
+        num_hidden_layers: Optional[int] = 22,
+        num_attention_heads: Optional[int] = 12,
+        hidden_activation: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        norm_eps: Optional[int] = 1e-5,
+        norm_bias: Optional[bool] = False,
+        pad_token_id: Optional[int] = 50283,
+        eos_token_id: Optional[int] = 50282,
+        bos_token_id: Optional[int] = 50281,
+        cls_token_id: Optional[int] = 50281,
+        sep_token_id: Optional[int] = 50282,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        embedding_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        mlp_dropout: Optional[float] = 0.0,
+        decoder_bias: Optional[bool] = True,
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
+        classifier_activation: Optional[str] = "gelu",
+        use_cache: Optional[bool] = True,
         local_attention: Optional[int] = 128,
-        reference_compile: Optional[bool] = False,
-        **super_kwargs,
+        global_attn_every_n_layers: Optional[int] = 3,
+        layer_types: Optional[list[str]] = None,
+        rope_scaling: Optional[RopeParameters] = None,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
-        del self.classifier_pooling
-        del self.deterministic_flash_attn
-        del self.sparse_prediction
-        del self.sparse_pred_ignore_index
-        del self.repad_logits_with_grad
-        del self.local_attention
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
+            **kwargs,
+        )
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.initializer_range = initializer_range
+        self.initializer_cutoff_factor = initializer_cutoff_factor
+        self.norm_eps = norm_eps
+        self.norm_bias = norm_bias
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.hidden_activation = hidden_activation
+        self.embedding_dropout = embedding_dropout
+        self.mlp_bias = mlp_bias
+        self.mlp_dropout = mlp_dropout
+        self.decoder_bias = decoder_bias
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
+        self.classifier_activation = classifier_activation
+        self.use_cache = use_cache
+        self.global_attn_every_n_layers = global_attn_every_n_layers
+        # for consistency with ModernBert
+        self.reference_compile = False
+
+        # Set up layer_types for standardized layer type detection
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            # Create layer_types based on the alternating pattern
+            self.layer_types = []
+            for layer_id in range(num_hidden_layers):
+                if layer_id % global_attn_every_n_layers != 0:
+                    self.layer_types.append("sliding_attention")
+                else:
+                    self.layer_types.append("full_attention")
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = getattr(self, "global_rope_theta", 160_000.0)
+        rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
