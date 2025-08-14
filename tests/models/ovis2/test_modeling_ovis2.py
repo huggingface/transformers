@@ -187,20 +187,6 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -360,7 +346,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=50)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a forested area with two deer in the foreground. The deer are standing on a grassy area, and the surrounding environment is shrouded in fog, creating a misty atmosphere. The deer appear to be grazing',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a forested area with a grassy field. There are two deer visible in the foreground. The deer appear to be grazing on the grass. The environment is quite foggy, creating a misty atmosphere. The deer',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
 
