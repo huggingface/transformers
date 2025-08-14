@@ -37,13 +37,7 @@ def test_marian_onnx_export():
         inputs = tokenizer(test_sentence, return_tensors="pt", padding=True, truncation=True, max_length=64)
 
         with torch.no_grad():
-            pt_outputs = model.generate(
-                **inputs,
-                max_length=64,
-                num_beams=1,
-                do_sample=False,
-                early_stopping=True
-            )
+            pt_outputs = model.generate(**inputs, max_length=64, num_beams=1, do_sample=False, early_stopping=True)
             pt_translation = tokenizer.decode(pt_outputs[0], skip_special_tokens=True)
 
         print(f"PyTorch translation: {pt_translation}")
@@ -84,6 +78,7 @@ def test_marian_onnx_export():
             # Verify ONNX files are valid
             try:
                 import onnx
+
                 encoder_onnx = onnx.load(encoder_path)
                 decoder_onnx = onnx.load(decoder_path)
 
@@ -119,13 +114,13 @@ def test_export_methods_exist():
         model = MarianMTModel.from_pretrained(model_name)
 
         # Check if methods exist
-        if hasattr(model, 'export_encoder_to_onnx'):
+        if hasattr(model, "export_encoder_to_onnx"):
             print("✅ export_encoder_to_onnx method exists")
         else:
             print("❌ export_encoder_to_onnx method missing")
             return False
 
-        if hasattr(model, 'export_decoder_to_onnx'):
+        if hasattr(model, "export_decoder_to_onnx"):
             print("✅ export_decoder_to_onnx method exists")
         else:
             print("❌ export_decoder_to_onnx method missing")
@@ -153,7 +148,7 @@ def main():
     results = []
 
     for test_name, test_func in tests:
-        print(f"\n{'='*20} {test_name} {'='*20}")
+        print(f"\n{'=' * 20} {test_name} {'=' * 20}")
         try:
             result = test_func()
             results.append((test_name, result))

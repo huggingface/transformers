@@ -1612,7 +1612,9 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
 
                 # Create proper attention mask if not provided
                 if decoder_attention_mask is None:
-                    decoder_attention_mask = torch.ones(batch_size, seq_length, device=input_ids.device, dtype=torch.long)
+                    decoder_attention_mask = torch.ones(
+                        batch_size, seq_length, device=input_ids.device, dtype=torch.long
+                    )
 
                 # Forward through decoder
                 decoder_outputs = self.decoder(
@@ -1642,9 +1644,7 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         # Create dummy inputs
         batch_size, seq_length = input_shape
         dummy_input_ids = torch.randint(0, self.config.vocab_size, input_shape, device=device)
-        dummy_encoder_hidden_states = torch.randn(
-            batch_size, seq_length, self.config.d_model, device=device
-        )
+        dummy_encoder_hidden_states = torch.randn(batch_size, seq_length, self.config.d_model, device=device)
         dummy_encoder_attention_mask = torch.ones(batch_size, seq_length, device=device, dtype=torch.long)
 
         # Export to ONNX

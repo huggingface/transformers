@@ -43,33 +43,20 @@ def export_marian_model_to_onnx(model_name: str, output_dir: str, opset_version:
     # Export encoder
     print("Exporting encoder...")
     encoder_path = os.path.join(output_dir, "encoder.onnx")
-    model.export_encoder_to_onnx(
-        encoder_path,
-        opset_version=opset_version,
-        input_shape=(1, 64),
-        device="cpu"
-    )
+    model.export_encoder_to_onnx(encoder_path, opset_version=opset_version, input_shape=(1, 64), device="cpu")
     print(f"Encoder exported to: {encoder_path}")
 
     # Export decoder
     print("Exporting decoder...")
     decoder_path = os.path.join(output_dir, "decoder.onnx")
-    model.export_decoder_to_onnx(
-        decoder_path,
-        opset_version=opset_version,
-        input_shape=(1, 64),
-        device="cpu"
-    )
+    model.export_decoder_to_onnx(decoder_path, opset_version=opset_version, input_shape=(1, 64), device="cpu")
     print(f"Decoder exported to: {decoder_path}")
 
     return encoder_path, decoder_path
 
 
 def test_onnx_export(
-    model_name: str,
-    encoder_path: str,
-    decoder_path: str,
-    test_sentence: str = "Hello, how are you?"
+    model_name: str, encoder_path: str, decoder_path: str, test_sentence: str = "Hello, how are you?"
 ):
     """
     Test the ONNX export by comparing outputs with the original PyTorch model.
@@ -92,13 +79,7 @@ def test_onnx_export(
 
     # Get PyTorch output
     with torch.no_grad():
-        pt_outputs = model.generate(
-            **inputs,
-            max_length=64,
-            num_beams=1,
-            do_sample=False,
-            early_stopping=True
-        )
+        pt_outputs = model.generate(**inputs, max_length=64, num_beams=1, do_sample=False, early_stopping=True)
         pt_translation = tokenizer.decode(pt_outputs[0], skip_special_tokens=True)
 
     print(f"PyTorch translation: {pt_translation}")
@@ -112,7 +93,7 @@ def test_onnx_export(
         # Prepare inputs for encoder
         encoder_inputs = {
             "input_ids": inputs["input_ids"].numpy().astype(np.int64),
-            "attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
+            "attention_mask": inputs["attention_mask"].numpy().astype(np.int64),
         }
 
         # Run encoder
@@ -134,7 +115,7 @@ def test_onnx_export(
             decoder_inputs = {
                 "input_ids": decoder_input_ids.astype(np.int64),
                 "encoder_hidden_states": encoder_hidden_states.astype(np.float32),
-                "encoder_attention_mask": inputs["attention_mask"].numpy().astype(np.int64)
+                "encoder_attention_mask": inputs["attention_mask"].numpy().astype(np.int64),
             }
 
             decoder_outputs = decoder_session.run(["logits"], decoder_inputs)
@@ -169,28 +150,15 @@ def test_onnx_export(
 def main():
     parser = argparse.ArgumentParser(description="Export Marian models to ONNX format")
     parser.add_argument(
-        "--model_name",
-        type=str,
-        default="Helsinki-NLP/opus-mt-en-ar",
-        help="Name of the Marian model to export"
+        "--model_name", type=str, default="Helsinki-NLP/opus-mt-en-ar", help="Name of the Marian model to export"
     )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="./onnx_export",
-        help="Directory to save the ONNX models"
-    )
-    parser.add_argument(
-        "--opset_version",
-        type=int,
-        default=17,
-        help="ONNX opset version to use"
-    )
+    parser.add_argument("--output_dir", type=str, default="./onnx_export", help="Directory to save the ONNX models")
+    parser.add_argument("--opset_version", type=int, default=17, help="ONNX opset version to use")
     parser.add_argument(
         "--test_sentence",
         type=str,
         default="Using handheld GPS devices and programs like Google Earth, members of the Trio Tribe, who live in the rainforests of southern Suriname, map out their ancestral lands to help strengthen their territorial claims.",
-        help="Test sentence to translate"
+        help="Test sentence to translate",
     )
 
     args = parser.parse_args()
@@ -205,19 +173,10 @@ def main():
 
     try:
         # Export model
-        encoder_path, decoder_path = export_marian_model_to_onnx(
-            args.model_name,
-            args.output_dir,
-            args.opset_version
-        )
+        encoder_path, decoder_path = export_marian_model_to_onnx(args.model_name, args.output_dir, args.opset_version)
 
         # Test export
-        test_onnx_export(
-            args.model_name,
-            encoder_path,
-            decoder_path,
-            args.test_sentence
-        )
+        test_onnx_export(args.model_name, encoder_path, decoder_path, args.test_sentence)
 
         print("\n✅ Export completed successfully!")
         print(f"Encoder saved to: {encoder_path}")
