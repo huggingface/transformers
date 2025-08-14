@@ -539,7 +539,7 @@ def _process_flash_attention_kwargs(
         flash_kwargs["dropout_p"] = dropout
 
     if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
-        flash_kwargs["window_size"] = (sliding_window, sliding_window)
+        flash_kwargs["window_size"] = (sliding_window - 1, sliding_window)
 
     if supports_mapping["deterministic"]:
         flash_kwargs["deterministic"] = (
