@@ -185,7 +185,9 @@ class PagedAttentionCache:
             # self.num_key_value_heads //= tp_size
 
         self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            config.head_dim
+            if hasattr(config, "head_dim") and config.head_dim is not None
+            else config.hidden_size // config.num_attention_heads
         )
         self.num_hidden_layers = config.num_hidden_layers
 
