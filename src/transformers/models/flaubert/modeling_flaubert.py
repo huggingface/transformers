@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu, get_activation
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -858,7 +858,13 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if not isinstance(cache, Cache):
+        if cache is None:
+            cache = EncoderDecoderCache(
+                self_attention_cache=DynamicCache(),
+                cross_attention_cache=DynamicCache(),
+            )
+
+        if isinstance(cache, tuple):
             cache = EncoderDecoderCache.from_legacy_cache(cache)
 
         if lengths is None:
