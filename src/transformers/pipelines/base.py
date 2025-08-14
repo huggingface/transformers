@@ -1427,8 +1427,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         is_list = isinstance(inputs, list)
 
         is_iterable = is_dataset or is_generator or is_list
-
-        # TODO make the get_iterator work also for `tf` (and `flax`).
         can_use_iterator = self.framework == "pt" and (is_dataset or is_generator or is_list)
 
         if is_list:

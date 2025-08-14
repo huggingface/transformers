@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -123,13 +124,20 @@ class FastSpeech2ConformerModelTester:
 
 
 @require_torch
-class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
+class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase, PipelineTesterMixin):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": FastSpeech2ConformerModel,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerModelTester(self)
@@ -560,13 +568,20 @@ class FastSpeech2ConformerWithHifiGanTester:
 
 
 @require_torch
-class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
+class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase, PipelineTesterMixin):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": FastSpeech2ConformerWithHifiGan,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)
