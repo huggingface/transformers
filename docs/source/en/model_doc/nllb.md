@@ -38,10 +38,11 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
+import torch
 from transformers import pipeline
 
-translator = pipeline("translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn")
-print(translator("UN Chief says there is no military solution in Syria"))
+pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", torch_dtype=torch.float16, device=0)
+pipeline("UN Chief says there is no military solution in Syria")
 ```
 
 </hfoption>
@@ -77,7 +78,6 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [BitsAndBytes quantization](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) to quantize the weights to `int8`:
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
@@ -94,25 +94,45 @@ visualizer = AttentionMaskVisualizer("facebook/nllb-200-distilled-600M")
 visualizer("UN Chief says there is no military solution in Syria")
 ```
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/tree/main/transformers/model_doc/NLLB-Attn-Mask.png"/>
+</div>
+
 ## Notes
 
 - The tokenizer was updated in April 2023 to prefix the source sequence with the source language rather than the target language. This prioritizes zero-shot performance at a minor cost to supervised performance.
 
-   <add new behavior example here>
+   ```python
+   >>> from transformers import NllbTokenizer
+
+   >>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+   >>> tokenizer("How was your day?").input_ids
+   [256047, 13374, 1398, 4260, 4039, 248130, 2]
+   ```
    
    To revert to the legacy behavior, use the code example below.
    
-   <add legacy_behavior example here>
+   ```python
+   >>> from transformers import NllbTokenizer
+
+   >>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", legacy_behaviour=True)
+   ```
    
  - For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
  
-   <add code example from https://huggingface.co/docs/transformers/v4.53.3/en/model_doc/nllb#generating-from-any-other-language-than-english>
+ - See example below for a translation from romanian to german:
+    ```python
+    >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
 
-## Resources
+    >>> article = "UN Chief says there is no military solution in Syria"
+    >>> inputs = tokenizer(article, return_tensors="pt")
 
-- [No Language Left Behind: Scaling Human-Centered Machine Translation (paper)](https://huggingface.co/papers/2207.04672)  
-- [Meta AI’s NLLB GitHub repository](https://github.com/facebookresearch/fairseq/tree/nllb)  
-- [Flores-200 benchmark and BCP-47 codes](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200)  
-- [Hugging Face Translation task guide](../tasks/translation)  
-- [Summarization task guide](../tasks/summarization)  
+    >>> translated_tokens = model.generate(
+    ...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
+    ... )
+    >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
+    ```
