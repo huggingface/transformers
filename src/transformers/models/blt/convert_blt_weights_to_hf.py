@@ -72,7 +72,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "vocab_size": unified_config.get("vocab_size", 256),
         "cross_attn_all_layers": unified_config.get("cross_attn_all_layers_encoder", False),
         "cross_attn_k": unified_config.get("cross_attn_k", 2),
-        "hidden_size_global": unified_config.get("hidden_size_global", 2048),
+        "hidden_size_global": unified_config.get("dim_global", 2048),
         "pm_size": unified_config.get("pm_size", 0),
         "hidden_size": encoder_hidden_size,
         "num_attention_heads": unified_config.get("n_heads_local_encoder", 16),
