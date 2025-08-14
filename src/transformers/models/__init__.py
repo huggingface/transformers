@@ -99,6 +99,8 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
     from .donut import *
@@ -284,6 +286,8 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
