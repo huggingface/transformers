@@ -227,7 +227,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "converted_models/vits"
+        model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
         model = DINOv3ViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -243,11 +243,15 @@ def prepare_img():
 class DINOv3ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("converted_models/vits") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
-        model = DINOv3ViTModel.from_pretrained("converted_models/vits").to(torch_device)
+        model = DINOv3ViTModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

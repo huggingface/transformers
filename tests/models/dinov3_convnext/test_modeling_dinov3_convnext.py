@@ -189,7 +189,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "converted_models/convnext_tiny"
+        model_name = "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
         model = DINOv3ConvNextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -205,11 +205,15 @@ def prepare_img():
 class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("converted_models/convnext_tiny") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/dinov3-convnext-tiny-pretrain-lvd1689m")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):
-        model = DINOv3ConvNextModel.from_pretrained("converted_models/convnext_tiny").to(torch_device)
+        model = DINOv3ConvNextModel.from_pretrained("facebook/dinov3-convnext-tiny-pretrain-lvd1689m").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
