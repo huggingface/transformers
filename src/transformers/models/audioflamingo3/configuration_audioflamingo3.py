@@ -10,11 +10,8 @@ logger = logging.get_logger(__name__)
 
 # Model Constants
 IGNORE_INDEX = -100
-SENTINEL_TOKEN = "<vila/sentinel>"
 
-MEDIA_TOKENS = {
-    "sound": "<sound>",
-}
+MEDIA_TOKENS = {"sound": "<sound>"}
 
 NUM_EXTRA_TOKENS = 10
 
@@ -52,7 +49,9 @@ class SoundMultimodalProjectorConfig(PretrainedConfig):
         super().__init__()
         self.sound_mm_projector_type = sound_mm_projector_type
 
+
 # -------------------------------------------------------------------------------------------------
+
 
 class AudioFlamingo3EncoderConfig(PretrainedConfig):
     r"""

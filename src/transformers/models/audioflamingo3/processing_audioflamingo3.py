@@ -15,6 +15,7 @@ from .configuration_audioflamingo3 import MEDIA_TOKENS
 
 __all__ = ["AudioFlamingo3Processor"]
 
+
 class AudioFlamingo3Processor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
@@ -68,7 +69,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return cls(fe, tok)
 
-
     def _tokenize_conversation(
         self,
         messages: Sequence[Dict[str, str]],
@@ -106,9 +106,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return self.tokenizer(text, return_tensors="pt").input_ids[0]
 
-
     def _get_num_windows(self, T, sr):
-        window_length  = int(30.0 * sr)
+        window_length = int(30.0 * sr)
         window_overlap = int(0.0 * sr)
         max_num_window = 20
         num_windows = 1
@@ -117,19 +116,18 @@ class AudioFlamingo3Processor(ProcessorMixin):
             full_length = window_length
         elif T >= (max_num_window * window_length - (max_num_window - 1) * window_overlap):
             num_windows = max_num_window
-            full_length = (max_num_window * window_length - (max_num_window - 1) * window_overlap)
+            full_length = max_num_window * window_length - (max_num_window - 1) * window_overlap
         else:
             num_windows = 1 + int(np.ceil((T - window_length) / float(window_length - window_overlap)))
             full_length = num_windows * window_length - (num_windows - 1) * window_overlap
-        
+
         return num_windows, full_length
 
-
     def _load_audio(self, file_path, target_sr=16000, duration=30.0, start=0.0):
-        if file_path.endswith('.mp3'):
+        if file_path.endswith(".mp3"):
             audio = AudioSegment.from_file(file_path)
             if len(audio) > (start + duration) * 1000:
-                audio = audio[start * 1000:(start + duration) * 1000]
+                audio = audio[start * 1000 : (start + duration) * 1000]
             if audio.frame_rate != target_sr:
                 audio = audio.set_frame_rate(target_sr)
             if audio.channels > 1:
@@ -152,7 +150,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 data = audio.read(frames_to_read)
                 if data.max() > 1 or data.min() < -1:
                     data = data / max(abs(data.max()), abs(data.min()))
-            
+
             if original_sr != target_sr:
                 if channels == 1:
                     data = librosa_resample(data.flatten(), orig_sr=original_sr, target_sr=target_sr)
@@ -161,20 +159,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
             else:
                 if channels != 1:
                     data = data.T[0]
-        
+
         if data.min() >= 0:
             data = 2 * data / abs(data.max()) - 1.0
         else:
             data = data / max(abs(data.max()), abs(data.min()))
-        
+
         assert len(data.shape) == 1, data.shape
         return data
 
-
-    def _load_sound_mask(self, sound_file, sample_rate=16000, window_length=30.0, window_overlap=0.0, max_num_window=20, audio_start = 0.0):
+    def _load_sound_mask(self, sound_file, sample_rate=16000, window_length=30.0, window_overlap=0.0, max_num_window=20, audio_start=0.0):
         if sound_file is None:
             return None
-        window_length  = int(window_length * sample_rate)
+        window_length = int(window_length * sample_rate)
         window_overlap = int(window_overlap * sample_rate)
         max_num_window = int(max_num_window)
         duration = max_num_window * (window_length - window_overlap) + window_overlap
@@ -184,19 +181,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_embed_masks = []
 
         try:
-            audio_data = self._load_audio(sound_file, sample_rate, duration, audio_start) # already cuts to max duration
+            audio_data = self._load_audio(sound_file, sample_rate, duration, audio_start)  # already cuts to max duration
             T = len(audio_data)
             audio_data = audio_data.reshape(1, -1)
             num_windows, full_length = self._get_num_windows(T, sample_rate)
 
             int16_to_float32 = lambda x: (x / 32767.0).astype(np.float32)
-            float32_to_int16 = lambda x: (np.clip(x, -1., 1.) * 32767.).astype(np.int16)
+            float32_to_int16 = lambda x: (np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
 
             audio_data_tensor = torch.from_numpy(int16_to_float32(float32_to_int16(audio_data))).float()
             for i in range(num_windows):
                 audio_embed_mask = torch.zeros(750)
                 start = i * (window_length - window_overlap)
-                audio_data_tensor_this = audio_data_tensor[:, start:start+window_length]
+                audio_data_tensor_this = audio_data_tensor[:, start : start + window_length]
                 orig_length = audio_data_tensor_this.shape[1]
                 audio_data_tensor_this = self.feature_extractor(audio_data_tensor_this.cpu().numpy(), sampling_rate=sample_rate, return_tensors="pt")
                 sound_outputs.append(audio_data_tensor_this["input_features"])
@@ -212,35 +209,34 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 audio_embed_masks.append(audio_embed_mask)
         except:
             print("Error loading sound file: ", sound_file)
-            sound_outputs.append(torch.zeros(1,128,3000))
+            sound_outputs.append(torch.zeros(1, 128, 3000))
             audio_feature_masks.append(torch.zeros(1, 3000, dtype=torch.int32))
             audio_embed_masks.append(torch.zeros(750))
         sound_outputs = torch.stack(sound_outputs, dim=0)
         audio_feature_masks = torch.stack(audio_feature_masks, dim=0)
         audio_embed_masks = torch.stack(audio_embed_masks, dim=0)
-        return sound_outputs.numpy().tolist(), audio_feature_masks ,audio_embed_masks
-
+        return sound_outputs.numpy().tolist(), audio_feature_masks, audio_embed_masks
 
     def __call__(self, text: str, audio_path: str):
         media = []
         media_meta = defaultdict(list)
 
         final_text = ""
-        sound, audio_feature_masks,audio_embed_masks = self._load_sound_mask(audio_path)
+        sound, audio_feature_masks, audio_embed_masks = self._load_sound_mask(audio_path)
         media.append(sound)
         media_meta["sound_feature_masks"].append(audio_feature_masks)
         media_meta["sound_embed_masks"].append(audio_embed_masks)
         final_text += MEDIA_TOKENS["sound"] * len(sound)
         final_text += text.replace(MEDIA_TOKENS["sound"], "").strip()
-        
+
         conversation = [{"from": "human", "value": final_text}]
         input_ids = self._tokenize_conversation(conversation, add_generation_prompt=True).cuda().unsqueeze(0)
 
-        sounds = torch.tensor(media).half()         
+        sounds = torch.tensor(media).half()
         media = [sound for sound in sounds]
-        sound_feature_masks = torch.tensor(media_meta["sound_feature_masks"][0]).half()   
+        sound_feature_masks = torch.tensor(media_meta["sound_feature_masks"][0]).half()
         media_meta["sound_feature_masks"] = [sound_mask for sound_mask in sound_feature_masks]
-        sound_embed_masks = torch.tensor(media_meta["sound_embed_masks"][0]).half()   
+        sound_embed_masks = torch.tensor(media_meta["sound_embed_masks"][0]).half()
         media_meta["sound_embed_masks"] = [sound_mask for sound_mask in sound_embed_masks]
 
         return input_ids, media, media_meta

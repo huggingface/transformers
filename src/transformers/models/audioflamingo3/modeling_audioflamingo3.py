@@ -100,10 +100,7 @@ class AudioFlamingo3Attention(nn.Module):
         self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
+            raise ValueError(f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}" f" and `num_heads`: {num_heads}).")
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
@@ -245,11 +242,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of AudioFlamingo3 isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
+        std = self.config.initializer_range if hasattr(self.config, "initializer_range") else self.config.audio_config.initializer_range
 
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -357,9 +350,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Ignore copy
@@ -379,9 +370,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (len(self.layers)), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
 
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -420,9 +409,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -437,6 +424,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 # -------------------------------------------------------------------------------------------------
 
 __all__ = ["AudioFlamingo3"]
+
 
 def get_model_config(config):
     default_keys = ["llm_cfg", "sound_tower_cfg", "sound_mm_projector_cfg"]
@@ -505,13 +493,11 @@ def build_llm_and_tokenizer(
 
     # Quantization related
     quantization_restore_from_checkpoint = False
-    
+
     if quantization_restore_from_checkpoint:
         kwargs.pop("fp8_llm_cfg", None)
 
-    llm = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs
-    )
+    llm = AutoModelForCausalLM.from_pretrained(model_name_or_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs)
 
     # Locate the tokenizer.
     llm_path = model_name_or_path
@@ -525,7 +511,7 @@ def build_llm_and_tokenizer(
         tokenizer.model_max_length = model_max_length
 
     # Set stop tokens for the tokenizer
-    tokenizer.stop_tokens = ['<|im_end|>']
+    tokenizer.stop_tokens = ["<|im_end|>"]
     tokenizer.stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.stop_tokens)
 
     # Add media tokens to the tokenizer
@@ -542,7 +528,15 @@ def build_llm_and_tokenizer(
 class LlavaMetaModel(ABC):
     def init_vlm(self, config: PreTrainedModel = None, *args, **kwargs):
         # TODO(ligeng): figure out how from_config and from_pretrained works in HF implementation.
-        if hasattr(self, "llm") or hasattr(self, "vision_tower") or hasattr(self, "speech_tower") or hasattr(self, "sound_tower") or hasattr(self, "mm_projector") or hasattr(self, "speech_mm_projector") or hasattr(self, "sound_mm_projector"):
+        if (
+            hasattr(self, "llm")
+            or hasattr(self, "vision_tower")
+            or hasattr(self, "speech_tower")
+            or hasattr(self, "sound_tower")
+            or hasattr(self, "mm_projector")
+            or hasattr(self, "speech_mm_projector")
+            or hasattr(self, "sound_mm_projector")
+        ):
             # already initialized, skipped
             return
 
@@ -559,11 +553,11 @@ class LlavaMetaModel(ABC):
             raise ValueError("`llm_cfg` `sound_tower_cfg` `sound_mm_projector_cfg` not found in the config.")
 
         self.llm, self.tokenizer = build_llm_and_tokenizer(llm_cfg, config, *args, **kwargs)
-        
+
         self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
         self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
         self.sound_encoder = BasicSoundEncoder(parent=self)
-        
+
         self.vocab_size = config.llm_cfg["vocab_size"] + NUM_EXTRA_TOKENS
 
         self.post_config()
@@ -625,14 +619,14 @@ class LlavaMetaForCausalLM(ABC):
         media: List[torch.Tensor],
         labels: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        media_meta: Dict[str, Dict[str, Any]]= None,
+        media_meta: Dict[str, Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         labels = labels if labels is not None else torch.full_like(input_ids, IGNORE_INDEX)
         attention_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids, dtype=torch.bool)
 
         # Extract text and media embeddings
         text_embeds = self.llm.model.embed_tokens(input_ids)
-        media_embeds = deque(self.sound_encoder(media, {}, media_meta['sound_feature_masks']))
+        media_embeds = deque(self.sound_encoder(media, {}, media_meta["sound_feature_masks"]))
         # This is a workaround to make sure the dummy embeddings are consumed
         # Remove padding
         batch_size = labels.shape[0]
@@ -644,19 +638,17 @@ class LlavaMetaForCausalLM(ABC):
 
         # -------------------------------- #
         num_audio_tokens = torch.stack(media_meta["sound_embed_masks"], dim=0).sum(-1)
-        num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])            
-        num_audios = len(media_embeds) # length of queue is the number of audios we have in total
+        num_audio_tokens = torch.tensor([round(int(x) / 10) * 10 for x in num_audio_tokens])
+        num_audios = len(media_embeds)  # length of queue is the number of audios we have in total
         max_audio_tokens, embed_dim = media_embeds[0].shape
 
-        audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
-            num_audio_tokens.device
-        ) < num_audio_tokens.unsqueeze(1)
+        audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(num_audio_tokens.device) < num_audio_tokens.unsqueeze(1)
 
         audio_embeds = []
-        while media_embeds:       
+        while media_embeds:
             audio_embeds.append(media_embeds.popleft())
-        audio_embeds = torch.stack(audio_embeds,dim=0)
-        
+        audio_embeds = torch.stack(audio_embeds, dim=0)
+
         masked_audio_features = audio_embeds[audio_features_mask].view(-1, embed_dim)
         batch_size, sequence_length = input_ids.shape
         _left_padding = torch.any(attention_mask[:, 0] == 0)
@@ -676,7 +668,7 @@ class LlavaMetaForCausalLM(ABC):
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
         # 1. Create a mask to know where special audio tokens are
-        special_audio_token_mask = input_ids == self.tokenizer.media_token_ids['sound'] #hard coded to just work with 'sound'
+        special_audio_token_mask = input_ids == self.tokenizer.media_token_ids["sound"]  # hard coded to just work with 'sound'
         num_special_audio_tokens = torch.sum(special_audio_token_mask, dim=-1)
 
         # In case the Audio model or the Language model has been offloaded to CPU, we need to manually
@@ -685,9 +677,7 @@ class LlavaMetaForCausalLM(ABC):
         attention_mask = attention_mask.to(target_device)
         input_ids = input_ids.to(target_device)
         num_audio_tokens = num_audio_tokens.to(target_device)
-        batch_indices, non_audio_indices = torch.where(
-            (input_ids != self.tokenizer.media_token_ids['sound']) & (attention_mask == 1)
-        )
+        batch_indices, non_audio_indices = torch.where((input_ids != self.tokenizer.media_token_ids["sound"]) & (attention_mask == 1))
 
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged audio-text sequence.
@@ -709,15 +699,9 @@ class LlavaMetaForCausalLM(ABC):
         )
 
         # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=text_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_token_num, dtype=attention_mask.dtype, device=text_embeds.device
-        )
-        final_input_ids = torch.full(
-            (batch_size, max_token_num), self.tokenizer.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device
-        )
+        final_embedding = torch.zeros(batch_size, max_token_num, embed_dim, dtype=text_embeds.dtype, device=text_embeds.device)
+        final_attention_mask = torch.zeros(batch_size, max_token_num, dtype=attention_mask.dtype, device=text_embeds.device)
+        final_input_ids = torch.full((batch_size, max_token_num), self.tokenizer.pad_token_id, dtype=input_ids.dtype, device=text_embeds.device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<audio>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the audio features
@@ -727,13 +711,11 @@ class LlavaMetaForCausalLM(ABC):
         final_labels = None
         if labels is not None:
             labels = labels.to(target_device)
-            final_labels = torch.full_like(final_attention_mask, IGNORE_INDEX, dtype=torch.long) #.to(torch.long)
+            final_labels = torch.full_like(final_attention_mask, IGNORE_INDEX, dtype=torch.long)  # .to(torch.long)
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_audio_indices]
 
         # 5. Fill the embeddings corresponding to the audios. Anything that is still zeros needs filling
-        audio_to_overwrite = torch.full(
-            (batch_size, max_token_num), True, dtype=torch.bool, device=text_embeds.device
-        )
+        audio_to_overwrite = torch.full((batch_size, max_token_num), True, dtype=torch.bool, device=text_embeds.device)
         audio_to_overwrite[batch_indices, text_to_overwrite] = False
         seq_indices = torch.arange(max_token_num).unsqueeze(0).to(target_device)
         seq_indices = seq_indices.expand(batch_size, max_token_num)
@@ -741,9 +723,7 @@ class LlavaMetaForCausalLM(ABC):
         if left_padding:
             # exclude padding on the left
             max_token_num = max_token_num.to(target_device)
-            val = (max_token_num - seq_indices) <= (
-                token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1)
-            )[:, None]
+            val = (max_token_num - seq_indices) <= (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
         else:
             # exclude padding on the right
             val = seq_indices < (token_placeholder_num.sum(-1) - (attention_mask == 0).long().sum(-1))[:, None]
@@ -756,27 +736,21 @@ class LlavaMetaForCausalLM(ABC):
                 f" the number of audio given to the model is {num_audios}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[audio_to_overwrite] = (
-            masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        )
+        final_embedding[audio_to_overwrite] = masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= audio_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
         # # Truncate sequences to `model_max_length` as media embeddings are inserted
         inputs, labels = self.__truncate_sequence(final_embedding, final_labels)
         return self.__batchify_sequence(inputs, labels)
 
-    def __truncate_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __truncate_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.training and any(len(input) > self.tokenizer.model_max_length for input in inputs):
             warnings.warn(f"Truncating sequences to `model_max_length` ({self.tokenizer.model_max_length}).")
             inputs = [input[: self.tokenizer.model_max_length] for input in inputs]
             labels = [label[: self.tokenizer.model_max_length] for label in labels]
         return inputs, labels
 
-    def __batchify_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __batchify_sequence(self, inputs: List[torch.Tensor], labels: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = len(inputs)
         device = inputs[0].device
         hidden_size = inputs[0].shape[1]
@@ -809,12 +783,11 @@ class LlavaMetaForCausalLM(ABC):
         input_ids: Optional[torch.FloatTensor] = None,
         media: Optional[List[torch.Tensor]] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        media_meta: Dict[str, Dict[str, Any]]= None,
+        media_meta: Dict[str, Dict[str, Any]] = None,
         **generation_kwargs,
     ):
         inputs_embeds, _, attention_mask = self._embed(input_ids, media, None, attention_mask, media_meta)
         return self.llm.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, **generation_kwargs)
-
 
     @property
     def default_generation_config(self) -> GenerationConfig:
@@ -969,19 +942,11 @@ class AudioFlamingo3SoundTower(nn.Module):
                 # for cases where only one window is there for the audio_clip
                 batch_size, _, max_mel_seq_len = sound.shape
                 max_seq_len = (max_mel_seq_len - 2) // 2 + 1
-                seq_range = (
-                        torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device)
-                        .unsqueeze(0)
-                        .expand(batch_size, max_seq_len)
-                    )
+                seq_range = torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device).unsqueeze(0).expand(batch_size, max_seq_len)
                 lengths_expand = audio_feat_lengths.unsqueeze(1).expand(batch_size, max_seq_len)
                 padding_mask = seq_range >= lengths_expand
-                audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(
-                        batch_size, 1, max_seq_len, max_seq_len
-                    )
-                audio_attention_mask = audio_attention_mask_.to(
-                        dtype=self.sound_tower.conv1.weight.dtype, device=self.sound_tower.conv1.weight.device
-                    )
+                audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(batch_size, 1, max_seq_len, max_seq_len)
+                audio_attention_mask = audio_attention_mask_.to(dtype=self.sound_tower.conv1.weight.dtype, device=self.sound_tower.conv1.weight.device)
                 audio_attention_mask[audio_attention_mask_] = float("-inf")
                 # Calculate features
                 sound_feature = self.sound_tower(sound, attention_mask=audio_attention_mask)
@@ -997,19 +962,11 @@ class AudioFlamingo3SoundTower(nn.Module):
             # for cases where only one window is there for the audio_clip
             batch_size, _, max_mel_seq_len = sounds.shape
             max_seq_len = (max_mel_seq_len - 2) // 2 + 1
-            seq_range = (
-                    torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device)
-                    .unsqueeze(0)
-                    .expand(batch_size, max_seq_len)
-                )
+            seq_range = torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device).unsqueeze(0).expand(batch_size, max_seq_len)
             lengths_expand = audio_feat_lengths.expand(batch_size, max_seq_len)
             padding_mask = seq_range >= lengths_expand
-            audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(
-                    batch_size, 1, max_seq_len, max_seq_len
-                )
-            audio_attention_mask = audio_attention_mask_.to(
-                    dtype=self.sound_tower.conv1.weight.dtype, device=self.sound_tower.conv1.weight.device
-                )
+            audio_attention_mask_ = padding_mask.view(batch_size, 1, 1, max_seq_len).expand(batch_size, 1, max_seq_len, max_seq_len)
+            audio_attention_mask = audio_attention_mask_.to(dtype=self.sound_tower.conv1.weight.dtype, device=self.sound_tower.conv1.weight.device)
             audio_attention_mask[audio_attention_mask_] = float("-inf")
             # Calculate features
             sound_features = self.sound_tower(sounds, attention_mask=audio_attention_mask)
@@ -1032,7 +989,7 @@ class AudioFlamingo3SoundTower(nn.Module):
             return self.sound_tower.config
         else:
             return self.cfg_only
-            
+
     @property
     def device(self):
         return self.sound_tower.device
