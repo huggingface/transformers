@@ -31,6 +31,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -48,6 +49,7 @@ from transformers import (
     default_data_collator,
     enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
+    is_datasets_available,
     is_torch_available,
     logging,
     set_seed,
@@ -161,6 +163,8 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+if is_datasets_available():
+    import datasets
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
@@ -519,7 +523,6 @@ if is_torch_available():
             return logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
-        import datasets
         import numpy as np
 
         # Create random input sequences
@@ -595,8 +598,6 @@ if is_torch_available():
         )
 
     def get_language_model_trainer(**kwargs):
-        import datasets
-
         dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -773,8 +774,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_trainer_with_datasets(self):
-        import datasets
-
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
         y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,)).astype(np.float32)
@@ -823,7 +822,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @slow
     def test_gradient_accumulation_loss_alignment_with_model_loss(self):
         set_seed(42)
-        import datasets
 
         model_name = "nickypro/tinyllama-15M"
         dataset_name = "wikitext"
@@ -923,7 +921,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
-        import datasets
 
         model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
@@ -1362,6 +1359,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
+    @pytest.mark.torch_compile_test
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1381,6 +1379,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_peft
     @require_bitsandbytes
+    @pytest.mark.torch_compile_test
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
 
@@ -4960,6 +4959,51 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
+    def test_special_token_aligment(self):
+        """
+        Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
+        ensure special tokens are aligned across configs
+        """
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # add new special tokens to tokenizer, so we can test that trainer aligns the model configs with the tokenizer
+        tokenizer.eos_token = "<|im_end|>"
+        tokenizer.pad_token = "<|im_end|>"
+        tokenizer.bos_token = "<|im_start|>"
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|im_end|>", "<|im_start|>"]})
+
+        # the model needs to have its embedding layer resized accordingly
+        model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+
+        # create a random dataset from the **new** vocab size
+        x = torch.randint(0, len(tokenizer), (64,))
+        dataset = RepeatDataset(x, length=2)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir, report_to="none", max_steps=1, per_device_train_batch_size=1
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=dataset,
+            )
+
+            # We haven't started training -> not yet aligned
+            self.assertNotEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertNotEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertNotEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+            trainer.train()
+
+            # Must be aligned as soon as we start training
+            self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
 
 @require_torch
 @is_staging_test
@@ -5017,7 +5061,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
-            "git log".split(),
+            ["git", "log"],
             capture_output=True,
             check=True,
             encoding="utf-8",

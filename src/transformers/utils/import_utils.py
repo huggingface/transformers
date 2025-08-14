@@ -451,9 +451,7 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # NOTE: MLU is OK with non-contiguous inputs.
@@ -467,9 +465,7 @@ def is_torch_sdpa_available():
 
 
 def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -1088,7 +1084,7 @@ def is_ninja_available():
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
@@ -1290,7 +1286,7 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False):
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("optimum-quanto"):
+    if not _is_package_available("optimum.quanto"):
         return False
 
     if accept_dev:
