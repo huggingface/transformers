@@ -2,6 +2,7 @@ FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root
+# `libgl1-mesa-glx` is removed in #40174 due to `libgl1-mesa-glx is not available, but is referred to by another package.`
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git libgl1 g++ tesseract-ocr
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
