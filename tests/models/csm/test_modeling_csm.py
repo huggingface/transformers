@@ -418,7 +418,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 @require_read_token
 class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # TODO: @eustlb, update with correct sesame's repo
         self.model_checkpoint = "sesame/csm-1b"
 
     def tearDown(self):
