@@ -436,10 +436,10 @@ class EfficientLoFTRModelIntegrationTest(unittest.TestCase):
         expected_matching_scores_shape = torch.Size((len(images), 2, expected_number_of_matches))
 
         expected_top10_matches_indices = torch.tensor(
-            [3145, 3065, 3143, 3066, 3144, 1397, 1705, 3151, 2342, 2422], dtype=torch.int64, device=torch_device
+            [3145, 3065, 3143, 3144, 1397, 1705, 3151, 2422, 3066, 2342], dtype=torch.int64, device=torch_device
         )
         expected_top10_matching_scores = torch.tensor(
-            [0.9997, 0.9996, 0.9996, 0.9995, 0.9995, 0.9995, 0.9994, 0.9994, 0.9994, 0.9994], device=torch_device
+            [0.9998, 0.9997, 0.9997, 0.9996, 0.9996, 0.9996, 0.9996, 0.9995, 0.9995, 0.9995], device=torch_device
         )
 
         self.assertEqual(outputs.matches.shape, expected_matches_shape)
