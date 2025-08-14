@@ -897,13 +897,11 @@ class BagelTextAttention(nn.Module):
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
         self.is_causal = is_causal
-        print("mode", mode)
 
         if mode == "und":
             query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim)
             key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim)
             value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_key_value_heads, self.head_dim)
-            print("kv shape after proj:", key_states.shape, value_states.shape)
 
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
@@ -934,16 +932,13 @@ class BagelTextAttention(nn.Module):
 
             key_states[:, text_indices, :, :] = self.k_norm(key_states[:, text_indices, :, :])
             key_states[:, vae_indices, :, :] = self.k_norm_generation(key_states[:, vae_indices, :, :])
-            print("kv shape after proj:", key_states.shape, value_states.shape)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
-        # Is it required as we transpose in fa2 file
         key_states = key_states.transpose(1, 2).contiguous()
         query_states = query_states.transpose(1, 2).contiguous()
         value_states = value_states.transpose(1, 2).contiguous()
-        print("kv shape before cache update:", key_states.shape, value_states.shape)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -1533,7 +1528,7 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_vae_latent(self, height: int, width: int):
+    def prepare_vae_latent(self, height: int, width: int, num_images:int):
         position_ids = get_flattened_position_ids_extrapolate(
             height,
             width,
@@ -1542,7 +1537,7 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         )
         h, w = height // self.latent_downsample, width // self.latent_downsample
         num_image_tokens = h * w
-        initial_noise = torch.rand(num_image_tokens, self.latent_channel * self.latent_patch_size**2)
+        initial_noise = torch.rand(num_images, num_image_tokens, self.latent_channel * self.latent_patch_size**2)
         return initial_noise, position_ids
 
     def forward_step(
@@ -1571,13 +1566,6 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         initial_latent = self.vae2llm_connector(initial_latents) + timestep_pos_embed + timestep_embeds
 
         combined_embeds = torch.concat([boi_embed, initial_latent, eoi_embed], dim=1)
-        print(
-            combined_embeds.shape,
-            vae_position_ids.shape,
-            vae_position_ids,
-            text_token_indices.shape,
-            text_token_indices,
-        )
 
         output = self.model.language_model(
             inputs_embeds=combined_embeds,
@@ -1594,7 +1582,6 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
 
         text_position_ids = torch.tensor([0] * (num_vae_tokens + 2), device=initial_latents.device).unsqueeze(0)
         image_position_ids = torch.tensor([76] * (num_vae_tokens + 2), device=initial_latents.device).unsqueeze(0)
-        print(text_position_ids.shape, combined_embeds.shape, text_position_ids, num_vae_tokens)
 
         if cfg_text_scale > 1.0:
             cfg_text_output = self.model.language_model(
@@ -1661,11 +1648,6 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
             height, width = image_shape
 
         bsz = len(input_ids)
-        num_sequences = generation_config["num_sequences"]
-        # pixel_values = pixel_values.repeat_interleave(num_sequences, dim=0)
-        # input_ids = input_ids.repeat_interleave(num_sequences, dim=0)
-        # attention_mask = attention_mask.repeat_interleave(num_sequences, dim=0)
-
         output = self.model(
             pixel_values=pixel_values,
             input_ids=input_ids,
@@ -1676,12 +1658,11 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
         )
         past_key_values = output.past_key_values
 
-        latents, vae_position_ids = self.prepare_vae_latent(height, width)
+        latents, vae_position_ids = self.prepare_vae_latent(height, width, bsz)
         print("latents shape:", latents.shape)
-        latents = latents.repeat(bsz * num_sequences, 1, 1)
-        print("repeated latents shape:", latents.shape)
 
         device = latents.device
+        latents = latents.to(dtype=output.last_hidden_state.dtype)
         # position_ids = torch.tensor([past_key_values.get_seq_length()] * latents.shape[-1],device=device)
 
         num_steps = generation_config["num_timesteps"]
@@ -1720,20 +1701,20 @@ class BagelForConditionalGeneration(BagelPreTrainedModel, GenerationMixin):
             latents = latents - velocity * delta_ts[step_idx]
 
         # latent = delta_ts.split((packed_seqlens - 2).tolist())
-        images = self.postprocess_latents(latents, image_shape)
-        return images
+        # images = self.postprocess_latents(latents, image_shape)
+        return latents
 
     def postprocess_latents(self, latents, image_shape=(512, 512)):
         # How to handle batch dim
-        h, w = image_shape[0] // self.model.latent_downsample, image_shape[1] // self.model.latent_downsample
+        h, w = image_shape[0] // self.latent_downsample, image_shape[1] // self.latent_downsample
         latent = latents.reshape(
-            1, h, w, self.model.latent_patch_size, self.model.latent_patch_size, self.model.latent_channel
+            1, h, w, self.latent_patch_size, self.latent_patch_size, self.latent_channel
         )
         latent = torch.einsum("nhwpqc->nchpwq", latent)
         latent = latent.reshape(
-            1, self.model.latent_channel, h * self.model.latent_patch_size, w * self.model.latent_patch_size
+            1, self.latent_channel, h * self.latent_patch_size, w * self.latent_patch_size
         )
-        image = self.vae_model.decode(latent)
+        image = self.vq_model.decode(latent)
 
         # Should go in Image processor later on.
         image = (image * 0.5 + 0.5).clamp(0, 1)[0].permute(1, 2, 0) * 255
