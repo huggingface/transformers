@@ -216,16 +216,16 @@ class XIELUActivation(nn.Module):
             import xielu.ops  # noqa: F401
 
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
+            msg = f"Using experimental xIELU CUDA."
             try:
                 from torch._dynamo import allow_in_graph
 
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
+                msg += f" Enabled torch._dynamo for xIELU CUDA."
             except Exception as err:
-                logger.warning_once(
-                    "Could not enable torch._dynamo for xIELU (%s) - this may result in slower performance.",
-                    str(err),
-                )
+                msg += f" Could not enable torch._dynamo for xIELU ({err}) - this may result in slower performance."
                 self._xielu_cuda_fn = self._xielu_cuda
+            logger.warning_once(msg)
         except Exception as err:
             logger.warning_once(
                 "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
@@ -268,7 +268,12 @@ class XIELUActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         if self._xielu_cuda_obj is not None and input.is_cuda:
-            return self._xielu_cuda_fn(input)
+            if not torch._dynamo.is_compiling():
+                return self._xielu_cuda_fn(input)
+            else:
+                logger.warning(
+                    "torch._dynamo is compiling, using Python version of xIELU."
+                )
         return self._xielu_python(input)
 
 
