@@ -2191,7 +2191,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         "text_encoder",
         "text_decoder",
     ]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(

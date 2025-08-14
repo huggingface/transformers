@@ -505,7 +505,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
 
         # Handle past_key_values and cache setup
         if use_cache and past_key_values is None and not self.training:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

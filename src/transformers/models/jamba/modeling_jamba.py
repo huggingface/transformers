@@ -28,7 +28,6 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
@@ -191,7 +190,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class HybridMambaAttentionDynamicCache(Cache):
+class HybridMambaAttentionDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -205,12 +204,9 @@ class HybridMambaAttentionDynamicCache(Cache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    key_cache = None
-    value_cache = None
     is_compileable = False
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        super().__init__(layer_classes=DynamicLayer)
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
@@ -273,13 +269,6 @@ class HybridMambaAttentionDynamicCache(Cache):
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
 # Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Jamba
