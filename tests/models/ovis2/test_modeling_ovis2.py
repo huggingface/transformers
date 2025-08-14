@@ -195,17 +195,13 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                # Ovis2 has SigLIP backbone which init weights differently from CLIP
-                if "image_newline" in name or "vision_tower" in name:
-                    continue
-                elif param.requires_grad:
+                if param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -250,6 +246,7 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
 
 @require_torch
+@slow
 class Ovis2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(
@@ -272,8 +269,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
@@ -295,8 +290,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
@@ -317,8 +310,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_multi_image(self):
         # related to (#29835)
         model = Ovis2ForConditionalGeneration.from_pretrained(
@@ -352,8 +343,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
@@ -381,8 +370,6 @@ class Ovis2IntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_batch_matches_single(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
