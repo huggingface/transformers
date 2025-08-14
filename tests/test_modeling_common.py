@@ -3493,7 +3493,7 @@ class ModelTesterMixin:
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
 
-            # forcing sliding window to go over the prefill size to check for SWA correctness
+            # forcing the prefill size to go over sliding window size to check for SWA correctness
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
