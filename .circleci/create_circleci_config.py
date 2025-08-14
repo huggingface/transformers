@@ -24,6 +24,7 @@ import yaml
 
 
 COMMON_ENV_VARIABLES = {
+    "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
