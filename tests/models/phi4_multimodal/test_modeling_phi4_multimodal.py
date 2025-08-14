@@ -14,6 +14,7 @@
 
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -253,6 +254,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 

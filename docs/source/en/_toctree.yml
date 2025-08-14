@@ -1009,6 +1009,8 @@
         title: GIT
       - local: model_doc/glm4v
         title: glm4v
+      - local: model_doc/glm4v_moe
+        title: glm4v_moe
       - local: model_doc/got_ocr2
         title: GOT-OCR2
       - local: model_doc/granitevision
@@ -1046,7 +1048,7 @@
       - local: model_doc/llama4
         title: Llama4
       - local: model_doc/llava
-        title: Llava
+        title: LLaVA
       - local: model_doc/llava_next
         title: LLaVA-NeXT
       - local: model_doc/llava_next_video
@@ -1095,6 +1097,10 @@
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
         title: Qwen2VL
+      - local: model_doc/sam2
+        title: SAM2
+      - local: model_doc/sam2_video
+        title: SAM2 Video
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/sam_hq

@@ -74,6 +74,7 @@ from .integrations.tensor_parallel import (
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -2126,7 +2127,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _pp_plan = None
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
-    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
@@ -2721,7 +2722,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
+        if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
@@ -2738,12 +2739,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 repo_id = applicable_attn_implementation
                 kernel_name = None
             repo_id = repo_id.strip()
+            # extract the rev after the @ if it exists
+            repo_id, _, rev = repo_id.partition("@")
+            repo_id = repo_id.strip()
+            rev = rev.strip() if rev else None
             try:
-                kernel = get_kernel(repo_id)
+                kernel = get_kernel(repo_id, revision=rev)
                 if hasattr(kernel, "flash_attn_varlen_func"):
                     if attention_wrapper is None:
                         attention_wrapper = flash_attention_forward
                     kernel_function = partial(attention_wrapper, implementation=kernel)
+                    lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
                 ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
@@ -2759,7 +2765,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
             return attn_implementation
         else:
-            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+            attn_implementation = self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+
+            # preload flash attention here to allow compile with fullgraph
+            if applicable_attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(applicable_attn_implementation)
+
+            return attn_implementation
 
     def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
         requested_attention = "sdpa" if _requested_attention is None else _requested_attention
@@ -2992,9 +3004,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights)
 
-    def tie_weights(self):
+    def tie_embeddings_and_encoder_decoder(self):
         """
-        Tie the weights between the input embeddings and the output embeddings.
+        If set in the config, tie the weights between the input embeddings and the output embeddings,
+        and the encoder and decoder.
 
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
@@ -3015,7 +3028,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Leading to issues on subsequent calls by different tests or subsequent calls.
             self._dynamic_tied_weights_keys = tied_weights
 
+    def tie_weights(self):
+        """
+        Recursively (for all submodels) tie all the weights of the model.
+        """
+        # Note that `self` is included in `self.modules` so we also apply to current PreTrainedModel with this call
         for module in self.modules():
+            # If it's a PreTrainedModel, may need to tie the embeddings and/or encoder/decoder weights
+            if isinstance(module, PreTrainedModel):
+                module.tie_embeddings_and_encoder_decoder()
+            # Additionally, if it has a custom `_tie_weights`, honor it
             if hasattr(module, "_tie_weights"):
                 module._tie_weights()
 
@@ -4484,6 +4506,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
+                Accept HF kernel references in the form:
+                  <namespace>/<repo_name>[@<revision>][:<kernel_name>]
+
+                - <namespace> and <repo_name> are any non-"/" and non-":" sequences.
+                - "@<revision>" is optional (branch, tag, or commit-ish), e.g. "@main", "@v1.2.0", "@abc123".
+                - ":<kernel_name>" is optional and selects a function inside the kernel repo.
+                - Both options can appear together and in this order only: @revision first, then :kernel_name.
+                - We intentionally allow a leading "<wrapper>|" prefix (e.g., "flash|...") because the code
+                  strips it before loading; '|' is not excluded in the character classes here.
+
+                Examples that match:
+                  "org/model"
+                  "org/model@main"
+                  "org/model:custom_kernel"
+                  "org/model@v1.2.3:custom_kernel"
+
             > Parameters for big model inference
 
             torch_dtype (`str` or `torch.dtype`, *optional*):
@@ -5845,7 +5883,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
-                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"`loss_type={loss_type}` was set in the config but it is unrecognized. "
                 f"Using the default loss: `ForCausalLMLoss`."
             )
             loss_type = "ForCausalLM"

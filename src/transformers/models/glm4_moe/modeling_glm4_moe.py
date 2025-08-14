@@ -135,6 +135,7 @@ class Glm4MoeAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.rope_scaling = config.rope_scaling
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -495,7 +496,7 @@ class Glm4MoeModel(Glm4MoePreTrainedModel):
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

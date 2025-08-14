@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -98,7 +98,7 @@ class Zamba2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Zamba2HybridDynamicCache(Cache):
+class Zamba2HybridDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -112,8 +112,6 @@ class Zamba2HybridDynamicCache(Cache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    key_cache = None
-    value_cache = None
     is_compileable = False
 
     def __init__(
@@ -191,13 +189,6 @@ class Zamba2HybridDynamicCache(Cache):
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor], tuple[torch.Tensor]]:
-        raise NotImplementedError("Zamba2HybridDynamicCache does not have a legacy cache equivalent.")
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("Zamba2HybridDynamicCache does not have a legacy cache equivalent.")
 
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor

@@ -165,6 +165,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4", "Glm4Model"),
         ("glm4_moe", "Glm4MoeModel"),
         ("glm4v", "Glm4vModel"),
+        ("glm4v_moe", "Glm4vMoeModel"),
+        ("glm4v_moe_text", "Glm4vMoeTextModel"),
         ("glm4v_text", "Glm4vTextModel"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
@@ -320,6 +322,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
+        ("sam2", "Sam2Model"),
+        ("sam2_hiera_det_model", "Sam2HieraDetModel"),
+        ("sam2_video", "Sam2VideoModel"),
+        ("sam2_vision_model", "Sam2VisionModel"),
         ("sam_hq", "SamHQModel"),
         ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
@@ -970,6 +976,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("glm4v", "Glm4vForConditionalGeneration"),
+        ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
@@ -1632,6 +1639,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
+        ("sam2", "Sam2Model"),
+        ("sam2_video", "Sam2Model"),
         ("sam_hq", "SamHQModel"),
     ]
 )

@@ -18,6 +18,7 @@ import tempfile
 import unittest
 from unittest import skip
 
+import pytest
 from packaging import version
 
 from transformers import AqlmConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
@@ -198,6 +199,7 @@ class AqlmTest(unittest.TestCase):
         is_aqlm_available() and version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
         "test requires `aqlm>=1.0.3`",
     )
+    @pytest.mark.torch_compile_test
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -223,11 +225,7 @@ class AqlmTest(unittest.TestCase):
 
         # Setup static KV cache for generation
         past_key_values = StaticCache(
-            config=self.quantized_model.config,
-            max_batch_size=1,
-            max_cache_len=seq_length + self.max_new_tokens + 1,
-            device=torch_device,
-            dtype=self.quantized_model.config._pre_quantization_dtype,
+            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
         )
 
         # Allocate token ids to be generated and copy prefix ids
