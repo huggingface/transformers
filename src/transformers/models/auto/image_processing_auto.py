@@ -183,6 +183,7 @@ else:
             ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("vit", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("vitpose", ("VitPoseImageProcessor", "VitPoseImageProcessorFast")),
             ("vit_hybrid", ("ViTHybridImageProcessor", None)),
             ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),

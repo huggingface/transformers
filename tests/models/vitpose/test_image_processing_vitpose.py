@@ -1,4 +1,4 @@
-# Copyright 2024 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitPoseImageProcessor
+    from transformers import VitPoseImageProcessor, VitPoseImageProcessorFast
 
 
 class VitPoseImageProcessingTester:
@@ -212,6 +212,130 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(encoded_images.shape), (len(boxes[0]), *expected_output_image_shape))
 
         # Test batched
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
+        encoded_images = image_processor(
+            image_inputs,
+            boxes=boxes,
+            return_tensors="pt",
+            input_data_format="channels_last",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape),
+            (self.image_processor_tester.batch_size * len(boxes[0]), *expected_output_image_shape),
+        )
+
+
+@require_torch
+@require_vision
+class VitPoseImageProcessingFastTest(ImageProcessingTestMixin, unittest.TestCase):
+    """
+    Test class specifically for the fast VitPose image processor to ensure feature parity.
+    """
+
+    image_processing_class = VitPoseImageProcessorFast if is_vision_available() else None
+
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = VitPoseImageProcessingTester(self)
+
+    @property
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
+
+    def test_image_processor_properties(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "do_affine_transform"))
+        self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        self.assertTrue(hasattr(image_processing, "image_mean"))
+        self.assertTrue(hasattr(image_processing, "image_std"))
+
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 20, "width": 20})
+
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size={"height": 42, "width": 42}
+        )
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    def test_call_pil(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
+        encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
+        encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
+        )
+
+    def test_call_numpy(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
+        encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
+        encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
+        )
+
+    def test_call_pytorch(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
+        encoded_images = image_processing(image_inputs[0], boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
+        encoded_images = image_processing(image_inputs, boxes=boxes, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
+        )
+
+    def test_call_numpy_4_channels(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
+        encoded_images = image_processor(
+            image_inputs[0],
+            boxes=boxes,
+            return_tensors="pt",
+            input_data_format="channels_last",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (len(boxes[0]), *expected_output_image_shape))
+
         boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
         encoded_images = image_processor(
             image_inputs,
