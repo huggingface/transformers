@@ -187,7 +187,7 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = DabDetrFrozenBatchNorm2d(module.num_features)
 
-            if not module.weight.device == torch.device("meta"):
+            if module.weight.device != torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
                 new_module.bias.data.copy_(module.bias)
                 new_module.running_mean.data.copy_(module.running_mean)
@@ -809,7 +809,7 @@ class DabDetrMLP(nn.Module):
 # Modified from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->DabDetr
 @auto_docstring
 class DabDetrPreTrainedModel(PreTrainedModel):
-    config_class = DabDetrConfig
+    config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]

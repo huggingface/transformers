@@ -17,12 +17,12 @@ import glob
 import importlib
 import os
 import re
+import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from typing import Optional, Union
 
 import libcst as cst
-from check_copies import run_ruff
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
@@ -57,7 +57,7 @@ def get_module_source_from_name(module_name: str) -> str:
 
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
-    regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
+    regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
@@ -141,7 +141,12 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         return updated_node
 
     def leave_ImportFrom(self, original_node, updated_node):
-        """The imports from other file types (configuration, processing etc) should use original model name."""
+        """
+        The imports from other file types (configuration, processing etc) should use original model name.
+        Also, no replaces on absolute imports (e.g. `from mamba_ssm import ...`)
+        """
+        if len(original_node.relative) == 0:  # no replaces on absolute imports
+            return original_node
         if self.original_new_model_name != self.new_name and m.matches(updated_node.module, m.Name()):
             patterns = "|".join(ALL_FILE_TYPES)
             regex = rf"({patterns})_{self.new_name}"
@@ -440,7 +445,7 @@ def find_all_dependencies(
             # Add the dependencies
             all_dependencies.add(current)
             all_dependencies_with_parent += [(current, parents[current])]
-            if current in dependency_mapping.keys():
+            if current in dependency_mapping:
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
                 parents.update(dict.fromkeys(dependency_mapping[current], current))
@@ -665,7 +670,7 @@ class ModuleMapper(CSTVisitor, ABC):
         the recursive mapping, i.e. `recursive_dependencies = {"test": {"bar", "foo"}, "bar": {"foo}}`.
         """
         recursive_dependencies = {}
-        for object_name in self.object_dependency_mapping.keys():
+        for object_name in self.object_dependency_mapping:
             all_dependencies = find_all_dependencies(self.object_dependency_mapping, start_entity=object_name)
             recursive_dependencies[object_name] = all_dependencies
         return recursive_dependencies
@@ -677,7 +682,7 @@ class ModuleMapper(CSTVisitor, ABC):
         new_dependencies = dependencies.copy()
         # Go through the set of dependencies
         for dep in tuple(dependencies):
-            if dep in self.object_recursive_dependency_mapping.keys():
+            if dep in self.object_recursive_dependency_mapping:
                 new_dependencies.update(self.object_recursive_dependency_mapping[dep])
         return new_dependencies
 
@@ -785,9 +790,7 @@ class ModelFileMapper(ModuleMapper):
         """
         # Add/overwrite all needed function nodes and dependencies
         self.functions.update(functions)
-        self.object_dependency_mapping.update(
-            {obj: dep for obj, dep in object_mapping.items() if obj in functions.keys()}
-        )
+        self.object_dependency_mapping.update({obj: dep for obj, dep in object_mapping.items() if obj in functions})
         # Add them to global nodes
         self.global_nodes.update(self.functions)
 
@@ -945,30 +948,20 @@ def replace_class_node(
     new_class_docstring = modular_docstring if len(modular_docstring) > 0 else original_modeling_docstring
 
     # Compute new class attributes
-    original_modeling_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in original_modeling_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    original_modeling_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in original_modeling_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
-    modular_class_attributes = {
-        node.body[0].targets[0].target.value: node
-        for node in modular_class_node.body.body
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()]))
-    }
-    modular_class_attributes.update(
-        {
-            node.body[0].target.value: node
-            for node in modular_class_node.body.body
-            if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()]))
-        }
-    )
+    original_modeling_class_attributes = {}
+    for node in original_modeling_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            original_modeling_class_attributes[node.body[0].target.value] = node
+
+    modular_class_attributes = {}
+    for node in modular_class_node.body.body:
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+            modular_class_attributes[node.body[0].targets[0].target.value] = node
+        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+            modular_class_attributes[node.body[0].target.value] = node
+
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
 
@@ -1093,13 +1086,15 @@ TYPE_TO_FILE_TYPE = {
 }
 
 
-def find_file_type(class_name: str) -> str:
+def find_file_type(class_name: str, model_name: str) -> str:
     """Based on a class name, find the file type corresponding to the class.
     If the class name is `LlamaConfig` it will return `configuration`.
     The list of suffixes is in `TYPE_TO_FILE_TYPE`. If there are no match, we match by default to `modeling`
     """
     match_pattern = "|".join(TYPE_TO_FILE_TYPE.keys())
-    match = re.search(rf"({match_pattern})$", class_name)
+    # We remove the model name to avoid ambiguity, e.g. for `Sam2VideoProcessor`,
+    # removing `Sam2Video` ensures we match `Processor` instead of `VideoProcessor`.
+    match = re.search(rf"({match_pattern})$", class_name.replace(get_cased_name(model_name), ""))
     if match:
         file_type = TYPE_TO_FILE_TYPE[match.group(1)]
     else:
@@ -1155,7 +1150,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
                 import_ref_count[name] = max(ref_count, import_ref_count[name])
     # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
     # a ref count > 0 at any point, the imports is actually used
-    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body.keys()}
+    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body}
 
     imports_to_keep = []
     # We need to keep track of which names were already imported, because some import may be duplicated from multiple sources
@@ -1182,7 +1177,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     return usual_import_nodes + protected_import_nodes
 
 
-def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
+def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
     """Split the `__all__` assignment found in the modular between each corresponding files."""
     all_all_per_file = {}
     assign_node = node.body[0]
@@ -1193,7 +1188,7 @@ def split_all_assignment(node: cst.CSTNode) -> dict[str, cst.CSTNode]:
             if isinstance(element.value, cst.SimpleString):
                 # Remove quotes and add the string to the elements list
                 class_name = element.value.value
-                file = find_file_type(element.value.evaluated_value)
+                file = find_file_type(element.value.evaluated_value, model_name)
                 all_all_to_add[file] += [class_name]
         for file, new_alls in all_all_to_add.items():
             new_node = assign_node.with_changes(
@@ -1282,7 +1277,7 @@ class ModularFileMapper(ModuleMapper):
                 assigned_variable = node.body[0].targets[0].target.value
                 # __all__ is treated differently and not added to general assignments
                 if assigned_variable == "__all__":
-                    self.all_all_to_add = split_all_assignment(node)
+                    self.all_all_to_add = split_all_assignment(node, self.model_name)
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
@@ -1499,8 +1494,8 @@ class ModularFileMapper(ModuleMapper):
             final_name_mapping[file] = get_lowercase_name(final_name)
 
         # Check we are not missing imported files
-        for file in self.model_specific_modules.keys():
-            if file not in final_name_mapping.keys():
+        for file in self.model_specific_modules:
+            if file not in final_name_mapping:
                 final_name_mapping[file] = self.model_name
 
         return final_name_mapping
@@ -1538,7 +1533,7 @@ def check_dependencies_and_create_import_node(
     corrected_dependencies = new_dependencies.copy()
     new_imports = {}
     for class_name in class_dependencies:
-        class_file_type = find_file_type(class_name)
+        class_file_type = find_file_type(class_name, new_name)
         # In this case, we need to remove it from the dependencies and create a new import instead
         if class_file_type != file_type:
             corrected_dependencies.remove(class_name)
@@ -1561,7 +1556,7 @@ def get_class_node_and_dependencies(
     ]
     super_class = model_specific_bases[0] if len(model_specific_bases) == 1 else None
 
-    file_type = find_file_type(class_name)
+    file_type = find_file_type(class_name, modular_mapper.model_name)
     file_to_update = files[file_type]
     model_name = modular_mapper.model_name
 
@@ -1619,7 +1614,7 @@ def get_class_node_and_dependencies(
         nodes_to_add = {
             dep: (relative_dependency_order[dep], modular_mapper.global_nodes[dep])
             for dep in all_dependencies_to_add
-            if dep not in file_to_update.keys()
+            if dep not in file_to_update
         }
 
     # Add the class node itself to the nodes to add
@@ -1683,6 +1678,16 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     return files
 
 
+def run_ruff(code, check=False):
+    if check:
+        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
+    else:
+        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
+
+
 def convert_modular_file(modular_file):
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
@@ -1715,7 +1720,7 @@ def convert_modular_file(modular_file):
 
 
 def save_modeling_file(modular_file, converted_file):
-    for file_type in converted_file.keys():
+    for file_type in converted_file:
         file_name_prefix = file_type.split("*")[0]
         file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(

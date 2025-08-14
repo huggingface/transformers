@@ -76,6 +76,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = importlib.metadata.version("amd-quark")
                 except Exception:
                     package_exists = False
+            elif pkg_name == "triton":
+                try:
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
+                except Exception:
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -111,6 +121,7 @@ HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
+TRITON_MIN_VERSION = "1.0.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -120,6 +131,7 @@ _vptq_available, _vptq_version = _is_package_available("vptq", return_version=Tr
 _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
@@ -127,6 +139,7 @@ _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
+_torch_optimi_available = importlib.util.find_spec("optimi") is not None
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -171,6 +184,8 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
+_fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
+_qutlass_available = _is_package_available("qutlass")
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -222,12 +237,12 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-_triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
+_triton_available, _triton_version = _is_package_available("triton", return_version=True)
 
 _torch_version = "N/A"
 _torch_available = False
@@ -376,6 +391,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_libcst_available():
+    return _libcst_available
+
+
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
@@ -404,6 +423,10 @@ def is_torch_deterministic():
     return False
 
 
+def is_triton_available(min_version: str = TRITON_MIN_VERSION):
+    return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
+
+
 def is_hadamard_available():
     return _hadamard_available
 
@@ -428,9 +451,7 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # NOTE: MLU is OK with non-contiguous inputs.
@@ -444,9 +465,7 @@ def is_torch_sdpa_available():
 
 
 def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -472,6 +491,10 @@ def is_galore_torch_available():
 
 def is_apollo_torch_available():
     return _apollo_torch_available
+
+
+def is_torch_optimi_available():
+    return _torch_optimi_available
 
 
 def is_lomo_available():
@@ -508,6 +531,10 @@ def is_fastapi_available():
 
 def is_uvicorn_available():
     return _uvicorn_available
+
+
+def is_openai_available():
+    return _openai_available
 
 
 def is_pretty_midi_available():
@@ -574,6 +601,12 @@ def is_causal_conv1d_available():
         if not torch.cuda.is_available():
             return False
         return _is_package_available("causal_conv1d")
+    return False
+
+
+def is_xlstm_available():
+    if is_torch_available():
+        return _is_package_available("xlstm")
     return False
 
 
@@ -723,10 +756,6 @@ def is_tf2onnx_available():
 
 def is_onnx_available():
     return _onnx_available
-
-
-def is_openai_available():
-    return _openai_available
 
 
 def is_flax_available():
@@ -926,9 +955,9 @@ def is_torch_hpu_available():
     original_compile = torch.compile
 
     def hpu_backend_compile(*args, **kwargs):
-        if kwargs.get("backend", None) not in ["hpu_backend", "eager"]:
+        if kwargs.get("backend") not in ["hpu_backend", "eager"]:
             logger.warning(
-                f"Calling torch.compile with backend={kwargs.get('backend', None)} on a Gaudi device is not supported. "
+                f"Calling torch.compile with backend={kwargs.get('backend')} on a Gaudi device is not supported. "
                 "We will override the backend with 'hpu_backend' to avoid errors."
             )
             kwargs["backend"] = "hpu_backend"
@@ -1055,7 +1084,7 @@ def is_ninja_available():
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
@@ -1250,6 +1279,24 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
         return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
 
 
+@lru_cache
+def is_quanto_greater(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("optimum.quanto"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -1307,6 +1354,14 @@ def is_optimum_quanto_available():
 
 def is_quark_available():
     return _quark_available
+
+
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+
+
+def is_qutlass_available():
+    return _qutlass_available
 
 
 def is_compressed_tensors_available():
@@ -1562,10 +1617,6 @@ def is_liger_kernel_available():
         return False
 
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
-
-
-def is_triton_available():
-    return _triton_available
 
 
 def is_rich_available():
@@ -1912,6 +1963,12 @@ UVICORN_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+OPENAI_IMPORT_ERROR = """
+{0} requires the openai library but it was not found in your environment. You can install it with pip:
+`pip install openai`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
 `pip install pytesseract`. Please note that you may need to restart your runtime after installation.
@@ -2041,6 +2098,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("fastapi", (is_fastapi_available, FASTAPI_IMPORT_ERROR)),
         ("uvicorn", (is_uvicorn_available, UVICORN_IMPORT_ERROR)),
+        ("openai", (is_openai_available, OPENAI_IMPORT_ERROR)),
         ("mistral-common", (is_mistral_common_available, MISTRAL_COMMON_IMPORT_ERROR)),
     ]
 )
@@ -2121,7 +2179,7 @@ class _LazyModule(ModuleType):
         self._object_missing_backend = {}
         self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
 
-        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+        if any(isinstance(key, frozenset) for key in import_structure):
             self._modules = set()
             self._class_to_module = {}
             self.__all__ = []
@@ -2171,12 +2229,12 @@ class _LazyModule(ModuleType):
                 self._modules = self._modules.union(module_keys)
 
                 for key, values in module.items():
-                    if len(missing_backends):
+                    if missing_backends:
                         self._object_missing_backend[key] = missing_backends
 
                     for value in values:
                         self._class_to_module[value] = key
-                        if len(missing_backends):
+                        if missing_backends:
                             self._object_missing_backend[value] = missing_backends
                     _import_structure.setdefault(key, []).extend(values)
 
@@ -2219,7 +2277,7 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._object_missing_backend.keys():
+        if name in self._object_missing_backend:
             missing_backends = self._object_missing_backend[name]
 
             class Placeholder(metaclass=DummyObject):
@@ -2243,7 +2301,7 @@ class _LazyModule(ModuleType):
             Placeholder.__module__ = module_name
 
             value = Placeholder
-        elif name in self._class_to_module.keys():
+        elif name in self._class_to_module:
             try:
                 module = self._get_module(self._class_to_module[name])
                 value = getattr(module, name)
@@ -2371,7 +2429,7 @@ def requires(*, backends=()):
     """
 
     if not isinstance(backends, tuple):
-        raise ValueError("Backends should be a tuple.")
+        raise TypeError("Backends should be a tuple.")
 
     applied_backends = []
     for backend in backends:
@@ -2698,7 +2756,7 @@ def spread_import_structure(nested_import_structure):
             if not isinstance(_value, dict):
                 frozenset_first_import_structure[_key] = _value
 
-            elif any(isinstance(v, frozenset) for v in _value.keys()):
+            elif any(isinstance(v, frozenset) for v in _value):
                 for k, v in _value.items():
                     if isinstance(k, frozenset):
                         # Here we want to switch around _key and k to propagate k upstream if it is a frozenset

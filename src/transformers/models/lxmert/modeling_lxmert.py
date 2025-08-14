@@ -319,22 +319,21 @@ class LxmertAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(context)
-        mixed_value_layer = self.value(context)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        batch_size, seq_length, _ = hidden_states.shape
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(context).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        )
+        value_layer = (
+            self.value(context)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -760,7 +759,7 @@ class LxmertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class LxmertPreTrainedModel(PreTrainedModel):
-    config_class = LxmertConfig
+    config: LxmertConfig
     load_tf_weights = load_tf_weights_in_lxmert
     base_model_prefix = "lxmert"
     _supports_param_buffer_assignment = False

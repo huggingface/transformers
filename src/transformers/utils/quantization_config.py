@@ -63,7 +63,9 @@ class QuantizationMethod(str, Enum):
     SPQR = "spqr"
     FP8 = "fp8"
     QUARK = "quark"
+    FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
+    MXFP4 = "mxfp4"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1199,7 +1201,7 @@ class VptqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        for layer_name, layer_param in self.config_for_layers.items():
+        for layer_param in self.config_for_layers.values():
             VptqLayerConfig(**layer_param)
         if self.enable_proxy_error is True:
             raise ValueError("enable_proxy_error should always be False until we support training")
@@ -1342,7 +1344,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
-                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
@@ -1551,6 +1552,67 @@ class HiggsConfig(QuantizationConfigMixin):
 
 
 @dataclass
+class FPQuantConfig(QuantizationConfigMixin):
+    """
+    FPQuantConfig is a configuration class for quantization using the FPQuant method.
+
+    Args:
+        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+            The dtype to use for the forward pass.
+        forward_method (`str`, *optional*, defaults to `"abs_max"`):
+            The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
+        backward_dtype (`str`, *optional*, defaults to `"bf16"`):
+            The dtype to use for the backward pass.
+        store_master_weights (`bool`, *optional*, defaults to `False`):
+            Whether to store the master weights. Needed for QAT over layer weights.
+        hadamard_group_size (`int`, *optional*, defaults to 32):
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        pseudoquantization (`bool`, *optional*, defaults to `False`):
+            Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        modules_to_not_convert (`list`, *optional*):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        forward_dtype: str = "mxfp4",
+        forward_method: str = "abs_max",
+        backward_dtype: str = "bf16",
+        store_master_weights: bool = False,
+        hadamard_group_size: int = 32,
+        pseudoquantization: bool = False,
+        modules_to_not_convert: Optional[list[str]] = None,
+        **kwargs,
+    ):
+        self.forward_dtype = forward_dtype
+        self.forward_method = forward_method
+        self.backward_dtype = backward_dtype
+        self.store_master_weights = store_master_weights
+        self.hadamard_group_size = hadamard_group_size
+        self.pseudoquantization = pseudoquantization
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self.quant_method = QuantizationMethod.FPQUANT
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if self.forward_dtype not in ["mxfp4"]:
+            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
+        if self.forward_method not in ["abs_max", "quest"]:
+            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
+        if self.backward_dtype not in ["bf16"]:
+            raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
+        if self.hadamard_group_size not in [32]:
+            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
+        if self.modules_to_not_convert is None:
+            self.modules_to_not_convert = ["lm_head"]
+
+
+@dataclass
 class TorchAoConfig(QuantizationConfigMixin):
     quant_method: QuantizationMethod
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
@@ -1650,7 +1712,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
-                raise ValueError(
+                raise TypeError(
                     f"quant_type must be either a string or an AOBaseConfig instance, got {type(self.quant_type)}"
                 )
         else:
@@ -1987,3 +2049,31 @@ class QuarkConfig(QuantizationConfigMixin):
                 self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
+
+
+@dataclass
+class Mxfp4Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using mxfp4 quantization.
+
+    Args:
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[list] = None,
+        dequantize: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.MXFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+
+    def get_loading_attributes(self):
+        return {
+            "dequantize": self.dequantize,
+        }

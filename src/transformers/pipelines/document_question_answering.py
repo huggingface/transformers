@@ -135,6 +135,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     """
 
     _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = None
+    _load_feature_extractor = None
+    _load_tokenizer = True
     # Make sure the docstring is updated when the default generation config is changed
     _default_generation_config = GenerationConfig(
         max_new_tokens=256,
@@ -337,7 +341,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not self.model_type == ModelType.VisionEncoderDecoder:
+        if self.model_type != ModelType.VisionEncoderDecoder:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]

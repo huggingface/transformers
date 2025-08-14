@@ -92,7 +92,7 @@ class VptqHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return False
 
     def is_serializable(self, safe_serialization=None):

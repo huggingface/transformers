@@ -92,6 +92,8 @@ PRIVATE_MODELS = [
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
+    "Glm4vMoeVisionModel",
+    "EvollaSaProtPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -137,6 +139,8 @@ IGNORE_NON_TESTED = (
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+        "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam2VideoModel",  # inherit from Sam2Model (tested).
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -157,6 +161,7 @@ IGNORE_NON_TESTED = (
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
+        "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
@@ -190,6 +195,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/bark/test_modeling_bark.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
+    "models/sam2_video/test_modeling_sam2_video.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -242,6 +248,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "Sam2Model",
+    "Sam2VideoModel",
     "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
@@ -790,7 +798,7 @@ def check_all_auto_object_names_being_defined():
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, mapping in mappings_to_check.items():
-        for _, class_names in mapping.items():
+        for class_names in mapping.values():
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
                 for class_name in class_names:
@@ -1192,7 +1200,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
-    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING.get(m, m) for m in model_types]
 
     errors = []
     for m in model_docs:

@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .codegen import *
     from .cohere import *
     from .cohere2 import *
+    from .cohere2_vision import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -84,6 +85,8 @@ if TYPE_CHECKING:
     from .decision_transformer import *
     from .deepseek_v2 import *
     from .deepseek_v3 import *
+    from .deepseek_vl import *
+    from .deepseek_vl_hybrid import *
     from .deformable_detr import *
     from .deit import *
     from .deprecated import *
@@ -102,6 +105,7 @@ if TYPE_CHECKING:
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
     from .emu3 import *
@@ -109,6 +113,8 @@ if TYPE_CHECKING:
     from .encoder_decoder import *
     from .ernie import *
     from .esm import *
+    from .evolla import *
+    from .exaone4 import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
@@ -123,6 +129,7 @@ if TYPE_CHECKING:
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *
+    from .gemma3n import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -133,6 +140,7 @@ if TYPE_CHECKING:
     from .gpt_neo import *
     from .gpt_neox import *
     from .gpt_neox_japanese import *
+    from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
@@ -207,6 +215,7 @@ if TYPE_CHECKING:
     from .mobilevit import *
     from .mobilevitv2 import *
     from .modernbert import *
+    from .modernbert_decoder import *
     from .moonshine import *
     from .moshi import *
     from .mpnet import *
@@ -254,6 +263,7 @@ if TYPE_CHECKING:
     from .pvt import *
     from .pvt_v2 import *
     from .qwen2 import *
+    from .qwen2_5_omni import *
     from .qwen2_5_vl import *
     from .qwen2_audio import *
     from .qwen2_moe import *
@@ -274,6 +284,8 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
@@ -334,6 +346,7 @@ if TYPE_CHECKING:
     from .vits import *
     from .vivit import *
     from .vjepa2 import *
+    from .voxtral import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *
@@ -347,6 +360,7 @@ if TYPE_CHECKING:
     from .xlm_roberta import *
     from .xlm_roberta_xl import *
     from .xlnet import *
+    from .xlstm import *
     from .xmod import *
     from .yolos import *
     from .yoso import *

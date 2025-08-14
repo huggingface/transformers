@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
 import warnings
+from copy import deepcopy
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -202,7 +202,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
             else:
-                setattr(self, key, getattr(self, key, None))
+                setattr(self, key, deepcopy(getattr(self, key, None)))
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
@@ -456,7 +456,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+                the token generated when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -553,7 +553,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -774,7 +774,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        output = deepcopy(self.__dict__)
         output.pop("model_valid_processing_keys", None)
         output.pop("_valid_kwargs_names", None)
         output["video_processor_type"] = self.__class__.__name__

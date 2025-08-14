@@ -49,6 +49,8 @@ class MLCDMLP(nn.Module):
 
 
 class MLCDRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
@@ -505,11 +507,10 @@ class MLCDVisionTransformer(nn.Module):
 
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -550,7 +551,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     """
 )
 class MLCDVisionModel(MLCDPreTrainedModel):
-    config_class = MLCDVisionConfig
+    config: MLCDVisionConfig
     main_input_name = "pixel_values"
     _no_split_modules = ["MLCDEncoderLayer"]
 

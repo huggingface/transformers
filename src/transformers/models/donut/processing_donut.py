@@ -199,7 +199,7 @@ class DonutProcessor(ProcessorMixin):
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
-        if len(output):
+        if output:
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}

@@ -239,7 +239,7 @@ def create_rename_keys(state_dict, config):
     ########################################## DECODER - END
 
     ########################################## Additional - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict:
         #### TEXT BACKBONE
         if "bert" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("bert", "model.text_backbone")))

@@ -59,12 +59,14 @@ from .integrations import (
     is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
+    is_trackio_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    TRITON_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
@@ -89,6 +91,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flax_available,
     is_flute_available,
+    is_fp_quant_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
@@ -104,6 +107,7 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_kernels_available,
     is_levenshtein_available,
     is_librosa_available,
     is_liger_kernel_available,
@@ -112,6 +116,7 @@ from .utils import (
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -124,6 +129,7 @@ from .utils import (
     is_pytest_available,
     is_pytorch_quantization_available,
     is_quark_available,
+    is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -152,6 +158,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_optimi_available,
     is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -162,6 +169,7 @@ from .utils import (
     is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
+    is_triton_available,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -379,6 +387,14 @@ def require_apollo_torch(test_case):
     return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
+def require_torch_optimi(test_case):
+    """
+    Decorator marking a test that requires torch-optimi. These tests are skipped when torch-optimi isn't installed.
+    https://github.com/jxnl/torch-optimi
+    """
+    return unittest.skipUnless(is_torch_optimi_available(), "test requires torch-optimi")(test_case)
+
+
 def require_lomo(test_case):
     """
     Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
@@ -439,6 +455,19 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_triton(min_version: str = TRITON_MIN_VERSION):
+    """
+    Decorator marking a test that requires triton. These tests are skipped when triton isn't installed.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_triton_available(min_version), f"test requires triton version >= {min_version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
@@ -574,6 +603,16 @@ def require_flash_attn(test_case):
 
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+
+
+def require_kernels(test_case):
+    """
+    Decorator marking a test that requires Flash Attention.
+
+    These tests are skipped when Flash Attention isn't installed.
+
+    """
+    return unittest.skipUnless(is_kernels_available(), "test requires Flash Attention")(test_case)
 
 
 def require_flash_attn_3(test_case):
@@ -1093,6 +1132,11 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_mps(test_case):
+    """Decorator marking a test that requires CUDA and PyTorch."""
+    return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
+
+
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
@@ -1246,6 +1290,16 @@ def require_swanlab(test_case):
 
     """
     return unittest.skipUnless(is_swanlab_available(), "test requires swanlab")(test_case)
+
+
+def require_trackio(test_case):
+    """
+    Decorator marking a test that requires trackio.
+
+    These tests are skipped when trackio isn't installed.
+
+    """
+    return unittest.skipUnless(is_trackio_available(), "test requires trackio")(test_case)
 
 
 def require_wandb(test_case):
@@ -1430,6 +1484,20 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fp_quant(test_case):
+    """
+    Decorator marking a test that requires fp_quant and qutlass
+    """
+    return unittest.skipUnless(is_fp_quant_available(), "test requires fp_quant")(test_case)
+
+
+def require_qutlass(test_case):
+    """
+    Decorator marking a test that requires qutlass
+    """
+    return unittest.skipUnless(is_qutlass_available(), "test requires qutlass")(test_case)
+
+
 def require_phonemizer(test_case):
     """
     Decorator marking a test that requires phonemizer
@@ -1525,6 +1593,13 @@ def require_speech(test_case):
     Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
     """
     return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
+
+
+def require_openai(test_case):
+    """
+    Decorator marking a test that requires openai
+    """
+    return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
 
 
 def require_mistral_common(test_case):
@@ -2562,9 +2637,7 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
-    elif isinstance(obj, (str, int, np.int64)):
-        return obj
-    elif obj is None:
+    elif isinstance(obj, (str, int, np.int64)) or obj is None:
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)
@@ -2793,7 +2866,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -2953,7 +3026,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3244,7 +3317,7 @@ def compare_pipeline_output_to_hub_spec(output, hub_spec):
     missing_keys = []
     unexpected_keys = []
     all_field_names = {field.name for field in fields(hub_spec)}
-    matching_keys = sorted([key for key in output.keys() if key in all_field_names])
+    matching_keys = sorted([key for key in output if key in all_field_names])
 
     # Fields with a MISSING default are required and must be in the output
     for field in fields(hub_spec):
