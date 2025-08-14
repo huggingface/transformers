@@ -81,6 +81,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = False
     valid_kwargs = SegformerFastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps"]
     rescale_factor = 1 / 255
 
     def __init__(self, **kwargs: Unpack[SegformerFastImageProcessorKwargs]):

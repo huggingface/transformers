@@ -100,6 +100,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     max_pixels = None
     valid_kwargs = Qwen2VLFastImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    call_only_args = ["images", "videos"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorKwargs]):
         size = kwargs.pop("size", None)

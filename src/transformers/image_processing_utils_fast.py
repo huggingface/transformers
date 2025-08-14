@@ -209,6 +209,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     device = None
     model_input_names = ["pixel_values"]
     valid_kwargs = DefaultFastImageProcessorKwargs
+    call_only_args = ["images"]
     unused_kwargs = None
 
     def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):

@@ -78,6 +78,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     do_pad: bool = True
     size_divisibility: int = 32
     valid_kwargs = VitMatteFastImageProcessorKwargs
+    call_only_args = ["images", "trimaps"]
 
     def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)

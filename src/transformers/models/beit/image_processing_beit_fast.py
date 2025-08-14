@@ -76,6 +76,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_reduce_labels = False
     valid_kwargs = BeitFastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps"]
 
     def __init__(self, **kwargs: Unpack[BeitFastImageProcessorKwargs]):
         super().__init__(**kwargs)

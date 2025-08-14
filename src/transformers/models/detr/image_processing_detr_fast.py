@@ -321,6 +321,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
     valid_kwargs = DetrFastImageProcessorKwargs
+    call_only_args = ["images", "annotations", "masks_path"]
 
     def __init__(self, **kwargs: Unpack[DetrFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:

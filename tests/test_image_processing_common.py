@@ -612,6 +612,20 @@ class ImageProcessingTestMixin:
         self.assertEqual(image_processor_1.size, modified_copied_size_1)
         self.assertEqual(image_processor_1.image_mean, modified_copied_image_mean_1)
 
+    def test_check_call_only_args(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping check_call_only_args test as fast image processor is not defined")
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        # get all args of the preprocess method
+        preprocess_args = inspect.getfullargspec(image_processor.preprocess).args
+        preprocess_args.remove("self")
+        self.assertEqual(
+            sorted(preprocess_args),
+            sorted(image_processor.call_only_args),
+            "Preprocess and call_only_args are not the same. "
+            "Define the `call_only_args` attribute in the fast image processor class consistently with the preprocess method.",
+        )
+
     @slow
     @require_torch_accelerator
     @require_vision
