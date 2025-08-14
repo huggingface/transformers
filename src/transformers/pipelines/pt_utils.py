@@ -95,7 +95,7 @@ class PipelineIterator(IterableDataset):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
                 if isinstance(element, Cache):
-                    loader_batched[k] = element.batch_select_indices(self._loader_batch_index)
+                    loader_batched[k] = element.select_indices(-2, self._loader_batch_index, return_copy=True)
                     continue
                 if element is None:
                     # This can happen for optional data that get passed around
