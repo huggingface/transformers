@@ -16,6 +16,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import BitsAndBytesConfig, Cache, DeepseekV2Config, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 
@@ -168,20 +170,17 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         expected_value_shape = expected_common_shape + (config.v_head_dim,)
 
         if isinstance(decoder_past_key_values, Cache):
-            self.assertListEqual(
-                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-                [expected_key_shape] * len(decoder_past_key_values.key_cache),
-            )
-            self.assertListEqual(
-                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
-                [expected_value_shape] * len(decoder_past_key_values.value_cache),
-            )
+            for layer in decoder_past_key_values.layers:
+                self.assertEqual(layer.keys.shape, expected_key_shape)
+                self.assertEqual(layer.values.shape, expected_value_shape)
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    @pytest.mark.torch_compile_test
     def test_generate_compilation_all_outputs(self):
         pass
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 
@@ -190,10 +189,12 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Deepseek-V2 uses MLA which has a special head dim and is not compatible with StaticCache shape")
+    @pytest.mark.torch_compile_test
     def test_generate_with_static_cache(self):
         pass
 
     @unittest.skip("Dynamic control flow in MoE")
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         pass
 

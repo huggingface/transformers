@@ -33,9 +33,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    make_list_of_images,
-    pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -161,6 +158,93 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         padded_images = torch.nn.functional.pad(images, padding, mode="constant", value=0.0)
         return padded_images
 
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[list[torch.Tensor]] = None,
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess for corresponding images.
+        instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
+            A mapping between object instance ids and class ids.
+        """
+        return super().preprocess(images, segmentation_maps, instance_id_to_semantic_id, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        instance_id_to_semantic_id: Optional[dict[int, int]],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        ignore_index = kwargs.pop("ignore_index", None)
+        images_kwargs = kwargs.copy()
+        processed_images, patch_offsets = self._preprocess(images, **images_kwargs)
+        outputs = BatchFeature({"pixel_values": processed_images})
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT
+                    if is_torchvision_v2_available()
+                    else F.InterpolationMode.NEAREST,
+                }
+            )
+
+            processed_segmentation_maps, _ = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+            processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            # Convert to list of binary masks and labels
+            mask_labels, class_labels = [], []
+            for idx, segmentation_map in enumerate(processed_segmentation_maps):
+                if isinstance(instance_id_to_semantic_id, list):
+                    instance_id = instance_id_to_semantic_id[idx]
+                else:
+                    instance_id = instance_id_to_semantic_id
+                # Use instance2class_id mapping per image
+                masks, classes = convert_segmentation_map_to_binary_masks(
+                    segmentation_map,
+                    instance_id,
+                    ignore_index=ignore_index,
+                )
+
+                mask_labels.append(torch.from_numpy(masks))
+                class_labels.append(torch.from_numpy(classes))
+
+            # we cannot batch them since they don't share a common class size
+            outputs["mask_labels"] = mask_labels
+            outputs["class_labels"] = class_labels
+
+        if patch_offsets:
+            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
+
+        return outputs
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -227,123 +311,6 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(images, dim=0) if return_tensors else images
 
         return processed_images, patch_offsets
-
-    def _preprocess_images(self, images, **kwargs):
-        """Preprocesses the input images."""
-        return self._preprocess(images, **kwargs)
-
-    def _preprocess_masks(self, segmentation_maps: list[torch.Tensor], **kwargs):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_normalize"] = False
-        kwargs["do_rescale"] = False
-        kwargs["input_data_format"] = ChannelDimension.FIRST
-
-        # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-
-        processed_segmentation_maps, _ = self._preprocess(images=processed_segmentation_maps, **kwargs)
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-
-        return processed_segmentation_maps
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: Optional[list[torch.Tensor]] = None,
-        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
-    ) -> BatchFeature:
-        r"""
-        segmentation_maps (`ImageInput`, *optional*):
-            The segmentation maps to preprocess for corresponding images.
-        instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
-            A mapping between object instance ids and class ids.
-        """
-        # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-
-        # Check if resample is an int before checking if it's an instance of PILImageResampling
-        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
-        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (int, PILImageResampling)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        ignore_index = kwargs.pop("ignore_index", None)
-
-        processed_images, patch_offsets = self._preprocess_images(images=images, **kwargs)
-
-        outputs = BatchFeature({"pixel_values": processed_images})
-
-        mask_labels, class_labels = [], []
-        if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_masks(segmentation_maps=segmentation_maps, **kwargs)
-            # Convert to list of binary masks and labels
-            for idx, segmentation_map in enumerate(segmentation_maps):
-                if isinstance(instance_id_to_semantic_id, list):
-                    instance_id = instance_id_to_semantic_id[idx]
-                else:
-                    instance_id = instance_id_to_semantic_id
-                # Use instance2class_id mapping per image
-                masks, classes = convert_segmentation_map_to_binary_masks(
-                    segmentation_map,
-                    instance_id,
-                    ignore_index=ignore_index,
-                )
-
-                mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
-
-            # we cannot batch them since they don't share a common class size
-            outputs["mask_labels"] = mask_labels
-            outputs["class_labels"] = class_labels
-
-        if patch_offsets:
-            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
-
-        return outputs
 
     def merge_image_patches(
         self,

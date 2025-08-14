@@ -37,8 +37,9 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSpectrogramOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import EmbeddingAccessMixin, PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
@@ -414,7 +415,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
-        self.alpha = torch.nn.Parameter(torch.tensor(1.0))
+        self.alpha = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, emb):
         emb = emb + self.alpha * self.pe[:, : emb.size(1)]
@@ -762,7 +763,7 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
         return hidden_states + layer_output.transpose(1, 2)
 
 
-class SpeechT5TextEncoderPrenet(nn.Module):
+class SpeechT5TextEncoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -773,19 +774,13 @@ class SpeechT5TextEncoderPrenet(nn.Module):
             config.max_text_positions,
         )
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     def forward(self, input_ids: torch.Tensor):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = self.encode_positions(inputs_embeds)
         return inputs_embeds
 
 
-class SpeechT5TextDecoderPrenet(nn.Module):
+class SpeechT5TextDecoderPrenet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -799,12 +794,6 @@ class SpeechT5TextDecoderPrenet(nn.Module):
             config.hidden_size,
             config.pad_token_id,
         )
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
 
     def forward(
         self,
@@ -835,7 +824,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         return inputs_embeds, attention_mask
 
 
-class SpeechT5TextDecoderPostnet(nn.Module):
+class SpeechT5TextDecoderPostnet(nn.Module, EmbeddingAccessMixin):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -845,6 +834,8 @@ class SpeechT5TextDecoderPostnet(nn.Module):
         return self.lm_head(hidden_states)
 
     def get_output_embeddings(self):
+        # Post-net has no token embeddings, but its lm_head must still be
+        # tied to the decoder weights when `tie_word_embeddings=True`.
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
@@ -886,11 +877,12 @@ class SpeechT5Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         position_bias: Optional[torch.Tensor] = None,
@@ -908,29 +900,29 @@ class SpeechT5Attention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
+                    curr_past_key_value = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_value.self_attention_cache
+                    curr_past_key_value = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_value
+                curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
             key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
             value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
@@ -938,7 +930,7 @@ class SpeechT5Attention(nn.Module):
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                    past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -1125,6 +1117,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = SpeechT5FeedForward(config, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1133,7 +1126,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
@@ -1151,7 +1144,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
                 size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1161,7 +1154,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -1181,7 +1174,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -1208,8 +1201,9 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
             nn.init.normal_(
                 module.conv.weight,
@@ -1217,15 +1211,17 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SpeechT5ScaledPositionalEncoding):
+            module.alpha.data.fill_(1.0)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
@@ -1234,9 +1230,12 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+        if hasattr(module, "masked_spec_embed"):
+            nn.init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -1641,7 +1640,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -3164,9 +3163,9 @@ class SpeechT5HifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

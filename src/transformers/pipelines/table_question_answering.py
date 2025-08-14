@@ -143,8 +143,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
             mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
         self.check_model_type(mapping)
 
-        self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
-            getattr(self.model.config, "num_aggregation_labels", None)
+        self.aggregate = getattr(self.model.config, "aggregation_labels", None) and getattr(
+            self.model.config, "num_aggregation_labels", None
         )
         self.type = "tapas" if hasattr(self.model.config, "aggregation_labels") else None
 

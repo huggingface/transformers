@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -311,6 +312,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 
@@ -440,13 +442,11 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         # difference: last dim
         k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         v_embed_dim = config.v_head_dim
-        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
+        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
+        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
         # build the full cache shapes
         num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [
-            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
-        ]
+        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @require_torch_large_accelerator
@@ -535,6 +535,7 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2

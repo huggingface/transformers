@@ -17,6 +17,8 @@ import math
 import unittest
 from unittest.util import safe_repr
 
+import pytest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -26,7 +28,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -41,10 +42,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        FalconMambaCache,
         FalconMambaForCausalLM,
         FalconMambaModel,
     )
-    from transformers.cache_utils import MambaCache
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -293,7 +294,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):
@@ -311,31 +312,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["cache_params"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_falcon_mamba_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -411,7 +387,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
+                    if isinstance(tuple_object, FalconMambaCache):  # MODIFIED PART START
                         recursive_check(tuple_object.conv_states, dict_object.conv_states)
                         recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
@@ -458,6 +434,10 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    @unittest.skip("Mamba models do not support DDP.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @require_torch
 @require_torch_accelerator
@@ -497,7 +477,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_4bit(self):
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config).to(
+            torch_device
+        )
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -507,12 +489,14 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
+    @pytest.mark.torch_compile_test
     def test_generation_torch_compile(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model = torch.compile(model)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        print(self.tokenizer.batch_decode(out, skip_special_tokens=False)[0])
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
@@ -543,7 +527,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
         model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.float16)
 
-        out = model.generate(**inputs, max_new_tokens=20)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
@@ -553,7 +537,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             inputs_embeds = model.get_input_embeddings()(inputs.pop("input_ids"))
 
         inputs["inputs_embeds"] = inputs_embeds
-        out = model.generate(**inputs, max_new_tokens=20)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         EXPECTED_OUTPUTS = Expectations(

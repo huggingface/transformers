@@ -574,7 +574,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage

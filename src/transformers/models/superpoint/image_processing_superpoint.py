@@ -23,6 +23,7 @@ from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
+    PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 
 def is_grayscale(
-    image: ImageInput,
+    image: np.ndarray,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
@@ -107,6 +108,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size (`dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
             `True`. Can be overridden by `size` in the `preprocess` method.
+        resample (`Resampling`, *optional*, defaults to `2`):
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
@@ -123,6 +126,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_grayscale: bool = False,
@@ -134,6 +138,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_grayscale = do_grayscale
@@ -182,6 +187,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         images,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
+        resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_grayscale: Optional[bool] = None,
@@ -231,6 +237,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         """
 
         do_resize = do_resize if do_resize is not None else self.do_resize
+        resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
@@ -266,7 +273,10 @@ class SuperPointImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            images = [self.resize(image=image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
             images = [

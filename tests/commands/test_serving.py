@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import asyncio
+import os
 import time
 import unittest
 from threading import Thread
@@ -23,14 +24,26 @@ from parameterized import parameterized
 
 import transformers.commands.transformers_cli as cli
 from transformers import GenerationConfig
-from transformers.commands.serving import ServeArguments, ServeCommand
+from transformers.commands.serving import Modality, ServeArguments, ServeCommand
 from transformers.testing_utils import CaptureStd, require_openai, slow
 from transformers.utils.import_utils import is_openai_available
 
 
 if is_openai_available():
+    from openai import APIConnectionError, OpenAI
     from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
-    from openai.types.responses import Response, ResponseCreatedEvent
+    from openai.types.responses import (
+        Response,
+        ResponseCompletedEvent,
+        ResponseContentPartAddedEvent,
+        ResponseContentPartDoneEvent,
+        ResponseCreatedEvent,
+        ResponseInProgressEvent,
+        ResponseOutputItemAddedEvent,
+        ResponseOutputItemDoneEvent,
+        ResponseTextDeltaEvent,
+        ResponseTextDoneEvent,
+    )
 
 
 @require_openai
@@ -155,7 +168,7 @@ def async_retry(fn, max_attempts=5, delay=2):
         for _ in range(max_attempts):
             try:
                 return await fn(*args, **kwargs)
-            except aiohttp.client_exceptions.ClientConnectorError:
+            except (aiohttp.client_exceptions.ClientConnectorError, APIConnectionError):
                 time.sleep(delay)
 
     return wrapper
@@ -256,6 +269,135 @@ class ServeCompletionsMixin:
 
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
+
+
+class ServeCompletionsGenerateMockTests(unittest.TestCase):
+    def test_processor_inputs_from_inbound_messages_llm(self):
+        modality = Modality.LLM
+        messages = expected_outputs = [
+            {"role": "user", "content": "How are you doing?"},
+            {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
+            {"role": "user", "content": "Can you help me write tests?"},
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+        self.assertListEqual(expected_outputs, outputs)
+
+        messages_with_type = [
+            {"role": "user", "content": [{"type": "text", "text": "How are you doing?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"}
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_with_type, modality)
+        self.assertListEqual(expected_outputs, outputs)
+
+        messages_multiple_text = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "How are you doing?"},
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"},
+                ],
+            },
+        ]
+        expected_outputs_multiple_text = [
+            {
+                "role": "user",
+                "content": "How are you doing? I'm doing great, thank you for asking! How can I assist you today?",
+            },
+        ]
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages_multiple_text, modality)
+        self.assertListEqual(expected_outputs_multiple_text, outputs)
+
+    def test_processor_inputs_from_inbound_messages_vlm_text_only(self):
+        modality = Modality.VLM
+        messages = [
+            {"role": "user", "content": "How are you doing?"},
+            {"role": "assistant", "content": "I'm doing great, thank you for asking! How can I assist you today?"},
+            {"role": "user", "content": "Can you help me write tests?"},
+        ]
+
+        expected_outputs = [
+            {"role": "user", "content": [{"type": "text", "text": "How are you doing?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'm doing great, thank you for asking! How can I assist you today?"}
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Can you help me write tests?"}]},
+        ]
+
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+        self.assertListEqual(expected_outputs, outputs)
+
+    def test_processor_inputs_from_inbound_messages_vlm_text_and_image_in_base_64(self):
+        modality = Modality.VLM
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "How many pixels are in the image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBARXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAABaADAAQAAAABAAAABQAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgABQAFAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAQEBAQEBAgEBAgICAgICAwICAgIDBAMDAwMDBAUEBAQEBAQFBQUFBQUFBQYGBgYGBgcHBwcHCAgICAgICAgICP/bAEMBAQEBAgICAwICAwgFBAUICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICP/dAAQAAf/aAAwDAQACEQMRAD8A/v4ooooA/9k="
+                        },
+                    },
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": "The number of pixels in the image cannot be determined from the provided information.",
+            },
+            {"role": "user", "content": "Alright"},
+        ]
+
+        expected_outputs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "How many pixels are in the image?"},
+                    {"type": "image", "url": "/var/folders/4v/64sxdhsd3gz3r8vhhnyc0mqw0000gn/T/tmp50oyghk6.png"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "The number of pixels in the image cannot be determined from the provided information.",
+                    }
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Alright"}]},
+        ]
+
+        outputs = ServeCommand.get_processor_inputs_from_inbound_messages(messages, modality)
+
+        for expected_output, output in zip(expected_outputs, outputs):
+            expected_output_content = expected_output["content"]
+            output_content = output["content"]
+
+            self.assertEqual(type(expected_output_content), type(output_content))
+
+            if isinstance(expected_output_content, list):
+                for expected_output_content_item, output_content_item in zip(expected_output_content, output_content):
+                    self.assertIn("type", expected_output_content_item)
+                    self.assertIn("type", output_content_item)
+                    self.assertTrue(expected_output_content_item["type"] == output_content_item["type"])
+
+                    if expected_output_content_item["type"] == "text":
+                        self.assertEqual(expected_output_content_item["text"], output_content_item["text"])
+
+                    if expected_output_content_item["type"] == "image":
+                        self.assertTrue(os.path.exists(output_content_item["url"]))
+            else:
+                raise ValueError("VLMs should only receive content as lists.")
 
 
 @slow  # server startup time is slow on our push CI
@@ -366,4 +508,94 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         thread.start()
 
 
-# TODO: Response integration tests
+@require_openai
+class ServeResponsesMixin:
+    """
+    Mixin class for the Completions API tests, to seamlessly replicate tests across the two versions of the API
+    (`generate` and `continuous_batching`).
+    """
+
+    @async_retry
+    async def run_server(self, request):
+        client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
+        stream = client.responses.create(**request)
+
+        all_payloads = []
+        for payload in stream:
+            all_payloads.append(payload)
+
+        return all_payloads
+
+    def test_request(self):
+        """Tests that an inference using the Responses API works"""
+
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "instructions": "You are a helpful assistant.",
+            "input": "Hello!",
+            "stream": True,
+            "max_output_tokens": 1,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+        print("ok")
+
+        order_of_payloads = [
+            ResponseCreatedEvent,
+            ResponseInProgressEvent,
+            ResponseOutputItemAddedEvent,
+            ResponseContentPartAddedEvent,
+            ResponseTextDeltaEvent,
+            ResponseTextDeltaEvent,
+            ResponseTextDoneEvent,
+            ResponseContentPartDoneEvent,
+            ResponseOutputItemDoneEvent,
+            ResponseCompletedEvent,
+        ]
+
+        self.assertEqual(len(all_payloads), 10)
+        for payload, payload_type in zip(all_payloads, order_of_payloads):
+            self.assertIsInstance(payload, payload_type)
+
+    # TODO: one test for each request flag, to confirm it is working as expected
+    # TODO: speed-based test to confirm that KV cache is working across requests
+
+
+@slow  # server startup time is slow on our push CI
+@require_openai
+class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
+    """Tests the Responses API."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Starts a server for tests to connect to."""
+        cls.port = 8003
+        args = ServeArguments(port=cls.port, default_seed=42)
+        serve_command = ServeCommand(args)
+        thread = Thread(target=serve_command.run)
+        thread.daemon = True
+        thread.start()
+
+    @slow
+    def test_full_request(self):
+        """Tests that an inference using the Responses API works"""
+
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "instructions": "You are a sports assistant designed to craft sports programs.",
+            "input": "Tell me what you can do.",
+            "stream": True,
+            "max_output_tokens": 30,
+        }
+        all_payloads = asyncio.run(self.run_server(request))
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ResponseTextDeltaEvent):
+                full_text += token.delta
+
+        # Verify that the system prompt went through.
+        self.assertTrue(
+            full_text.startswith(
+                "As an AI language model, I am designed to assist with various tasks and provide information on different topics related to sports."
+            )
+        )

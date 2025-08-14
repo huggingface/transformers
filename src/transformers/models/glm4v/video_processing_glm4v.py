@@ -53,8 +53,6 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
-import torch.nn.functional as F
-
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     max_image_size: dict[str, int] = None
@@ -101,6 +99,24 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm4vVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
+        if self.size is not None and (
+            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
+        ):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+    def _further_process_kwargs(
+        self,
+        size: Optional[SizeDict] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def sample_frames(
         self,
@@ -145,9 +161,9 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         self,
         videos: list[torch.Tensor],
         video_metadata: Optional[Union[list[VideoMetadata], list[dict]]] = None,
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: SizeDict = None,
+        size: bool = SizeDict,
+        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -191,11 +207,14 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     width=width,
                     temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
-                    max_pixels=self.max_image_size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 stacked_videos = stacked_videos.view(B * T, C, H, W)
-                stacked_videos = F.interpolate(
-                    stacked_videos, size=(resized_height, resized_width), mode="bicubic", align_corners=False
+                stacked_videos = self.resize(
+                    stacked_videos,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    interpolation=interpolation,
                 )
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
