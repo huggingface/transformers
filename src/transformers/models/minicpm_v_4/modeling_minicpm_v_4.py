@@ -2157,7 +2157,7 @@ def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
-class SiglipPreTrainedModel(PreTrainedModel):
+class MiniCPMVisionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -2199,7 +2199,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
-class MiniCPMVisionEncoder(nn.Module):
+class MiniCPMVisionEncoderLayer(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
@@ -2317,7 +2317,7 @@ SIGLIP_VISION_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     """The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING
 )
-class MiniCPMVisionTransformer(SiglipPreTrainedModel):
+class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -2329,7 +2329,7 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
 
         self.embeddings = MiniCPMVisionEmbeddings(config)
         self.embed_dim = self.embeddings.embed_dim
-        self.encoder = MiniCPMVisionEncoder(config)
+        self.encoder = MiniCPMVisionEncoderLayer(config)
         self.patch_size = self.embeddings.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
