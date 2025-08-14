@@ -1568,6 +1568,7 @@ class FPQuantConfig(QuantizationConfigMixin):
             The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32). If `None`, it will be set to 16 for `"nvfp4"` and 32 for `"mxfp4"`.
         pseudoquantization (`bool`, *optional*, defaults to `False`):
             Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"` or `"identity"`.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1581,6 +1582,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         store_master_weights: bool = False,
         hadamard_group_size: Optional[int] = None,
         pseudoquantization: bool = False,
+        transform_init: str = "hadamard",
         modules_to_not_convert: Optional[list[str]] = None,
         **kwargs,
     ):
@@ -1590,6 +1592,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
         self.pseudoquantization = pseudoquantization
+        self.transform_init = transform_init
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.FPQUANT
@@ -1608,23 +1611,26 @@ class FPQuantConfig(QuantizationConfigMixin):
 
         if self.forward_dtype == "mxfp4":
             if self.forward_method not in ["abs_max", "quest"]:
-                raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for 'mxfp4' for now.")
+                raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for 'mxfp4'.")
             if self.hadamard_group_size is None:
                 self.hadamard_group_size = 32
-            if self.hadamard_group_size not in [32]:
-                raise ValueError("Only a `hadamard_group_size` of 32 is supported for 'mxfp4' for now.")
+            if self.hadamard_group_size not in [32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [32, 64, 128] is supported for 'mxfp4'.")
         elif self.forward_dtype == "nvfp4":
             if self.forward_method not in ["abs_max"]:
-                raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4' for now.")
+                raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4'.")
             if self.hadamard_group_size is None:
                 self.hadamard_group_size = 16
-            if self.hadamard_group_size not in [16]:
-                raise ValueError("Only a `hadamard_group_size` of 16 is supported for 'nvfp4' for now.")
+            if self.hadamard_group_size not in [16, 32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [16, 32, 64, 128] is supported for 'nvfp4'.")
         else:
             raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
 
         if self.backward_dtype not in ["bf16"]:
             raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
+        if self.transform_init not in ["hadamard", "identity"]:
+            raise ValueError("Only 'hadamard' and 'identity' are supported for transform_init.")
+
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 

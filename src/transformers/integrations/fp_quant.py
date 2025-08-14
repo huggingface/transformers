@@ -45,5 +45,6 @@ def adapt_fp_quant_config(config: FPQuantConfig):
         store_master_weights=config.store_master_weights,
         hadamard_group_size=config.hadamard_group_size,
         pseudoquantization=config.pseudoquantization,
+        transform_init=config.transform_init,
         modules_to_not_convert=config.modules_to_not_convert,
     )
