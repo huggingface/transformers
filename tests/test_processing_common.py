@@ -629,7 +629,6 @@ class ProcessorTesterMixin:
             rescale_factor=-1,
             padding="max_length",
             max_length=176,
-            do_sample_frames=False,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -654,7 +653,6 @@ class ProcessorTesterMixin:
             rescale_factor=-1,
             padding="longest",
             max_length=176,
-            do_sample_frames=False,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -681,7 +679,6 @@ class ProcessorTesterMixin:
                 videos_kwargs={"do_rescale": True, "rescale_factor": -1},
                 do_rescale=True,
                 return_tensors="pt",
-                do_sample_frames=False,
             )
 
     def test_structured_kwargs_nested_video(self):
