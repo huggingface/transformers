@@ -32,9 +32,6 @@ if is_vision_available():
         Qwen2TokenizerFast,
     )
 
-if is_torch_available:
-    pass
-
 
 @require_vision
 class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
