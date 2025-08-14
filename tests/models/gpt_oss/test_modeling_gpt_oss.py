@@ -430,13 +430,10 @@ if __name__ == "__main__":
         # Check that gradients were computed for all parameters that have a grad field
         for name, param in model_obj.named_parameters():
             if param.requires_grad:
-                self.assertIsNotNone(
-                    param.grad, f"Parameter '{name}' did not receive a gradient."
-                )
+                self.assertIsNotNone(param.grad, f"Parameter '{name}' did not receive a gradient.")
                 # Check that gradients are not all zero
                 self.assertTrue(
-                    torch.sum(torch.abs(param.grad)).item() > 0,
-                    f"Gradient for parameter '{name}' is all zeros."
+                    torch.sum(torch.abs(param.grad)).item() > 0, f"Gradient for parameter '{name}' is all zeros."
                 )
 
     def test_model_matches_original_20b(self):
