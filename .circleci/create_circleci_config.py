@@ -105,11 +105,12 @@ class CircleCIJob:
         else:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             print(os.environ.get("GIT_COMMIT_MESSAGE"))
-            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("GIT_COMMIT_MESSAGE", "") == "dev-ci":
+            if True:
                 self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
+        self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -178,14 +179,24 @@ class CircleCIJob:
             {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                # "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/vit | tee tests_output.txt)"}
             },
+            {"run": {"name": "mkdir mem_info", "mkdir mem_info"}},
+            {"run": {"name": "ps aux --sort pmem 1", "command": "ps aux --sort pmem > mem_info/mem_info_1.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 2", "command": "ps aux --sort pmem > mem_info/mem_info_2.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 3", "command": "ps aux --sort pmem > mem_info/mem_info_3.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 4", "command": "ps aux --sort pmem > mem_info/mem_info_4.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 5", "command": "ps aux --sort pmem > mem_info/mem_info_5.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 6", "command": "ps aux --sort pmem > mem_info/mem_info_6.txt && sleep 10"}},
+            {"run": {"name": "ps aux --sort pmem 7", "command": "ps aux --sort pmem > mem_info/mem_info_7.txt && sleep 10"}},
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
+            {"store_artifacts": {"path": "mem_info"}},
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
