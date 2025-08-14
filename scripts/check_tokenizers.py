@@ -1,11 +1,11 @@
 from collections import Counter
-from typing import Any, Sequence
 
 import datasets
 
 import transformers
 from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
 from transformers.utils import logging
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logging.set_verbosity_info()
@@ -22,7 +22,7 @@ imperfect = 0
 wrong = 0
 
 
-def check_diff(spm_diff: list[int], tok_diff: list[int], slow: Any, fast: Any) -> bool:
+def check_diff(spm_diff: list[int], tok_diff: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> bool:
     if spm_diff == list(reversed(tok_diff)):
         # AAA -> AA+A vs A+AA case.
         return True
@@ -43,7 +43,7 @@ def check_diff(spm_diff: list[int], tok_diff: list[int], slow: Any, fast: Any) -
     return False
 
 
-def check_LTR_mark(line: str, idx: int, fast: Any) -> bool:
+def check_LTR_mark(line: str, idx: int, fast: PreTrainedTokenizerBase) -> bool:
     enc = fast.encode_plus(line)[0]
     offsets = enc.offsets
     curr, prev = offsets[idx], offsets[idx - 1]
@@ -54,7 +54,7 @@ def check_LTR_mark(line: str, idx: int, fast: Any) -> bool:
     return False
 
 
-def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: Any, fast: Any) -> bool:
+def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> bool:
     # Encoding can be the same with same result AAA -> A + AA vs AA + A
     # We can check that we use at least exactly the same number of tokens.
     for i, (spm_id, tok_id) in enumerate(zip(spm_ids, tok_ids)):
@@ -113,7 +113,7 @@ def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: Any, 
     return False
 
 
-def test_string(slow: Any, fast: Any, text: str) -> None:
+def test_string(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase, text: str) -> None:
     global perfect
     global imperfect
     global wrong
@@ -145,7 +145,7 @@ def test_string(slow: Any, fast: Any, text: str) -> None:
     ), f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
 
 
-def test_tokenizer(slow: Any, fast: Any) -> None:
+def test_tokenizer(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> None:
     global batch_total
     for i in range(len(dataset)):
         # premise, all languages
