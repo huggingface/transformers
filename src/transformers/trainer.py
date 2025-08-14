@@ -1820,6 +1820,9 @@ class Trainer:
                 kahan_sum = bool(kahan_sum)
 
             stable_adamw_kwargs = {
+                "betas": (args.adam_beta1, args.adam_beta2),
+                "weight_decay": args.weight_decay,
+                "eps": args.adam_epsilon,
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
                 "kahan_sum": kahan_sum,
