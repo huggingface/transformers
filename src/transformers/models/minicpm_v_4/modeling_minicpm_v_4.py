@@ -35,15 +35,20 @@ from PIL import Image
 from torch import Tensor, nn
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
 
-from ... import AutoProcessor, LlamaForCausalLM
+from ... import AutoProcessor, LlamaModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...generation.streamers import TextIteratorStreamer
 from ...integrations import is_deepspeed_zero3_enabled, use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.siglip.configuration_siglip import SiglipVisionConfig
 from ...processing_utils import Unpack
@@ -326,13 +331,14 @@ class MiniCPM_V_4PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@auto_docstring
 class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.llm = LlamaForCausalLM(config)
+        self.language_model = LlamaModel._from_config(config)
         self.vpm = self.init_vision_module()
         self.vision_dim = self.vpm.embed_dim
-        self.embed_dim = self.llm.config.hidden_size
+        self.embed_dim = self.language_model.config.hidden_size
         self.resampler = Resampler(
             num_queries=self.config.query_num,
             embed_dim=self.embed_dim,
@@ -352,27 +358,27 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         return model
 
     def get_input_embeddings(self):
-        return self.llm.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.llm.embed_tokens = value
+        self.language_model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.llm.lm_head
+        return self.language_model.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.llm.lm_head = new_embeddings
+        self.language_model.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.llm = decoder
+        self.language_model = decoder
 
     def get_decoder(self):
-        return self.llm
+        return self.language_model
 
     def get_vllm_embedding(self, data):
         if "vision_hidden_states" not in data:
-            dtype = self.llm.model.embed_tokens.weight.dtype
-            device = self.llm.model.embed_tokens.weight.device
+            dtype = self.language_model.embed_tokens.weight.dtype
+            device = self.language_model.embed_tokens.weight.device
             tgt_sizes = data["tgt_sizes"]
             pixel_values_list = data["pixel_values"]
             vision_hidden_states = []
@@ -435,10 +441,10 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         else:
             vision_hidden_states = data["vision_hidden_states"]
 
-        if hasattr(self.llm.config, "scale_emb"):
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"]) * self.llm.config.scale_emb
+        if hasattr(self.language_model.config, "scale_emb"):
+            vllm_embedding = self.language_model.embed_tokens(data["input_ids"]) * self.language_model.config.scale_emb
         else:
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"])
+            vllm_embedding = self.language_model.embed_tokens(data["input_ids"])
 
         vision_hidden_states = [
             i.type(vllm_embedding.dtype) if isinstance(i, torch.Tensor) else i for i in vision_hidden_states
@@ -482,12 +488,27 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
     def forward(
         self,
         data: Union[dict, torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        """
+        Performs the forward pass of the model with multimodal inputs.
+
+        Args:
+            data (`Union[Dict[str, torch.Tensor], torch.Tensor]`, *optional*):
+                A multimodal input containing text and/or vision data.
+                - If a `torch.Tensor` is provided, it is treated as `input_ids`, and a corresponding
+                  `attention_mask` of ones is automatically created.
+            **kwargs:
+                Additional keyword arguments to be passed to the underlying language model.
+
+        Returns:
+            `BaseModelOutputWithPast`: The output from the language model, typically containing the last hidden
+            state, past key-value states for causal language modeling, and other model outputs.
+        """
         if isinstance(data, torch.Tensor):
             attention_mask = torch.ones_like(data, dtype=torch.bool)
             kwargs = {"attention_mask": attention_mask}
-            return self.llm(input_ids=data, **kwargs)
+            return self.language_model(input_ids=data, **kwargs)
 
         if data is None:
             data = {
@@ -510,11 +531,65 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         if position_ids.dtype != torch.int64:
             position_ids = position_ids.long()
 
-        return self.llm(input_ids=None, position_ids=position_ids, inputs_embeds=vllm_embedding, **kwargs)
+        return self.language_model(input_ids=None, position_ids=position_ids, inputs_embeds=vllm_embedding, **kwargs)
+
+
+@auto_docstring
+class MiniCPM_V_4ForConditionalGeneration(MiniCPM_V_4PreTrainedModel, GenerationMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = MiniCPM_V_4Model._from_config(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.processor = None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        outputs: BaseModelOutputWithPast = self.model.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def _decode(self, inputs_embeds, tokenizer, attention_mask, decode_text=False, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
-        output = self.llm.generate(
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.model.terminators]
+        output = super().generate(
             inputs_embeds=inputs_embeds,
             pad_token_id=0,
             eos_token_id=terminators,
@@ -526,7 +601,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         return output
 
     def _decode_stream(self, inputs_embeds, tokenizer, **kwargs):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.model.terminators]
         streamer = TextIteratorStreamer(tokenizer=tokenizer)
         generation_kwargs = {
             "inputs_embeds": inputs_embeds,
@@ -536,13 +611,13 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         }
         generation_kwargs.update(kwargs)
 
-        thread = Thread(target=self.llm.generate, kwargs=generation_kwargs)
+        thread = Thread(target=super().generate, kwargs=generation_kwargs)
         thread.start()
 
         return streamer
 
     def _decode_text(self, result_ids, tokenizer):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
+        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.model.terminators]
         result_text = []
         for result in result_ids:
             result = result[result != 0]
@@ -585,7 +660,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
             (
                 model_inputs["inputs_embeds"],
                 vision_hidden_states,
-            ) = self.get_vllm_embedding(model_inputs)
+            ) = self.model.get_vllm_embedding(model_inputs)
 
             if stream:
                 result = self._decode_stream(model_inputs["inputs_embeds"], tokenizer, **kwargs)
@@ -733,7 +808,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
 
             def stream_gen():
                 for text in res:
-                    for term in self.terminators:
+                    for term in self.model.terminators:
                         text = text.replace(term, "")
                     yield text
 
@@ -1222,14 +1297,14 @@ class MultiheadAttention(nn.MultiheadAttention):
             # generator expressions.
             if torch.overrides.has_torch_function(tensor_args):
                 why_not_fast_path = "some Tensor argument has_torch_function"
-            elif _is_make_fx_tracing():
+            elif F._is_make_fx_tracing():
                 why_not_fast_path = "we are running make_fx tracing"
-            elif not all(_check_arg_device(x) for x in tensor_args):
+            elif not all(F._check_arg_device(x) for x in tensor_args):
                 why_not_fast_path = (
                     "some Tensor argument's device is neither one of "
                     f"cpu, cuda or {torch.utils.backend_registration._privateuse1_backend_name}"
                 )
-            elif torch.is_grad_enabled() and any(_arg_requires_grad(x) for x in tensor_args):
+            elif torch.is_grad_enabled() and any(F._arg_requires_grad(x) for x in tensor_args):
                 why_not_fast_path = (
                     "grad is enabled and at least one of query or the "
                     "input/output projection weights or biases requires_grad"
@@ -1465,9 +1540,9 @@ class MultiheadAttention(nn.MultiheadAttention):
             k = torch.cat([k, bias_k.repeat(1, bsz, 1)])
             v = torch.cat([v, bias_v.repeat(1, bsz, 1)])
             if attn_mask is not None:
-                attn_mask = pad(attn_mask, (0, 1))
+                attn_mask = F.pad(attn_mask, (0, 1))
             if key_padding_mask is not None:
-                key_padding_mask = pad(key_padding_mask, (0, 1))
+                key_padding_mask = F.pad(key_padding_mask, (0, 1))
         else:
             assert bias_k is None
             assert bias_v is None
@@ -1505,9 +1580,9 @@ class MultiheadAttention(nn.MultiheadAttention):
             k = torch.cat([k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1)
             v = torch.cat([v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1)
             if attn_mask is not None:
-                attn_mask = pad(attn_mask, (0, 1))
+                attn_mask = F.pad(attn_mask, (0, 1))
             if key_padding_mask is not None:
-                key_padding_mask = pad(key_padding_mask, (0, 1))
+                key_padding_mask = F.pad(key_padding_mask, (0, 1))
 
         # update source sequence length after adjustments
         src_len = k.size(1)
@@ -1547,7 +1622,7 @@ class MultiheadAttention(nn.MultiheadAttention):
                 attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
             attn_output_weights = F.softmax(attn_output_weights, dim=-1)
             if dropout_p > 0.0:
-                attn_output_weights = dropout(attn_output_weights, p=dropout_p)
+                attn_output_weights = F.dropout(attn_output_weights, p=dropout_p)
 
             attn_output = torch.bmm(attn_output_weights, v)
 
@@ -2385,4 +2460,4 @@ class MiniCPMVisionTransformer(SiglipPreTrainedModel):
         )
 
 
-__all__ = ["MiniCPM_V_4Model", "MiniCPM_V_4PreTrainedModel"]
+__all__ = ["MiniCPM_V_4ForConditionalGeneration", "MiniCPM_V_4Model", "MiniCPM_V_4PreTrainedModel"]

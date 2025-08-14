@@ -51,7 +51,7 @@ class MiniCPMVisionConfig(SiglipVisionConfig):
 
 
 class MiniCPM_V_4Config(PretrainedConfig):
-    model_type = "minicpmv"
+    model_type = "minicpm_v_4"
     is_composition = True
 
     def __init__(
