@@ -2481,6 +2481,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if not is_flash_attn_2_available():
+            if is_kernels_available():
+                logger.warning_once(
+                    "You don't have flash_attn installed, we will default to use `kernels-community/flash-attn`!"
+                )
+                return True
             preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
