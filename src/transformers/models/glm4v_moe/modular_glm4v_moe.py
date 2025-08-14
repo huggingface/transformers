@@ -358,9 +358,11 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
 
     def compute_default_rope_parameters(
         config: Optional[Glm4vMoeTextConfig] = None,
-        **super_kwargs,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
     ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, **super_kwargs)
+        return super().compute_default_rope_parameters(config, device=device, seq_len=seq_len, layer_type=layer_type)
 
 
 class Glm4vMoeTextAttention(Glm4Attention):
