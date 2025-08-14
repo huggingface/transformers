@@ -75,7 +75,7 @@ echo -e "UN Chief says there is no military solution in Syria" | transformers ru
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [BitsAndBytes quantization](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) to quantize the weights to `int8`:
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
