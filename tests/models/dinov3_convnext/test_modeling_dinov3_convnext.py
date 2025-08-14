@@ -167,11 +167,11 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), 4)
+            self.assertEqual(len(hidden_states), 5)
 
             # DINOv3ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
+                list(hidden_states[1].shape[-2:]),
                 [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
             )
 
@@ -192,6 +192,10 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         model_name = "facebook/dinov3-convnext-tiny-pretrain-lvd1689m"
         model = DINOv3ConvNextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="DINOv3ConvNext does not retain grads for first hidden state (original pixel_values)")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 
 # We will verify our results on an image of cute cats

@@ -226,7 +226,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         hidden_states = pixel_values
 
         output_hidden_states = output_hidden_states or self.config.output_hidden_states
-        all_hidden_states = []
+        all_hidden_states = [hidden_states] if output_hidden_states else []
 
         for stage in self.stages:
             hidden_states = stage(hidden_states)
