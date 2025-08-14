@@ -82,18 +82,18 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
             raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
         """
         if self.data_format == "channels_first":
-            x = x.permute(0, 2, 3, 1)
-            x = super().forward(x)
-            x = x.permute(0, 3, 1, 2)
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
         else:
-            x = super().forward(x)
-        return x
+            features = super().forward(features)
+        return features
 
 
 class DINOv3ConvNextLayer(nn.Module):
@@ -124,22 +124,22 @@ class DINOv3ConvNextLayer(nn.Module):
         self.gamma = nn.Parameter(torch.full((channels,), config.layer_scale_init_value), requires_grad=True)
         self.drop_path = DINOv3ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Tensor of shape (batch_size, channels, height, width)
+            features: Tensor of shape (batch_size, channels, height, width)
         """
-        residual = x
-        x = self.depthwise_conv(x)
-        x = x.permute(0, 2, 3, 1)  # to channels last
-        x = self.layer_norm(x)
-        x = self.pointwise_conv1(x)
-        x = self.activation_fn(x)
-        x = self.pointwise_conv2(x)
-        x = x * self.gamma
-        x = x.permute(0, 3, 1, 2)  # back to channels first
-        x = residual + self.drop_path(x)
-        return x
+        residual = features
+        features = self.depthwise_conv(features)
+        features = features.permute(0, 2, 3, 1)  # to channels last
+        features = self.layer_norm(features)
+        features = self.pointwise_conv1(features)
+        features = self.activation_fn(features)
+        features = self.pointwise_conv2(features)
+        features = features * self.gamma
+        features = features.permute(0, 3, 1, 2)  # back to channels first
+        features = residual + self.drop_path(features)
+        return features
 
 
 class DINOv3ConvNextStage(nn.Module):
@@ -174,15 +174,15 @@ class DINOv3ConvNextStage(nn.Module):
             ]
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Tensor of shape (batch_size, channels, height, width)
+            features: Tensor of shape (batch_size, channels, height, width)
         """
-        x = self.downsample_layers(x)
+        features = self.downsample_layers(features)
         for layer in self.layers:
-            x = layer(x)
-        return x
+            features = layer(features)
+        return features
 
 
 @auto_docstring
