@@ -78,15 +78,16 @@ def _lazy_imports(implementation: Optional[str]):
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
 
-    # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
-    # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
-    if implementation == "flash_attention_2" and is_torch_npu_available():
-        from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
-        from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
-        pad_input, unpad_input = _pad_input, _unpad_input
-    elif implementation == "flash_attention_2" or (implementation is None and is_fa2 and not is_fa3):
+    if implementation == "flash_attention_2" or (implementation is None and is_fa2 and not is_fa3):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
+    elif is_torch_npu_available():
+        pad_input, unpad_input = _pad_input, _unpad_input
+
+        # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
+        # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
+        from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
+        from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
     else:
         pad_input, unpad_input = _pad_input, _unpad_input
         if implementation == "flash_attention_3" or (implementation is None and is_fa3):
