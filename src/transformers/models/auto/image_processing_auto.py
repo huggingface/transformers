@@ -176,7 +176,7 @@ else:
             ("timesformer", ("VideoMAEImageProcessor", None)),
             ("timm_wrapper", ("TimmWrapperImageProcessor", None)),
             ("tvlt", ("TvltImageProcessor", None)),
-            ("tvp", ("TvpImageProcessor", None)),
+            ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
