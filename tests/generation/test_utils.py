@@ -2048,6 +2048,7 @@ class GenerationTesterMixin:
                 model.generate(**generation_kwargs, **inputs_dict)
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
     @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
     def test_generate_compile_model_forward(self):
         """
@@ -2744,6 +2745,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    @pytest.mark.torch_export_test
     def test_cache_dependant_input_preparation_exporting(self):
         self.assertFalse(
             is_torchdynamo_exporting()
@@ -4342,6 +4344,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(model_inputs["encoder_outputs"] == "foo")
         # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile_fullgraph_tiny(self):
         """
         Tests that we can call end-to-end generation with a tiny model (i.e. doesn't crash)
@@ -4931,6 +4934,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -5043,6 +5047,26 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_callable(self):
+        """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+
+        def custom_loop(model, input_ids, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+            # Check that generate() correctly prepares the stopping criteria
+            assert stopping_criteria[0].max_length == input_ids.shape[1] + 3
+            return "callable_success"
+
+        value = model.generate(
+            **model_inputs,
+            max_new_tokens=3,
+            custom_generate=custom_loop,
+        )
+        self.assertEqual(value, "callable_success")
 
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):
