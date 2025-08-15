@@ -222,4 +222,4 @@ def setup_timeout_debug(timeout_seconds=600):  # 5 minutes
 
 # In your conftest.py or at the start of your test
 faulthandler.enable()
-setup_timeout_debug(6)  # Adjust timeout as needed
+setup_timeout_debug(30)  # Adjust timeout as needed
