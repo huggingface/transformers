@@ -174,19 +174,13 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     def get_decoder(self):
         return self.language_model
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_num_patches: torch.Tensor,
-    ):
+    def get_image_features(self, pixel_values: torch.FloatTensor):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
                The tensors corresponding to the input images.
-            image_num_patches (`torch.Tensor` of shape `(num_images)`)
-                Number of patches for each image.
         Returns:
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
@@ -197,13 +191,36 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
+
     @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
-        image_num_patches: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -212,10 +229,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, Cohere2VisionModelOutputWithPast]:
-        r"""
-        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
-            Number of patches per input image.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -223,18 +236,11 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_num_patches=image_num_patches)
+            image_features = self.get_image_features(pixel_values)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -286,15 +292,8 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_num_patches: torch.Tensor,
-    ):
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_num_patches=image_num_patches,
-        )
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        return self.model.get_image_features(pixel_values=pixel_values)
 
     # Make modules available throught conditional class for BC
     @property
@@ -315,7 +314,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        image_num_patches: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -328,8 +326,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Cohere2VisionCausalLMOutputWithPast]:
         r"""
-        image_num_patches (`torch.Tensor` of shape `(num_images,)`):
-            Number of patches per input image.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -367,7 +363,6 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            image_num_patches=image_num_patches,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

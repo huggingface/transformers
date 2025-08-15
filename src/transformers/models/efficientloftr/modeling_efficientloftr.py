@@ -69,6 +69,8 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
         self.config = config
@@ -320,7 +322,6 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->EfficientLoFTR
     def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -329,7 +330,7 @@ class EfficientLoFTRAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -476,12 +477,16 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
         hidden_states = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        encoder_hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
-        encoder_hidden_states = encoder_hidden_states.flip(1)
-        encoder_hidden_states = encoder_hidden_states.reshape(-1, embed_dim, height, width)
-
-        hidden_states = self.cross_attention(hidden_states, encoder_hidden_states, **kwargs)
-        hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
+        ###
+        # Implementation of a bug in the original implementation regarding the cross-attention
+        # See : https://github.com/zju3dv/MatchAnything/issues/26
+        hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
+        features_0 = hidden_states[:, 0]
+        features_1 = hidden_states[:, 1]
+        features_0 = self.cross_attention(features_0, features_1, **kwargs)
+        features_1 = self.cross_attention(features_1, features_0, **kwargs)
+        hidden_states = torch.stack((features_0, features_1), dim=1)
+        ###
 
         return hidden_states
 
@@ -748,8 +753,15 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     if border_margin <= 0:
         return tensor
 
-    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
-    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
+    tensor[:, :border_margin] = value
+    tensor[:, :, :border_margin] = value
+    tensor[:, :, :, :border_margin] = value
+    tensor[:, :, :, :, :border_margin] = value
+    tensor[:, -border_margin:] = value
+    tensor[:, :, -border_margin:] = value
+    tensor[:, :, :, -border_margin:] = value
+    tensor[:, :, :, :, -border_margin:] = value
+
     return tensor
 
 
@@ -1274,6 +1286,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         # 3. Fine-level refinement
         residual_features = features[1:]
+        coarse_features = coarse_features / self.config.hidden_size**0.5
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices

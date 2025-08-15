@@ -294,5 +294,16 @@ class GroundingDinoConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        sub_configs = {}
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PretrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PretrainedConfig):
+            sub_configs["text_config"] = type(self.text_config)
+        return sub_configs
+
 
 __all__ = ["GroundingDinoConfig"]

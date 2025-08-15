@@ -18,7 +18,8 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 import numpy as np
 from parameterized import parameterized
@@ -227,6 +228,25 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             ).input_features
             for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
                 self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def test_audio_features_attn_mask_consistent(self):
+        # regression test for https://github.com/huggingface/transformers/issues/39911
+        # Test input_features and input_features_mask have consistent shape
+        np.random.seed(42)
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        for i in [512, 640, 1024]:
+            audio = np.random.randn(i)
+            mm_data = {
+                "raw_speech": [audio],
+                "sampling_rate": 16000,
+            }
+            inputs = feature_extractor(**mm_data, return_tensors="np")
+            out = inputs["input_features"]
+            mask = inputs["input_features_mask"]
+
+            assert out.ndim == 3
+            assert mask.ndim == 2
+            assert out.shape[:2] == mask.shape[:2]
 
     def test_dither(self):
         np.random.seed(42)  # seed the dithering randn()
