@@ -16,7 +16,7 @@
 """PyTorch ESM model."""
 
 import math
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS,PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_esm import EsmConfig
 
@@ -274,7 +274,7 @@ class EsmSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout_prob = config.attention_probs_dropout_prob
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
@@ -323,51 +323,82 @@ class EsmSelfAttention(nn.Module):
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            assert head_mask is None, "head_mask is only supported for eager attention"
+            assert "relative" not in self.position_embedding_type, "relative position embeddings are only supported for eager attention"
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=self.dropout_prob,
+            head_mask=head_mask,
+            hidden_states=hidden_states,
+        )
 
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in EsmModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs.to(value_layer.dtype), value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         if self.is_decoder:
             outputs = outputs + (None,)
         return outputs
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query_layer: torch.Tensor,
+    key_layer: torch.Tensor,
+    value_layer: torch.Tensor,
+    attention_mask: Optional[torch.FloatTensor] = None,
+    scaling: int = 1.0,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.FloatTensor] = None,
+    hidden_states: Optional[torch.FloatTensor] = None,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+    if module.position_embedding_type == "relative_key" or module.position_embedding_type == "relative_key_query":
+        seq_length = hidden_states.size()[1]
+        position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+        position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+        distance = position_ids_l - position_ids_r
+        positional_embedding = module.distance_embedding(distance + module.max_position_embeddings - 1)
+        positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+        if module.position_embedding_type == "relative_key":
+            relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+            attention_scores = attention_scores + relative_position_scores
+        elif module.position_embedding_type == "relative_key_query":
+            relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+            relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+            attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
+    if attention_mask is not None:
+        # Apply the attention mask is (precomputed for all layers in EsmModel forward() function)
+        attention_scores = attention_scores + attention_mask
+
+    # Normalize the attention scores to probabilities.
+    attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attention_probs = nn.functional.dropout(attention_probs, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if head_mask is not None:
+        attention_probs = attention_probs * head_mask
+
+    context_layer = torch.matmul(attention_probs.to(value_layer.dtype), value_layer)
+
+    context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+    new_context_layer_shape = context_layer.size()[:-2] + (module.all_head_size,)
+    context_layer = context_layer.view(new_context_layer_shape)
+
+    return context_layer, attention_probs
 
 
 class EsmSelfOutput(nn.Module):
@@ -828,7 +859,7 @@ class EsmModel(EsmPreTrainedModel):
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
+f
             [What are input IDs?](../glossary#input-ids)
         position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
