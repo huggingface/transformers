@@ -1596,10 +1596,6 @@ class EncoderDecoderCache(Cache):
 
     def batch_select_indices(self, indices: torch.Tensor):
         """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
-        self.select_indices(0, indices, return_copy=False)
-
-    def select_indices(self, axis: int, indices: torch.Tensor, return_copy: bool = False):
-        """Select indices from the cache"""
         self.check_dynamic_cache(self.batch_select_indices.__name__)
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
