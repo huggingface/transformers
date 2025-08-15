@@ -7,7 +7,7 @@ RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-de
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu 
-RUN uv pip install --no-cache-dir 'torch<2.8' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
 RUN git lfs install
 
 RUN uv pip install --no-cache-dir pypi-kenlm
