@@ -27,7 +27,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 
-from ...cache_utils import Cache, DynamicCache, DynamicLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
@@ -222,7 +222,7 @@ class GraniteMoeHybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HybridMambaAttentionDynamicCache(Cache):
+class HybridMambaAttentionDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
@@ -241,7 +241,6 @@ class HybridMambaAttentionDynamicCache(Cache):
     is_compileable = False
 
     def __init__(self, config: GraniteMoeHybridConfig, batch_size, dtype=torch.float16, device=None):
-        super().__init__(layer_classes=DynamicLayer)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         conv_kernel_size = config.mamba_d_conv

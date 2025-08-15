@@ -97,7 +97,7 @@ class Zamba2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Zamba2HybridDynamicCache(Cache):
+class Zamba2HybridDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).
