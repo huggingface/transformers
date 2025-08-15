@@ -862,7 +862,7 @@ class TransformersKwargs(TypedDict, total=False):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
         output_hidden_states (`Optional[bool]`, *optional*):
-            Most of the models support outputing all hidden states computed during the forward pass.
+            Most of the models support outputting all hidden states computed during the forward pass.
         output_attentions (`Optional[bool]`, *optional*):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):

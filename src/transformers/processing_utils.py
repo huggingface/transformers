@@ -223,7 +223,7 @@ class VideosKwargs(TypedDict, total=False):
 
     Attributes:
         do_convert_rgb (`bool`):
-            Whether to convert the video to RGB fromat.
+            Whether to convert the video to RGB format.
         do_resize (`bool`):
             Whether to resize the video.
         size (`dict[str, int]`, *optional*):
