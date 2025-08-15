@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch DINOv3 model."""
+"""Testing suite for the PyTorch Dinov3 model."""
 
 import unittest
 
-from transformers import DINOv3ViTConfig
+from transformers import Dinov3VitConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DINOv3ViTModel
+    from transformers import Dinov3VitModel
 
 
 if is_vision_available():
@@ -37,7 +37,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class DINOv3ViTModelTester:
+class Dinov3VitModelTester:
     def __init__(
         self,
         parent,
@@ -97,7 +97,7 @@ class DINOv3ViTModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return DINOv3ViTConfig(
+        return Dinov3VitConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -114,7 +114,7 @@ class DINOv3ViTModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = DINOv3ViTModel(config=config)
+        model = Dinov3VitModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -141,10 +141,10 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DINOv3ViTModel,) if is_torch_available() else ()
+    all_model_classes = (Dinov3VitModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": DINOv3ViTModel,
+            "image-feature-extraction": Dinov3VitModel,
         }
         if is_torch_available()
         else {}
@@ -157,8 +157,8 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     def setUp(self):
-        self.model_tester = DINOv3ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DINOv3ViTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = Dinov3VitModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Dinov3VitConfig, has_text_modality=False, hidden_size=37)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -228,7 +228,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
-        model = DINOv3ViTModel.from_pretrained(model_name)
+        model = Dinov3VitModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -240,7 +240,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class DINOv3ViTModelIntegrationTest(unittest.TestCase):
+class Dinov3VitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -251,7 +251,7 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = DINOv3ViTModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m").to(torch_device)
+        model = Dinov3VitModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -262,7 +262,7 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the last hidden states
-        # in DINOv3 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        # in Dinov3 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         _, _, height, width = inputs["pixel_values"].shape
         num_patches = (height // model.config.patch_size) * (width // model.config.patch_size)
         expected_seq_length = num_patches + 1 + model.config.num_register_tokens
