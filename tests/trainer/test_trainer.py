@@ -1326,10 +1326,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # By default the past_key_values are removed
         result = trainer.predict(eval_dataset)
         self.assertTrue(isinstance(result.predictions, np.ndarray))
-        # We can still get them by setting ignore_keys to []
-        result = trainer.predict(eval_dataset, ignore_keys=[])
-        self.assertTrue(isinstance(result.predictions, tuple))
-        self.assertEqual(len(result.predictions), 2)
+        # Note: past_key_values must be ignored, as Trainer cannot handle Cache classes
+        # and support for legacy tuples is deprecated.
 
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
