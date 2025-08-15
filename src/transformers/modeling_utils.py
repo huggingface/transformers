@@ -2485,9 +2485,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "You don't have flash_attn installed, we will default to use `kernels-community/flash-attn`!"
                 )
                 try:
-                    from kernels import get_kernels
+                    from kernels import get_kernel
 
-                    get_kernels("kernels-community/flash-attn")
+                    get_kernel("kernels-community/flash-attn")
                     return True
                 except Exception as e:
                     pass
