@@ -44,6 +44,10 @@ class GptOssConfig(PretrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
     }
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "top_k": "num_experts_per_tok",
+    }
 
     def __init__(
         self,

@@ -112,6 +112,10 @@ class PhimoeConfig(PretrainedConfig):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "top_k": "num_experts_per_tok",
+    }
 
     def __init__(
         self,
