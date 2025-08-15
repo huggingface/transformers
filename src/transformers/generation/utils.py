@@ -71,8 +71,8 @@ from .candidate_generator import (
     _prepare_token_type_ids,
 )
 from .configuration_utils import (
-    NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
+    STATIC_CACHE_CLASSES_MAPPING,
     GenerationConfig,
     GenerationMode,
 )
@@ -1825,7 +1825,7 @@ class GenerationMixin(ContinuousMixin):
         if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
             cache_implementation = "hybrid_chunked"
 
-        cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        cache_cls: Cache = STATIC_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
@@ -1957,7 +1957,7 @@ class GenerationMixin(ContinuousMixin):
             else {}
         )
         if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation in STATIC_CACHE_CLASSES_MAPPING:
                 # Here, we use `_support_attention_backend` as a proxy to know if the model can use a static cache
                 # (i.e. if it can correctly create the attention mask for static shapes). It is less restrictive than
                 # using `_can_compile_fullgraph`

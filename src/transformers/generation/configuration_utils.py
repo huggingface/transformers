@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+STATIC_CACHE_CLASSES_MAPPING = {}
 QUANT_BACKEND_CLASSES_MAPPING = {}
 ALL_CACHE_IMPLEMENTATIONS = []
 
@@ -60,7 +60,7 @@ if is_torch_available():
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
-    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    STATIC_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
         "sliding_window": SlidingWindowCache,
@@ -70,7 +70,7 @@ if is_torch_available():
         "offloaded_hybrid_chunked": OffloadedHybridCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
+    ALL_CACHE_IMPLEMENTATIONS = list(STATIC_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
