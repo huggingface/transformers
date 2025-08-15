@@ -5437,7 +5437,27 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices:
+            # Handle context parallelism token counting
+            if (
+                hasattr(self.accelerator, "parallelism_config")
+                and self.accelerator.parallelism_config is not None
+                and hasattr(self.accelerator.parallelism_config, "cp_size")
+                and self.accelerator.parallelism_config.cp_size > 1
+            ):
+                # For context parallelism, use AVG instead of SUM to avoid over-accounting tokens
+                import torch.distributed as dist
+
+                if dist.is_initialized():
+                    # Convert to tensor for all_reduce
+                    if not torch.is_tensor(num_items_in_batch):
+                        num_items_in_batch = torch.tensor(num_items_in_batch, dtype=torch.long)
+                    num_items_in_batch = num_items_in_batch.to(device)
+
+                    # All-reduce with AVG across context parallel group
+                    # Note: We use all processes here as we don't have easy access to CP group
+                    dist.all_reduce(num_items_in_batch, op=dist.ReduceOp.AVG)
+                    num_items_in_batch = int(num_items_in_batch.item())
+            elif self.args.average_tokens_across_devices:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
 
             if torch.is_tensor(num_items_in_batch):
