@@ -1975,47 +1975,6 @@ def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
-class MiniCPMVisionPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = SiglipVisionConfig
-    base_model_prefix = "siglip"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-
-        if isinstance(module, MiniCPMVisionEmbeddings):
-            width = self.config.hidden_size
-            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-        elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
-        elif isinstance(module, SiglipAttention):
-            nn.init.normal_(module.q_proj.weight)
-            nn.init.normal_(module.k_proj.weight)
-            nn.init.normal_(module.v_proj.weight)
-            nn.init.normal_(module.out_proj.weight)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.v_proj.bias)
-            nn.init.zeros_(module.out_proj.bias)
-        elif isinstance(module, SiglipMLP):
-            nn.init.normal_(module.fc1.weight)
-            nn.init.normal_(module.fc2.weight)
-            nn.init.normal_(module.fc1.bias, std=1e-6)
-            nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-
 SIGLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -2135,7 +2094,7 @@ class MiniCPMVisionEncoderLayer(nn.Module):
     """The vision model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING
 )
-class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
+class MiniCPMVisionTransformer(SiglipVisionTransformer):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -2151,9 +2110,6 @@ class MiniCPMVisionTransformer(MiniCPMVisionPreTrainedModel):
         self.patch_size = self.embeddings.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
