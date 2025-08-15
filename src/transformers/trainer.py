@@ -3792,7 +3792,43 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            # Wrap forward pass with context parallelism if enabled
+            if getattr(self, "is_cp_enabled", False):
+                # Prepare buffers for context parallelism
+                buffers = []
+                buffer_seq_dims = []
+
+                # Ensure position_ids exist before context parallel splitting
+                if "input_ids" in inputs and ("position_ids" not in inputs or inputs["position_ids"] is None):
+                    # Create position_ids if not present (needed for Flash Attention compatibility)
+                    seq_len = inputs["input_ids"].shape[1]
+                    batch_size = inputs["input_ids"].shape[0]
+                    inputs["position_ids"] = (
+                        torch.arange(0, seq_len, dtype=torch.long, device=inputs["input_ids"].device)
+                        .unsqueeze(0)
+                        .expand(batch_size, -1)
+                    )
+
+                if "input_ids" in inputs:
+                    buffers.append(inputs["input_ids"])
+                    buffer_seq_dims.append(1)  # Sequence dimension
+                if "labels" in inputs:
+                    buffers.append(inputs["labels"])
+                    buffer_seq_dims.append(1)
+                if "attention_mask" in inputs:
+                    buffers.append(inputs["attention_mask"])
+                    buffer_seq_dims.append(1)
+                # Include position_ids in context parallelism splitting (key for Flash Attention compatibility)
+                if "position_ids" in inputs and inputs["position_ids"] is not None:
+                    buffers.append(inputs["position_ids"])
+                    buffer_seq_dims.append(1)
+
+                with self.accelerator.maybe_context_parallel(
+                    buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=set(buffers)
+                ):
+                    loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            else:
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -4071,6 +4107,17 @@ class Trainer:
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
+
+        # Handle context parallelism state dict properly
+        if (
+            state_dict is None
+            and hasattr(self.accelerator, "parallelism_config")
+            and self.accelerator.parallelism_config is not None
+            and hasattr(self.accelerator.parallelism_config, "cp_size")
+            and self.accelerator.parallelism_config.cp_size > 1
+        ):
+            # Use accelerator.get_state_dict() for proper gathering when context parallelism is enabled
+            state_dict = self.accelerator.get_state_dict(self.model)
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
@@ -5245,6 +5292,14 @@ class Trainer:
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
+
+        # Add parallelism_config if context parallelism is enabled
+        if getattr(self.args, "parallelism_config", None) is not None:
+            args["parallelism_config"] = self.args.parallelism_config
+
+        # Add fsdp_plugin if it was created for context parallelism
+        if getattr(self.args, "fsdp_plugin", None) is not None:
+            args["fsdp_plugin"] = self.args.fsdp_plugin
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
@@ -5272,6 +5327,10 @@ class Trainer:
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
         self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+        self.is_cp_enabled = (
+            getattr(self.accelerator.state, "parallelism_config", None) is not None
+            and getattr(self.accelerator.state.parallelism_config, "cp_size", 1) > 1
+        )
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
