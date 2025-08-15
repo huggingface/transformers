@@ -263,6 +263,7 @@ class Glm4MoeAttention(CohereAttention, nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.rope_scaling = config.rope_scaling
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 

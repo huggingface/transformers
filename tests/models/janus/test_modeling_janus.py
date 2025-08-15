@@ -20,6 +20,7 @@ import unittest
 from functools import reduce
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import (
@@ -89,7 +90,7 @@ class JanusVisionText2TextModelTester:
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
-            "num_image_tokens": 4,
+            "num_image_tokens": 16,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -294,6 +295,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                             pass
 
     @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 

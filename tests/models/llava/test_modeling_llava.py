@@ -476,6 +476,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_bitsandbytes
     def test_batched_generation(self):
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
 
