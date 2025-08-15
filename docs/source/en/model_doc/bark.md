@@ -43,10 +43,10 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
-from transformers import BarkModel
+from transformers import BarkModel, infer_device
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
 ```
 
@@ -54,7 +54,7 @@ model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).
 
 As mentioned above, Bark is made up of 4 sub-models, which are called up sequentially during audio generation. In other words, while one sub-model is in use, the other sub-models are idle.
 
-If you're using a CUDA device, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from GPU to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
+If you're using a CUDA GPU or Intel XPU, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from device to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
 
 ```python
 model.enable_cpu_offload()
