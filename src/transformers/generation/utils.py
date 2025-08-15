@@ -73,7 +73,6 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
-    CompileConfig,
     GenerationConfig,
     GenerationMode,
 )
@@ -3469,13 +3468,9 @@ class GenerationMixin(ContinuousMixin):
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2" and getattr(
-                model_kwargs.get("past_key_values"), "is_compileable", False
-            ):
-                if generation_config.compile_config is None:
-                    generation_config.compile_config = CompileConfig(fullgraph=False)
-                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
-                elif generation_config.compile_config.fullgraph:
+            if self.config._attn_implementation == "flash_attention_2":
+                # only raise warning if the user passed an explicit compile-config
+                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
                         "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
