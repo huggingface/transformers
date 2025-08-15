@@ -1611,6 +1611,9 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.self_attention_cache}, {self.cross_attention_cache})"
+
 
 ### Deprecated classes
 

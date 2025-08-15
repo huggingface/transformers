@@ -48,6 +48,7 @@ if is_torch_available():
         AutoTokenizer,
         Cache,
         DynamicCache,
+        EncoderDecoderCache,
         Gemma2Config,
         GenerationConfig,
         HybridCache,
@@ -163,6 +164,20 @@ class CacheTest(unittest.TestCase):
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+    @parameterized.expand(
+        [
+            # wrap the test cases into tuples, otherwise parametrized is confused and tries to unpack the cache
+            (DynamicCache(),),
+            (EncoderDecoderCache(DynamicCache(), DynamicCache()),),
+            (HybridCache(config=Gemma2Config(), max_cache_len=4),),
+            (SlidingWindowCache(config=Gemma2Config(), max_cache_len=4),),
+            (StaticCache(config=Gemma2Config(), max_cache_len=4),),
+        ]
+    )
+    def test_cache_repr_does_not_raise(self, cache):
+        # check that reprs of the cache does not raise an error
+        repr(cache)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
