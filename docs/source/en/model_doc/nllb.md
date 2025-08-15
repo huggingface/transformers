@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -20,6 +21,9 @@ rendered properly in your Markdown viewer.
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
+
+*This model was released on 2022-07-11 and added to Hugging Face Transformers on 2022-07-18.*
+
 
 # NLLB
 
@@ -143,6 +147,7 @@ visualizer("UN Chief says there is no military solution in Syria")
     >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
     Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
     ```
+
 ## NllbTokenizer
 
 [[autodoc]] NllbTokenizer

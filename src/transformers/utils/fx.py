@@ -129,6 +129,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "deberta",
     "deberta-v2",
     "dinov2",
+    "dinov3_convnext",
+    "dinov3_vit",
     "distilbert",
     "donut-swin",
     "electra",
