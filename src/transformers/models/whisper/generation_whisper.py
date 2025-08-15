@@ -411,6 +411,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_dict_in_generate: Optional[bool] = None,
         force_unique_generate_call: Optional[bool] = None,
         monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
+        keep_special_tokens: Optional[int] = 0,
         **kwargs,
     ):
         """
@@ -540,6 +541,9 @@ class WhisperGenerationMixin(GenerationMixin):
                 takes a tensor argument `p` of shape `(n, 2)`, where `n` is the batch size. `p[i, 0]`  contains the
                 index of the audio frame that is currently being transcribed for batch item `i`. `p[i, 1]` contains
                 the total number of frames for batch item `i`. No return value is expected.
+            keep_special_tokens (`int`, *optional*, defaults to 0):
+                The number of special tokens to keep at the beginning of the generated sequence.
+                Defaults to 0. -1 means keep all special tokens.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -880,6 +884,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 is_shortform=is_shortform,
                 batch_size=batch_size,
                 attention_mask=attention_mask,
+                keep_special_tokens=keep_special_tokens,
                 kwargs=kwargs,
             )
 
@@ -904,6 +909,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     idx=i,
                     return_token_timestamps=return_token_timestamps,
                     decoder_input_ids=decoder_input_ids,
+                    num_special_tokens=keep_special_tokens,
                 )
 
                 seek[prev_i] += segment_offset
@@ -996,6 +1002,7 @@ class WhisperGenerationMixin(GenerationMixin):
         is_shortform,
         batch_size,
         attention_mask,
+        keep_special_tokens,
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -1058,6 +1065,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 is_shortform=is_shortform,
                 seek=seek,
                 batch_idx_map=batch_idx_map,
+                keep_special_tokens=keep_special_tokens,
             )
 
             if cur_bsz < batch_size:
@@ -1146,13 +1154,17 @@ class WhisperGenerationMixin(GenerationMixin):
         is_shortform,
         seek,
         batch_idx_map,
+        keep_special_tokens,
     ):
         # remove all previously passed decoder input ids
         # should happen only if it is the first generated segment
         start_idx = decoder_input_ids.shape[-1]
 
+        if keep_special_tokens == -1:
+            keep_special_tokens = start_idx
+
         if isinstance(seek_outputs, torch.Tensor):
-            return seek_outputs[:, start_idx:], seek_outputs
+            return seek_outputs[:, start_idx - keep_special_tokens :], seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames")
@@ -1201,7 +1213,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
             return values[batch_idx].cpu()
 
-        sequence_tokens = seek_outputs["sequences"][:, start_idx:]
+        sequence_tokens = seek_outputs["sequences"][:, start_idx - keep_special_tokens :]
         seek_outputs = [
             {
                 k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
@@ -2009,6 +2021,7 @@ class WhisperGenerationMixin(GenerationMixin):
         idx,
         return_token_timestamps,
         decoder_input_ids,
+        num_special_tokens,
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
@@ -2019,6 +2032,9 @@ class WhisperGenerationMixin(GenerationMixin):
         token_timestamps = seek_outputs[idx]["token_timestamps"] if return_token_timestamps else []
         idx_offset = decoder_input_ids.shape[-1]
         device = seek_sequence.device
+
+        if num_special_tokens == -1:
+            num_special_tokens = idx_offset
 
         # If whisper predicted a "end of segment" via a timestep token, let's go ever each
         # "end of segment" prediction and slice the decoding into segments accordingly
@@ -2037,7 +2053,17 @@ class WhisperGenerationMixin(GenerationMixin):
             for i, current_slice in enumerate(slices):
                 is_last_slice = i == len(slices) - 1
                 sliced_tokens = seek_sequence[last_slice:current_slice]
-                start_timestamp_pos = sliced_tokens[0] - timestamp_begin
+
+                start_timestamp_pos = None
+                for token in sliced_tokens:
+                    if token >= timestamp_begin:
+                        start_timestamp_pos = token - timestamp_begin
+                        break
+
+                if start_timestamp_pos is None:
+                    # This should not be possible. Fallback to previous logic.
+                    start_timestamp_pos = sliced_tokens[0] - timestamp_begin
+
                 idx_sliced_tokens = -1 if not is_last_slice or single_timestamp_ending else -2
                 end_timestamp_pos = sliced_tokens[idx_sliced_tokens] - timestamp_begin
                 segments.append(
@@ -2055,7 +2081,12 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
                 if return_token_timestamps:
                     segments[-1]["token_timestamps"] = (
-                        token_timestamps[idx_offset + last_slice : idx_offset + current_slice] + time_offset[prev_idx]
+                        token_timestamps[
+                            idx_offset + last_slice - num_special_tokens : idx_offset
+                            + current_slice
+                            - num_special_tokens
+                        ]
+                        + time_offset[prev_idx]
                     )
                 last_slice = current_slice
 
