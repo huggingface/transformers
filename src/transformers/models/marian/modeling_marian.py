@@ -979,7 +979,7 @@ class MarianDecoder(MarianPreTrainedModel):
 
         # retrieve input_ids and inputs_embeds
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         elif input_ids is not None:
             input = input_ids
             input_shape = input.shape
@@ -987,8 +987,6 @@ class MarianDecoder(MarianPreTrainedModel):
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
