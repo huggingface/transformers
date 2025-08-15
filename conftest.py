@@ -301,3 +301,250 @@ class ThreadTimeoutCleanup:
 
 # Use it:
 thread_timeout_cleanup = ThreadTimeoutCleanup(cleanup_timeout=120)
+
+import atexit
+import threading
+import time
+import sys
+import signal
+import faulthandler
+import gc
+import os
+
+
+class ComprehensiveExitDebugger:
+    def __init__(self, cleanup_timeout=30, post_atexit_timeout=60):
+        self.cleanup_timeout = cleanup_timeout
+        self.post_atexit_timeout = post_atexit_timeout
+        self.cleanup_count = 0
+        self.skipped_cleanups = []
+        self.exit_start_time = None
+
+        # Enable faulthandler
+        faulthandler.enable()
+
+        # Hook atexit cleanup functions
+        self.hook_cleanup_registration()
+
+        # Hook sys.exit to monitor post-atexit hangs
+        self.hook_system_exit()
+
+        # Register our own final monitoring function
+        atexit.register(self.final_exit_monitoring)
+
+        print("=== Comprehensive Exit Debugger Initialized ===", file=sys.stderr)
+        print(f"Cleanup timeout: {cleanup_timeout}s, Post-atexit timeout: {post_atexit_timeout}s", file=sys.stderr)
+
+    def hook_cleanup_registration(self):
+        """Hook atexit.register to monitor individual cleanup functions"""
+        original_register = atexit.register
+
+        def monitored_register(func, *args, **kwargs):
+            module = getattr(func, '__module__', 'unknown')
+            name = getattr(func, '__name__', str(func))
+            func_id = f"{module}.{name}"
+
+            # Skip known problematic cleanups
+            if any(bad in func_id.lower() for bad in ['threadpoolexecutor', 'concurrent.futures']):
+                print(f"SKIPPING KNOWN HANGER: {func_id}", file=sys.stderr)
+                self.skipped_cleanups.append(func_id)
+                return lambda: None
+
+            print(f"CLEANUP REGISTERED: {func_id}", file=sys.stderr)
+
+            def monitored_wrapper(*wrapper_args, **wrapper_kwargs):
+                self.cleanup_count += 1
+                print(f"CLEANUP START: {func_id}", file=sys.stderr)
+                start_time = time.time()
+
+                # Run cleanup with timeout in separate thread
+                completed = threading.Event()
+                result = [None]
+                exception = [None]
+
+                def run_cleanup():
+                    try:
+                        result[0] = func(*wrapper_args, **wrapper_kwargs)
+                    except Exception as e:
+                        exception[0] = e
+                    finally:
+                        completed.set()
+
+                thread = threading.Thread(target=run_cleanup, daemon=True)
+                thread.start()
+
+                if completed.wait(timeout=self.cleanup_timeout):
+                    elapsed = time.time() - start_time
+                    if exception[0]:
+                        print(f"CLEANUP FAILED: {func_id} ({elapsed:.3f}s) - {exception[0]}", file=sys.stderr)
+                    else:
+                        print(f"CLEANUP DONE: {func_id} ({elapsed:.3f}s)", file=sys.stderr)
+                    return result[0]
+                else:
+                    elapsed = time.time() - start_time
+                    print(f"CLEANUP TIMEOUT: {func_id} ({elapsed:.1f}s) - skipping and continuing", file=sys.stderr)
+                    self.skipped_cleanups.append(func_id)
+
+                    # Dump stack trace for hanging cleanup
+                    print(f"  Stack trace of hanging cleanup:", file=sys.stderr)
+                    faulthandler.dump_traceback(sys.stderr, all_threads=True)
+                    return None
+
+            return original_register(monitored_wrapper, *args, **kwargs)
+
+        atexit.register = monitored_register
+
+    def hook_system_exit(self):
+        """Hook sys.exit to start post-atexit monitoring"""
+        original_exit = sys.exit
+        original_excepthook = sys.excepthook
+
+        def monitored_exit(code=0):
+            self.exit_start_time = time.time()
+            print(f"\n=== sys.exit({code}) called ===", file=sys.stderr)
+
+            # Start post-atexit monitoring thread
+            def post_atexit_monitor():
+                time.sleep(self.post_atexit_timeout)
+                print(f"\n=== POST-ATEXIT HANG DETECTED ===", file=sys.stderr)
+                print("All atexit cleanups completed, but process still hanging", file=sys.stderr)
+                self.analyze_hang_causes()
+                print("=== FORCE EXIT ===", file=sys.stderr)
+                os._exit(1)
+
+            monitor = threading.Thread(target=post_atexit_monitor, daemon=True)
+            monitor.start()
+
+            # Call original exit
+            return original_exit(code)
+
+        def monitored_excepthook(exc_type, exc_value, exc_traceback):
+            if exc_type == SystemExit:
+                print(f"=== SystemExit in excepthook: {exc_value} ===", file=sys.stderr)
+            return original_excepthook(exc_type, exc_value, exc_traceback)
+
+        sys.exit = monitored_exit
+        sys.excepthook = monitored_excepthook
+
+    def final_exit_monitoring(self):
+        """Final monitoring function - runs as last atexit"""
+        print(f"\n=== FINAL EXIT MONITORING START ===", file=sys.stderr)
+        print(f"Completed {self.cleanup_count} cleanups", file=sys.stderr)
+        if self.skipped_cleanups:
+            print(f"Skipped cleanups: {self.skipped_cleanups}", file=sys.stderr)
+
+        # Start detailed monitoring
+        self.monitor_exit_process()
+
+    def monitor_exit_process(self):
+        """Monitor the exit process in detail"""
+        start_time = time.time()
+
+        # Monitor for up to post_atexit_timeout seconds
+        for i in range(self.post_atexit_timeout // 5):
+            time.sleep(5)
+            elapsed = time.time() - start_time
+
+            print(f"\n--- Exit monitoring at {elapsed:.1f}s ---", file=sys.stderr)
+
+            # 1. Check threads
+            non_daemon_threads = self.analyze_threads()
+
+            # 2. If no threads blocking, check other causes
+            if not non_daemon_threads:
+                print("No non-daemon threads found - checking other causes", file=sys.stderr)
+                self.analyze_other_causes()
+                break
+            else:
+                print(f"Still waiting for {len(non_daemon_threads)} non-daemon threads", file=sys.stderr)
+
+        # If we complete the loop, something else is hanging
+        final_elapsed = time.time() - start_time
+        if final_elapsed >= self.post_atexit_timeout - 5:
+            print(f"\n=== TIMEOUT after {final_elapsed:.1f}s ===", file=sys.stderr)
+            self.analyze_hang_causes()
+
+    def analyze_threads(self):
+        """Analyze thread status"""
+        print("  Thread analysis:", file=sys.stderr)
+        main_thread = threading.main_thread()
+        all_threads = threading.enumerate()
+        non_daemon_threads = []
+
+        for thread in all_threads:
+            is_main = thread == main_thread
+            is_non_daemon = not thread.daemon and not is_main and thread.is_alive()
+
+            if is_non_daemon:
+                non_daemon_threads.append(thread)
+                print(f"    NON-DAEMON: {thread.name} (ident: {thread.ident})", file=sys.stderr)
+
+                # Try to get more info about the thread
+                if hasattr(thread, '_target') and thread._target:
+                    target_name = getattr(thread._target, '__name__', str(thread._target))
+                    print(f"      Target: {target_name}", file=sys.stderr)
+            elif not is_main:
+                print(f"    daemon: {thread.name}", file=sys.stderr)
+
+        print(f"    Total threads: {len(all_threads)}, Non-daemon: {len(non_daemon_threads)}", file=sys.stderr)
+        return non_daemon_threads
+
+    def analyze_other_causes(self):
+        """Analyze other potential hang causes"""
+        print("  Other analysis:", file=sys.stderr)
+
+        # Garbage collection
+        print(f"    GC enabled: {gc.isenabled()}, counts: {gc.get_count()}", file=sys.stderr)
+
+        # Objects with finalizers
+        try:
+            finalizers = [obj for obj in gc.get_objects() if hasattr(obj, '__del__')]
+            print(f"    Objects with __del__: {len(finalizers)}", file=sys.stderr)
+        except:
+            print("    Could not count finalizers", file=sys.stderr)
+
+        # Loaded modules that might cause issues
+        problematic_modules = ['multiprocessing', 'concurrent.futures', 'threading',
+                               'asyncio', 'subprocess', 'queue', 'signal']
+        loaded_problematic = [name for name in problematic_modules if name in sys.modules]
+        if loaded_problematic:
+            print(f"    Problematic modules loaded: {loaded_problematic}", file=sys.stderr)
+
+        # File descriptors (Linux/Mac only)
+        try:
+            fd_count = len(os.listdir('/proc/self/fd'))
+            print(f"    Open file descriptors: {fd_count}", file=sys.stderr)
+        except:
+            pass
+
+    def analyze_hang_causes(self):
+        """Comprehensive analysis when hang is detected"""
+        print("\n=== COMPREHENSIVE HANG ANALYSIS ===", file=sys.stderr)
+
+        # 1. Thread stacks
+        print("\n--- ALL THREAD STACKS ---", file=sys.stderr)
+        faulthandler.dump_traceback(sys.stderr, all_threads=True)
+
+        # 2. Detailed thread analysis
+        print("\n--- DETAILED THREAD ANALYSIS ---", file=sys.stderr)
+        self.analyze_threads()
+
+        # 3. Other causes
+        print("\n--- OTHER POTENTIAL CAUSES ---", file=sys.stderr)
+        self.analyze_other_causes()
+
+        # 4. Summary
+        print(f"\n--- SUMMARY ---", file=sys.stderr)
+        if self.exit_start_time:
+            total_time = time.time() - self.exit_start_time
+            print(f"Total exit time: {total_time:.1f}s", file=sys.stderr)
+        print(f"Completed cleanups: {self.cleanup_count}", file=sys.stderr)
+        print(f"Skipped cleanups: {len(self.skipped_cleanups)}", file=sys.stderr)
+        if self.skipped_cleanups:
+            print(f"Skipped: {self.skipped_cleanups}", file=sys.stderr)
+
+        sys.stderr.flush()
+
+
+# One-line setup for conftest.py:
+exit_debugger = ComprehensiveExitDebugger(cleanup_timeout=120, post_atexit_timeout=180)
