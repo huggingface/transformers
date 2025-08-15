@@ -3873,7 +3873,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
         quantization_config = kwargs.pop("quantization_config", None)
         if quantization_config is not None:
-            self.hf_quantizer = AutoHfQuantizer.from_config(quantization_config)
+            self.hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=False)
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
@@ -3916,7 +3916,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-
+        if hf_quantizer is not None:
+            for name, tensor in self.state_dict().items():
+                logger.debug(f"Creating quantized parameter for {name}")
+                print(f"Creating quantized parameter for {name}")
+                hf_quantizer.create_quantized_param(self, tensor, name, self.device, state_dict)
+        state_dict = self.state_dict()
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)

@@ -119,20 +119,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 not self.pre_quantized
                 and isinstance(device_map, dict)
                 and ("cpu" in device_map.values() or "disk" in device_map.values())
-            ):
-                raise ValueError(
-                    "You are attempting to load an FP4 model with a device_map that contains a CPU or disk device."
-                    "This is not supported when the model is quantized on the fly. "
-                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
-                )
-
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
-            logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16` due to "
-                "requirements of `fbgemm-gpu` to enable model loading in fp4. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
                 " torch_dtype=torch.bfloat16 to remove this warning.",
                 torch_dtype,
             )
@@ -177,14 +163,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
+            global triton_kernels_hub
+            from kernels import get_kernel
+
+            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
             PrecisionConfig, FlexCtx, InFlexData = (
                 triton_kernels_hub.matmul_ogs.PrecisionConfig,
                 triton_kernels_hub.matmul_ogs.FlexCtx,
                 triton_kernels_hub.matmul_ogs.InFlexData,
             )
             module, _ = get_module_from_name(model, param_name)
-            with torch.cuda.device(target_device):
-                if isinstance(module, Mxfp4GptOssExperts):
+            with torch.device(target_device):
+                if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     if "gate_up_proj" in param_name:
                         right_pad = module.gate_up_proj_right_pad
                         bottom_pad = module.gate_up_proj_bottom_pad
@@ -213,7 +204,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         module.down_proj_blocks = torch.nn.Parameter(
                             triton_weight_tensor.storage.data, requires_grad=False
                         )
-
+                    print("New module: ", list(module.state_dict().items()))
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
