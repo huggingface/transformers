@@ -24,10 +24,11 @@ import tempfile
 import threading
 import time
 from argparse import ArgumentParser, Namespace
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Generator, Iterable, Optional, Union
+from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE

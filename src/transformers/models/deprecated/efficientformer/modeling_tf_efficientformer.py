@@ -867,7 +867,7 @@ class TFEfficientFormerMainLayer(keras.layers.Layer):
         # The hidden states are in (batch_size, height, width, num_channels)
         # shape after all stages except the MB3D blocks.
         if output_hidden_states:
-            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]]) + (
+            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1][:-1]) + (
                 encoder_outputs[1][-1],
             )
 
