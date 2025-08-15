@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+triton_kernels_hub = None
 
 
 class Mxfp4HfQuantizer(HfQuantizer):
