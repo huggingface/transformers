@@ -281,28 +281,3 @@ print(processed_chat.keys())
 </hfoption>
 </hfoptions>
 
-## Template configuration
-
-You can create a custom chat template with [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) and set it with [`~ProcessorMixin.apply_chat_template`]. Refer to the [Template writing](./chat_templating_writing) guide for more details.
-
-For example, to enable a template to handle a *list of content* from multiple modalities while still supporting plain strings for text-only inference, specify how to handle the `content['type']` if it is an image or text as shown below in the Llama 3.2 Vision Instruct [template](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct/blob/main/chat_template.json).
-
-```jinja
-{% for message in messages %}
-{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}
-{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}
-{% if message['content'] is string %}
-{{ message['content'] }}
-{% else %}
-{% for content in message['content'] %}
-{% if content['type'] == 'image' %}
-{{ '<|image|>' }}
-{% elif content['type'] == 'text' %}
-{{ content['text'] }}
-{% endif %}
-{% endfor %}
-{% endif %}
-{{ '<|eot_id|>' }}
-{% endfor %}
-{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}
-```

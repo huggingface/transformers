@@ -14,15 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Template writing
+# Writing a chat template
 
-A chat template is a [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) template stored in the tokenizers [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax. A chat template performs the following three roles.
+A chat template is a [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) template stored in the tokenizer's [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
 
-1. Print the role enclosed in `<|` and `|>` (`<|user|>`, `<|assistant|>`, etc.).
-2. Print the message followed by an end-of-sequence (`EOS`) token.
-3. Print the assistant token if [add_generation_prompt=True](./chat_templating#add_generation_prompt) so the model generates an assistant response.
-
-An example template is shown below.
+An example template is shown below:
 
 ```jinja
 {%- for message in messages %}
@@ -34,55 +30,71 @@ An example template is shown below.
 {%- endif %}
 ```
 
-The template can be customized to handle more complex use cases. This guide will show you how to add and edit templates and includes template writing tips.
+If you stare at this for a while, you should realize that this is actually very like Python, albeit with some strange
+`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of 
+the message, followed by an end-of-sequence token. If the `add_generation_prompt` variable is set to `True`, it adds 
+the starting header for an assistant message to the end of the conversation.
 
-## Create a template
-
-Create a template by writing a Jinja template and then setting it as the chat template in the tokenizer. For example, the template below adds `[ASST]` and `[/ASST]` tags to the assistant messages.
-
-```jinja
-{%- for message in messages %}
-    {%- if message['role'] == 'user' %}
-        {{- bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
-    {%- elif message['role'] == 'system' %}
-        {{- '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
-    {%- elif message['role'] == 'assistant' %}
-        {{- '[ASST] '  + message['content'] + ' [/ASST]' + eos_token }}
-    {%- endif %}
-{%- endfor %}
-```
-
-Set the template in the tokenizer, and the next time you use [`~PreTrainedTokenizerBase.apply_chat_template`], the new template is used.
-
-```py
-template = tokenizer.chat_template
-template = template.replace("SYS", "SYSTEM")  # Change the system token
-tokenizer.chat_template = template  # Set the new template
-```
-
-The template is saved in the `tokenizer_config.json` file. Upload it to the Hub with [`~PreTrainedTokenizer.push_to_hub`] so you can reuse it later and make sure everyone is using the right template for your model.
-
-```py
-tokenizer.push_to_hub("model_name")
-```
+To use the template you've written, simply assign the template string to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It will also be saved
+with the tokenizer whenever you call [`~PreTrainedTokenizer.save_pretrained`] or [`~PreTrainedTokenizer.push_to_hub`]. The template will be saved in the `chat_template.jinja` file in the tokenizer directory. You can
+edit this file directly to change the template, which is often easier than manipulating a template string.
 
 ## Template writing tips
 
-The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see what template it's using. Try starting with simple models that don't call any tools or support RAG. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/3.1.x/templates/#synopsis) for more details about formatting and syntax.
+The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see the template it's using. Try starting with simple models that don't call any tools or support RAG, as tool-use models in particular can have very complex templates! Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/3.1.x/templates/#synopsis) for more details about formatting and syntax.
 
-This section curates some best practices for writing clean and efficient Jinja templates.
+There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail. 
 
-### Trimming whitespace
+### Writing multimodal chat templates
 
-Jinja prints any whitespace before or after a block of text. This can be an issue for chat templates because whitespace usage should be intentional. Add `-` to strip any whitespace before a block.
+For multimodal templates, remember that you are normally setting the `chat_template` attribute on the **processor**, not the tokenizer. Also, the `content` key of a message will often be a list of content dicts,
+rather than just a single string. You may wish to check the type of each content item in the list, and handle it accordingly.
+
+Secondly, be aware that your template should generally not directly access image or video data. This is normally handled by the processor after template rendering has finished. Instead,
+your template should generally emit a single special token like `<|image|>` or `<|video|>` when it encounters image or video content, which the processor will later
+expand out into a sequence of image or video tokens. The exact tokens you should emit will depend on the model you're working with. This can be quite confusing, so again,
+we strongly recommend loading an existing multimodal processor and seeing how it handles things!
+
+Below is an example of a template that handles mixed image and text content:
 
 ```jinja
 {%- for message in messages %}
-    {{- message['role'] + message['content'] }}
+    {%- if loop.index0 == 0 %}
+        {{- bos_token }}
+    {%- endif %}
+    {{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}
+    {%- if message['content'] is string %}
+        {{- message['content'] }}
+    {%- else %}
+        {%- for content in message['content'] %}
+            {%- if content['type'] == 'image' %}
+                {{- '<|image|>' }}
+            {%- elif content['type'] == 'text' %}
+                {{- content['text'] }}
+            {%- endif %}
+        {%- endfor %}
+    {%- endif %}
+    {{- '<|eot_id|>' }}
 {%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|start_header_id|>assistant<|end_header_id|>\n\n' }}
+{%- endif %}
 ```
 
-The incorrect whitespace usage example below may introduce a newline and indentation in the output.
+Note how this template is mostly doing the same thing as the simple template above, but it checks for `content` lists,
+and iterates over them to render `<|image|>` tokens where necessary. This allows images to be inserted "into the flow"
+of user text. Note that not all models work this way - some may move all images to the end of the user message,
+for example. The chat template should always match the format the model was trained with.
+
+### Trimming whitespace
+
+Jinja prints any whitespace before or after a block of text. This can be an issue for chat templates because adding extra
+whitespace that was not present during model training can harm performance! To avoid this, you can add `-` to
+Jinja line syntax. Doing this will remove any whitespace before the symbol, which means you can write your template
+with Pythonic indentation and linebreaks, without worrying about accidentally printing that indentation in the rendered
+output. We strongly recommend using `-`!
+
+Here is an example template where the lack of `-` will result in extra whitespace being printed in the output:
 
 ```jinja
 {% for message in messages %}
@@ -90,22 +102,31 @@ The incorrect whitespace usage example below may introduce a newline and indenta
 {% endfor %}
 ```
 
-### Special variables
+By adding `-`, we ensure that we only print the content we intend to:
 
-There are five special variables available inside a template. You can pass virtually any additional arguments to [`~PreTrainedTokenizerBase.apply_chat_template`] and it will be available inside the template as a variable. However, you should try to keep the number of variables to the five below to make it easier for users to use the chat model without writing custom code to handle model-specific arguments.
+```jinja
+{%- for message in messages %}
+    {{- message['role'] + message['content'] }}
+{%- endfor %}
+```
 
-- `messages` contains the chat history as a list of message dicts.
-- `tools` contains a list of tools in JSON schema format.
-- `documents` contains a list of documents with the format `{"title": Title, "contents": "Contents"}` (designed for RAG models).
-- `add_generation_prompt` is a boolean that determines whether to add an assistant header at the end of the conversation.
-- `bos_token` and `eos_token` are special tokens extracted from a tokenizers `special_tokens_map`.
+### Special variables and callables
 
-### Callable functions
+You may have noticed that the templates above use the `messages` variable a lot, in addition to things like `add_generation_prompt`, `bos_token` and `eos_token`. A reasonable question to ask, then, is
+"Where do these variables come from, and what other variables are available to me inside the template?"
 
-There are two callable functions available inside a template.
+The short answer is that the only constants are the `messages` variable and the `add_generation_prompt` boolean. However, you will also have
+access to **any other keyword arguments that are passed to the [`~PreTrainedTokenizerBase.apply_chat_template`] method**.
+This is a lot of flexibility, but we do it this way because it allows templates to support use-cases that we may not have thought of
+while designing the spec. The most common additional variable is `tools`, which contains a list of tools in JSON schema format. Although you can use any variable name you like,
+we highly recommend sticking to convention and using `tools` for this purpose, as it will make your template more compatible with the standard API.
+
+You will also always have access to any tokens contained in `tokenizer.special_tokens_map`, which often includes special tokens like `bos_token` and `eos_token`. You can access these directly by name, like `{{- bos_token }}`.
+
+And finally, there are two callable functions available to you. To call them, use `{{- function_name(argument) }}`.
 
 - `raise_exception(msg)` raises a `TemplateException`. This is useful for debugging or warning users about incorrect template usage.
-- `strftime_now(format_str)` retrieves the current date and time in a specific format which could be useful to include in system messages. It is equivalent to [datetime.now().strftime(format_str)](https://docs.python.org/3/library/datetime.html#datetime.datetime.now) in Python.
+- `strftime_now(format_str)` retrieves the current date and time in a specific format, which is often required in system messages. It is equivalent to [datetime.now().strftime(format_str)](https://docs.python.org/3/library/datetime.html#datetime.datetime.now) in Python.
 
 ### Compatibility with non-Python Jinja
 
