@@ -138,7 +138,7 @@ class EvollaSaProtEmbeddings(nn.Module):
         # a factor of (fraction of unmasked tokens during training) / (fraction of unmasked tokens in sample).
         # This is analogous to the way that dropout layers scale down outputs during evaluation when not
         # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
-        if self.token_dropout:
+        if self.token_dropout and input_ids is not None:
             embeddings = embeddings.masked_fill((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
             mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all EVOLLA_SA_PROT model training runs
             src_lengths = attention_mask.sum(-1)
