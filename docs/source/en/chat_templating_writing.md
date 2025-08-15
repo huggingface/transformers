@@ -35,7 +35,7 @@ If you stare at this for a while, you should realize that this is actually very 
 the message, followed by an end-of-sequence token. If the `add_generation_prompt` variable is set to `True`, it adds 
 the starting header for an assistant message to the end of the conversation.
 
-To use the template you've written, simply assign the template string to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It will also be saved
+Once you've written a template, you can simply load it as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It will also be saved
 with the tokenizer whenever you call [`~PreTrainedTokenizer.save_pretrained`] or [`~PreTrainedTokenizer.push_to_hub`]. The template will be saved in the `chat_template.jinja` file in the tokenizer directory. You can
 edit this file directly to change the template, which is often easier than manipulating a template string.
 
@@ -165,9 +165,11 @@ The following section lists elements of the standard API for writing templates f
 
 ### Tool definitions
 
-Transformers chat template methods allow a user to pass tools as Python functions or a JSON schema. When functions are passed, a JSON schema is automatically generated and passed to the template. The `tools` variable in a template always takes a list of JSON schemas.
+Transformers chat template methods allow a user to pass tools as Python functions or a JSON schema. When functions are passed, a JSON schema is automatically generated and passed to the template. Therefore, when your template accesses the `tools` variable, it will always be list of JSON schemas.
 
-The specific tokens and tool descriptions should match the ones your model was trained with. Your model doesn't need to understand the JSON schema input because your template can translate the JSON schema into your models format. For example, [Command-R](./model_doc/cohere) was trained with tools defined with Python function headers, but the Command-R tool template accepts JSON schemas. The template internally converts types and renders the input tools as Python headers.
+Even though your template will always receive tools as JSON schema, you may need to radically change this format when rendering them to match the format your model was trained with. For example, [Command-R](./model_doc/cohere) was trained with tools defined with Python function headers! The template internally converts JSON schema types and renders the input tools as Python headers.
+
+Here is an example of a tool definition in JSON schema format:
 
 ```json
 {
@@ -193,7 +195,7 @@ The specific tokens and tool descriptions should match the ones your model was t
 }
 ```
 
-An example for handling tool definitions in a chat template is shown below. The specific tokens and tool descriptions should be changed to match the ones a model was trained with.
+An example of handling tool definitions in a chat template is shown below. Again, remember that the specific tokens and layouts should be changed to match the ones the model was trained with.
 
 ```
 {%- if tools %}
@@ -209,7 +211,9 @@ An example for handling tool definitions in a chat template is shown below. The 
 
 ### Tool calls
 
-Tool calls, if present, is a list with the `"assistant”` role. This is always a list even though most tool-calling models only support single tool calls, which means the list usually only contains a single element.
+In addition to rendering the tool definitions, you will also need to render tool calls and tool responses in your template.
+
+Tool calls are generally passed in the `tool_calls` key of an `"assistant”` message. This is always a list even though most tool-calling models only support single tool calls, which means the list usually only contains a single element.
 
 ```json
 {
@@ -229,7 +233,7 @@ Tool calls, if present, is a list with the `"assistant”` role. This is always 
 }
 ```
 
-A common pattern for handling tool calls is shown below.
+A common pattern for handling tool calls is shown below, but, again, make sure you actually match the format your model was trained with!
 
 ```
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
@@ -242,7 +246,7 @@ A common pattern for handling tool calls is shown below.
 
 ### Tool responses
 
-Tool responses are a message dict with the `role`, `name` (name of the function) and `content` (result of the tool call) keys.
+Tool responses are message dicts with the `tool` role. They are much simpler than tool calls, and usually only contain `role`, `name` and `content` keys:
 
 ```json
 {
@@ -252,7 +256,7 @@ Tool responses are a message dict with the `role`, `name` (name of the function)
 }
 ```
 
-Not all the keys need to be used in the tool response. For example, if a model doesn’t expect the function name to be included in the tool response, then you can just include the `role` and `content`.
+Some templates may not even need the `name` key. If this is the case for your model, you can write your template to only read the `content` key:
 
 ```
 {%- if message['role'] == 'tool' %}
@@ -262,11 +266,11 @@ Not all the keys need to be used in the tool response. For example, if a model d
 
 ## Contribute
 
-Add a chat template by setting the `chat_template` attribute in the tokenizer and testing it with [`~PreTrainedTokenizerBase.apply_chat_template`]. If it works as expected, then you can upload it to the Hub with with [`~PreTrainedTokenizer.push_to_hub`].
+Once your template is ready, you can use it by setting it as the `chat_template` attribute in the tokenizer and testing it with [`~PreTrainedTokenizerBase.apply_chat_template`]. If it works as expected, then you can upload it to the Hub with with [`~PreTrainedTokenizer.push_to_hub`].
 
-Even if you're not the model owner, it is still helpful to add a template for a model with an empty chat template or a model that is using a default class template. Open a [pull request](https://hf.co/docs/hub/repositories-pull-requests-discussions) on the model repository to add the template.
+Even if you're not the model owner, it is still helpful to add a template for a model with an empty or incorrect chat template. Open a [pull request](https://hf.co/docs/hub/repositories-pull-requests-discussions) on the model repository to add the template!
 
 ```py
 tokenizer.chat_template = template
-tokenizer.push_to_hub("model_name")
+tokenizer.push_to_hub("amazing_company/cool_model", commit_message="Add chat template", create_pr=True)
 ```
