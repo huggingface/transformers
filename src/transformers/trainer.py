@@ -3812,6 +3812,49 @@ class Trainer:
 
         return inputs
 
+    def _is_attention_mask_causal(self, attention_mask):
+        """
+        Check if an attention mask is causal (compatible with causal attention).
+        Context parallelism only supports causal attention patterns. This function
+        checks if the provided attention mask is compatible.
+
+        Args:
+            attention_mask (torch.Tensor): The attention mask to check
+
+        Returns:
+            bool: True if the mask is causal or compatible with causal attention
+        """
+        if attention_mask is None:
+            return True  # No mask is considered causal (model uses default causal masking)
+
+        # Handle different mask dimensions
+        if attention_mask.dim() == 2:
+            # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+            return True
+        elif attention_mask.dim() in [3, 4]:
+            # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+            # Check if it's lower triangular (causal)
+            seq_len = attention_mask.shape[-1]
+            if seq_len <= 1:
+                return True  # Single token or empty is always causal
+
+            # Take first batch and head (if 4D) for checking pattern
+            if attention_mask.dim() == 4:
+                mask = attention_mask[0, 0]  # First batch, first head
+            else:
+                mask = attention_mask[0]  # First batch
+
+            # Check if upper triangular part is masked (should be 0 or very negative for causal)
+            upper_triangular = torch.triu(mask, diagonal=1)
+
+            # For causal masks, upper triangular should be 0 or very negative (like -inf)
+            # Use a reasonable threshold to handle float precision issues
+            is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+            return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+        # For unknown dimensions, be conservative and reject
+        return False
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3872,33 +3915,41 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            # Wrap forward pass with context parallelism if enabled
-            if getattr(self, "is_cp_enabled", False):
-                # Prepare buffers for context parallelism
-                buffers = []
-                buffer_seq_dims = []
+            # Prepare buffers for context parallelism
+            buffers = []
+            buffer_seq_dims = []
 
-                # position_ids are already provided by the data collator, no need to create them manually
+            # position_ids are already provided by the data collator, no need to create them manually
 
-                if "input_ids" in inputs:
-                    buffers.append(inputs["input_ids"])
-                    buffer_seq_dims.append(1)  # Sequence dimension
-                if "labels" in inputs:
-                    buffers.append(inputs["labels"])
-                    buffer_seq_dims.append(1)
-                if "attention_mask" in inputs:
-                    buffers.append(inputs["attention_mask"])
-                    buffer_seq_dims.append(1)
-                # Include position_ids in context parallelism splitting (key for Flash Attention compatibility)
-                if "position_ids" in inputs and inputs["position_ids"] is not None:
-                    buffers.append(inputs["position_ids"])
-                    buffer_seq_dims.append(1)
+            if "input_ids" in inputs:
+                buffers.append(inputs["input_ids"])
+                buffer_seq_dims.append(1)  # Sequence dimension
+            if "labels" in inputs:
+                buffers.append(inputs["labels"])
+                buffer_seq_dims.append(1)
+            if "attention_mask" in inputs:
+                # Context parallel currently doesn't support other masks than causal
+                # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+                # Check if the mask is really causal and if not throw an error
+                attention_mask = inputs["attention_mask"]
+                if getattr(self, "is_cp_enabled", False) and not self._is_attention_mask_causal(attention_mask):
+                    raise ValueError(
+                        "Context parallelism only supports causal attention masks. "
+                        "The provided attention_mask is not causal. "
+                        "Please ensure your data uses causal masking (lower triangular) "
+                        "or remove the attention_mask to use the model's default causal masking."
+                    )
+                buffers.append(inputs["attention_mask"])
+                buffer_seq_dims.append(1)
+            # Include position_ids in context parallelism splitting (key for Flash Attention compatibility)
+            if "position_ids" in inputs and inputs["position_ids"] is not None:
+                buffers.append(inputs["position_ids"])
+                buffer_seq_dims.append(1)
 
-                with self.accelerator.maybe_context_parallel(
-                    buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=set(buffers)
-                ):
-                    loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
-            else:
+            # Context manager is no-op if CP isn't enabled
+            with self.accelerator.maybe_context_parallel(
+                buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=set(buffers)
+            ):
                 loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
@@ -5516,8 +5567,8 @@ class Trainer:
                     num_items_in_batch = num_items_in_batch.to(device)
 
                     # All-reduce with AVG across context parallel group
-                    # Note: We use all processes here as we don't have easy access to CP group
-                    dist.all_reduce(num_items_in_batch, op=dist.ReduceOp.AVG)
+                    cp_group = self.accelerator.torch_device_mesh["cp"].get_group()
+                    dist.all_reduce(num_items_in_batch, op=dist.ReduceOp.AVG, group=cp_group)
                     num_items_in_batch = int(num_items_in_batch.item())
             elif self.args.average_tokens_across_devices:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()

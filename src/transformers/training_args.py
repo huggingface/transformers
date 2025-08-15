@@ -2115,8 +2115,13 @@ class TrainingArguments:
             else:
                 # Ensure FSDP v2 is used when context parallelism is enabled
                 if self.fsdp_config.get("version", 1) != 2:
-                    logger.warning("Context parallelism requires FSDP v2. Updating FSDP config to use version 2.")
-                    self.fsdp_config["version"] = 2
+                    raise ValueError(
+                        f"Context parallelism (context_parallel_size={self.context_parallel_size}) requires FSDP v2, "
+                        f"but you have configured FSDP v{self.fsdp_config.get('version', 1)}. "
+                        f"FSDP v1 and v2 have different configuration options and behavior. "
+                        f"Please update your fsdp_config to use version 2: fsdp_config={{'version': 2, ...}} "
+                        f"or remove fsdp configuration to let context parallelism auto-configure FSDP v2."
+                    )
 
             # Validation for context parallelism
             if self.per_device_train_batch_size != 1:
