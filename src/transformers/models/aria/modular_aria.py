@@ -1172,6 +1172,7 @@ class AriaGroupedExpertsMLP(nn.Module):
         return fc2_output
 
 
+# FIXME standardize
 # Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
 class AriaTextMoELayer(nn.Module):
     """

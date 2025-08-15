@@ -146,6 +146,7 @@ class DeepseekV3TopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
+# FIXME: update the experts
 class DeepseekV3MoE(nn.Module):
     """
     A mixed expert module containing shared experts.

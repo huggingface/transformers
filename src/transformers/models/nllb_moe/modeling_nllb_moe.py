@@ -409,6 +409,7 @@ class NllbMoeDenseActDense(nn.Module):
         return hidden_states
 
 
+# FIXME: update the experts for the new api
 class NllbMoeSparseMLP(nn.Module):
     r"""
     Implementation of the NLLB-MoE sparse MLP module.

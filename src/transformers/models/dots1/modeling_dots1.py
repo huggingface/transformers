@@ -262,6 +262,7 @@ class Dots1MLP(nn.Module):
         return down_proj
 
 
+# FIXME: update to latest mlp interface
 class Dots1MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
