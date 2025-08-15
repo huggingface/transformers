@@ -90,7 +90,9 @@ def check_details(line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTr
                     if tok_ids[first + k : first + k + min_width] == spm_ids[first + i : first + i + min_width]
                 ]
                 for j in possible_matches:
-                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], slow, fast) and check_details(
+                    if check_diff(
+                        spm_ids[first : first + i], tok_ids[first : first + j], slow, fast
+                    ) and check_details(
                         line,
                         spm_ids[first + i : last],
                         tok_ids[first + j : last],
@@ -140,9 +142,9 @@ def test_string(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase, te
     if skip_assert:
         return
 
-    assert (
-        slow_ids == fast_ids
-    ), f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    assert slow_ids == fast_ids, (
+        f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    )
 
 
 def test_tokenizer(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> None:
