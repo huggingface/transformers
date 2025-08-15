@@ -29,10 +29,10 @@ from ...configuration_utils import PretrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import AttentionInterface
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import (
@@ -47,6 +47,8 @@ from ..llama.modeling_llama import (
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
@@ -84,8 +86,6 @@ class DogeConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings.
             NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value accordingly.
@@ -194,32 +194,31 @@ class DogeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=1024,
-        intermediate_size=2048,
-        num_hidden_layers=32,
-        hidden_dropout=0.0,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        tie_word_embeddings=False,
-        max_position_embeddings=2048,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        num_attention_heads=8,
-        num_key_value_heads=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        sliding_window=None,
-        keep_window_size=2048,
-        is_moe=False,
-        num_experts=16384,
-        num_experts_per_tok=64,
-        norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        vocab_size: Optional[int] = 32768,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 32,
+        hidden_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-06,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        max_position_embeddings: Optional[int] = 2048,
+        rope_scaling: Optional[RopeParameters] = None,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        keep_window_size: Optional[int] = 2048,
+        is_moe: Optional[bool] = False,
+        num_experts: Optional[int] = 16384,
+        num_experts_per_tok: Optional[int] = 64,
+        norm_topk_prob: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -234,8 +233,6 @@ class DogeConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
@@ -251,9 +248,14 @@ class DogeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         # for backward compatibility
@@ -357,7 +359,9 @@ class DogeAttention(nn.Module):
         )
         self.q_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = DogeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_emb = DogeRotaryEmbedding(config=config)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -366,6 +370,7 @@ class DogeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -375,7 +380,17 @@ class DogeAttention(nn.Module):
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -527,11 +542,12 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         self.mlp = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
         self.post_attention_residual = nn.Parameter(torch.ones(config.hidden_size))
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[tuple[torch.Tensor]] = None,

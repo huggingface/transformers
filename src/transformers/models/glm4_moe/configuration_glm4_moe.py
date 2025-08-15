@@ -19,8 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class Glm4MoeConfig(PretrainedConfig):
@@ -68,8 +70,6 @@ class Glm4MoeConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -169,33 +169,32 @@ class Glm4MoeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=10944,
-        num_hidden_layers=46,
-        num_attention_heads=96,
-        partial_rotary_factor=0.5,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        moe_intermediate_size=1408,
-        num_experts_per_tok=8,
-        n_shared_experts=1,
-        n_routed_experts=128,
-        routed_scaling_factor=1.0,
-        n_group=1,
-        topk_group=1,
-        first_k_dense_replace=1,
-        norm_topk_prob=True,
-        use_qk_norm=False,
+        vocab_size: Optional[int] = 151552,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 10944,
+        num_hidden_layers: Optional[int] = 46,
+        num_attention_heads: Optional[int] = 96,
+        partial_rotary_factor: Optional[float] = 0.5,
+        num_key_value_heads: Optional[int] = 8,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        moe_intermediate_size: Optional[int] = 1408,
+        num_experts_per_tok: Optional[int] = 8,
+        n_shared_experts: Optional[int] = 1,
+        n_routed_experts: Optional[int] = 128,
+        routed_scaling_factor: Optional[float] = 1.0,
+        n_group: Optional[int] = 1,
+        topk_group: Optional[int] = 1,
+        first_k_dense_replace: Optional[int] = 1,
+        norm_topk_prob: Optional[bool] = True,
+        use_qk_norm: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -211,14 +210,18 @@ class Glm4MoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         # MoE arguments

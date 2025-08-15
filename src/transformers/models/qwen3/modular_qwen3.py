@@ -30,14 +30,12 @@ from ..llama.modeling_llama import (
     LlamaAttention,
 )
 from ..qwen2.modeling_qwen2 import (
-    Qwen2DecoderLayer,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2Model,
-    Qwen2PreTrainedModel,
     Qwen2RMSNorm,
+    Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -57,13 +55,20 @@ class Qwen3MLP(GemmaMLP):
     pass
 
 
+class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
+    pass
+
+
 class Qwen3Attention(LlamaAttention):
     def __init__(self, config: Qwen3Config, layer_idx: int):
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = config.sliding_window if layer_type == "sliding_attention" else None
+        self.rotary_emb = Qwen3RotaryEmbedding(config=config, layer_type=layer_type)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -72,6 +77,7 @@ class Qwen3Attention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -81,7 +87,17 @@ class Qwen3Attention(LlamaAttention):
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(hidden_states, position_ids)
+        else:
+            logger.warning_once(
+                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                "removed in v4.60.0. Make sure to pass `position_ids` instead."
+            )
+            cos, sin = position_embeddings
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -102,24 +118,13 @@ class Qwen3Attention(LlamaAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,  # diff with Llama
+            position_ids=position_ids,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class Qwen3DecoderLayer(Qwen2DecoderLayer):
-    pass
-
-
-class Qwen3PreTrainedModel(Qwen2PreTrainedModel):
-    pass
-
-
-class Qwen3Model(Qwen2Model):
-    pass
 
 
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
@@ -167,8 +172,8 @@ class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
 __all__ = [
     "Qwen3ForCausalLM",
     "Qwen3ForQuestionAnswering",
-    "Qwen3PreTrainedModel",
-    "Qwen3Model",
+    "Qwen3PreTrainedModel",  # noqa: F822
+    "Qwen3Model",  # noqa: F822
     "Qwen3ForSequenceClassification",
     "Qwen3ForTokenClassification",
 ]

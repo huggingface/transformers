@@ -20,7 +20,7 @@ import torch
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -33,6 +33,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -88,8 +89,6 @@ class SmolLM3Config(PretrainedConfig):
             The id of the beginning of sentence token.
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
-        rope_theta (`float`, *optional*, defaults to 2000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -178,30 +177,29 @@ class SmolLM3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=2048,
-        intermediate_size=11008,
-        num_hidden_layers=36,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=128004,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        rope_theta=2000000.0,
-        rope_scaling=None,
-        use_sliding_window=False,
-        sliding_window=None,
-        no_rope_layers=None,
-        no_rope_layer_interval=4,
-        layer_types=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
+        vocab_size: Optional[int] = 128256,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 36,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 128004,
+        bos_token_id: Optional[int] = 128000,
+        eos_token_id: Optional[int] = 128001,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        no_rope_layers: Optional[int] = None,
+        no_rope_layer_interval: Optional[int] = 4,
+        layer_types: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(
@@ -229,8 +227,6 @@ class SmolLM3Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -257,16 +253,31 @@ class SmolLM3Config(PretrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = getattr(self, "rope_theta", 2000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
+
+
+class SmolLM3RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class SmolLM3Attention(LlamaAttention):
     def __init__(self, config: SmolLM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
+        self.rotary_emb = SmolLM3RotaryEmbedding(config=config, layer_type=config.layer_types[layer_idx])
         self.use_rope = config.no_rope_layers[layer_idx]
         self.sliding_window = (
             config.sliding_window
@@ -274,6 +285,7 @@ class SmolLM3Attention(LlamaAttention):
             else None
         )
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -282,6 +294,7 @@ class SmolLM3Attention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -292,7 +305,16 @@ class SmolLM3Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if self.use_rope:
-            cos, sin = position_embeddings
+            if position_embeddings is None:
+                cos, sin = self.rotary_emb(hidden_states, position_ids)
+            else:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                    "removed in v4.60.0. Make sure to pass `position_ids` instead."
+                )
+                cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -312,6 +334,7 @@ class SmolLM3Attention(LlamaAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            position_ids=position_ids,
             **kwargs,
         )
 

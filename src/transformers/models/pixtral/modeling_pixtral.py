@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_rope_utils import dynamic_rope_update, extract_rope_scaling_dict_from_config
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -60,17 +60,59 @@ class PixtralRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config, device=None):
+    def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
         super().__init__()
-        self.rope_type = "default"
-        self.dim = config.head_dim
-        self.base = config.rope_theta
+
+        self.rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        self.rope_type = self.rope_scaling_dict["rope_type"]
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            raise ValueError("Pixtral doesn't support RoPE other types except for the 'default'")
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(config, device, layer_type=layer_type)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+        self.config = config
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[PixtralVisionConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PretrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        if getattr(config, "rope_scaling_dict", None) is None or "rope_theta" not in config.rope_scaling_dict:
+            rope_scaling_dict = extract_rope_scaling_dict_from_config(config, layer_type=layer_type)
+        else:
+            rope_scaling_dict = config.rope_scaling_dict
+
+        base = rope_scaling_dict["rope_theta"]
+        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Here is the diff from Llama RoPE
         max_patches_per_side = config.image_size // config.patch_size
-        freqs = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float() / self.dim))
+        h = torch.arange(max_patches_per_side)
+        w = torch.arange(max_patches_per_side)
 
-        h = torch.arange(max_patches_per_side, device=freqs.device)
-        w = torch.arange(max_patches_per_side, device=freqs.device)
-
+        freqs = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
         freqs_h = torch.outer(h, freqs[::2]).float()
         freqs_w = torch.outer(w, freqs[1::2]).float()
         inv_freq = torch.cat(
@@ -79,11 +121,12 @@ class PixtralRotaryEmbedding(nn.Module):
                 freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
             ],
             dim=-1,
-        ).reshape(-1, self.dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
+        ).reshape(-1, dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
 
         # TODO maybe make it torch compatible later on. We can also just slice
-        self.register_buffer("inv_freq", torch.cat((inv_freq, inv_freq), dim=-1), persistent=False)
+        inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

@@ -15,7 +15,10 @@
 # limitations under the License.
 
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -66,7 +69,8 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
         projector_dropout (`int`, *optional*, defaults to 0.0): TODO
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        rope_theta (`int`, *optional*, defaults to 10000): TODO
+        rope_scaling (`RopeParameters`, *optional*):
+            RoPE Parameters
     """
 
     base_model_tp_plan = {
@@ -83,26 +87,26 @@ class Llama4VisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size: int = 768,
-        hidden_act: str = "gelu",
-        num_hidden_layers: int = 34,
-        num_attention_heads: int = 16,
-        num_channels: int = 3,
-        intermediate_size: int = 5632,
-        vision_output_dim: int = 7680,
-        image_size: int = 448,
-        patch_size: int = 14,
-        norm_eps: float = 1e-5,
-        vision_feature_layer=-1,
-        vision_feature_select_strategy="default",
-        initializer_range: float = 0.02,
-        pixel_shuffle_ratio=0.5,
-        projector_input_dim=4096,
-        projector_output_dim=4096,
-        multi_modal_projector_bias=False,
-        projector_dropout=0.0,
-        attention_dropout=0.0,
-        rope_theta=10000,
+        hidden_size: Optional[int] = 768,
+        hidden_act: Optional[str] = "gelu",
+        num_hidden_layers: Optional[int] = 34,
+        num_attention_heads: Optional[int] = 16,
+        num_channels: Optional[int] = 3,
+        intermediate_size: Optional[int] = 5632,
+        vision_output_dim: Optional[int] = 7680,
+        image_size: Optional[int] = 448,
+        patch_size: Optional[int] = 14,
+        norm_eps: Optional[float] = 1e-5,
+        vision_feature_layer: Optional[int] = -1,
+        vision_feature_select_strategy: Optional[str] = "default",
+        initializer_range: Optional[float] = 0.02,
+        pixel_shuffle_ratio: Optional[float] = 0.5,
+        projector_input_dim: Optional[int] = 4096,
+        projector_output_dim: Optional[int] = 4096,
+        multi_modal_projector_bias: Optional[bool] = False,
+        projector_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        rope_scaling: Optional[RopeParameters] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -124,7 +128,17 @@ class Llama4VisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.vision_feature_layer = vision_feature_layer
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.rope_theta = rope_theta
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
         super().__init__(**kwargs)
 
 
@@ -174,8 +188,6 @@ class Llama4TextConfig(PretrainedConfig):
             The id of the end of sentence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to `500000.0`):
-            The base period of the RoPE embeddings.
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
         num_experts_per_tok (`int`, *optional*, defaults to 1): TODO
         num_local_experts (`int`, *optional*, defaults to 16): TODO
@@ -295,7 +307,6 @@ class Llama4TextConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=500000,
         attention_dropout=0.0,
         num_experts_per_tok=1,
         num_local_experts=16,
@@ -305,7 +316,7 @@ class Llama4TextConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling=None,
+        rope_scaling: Optional[RopeParameters] = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
@@ -332,7 +343,6 @@ class Llama4TextConfig(PretrainedConfig):
         self.intermediate_size_mlp = intermediate_size_mlp
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.rope_scaling = rope_scaling
         self.attention_bias = False
         # for backward compatibility
         if num_key_value_heads is None:
@@ -343,7 +353,6 @@ class Llama4TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
@@ -379,6 +388,22 @@ class Llama4TextConfig(PretrainedConfig):
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
         layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        rope_config_validation(self)
 
 
 class Llama4Config(PretrainedConfig):

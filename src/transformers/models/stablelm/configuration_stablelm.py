@@ -14,8 +14,10 @@
 # limitations under the License.
 """StableLM model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -69,8 +71,6 @@ class StableLmConfig(PretrainedConfig):
             (not used by all models). Only relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to `10000.0`):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -140,28 +140,27 @@ class StableLmConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50304,
-        intermediate_size=6912,
-        hidden_size=2560,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=32,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        layer_norm_eps=1.0e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10_000,
-        rope_scaling=None,
-        use_qkv_bias=False,
-        qk_layernorm=False,
-        use_parallel_residual=False,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        partial_rotary_factor=0.25,
-        bos_token_id=0,
-        eos_token_id=0,
+        vocab_size: Optional[int] = 50304,
+        intermediate_size: Optional[int] = 6912,
+        hidden_size: Optional[int] = 2560,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[float] = 1.0e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_qkv_bias: Optional[bool] = False,
+        qk_layernorm: Optional[bool] = False,
+        use_parallel_residual: Optional[bool] = False,
+        hidden_dropout: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        partial_rotary_factor: Optional[float] = 0.25,
+        bos_token_id: Optional[int] = 0,
+        eos_token_id: Optional[int] = 0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -177,18 +176,22 @@ class StableLmConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.use_qkv_bias = use_qkv_bias
         self.qk_layernorm = qk_layernorm
         self.use_parallel_residual = use_parallel_residual
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         super().__init__(

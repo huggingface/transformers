@@ -19,8 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
 class SmolLM3Config(PretrainedConfig):
@@ -69,8 +71,6 @@ class SmolLM3Config(PretrainedConfig):
             The id of the beginning of sentence token.
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
-        rope_theta (`float`, *optional*, defaults to 2000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -159,30 +159,29 @@ class SmolLM3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=2048,
-        intermediate_size=11008,
-        num_hidden_layers=36,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=128004,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        rope_theta=2000000.0,
-        rope_scaling=None,
-        use_sliding_window=False,
-        sliding_window=None,
-        no_rope_layers=None,
-        no_rope_layer_interval=4,
-        layer_types=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
+        vocab_size: Optional[int] = 128256,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 11008,
+        num_hidden_layers: Optional[int] = 36,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 128004,
+        bos_token_id: Optional[int] = 128000,
+        eos_token_id: Optional[int] = 128001,
+        rope_scaling: Optional[RopeParameters] = None,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        no_rope_layers: Optional[int] = None,
+        no_rope_layer_interval: Optional[int] = 4,
+        layer_types: Optional[int] = None,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
         super().__init__(
@@ -210,8 +209,6 @@ class SmolLM3Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -238,9 +235,19 @@ class SmolLM3Config(PretrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
+        rope_theta = getattr(self, "rope_theta", 2000000.0)
+        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        if rope_scaling is not None:
+            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
+                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
+                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+            else:
+                full_attention_rope.update(**rope_scaling)
+
+        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
 
 

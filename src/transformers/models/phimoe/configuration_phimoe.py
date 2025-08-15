@@ -15,8 +15,10 @@
 
 """PyTorch Phi-MoE model."""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...utils import logging
 
 
@@ -70,8 +72,6 @@ class PhimoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
             contain the following keys: `type`, `short_factor`, `long_factor`, `short_mscale`, `long_mscale` and
@@ -115,33 +115,32 @@ class PhimoeConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32064,
-        hidden_size=4096,
-        intermediate_size=6400,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 32,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_theta=1e6,
-        rope_scaling=None,
-        sliding_window=None,
-        attention_dropout=0.0,
-        num_experts_per_tok=2,
-        num_local_experts=16,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        router_jitter_noise=0.01,
-        input_jitter_noise=0.0,
-        attention_bias=False,
-        lm_head_bias=False,
+        vocab_size: Optional[int] = 32064,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 6400,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 4096 * 32,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[int] = False,
+        rope_scaling: Optional[RopeParameters] = None,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[float] = 0.0,
+        num_experts_per_tok: Optional[int] = 2,
+        num_local_experts: Optional[int] = 16,
+        output_router_logits: Optional[bool] = False,
+        router_aux_loss_coef: Optional[float] = 0.001,
+        router_jitter_noise: Optional[float] = 0.01,
+        input_jitter_noise: Optional[float] = 0.0,
+        attention_bias: Optional[bool] = False,
+        lm_head_bias: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,7 +161,6 @@ class PhimoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
 
         self.num_experts_per_tok = num_experts_per_tok
@@ -172,10 +170,17 @@ class PhimoeConfig(PretrainedConfig):
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
 
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
         self.rope_scaling = rope_scaling
-        if isinstance(self.rope_scaling, dict):
-            if "rope_type" not in self.rope_scaling:
-                self.rope_scaling["rope_type"] = self.rope_scaling.get("type", None)
+
+        if self.rope_scaling.get("rope_type", "default") != "default":
             if "original_max_position_embeddings" in self.rope_scaling:
                 self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
             rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)

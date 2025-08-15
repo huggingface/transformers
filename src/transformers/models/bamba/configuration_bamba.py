@@ -15,6 +15,7 @@
 """Bamba model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -164,9 +165,11 @@ class BambaConfig(PretrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-        self.rope_theta = 10000.0
-        self.rope_scaling = None
-        self.partial_rotary_factor = 0.5
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        self.rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        rope_config_validation(self)
 
         mamba_intermediate = mamba_expand * hidden_size
 

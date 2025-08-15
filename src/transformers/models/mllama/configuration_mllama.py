@@ -166,8 +166,6 @@ class MllamaTextConfig(PretrainedConfig):
             specified, will default to `num_attention_heads`.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_theta (`float`, *optional*, defaults to `500000.0`):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -253,7 +251,6 @@ class MllamaTextConfig(PretrainedConfig):
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
-        rope_theta: float = 500_000,
         rope_scaling: Optional[dict] = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
@@ -278,13 +275,21 @@ class MllamaTextConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.hidden_act = hidden_act
-        self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
 
         super().__init__(

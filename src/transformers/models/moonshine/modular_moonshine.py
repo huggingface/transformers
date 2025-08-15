@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -106,8 +106,6 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -183,30 +181,29 @@ class MoonshineConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=288,
-        intermediate_size=1152,
-        encoder_num_hidden_layers=6,
-        decoder_num_hidden_layers=6,
-        encoder_num_attention_heads=8,
-        decoder_num_attention_heads=8,
-        encoder_num_key_value_heads=None,
-        decoder_num_key_value_heads=None,
-        pad_head_dim_to_multiple_of=None,
-        encoder_hidden_act="gelu",
-        decoder_hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        decoder_start_token_id=1,
-        use_cache=True,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=0.9,
-        is_encoder_decoder=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        bos_token_id=1,
-        eos_token_id=2,
+        vocab_size: Optional[int] = 32768,
+        hidden_size: Optional[int] = 288,
+        intermediate_size: Optional[int] = 1152,
+        encoder_num_hidden_layers: Optional[int] = 6,
+        decoder_num_hidden_layers: Optional[int] = 6,
+        encoder_num_attention_heads: Optional[int] = 8,
+        decoder_num_attention_heads: Optional[int] = 8,
+        encoder_num_key_value_heads: Optional[int] = None,
+        decoder_num_key_value_heads: Optional[int] = None,
+        pad_head_dim_to_multiple_of: Optional[int] = None,
+        encoder_hidden_act: Optional[str] = "gelu",
+        decoder_hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 512,
+        initializer_range: Optional[float] = 0.02,
+        decoder_start_token_id: Optional[int] = 1,
+        use_cache: Optional[bool] = True,
+        rope_scaling: Optional[RopeParameters] = None,
+        partial_rotary_factor: Optional[float] = 0.9,
+        is_encoder_decoder: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -233,16 +230,21 @@ class MoonshineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
         # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
+        else:
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        self.rope_scaling = rope_scaling
         rope_config_validation(self)
-
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -283,6 +285,10 @@ class MoonshineDecoderMLP(nn.Module):
         return hidden_states
 
 
+class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+    pass
+
+
 class MoonshineAttention(GlmAttention):
     def __init__(
         self,
@@ -305,6 +311,7 @@ class MoonshineAttention(GlmAttention):
         else:
             self.head_dim_padding = 0
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -314,6 +321,7 @@ class MoonshineAttention(GlmAttention):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
@@ -354,7 +362,15 @@ class MoonshineAttention(GlmAttention):
                 )
 
         if not is_cross_attention:
-            cos, sin = position_embeddings
+            if position_embeddings is None:
+                cos, sin = self.rotary_emb(hidden_states, position_ids)
+            else:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                    "removed in v4.60.0. Make sure to pass `position_ids` instead."
+                )
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_values is not None:
@@ -383,6 +399,7 @@ class MoonshineAttention(GlmAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             is_causal=is_causal,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -392,10 +409,6 @@ class MoonshineAttention(GlmAttention):
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
-    pass
 
 
 class MoonshineEncoderLayer(LlamaDecoderLayer):
@@ -440,6 +453,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
+    @deprecate_kwarg("position_embeddings", version="4.60.0")
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -537,7 +551,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
         self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
-        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList(
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
@@ -594,14 +607,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -681,7 +692,6 @@ class MoonshineDecoder(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
@@ -708,7 +718,6 @@ class MoonshineDecoder(LlamaModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
