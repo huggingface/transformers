@@ -144,6 +144,48 @@ import sys
 import threading
 import time
 
+import subprocess
+import os
+import sys
+import threading
+import time
+
+
+def dump_cpp_stack():
+    pid = os.getpid()
+    try:
+        # Create a gdb script
+        gdb_script = f"""
+set pagination off
+set logging file /tmp/gdb_trace_{pid}.txt
+set logging on
+attach {pid}
+thread apply all bt
+py-bt
+detach
+quit
+"""
+
+        with open(f'/tmp/gdb_script_{pid}.gdb', 'w') as f:
+            f.write(gdb_script)
+
+        # Run gdb non-interactively
+        result = subprocess.run([
+            'gdb', '-batch', '-x', f'/tmp/gdb_script_{pid}.gdb'
+        ], capture_output=True, text=True, timeout=30)
+
+        # Print the output
+        if os.path.exists(f'/tmp/gdb_trace_{pid}.txt'):
+            with open(f'/tmp/gdb_trace_{pid}.txt', 'r') as f:
+                print("=== GDB C++ Stack Trace ===", file=sys.stderr)
+                print(f.read(), file=sys.stderr)
+
+        print("=== GDB stderr ===", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+
+    except Exception as e:
+        print(f"Failed to get gdb trace: {e}", file=sys.stderr)
+
 
 def dump_stacks_and_exit():
     print("\n=== TIMEOUT: Dumping all stacks ===", file=sys.stderr)
@@ -151,6 +193,9 @@ def dump_stacks_and_exit():
     print("=== Active threads ===", file=sys.stderr)
     for thread in threading.enumerate():
         print(f"Thread: {thread.name}, daemon: {thread.daemon}, alive: {thread.is_alive()}", file=sys.stderr)
+
+    dump_cpp_stack()
+
     sys.stderr.flush()
 
     # Force exit after showing debug info
@@ -159,14 +204,22 @@ def dump_stacks_and_exit():
 
 
 def setup_timeout_debug(timeout_seconds=600):  # 5 minutes
-    def timeout_handler():
+    def timeout_handler1():
         time.sleep(timeout_seconds)
         dump_stacks_and_exit()
 
-    timeout_thread = threading.Thread(target=timeout_handler, daemon=True)
+    timeout_thread = threading.Thread(target=timeout_handler1, daemon=True)
     timeout_thread.start()
 
 
+
+
+
+
+
+
+# In conftest.py
+
 # In your conftest.py or at the start of your test
 faulthandler.enable()
-setup_timeout_debug(600)  # Adjust timeout as needed
+setup_timeout_debug(6)  # Adjust timeout as needed
