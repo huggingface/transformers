@@ -29,6 +29,7 @@ pkgs_to_check_at_runtime = [
     "requests",
     "packaging",
     "filelock",
+    "jinja2",
     "numpy",
     "tokenizers",
     "huggingface-hub",
