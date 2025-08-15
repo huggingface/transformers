@@ -2100,6 +2100,11 @@ class TrainingArguments:
             # Context parallelism requires FSDP v2
             # Only create if not already using FSDP
             if not self.fsdp:
+                logger.warning(
+                    f"Context parallelism (context_parallel_size={self.context_parallel_size}) requires FSDP v2. "
+                    f"Automatically enabling FSDP v2 with transformer_based_wrap policy. "
+                    f"To configure FSDP manually, set fsdp=['full_shard'] and fsdp_config appropriately."
+                )
                 from accelerate.utils import FullyShardedDataParallelPlugin
 
                 self.fsdp_plugin = FullyShardedDataParallelPlugin(
