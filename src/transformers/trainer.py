@@ -4187,13 +4187,7 @@ class Trainer:
         logger.info(f"Saving model checkpoint to {output_dir}")
 
         # Handle context parallelism state dict properly
-        if (
-            state_dict is None
-            and hasattr(self.accelerator, "parallelism_config")
-            and self.accelerator.parallelism_config is not None
-            and hasattr(self.accelerator.parallelism_config, "cp_size")
-            and self.accelerator.parallelism_config.cp_size > 1
-        ):
+        if state_dict is None and self.is_cp_enabled:
             # Use accelerator.get_state_dict() for proper gathering when context parallelism is enabled
             state_dict = self.accelerator.get_state_dict(self.model)
 
@@ -5408,7 +5402,7 @@ class Trainer:
         self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
         self.is_cp_enabled = (
             getattr(self.accelerator.state, "parallelism_config", None) is not None
-            and getattr(self.accelerator.state.parallelism_config, "cp_size", 1) > 1
+            and self.accelerator.state.parallelism_config.cp_enabled
         )
         # post accelerator creation setup
         if self.is_fsdp_enabled:
@@ -5517,12 +5511,7 @@ class Trainer:
 
         if num_items_in_batch is not None:
             # Handle context parallelism token counting
-            if (
-                hasattr(self.accelerator, "parallelism_config")
-                and self.accelerator.parallelism_config is not None
-                and hasattr(self.accelerator.parallelism_config, "cp_size")
-                and self.accelerator.parallelism_config.cp_size > 1
-            ):
+            if self.is_cp_enabled:
                 # For context parallelism, use AVG instead of SUM to avoid over-accounting tokens
                 import torch.distributed as dist
 
