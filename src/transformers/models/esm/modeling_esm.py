@@ -32,7 +32,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS,PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import (
+    ALL_ATTENTION_FUNCTIONS,
+    PreTrainedModel,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import auto_docstring, can_return_tuple, logging
 from .configuration_esm import EsmConfig
 
@@ -327,7 +332,9 @@ class EsmSelfAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
             assert head_mask is None, "head_mask is only supported for eager attention"
-            assert "relative" not in self.position_embedding_type, "relative position embeddings are only supported for eager attention"
+            assert "relative" not in self.position_embedding_type, (
+                "relative position embeddings are only supported for eager attention"
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -854,22 +861,22 @@ class EsmModel(EsmPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
-            Indices of input sequence tokens in the vocabulary.
+                input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
+                    Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-f
-            [What are input IDs?](../glossary#input-ids)
-        position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
+                    Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                    [`PreTrainedTokenizer.__call__`] for details.
+        f
+                    [What are input IDs?](../glossary#input-ids)
+                position_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`, *optional*):
+                    Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                    config.max_position_embeddings - 1]`.
 
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
+                    [What are position IDs?](../glossary#position-ids)
+                inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
+                    Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+                    is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+                    model's internal embedding lookup matrix.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
