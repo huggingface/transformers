@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import os
-import warnings
 from functools import partial
 from typing import Optional, TypedDict
 
@@ -424,14 +423,6 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
     )
 
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
-
-
-def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
-    warnings.warn(
-        "The function `_prepare_flash_attention_from_position_ids` in `transformers.modeling_flash_attention_utils` is deprecated and will be removed in a future version. Please use `_prepare_from_posids` instead.",
-        FutureWarning,
-    )
-    return _prepare_from_posids(query, key, value, position_ids)
 
 
 def _is_packed_sequence(position_ids, batch_size):
