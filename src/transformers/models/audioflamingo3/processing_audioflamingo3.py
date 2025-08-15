@@ -10,6 +10,7 @@ from librosa import resample as librosa_resample
 from pydub import AudioSegment
 from ... import AutoTokenizer, WhisperFeatureExtractor
 from ...processing_utils import ProcessorMixin
+from ...utils.hub import snapshot_download
 
 from .configuration_audioflamingo3 import MEDIA_TOKENS
 
