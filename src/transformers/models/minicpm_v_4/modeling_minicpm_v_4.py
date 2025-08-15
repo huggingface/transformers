@@ -51,7 +51,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.siglip.configuration_siglip import SiglipVisionConfig
-from ...models.siglip.modeling_siglip import SiglipVisionTransformer
+from ...models.siglip.modeling_siglip import SiglipVisionEmbeddings, SiglipVisionTransformer
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -1693,9 +1693,9 @@ class SiglipVisionModelOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
-class MiniCPMVisionEmbeddings(nn.Module):
+class MiniCPMVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: SiglipVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
