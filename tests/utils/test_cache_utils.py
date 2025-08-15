@@ -15,6 +15,7 @@
 import copy
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -594,6 +595,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 class CacheExportIntegrationTest(unittest.TestCase):
     """Cache tests that rely on `torch.export()` and model loading"""
 
+    @pytest.mark.torch_export_test
     def test_dynamic_cache_exportability(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model = model.eval()
@@ -635,6 +637,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
+    @pytest.mark.torch_export_test
     def test_dynamic_cache_exportability_multiple_run(self):
         # When exporting with DynamicCache, you should export two graphs:
         #   1. A graph without cache
@@ -730,6 +733,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
     @unittest.skip("Runs on my machine locally, passed, no idea why it does not online")
+    @pytest.mark.torch_export_test
     def test_static_cache_exportability(self):
         """
         Tests that static cache works with `torch.export()`
@@ -808,6 +812,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             strict=strict,
         )
 
+    @pytest.mark.torch_export_test
     def test_hybrid_cache_exportability(self):
         """
         Tests that static cache works with `torch.export()`

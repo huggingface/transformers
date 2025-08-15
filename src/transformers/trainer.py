@@ -917,7 +917,7 @@ class Trainer:
         if isinstance(self.processing_class, ProcessorMixin):
             tokenizer = self.processing_class.tokenizer
         else:
-            tokenizer = self.tokenizer
+            tokenizer = self.processing_class
         model_has_generation_config = (
             hasattr(self.model, "generation_config") and self.model.generation_config is not None
         )
@@ -943,7 +943,9 @@ class Trainer:
             # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
             # EOS tokens defined here will halt generation.
             if model_has_generation_config:
-                all_eos_tokens = [tokenizer.eos_token_id] + list(self.model.generation_config.eos_token_id)
+                all_eos_tokens = [tokenizer.eos_token_id]
+                if self.model.generation_config.eos_token_id is not None:
+                    all_eos_tokens += list(self.model.generation_config.eos_token_id)
                 self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
         # 2 - Align BOS
@@ -971,8 +973,9 @@ class Trainer:
         # 4 - Warn users about the changes
         if len(updated_tokens) > 0:
             logger.warning(
-                "The tokenizer has new special tokens that are also defined in the model configs. The model "
-                f"configs were aligned accordingly. Updated tokens: {updated_tokens}"
+                "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+                "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+                f"values. Updated tokens: {updated_tokens}."
             )
 
     def _set_signature_columns_if_needed(self):
