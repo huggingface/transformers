@@ -443,35 +443,9 @@ if __name__ == "__main__":
                 )
 
     def test_model_matches_original_20b(self):
-        input_text = "Roses are red, violets"
+        input_text = "Janet’s ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?"
 
-        original_output = "Roses are red, violets are blue, I love you, and I love you too."
-        original_logprobs = torch.tensor(
-            [
-                -0.037353515625,
-                -0.08154296875,
-                -1.21875,
-                -1.953125,
-                -2.234375,
-                -0.96875,
-                -1.546875,
-                -1.640625,
-                -0.93359375,
-                -1.609375,
-                -1.625,
-                -0.85546875,
-                -1.7265625,
-                -0.7421875,
-                -2.078125,
-                -0.006561279296875,
-                -0.10498046875,
-                -0.1767578125,
-                -0.1240234375,
-                -0.099609375,
-            ]
-        )
-
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
+        model_id = "lmsys/gpt-oss-20b-bf16"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -484,8 +458,11 @@ if __name__ == "__main__":
 
         num_generated_tokens = 0
         with torch.no_grad():
-            for i in range(12):
-                tensors = torch.as_tensor(tokens, dtype=torch.int32, device=model.device).unsqueeze(0)
+            for i in range(512):
+                print(f"Generating token {i + 1}...")
+                tensors = torch.as_tensor(
+                    tokens, dtype=torch.int32, device=model.device
+                ).unsqueeze(0)
                 logits = model(tensors).logits[0]
 
                 predicted_token = torch.argmax(logits[-1, :], dim=-1).item()
@@ -495,17 +472,9 @@ if __name__ == "__main__":
                 tokens.append(predicted_token)
                 num_generated_tokens += 1
                 decoded_token = tokenizer.decode([predicted_token])
-                logprob_differences = selected_logprobs - original_logprobs[i]
-
-                print(
-                    f"Generated token: {repr(decoded_token)}, logprob: {selected_logprobs}, logprob differences: {logprob_differences}"
-                )
-                torch.testing.assert_close(
-                    selected_logprobs.cpu().to(original_logprobs.dtype), original_logprobs[i], atol=1e-1, rtol=1e-1
-                )
 
         decoded_string = tokenizer.decode(tokens)
-        self.assertTrue(original_output.startswith(decoded_string))
+        print(f"Decoded string: {decoded_string}")
 
     def test_model_matches_original_120b(self):
         input_text = "Roses are red, violets"

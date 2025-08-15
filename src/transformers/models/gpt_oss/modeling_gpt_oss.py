@@ -242,6 +242,8 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        # print(f"causal_mask:{causal_mask.to('cpu').shape} ")
+        # print(f"causal_mask: {causal_mask.to('cpu')}")
         attn_weights = attn_weights + causal_mask
 
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
@@ -355,6 +357,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
+        print(f"2. hidden_states: {hidden_states.to('cpu')}")
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
         hidden_states, _ = self.self_attn(
@@ -368,12 +371,13 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = residual + hidden_states
-
+        print(f"3. attn_output: {hidden_states.to('cpu')}")
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, _ = self.mlp(hidden_states)  # diff with llama: router scores
         hidden_states = residual + hidden_states
+        print(f"4. mlp output: {hidden_states.to('cpu')}")
         return hidden_states
 
 
@@ -464,9 +468,11 @@ class GptOssModel(GptOssPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
+        print(f"-1: input_ids: {input_ids.to('cpu')}")
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
+        print(f"0. embedding output: {inputs_embeds.to('cpu')}")
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -504,6 +510,7 @@ class GptOssModel(GptOssPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
+        print(f"1. norm output: {hidden_states.to('cpu')}")
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
