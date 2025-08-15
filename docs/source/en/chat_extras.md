@@ -14,64 +14,68 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tools and RAG
+# Using Chat Templates With Tools
 
-The [`~PreTrainedTokenizerBase.apply_chat_template`] method supports virtually any additional argument types - strings, lists, dicts - besides the chat message. This makes it possible to use chat templates for many use cases.
+It is very common for chat models to be trained with support for "function-calling" or "tool-use". These "tools" are functions,
+supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator
+tool so that they can perform arithmetic without having to do it internally in the neural net itself, which usually becomes unreliable
+for larger inputs.
 
-This guide will demonstrate how to use chat templates with tools and retrieval-augmented generation (RAG).
+This guide will demonstrate how to define tools, how to pass them to a chat model, and how to handle the model's output when it calls a tool.
 
 ## Tools
 
-Tools are functions a large language model (LLM) can call to perform specific tasks. It is a powerful way to extend the capabilities of conversational agents with real-time information, computational tools, or access to large databases.
+When a model supports tool-use, you can pass functions to the `tools` argument of [`~PreTrainedTokenizerBase.apply_chat_template`].
+The tools can be passed as either [JSON schema](https://json-schema.org/learn) or as Python functions. If you pass Python functions,
+the arguments, argument types and function docstring will be parsed in order to generate the JSON schema automatically.
 
-Follow the rules below when creating a tool.
+Although passing Python functions is very convenient, the parser can only handle [Google-style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
+docstrings. Therefore, make sure you follow that format! Here are a couple of examples of well-formatted functions
+that are ready to use as tools:
 
-1. The function should have a descriptive name.
-2. The function arguments must have a type hint in the function header (don't include in the `Args` block).
-3. The function must have a [Google-style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) docstring.
-4. The function can have a return type and `Returns` block, but these are optional because most tool use models ignore them.
-
-An example tool to get temperature and wind speed is shown below.
 
 ```py
-def get_current_temperature(location: str, unit: str) -> float:
+def get_current_temperature(location: str, unit: str):
     """
     Get the current temperature at a location.
     
     Args:
         location: The location to get the temperature for, in the format "City, Country"
         unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
-    Returns:
-        The current temperature at the specified location in the specified units, as a float.
     """
     return 22.  # A real function should probably actually get the temperature!
 
-def get_current_wind_speed(location: str) -> float:
+def get_current_wind_speed(location: str):
     """
     Get the current wind speed in km/h at a given location.
     
     Args:
-        location: The location to get the temperature for, in the format "City, Country"
-    Returns:
-        The current wind speed at the given location in km/h, as a float.
+        location: The location to get the wind speed for, in the format "City, Country"
     """
     return 6.  # A real function should probably actually get the wind speed!
 
 tools = [get_current_temperature, get_current_wind_speed]
 ```
 
-Load a model and tokenizer that supports tool-use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
+You may, if you wish, add a `Returns:` block to the docstring and a return type to the function header, but most models
+will not use this information. The parser will also ignore any of the actual code inside your function! What really
+matters is the function name, the argument names, the argument types, and the docstring describing the function's purpose
+and the purpose of its arguments. These create the "signature" that the model will use to decide whether to call the tool.
+
+## A tool-calling example
+
+Let's start by loading a model and tokenizer that supports tool-use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained( "NousResearch/Hermes-2-Pro-Llama-3-8B")
-tokenizer = AutoTokenizer.from_pretrained( "NousResearch/Hermes-2-Pro-Llama-3-8B")
-model = AutoModelForCausalLM.from_pretrained( "NousResearch/Hermes-2-Pro-Llama-3-8B", dtype=torch.bfloat16, device_map="auto")
+checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
 ```
 
-Create a chat message.
+Next, let's create a chat, just like you would with a normal chat model.
 
 ```py
 messages = [
@@ -80,12 +84,12 @@ messages = [
 ]
 ```
 
-Pass `messages` and a list of tools to [`~PreTrainedTokenizerBase.apply_chat_template`]. Then you can pass the inputs to the model for generation.
+Next, pass `messages` and a list of tools to [`~PreTrainedTokenizerBase.apply_chat_template`], then tokenize and generate a response. This is exactly
+the same as with a normal chat model, except for the `tools` argument.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v for k, v in inputs.items()}
-outputs = model.generate(**inputs, max_new_tokens=128)
+outputs = model.generate(**inputs.to(model.device), max_new_tokens=128)
 print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 ```
 
@@ -95,12 +99,14 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 </tool_call><|im_end|>
 ```
 
-The chat model called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature. 
+The chat model has emitted a tool call! Specifically, it called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature.
 
-Now append the `get_current_temperature` function and these arguments to the chat message as `tool_call`. The `tool_call` dictionary should be provided to the `assistant` role instead of the `system` or `user`.
+Note that the model **cannot actually call the tool itself**. Instead, it will request a tool call, and it's your job to handle the call and append both the call and the result to the chat history.
+
+Let's start with the call: We use the `tool_calls` key of an `assistant` message to hold the call. This is the recommended API, and should be supported by the chat template of most tool-using models.
 
 > [!WARNING]
-> The OpenAI API uses a JSON string as its `tool_call` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
+> Although this is similar to the OpenAI API, the OpenAI API uses a JSON string as its `tool_call` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
 
 <hfoptions id="tool-call">
 <hfoption id="Llama">
@@ -110,45 +116,37 @@ tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris
 messages.append({"role": "assistant", "tool_calls": [{"type": "function", "function": tool_call}]})
 ```
 
-Allow the assistant to read the function outputs and chat with the user.
+Next, we have to actually append the tool response to the chat history. For this, we generally use the `tool` role:
+
+```py
+messages.append({"role": "tool", "content": "22"})  # Note that the returned content is always a string!
+```
+
+Finally, allow the model to read the tool response and reply to the user:
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v for k, v in inputs.items()}
-out = model.generate(**inputs, max_new_tokens=128)
+out = model.generate(**inputs.to(model.device), max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 ```
 
 ```txt
-The temperature in Paris, France right now is approximately 12°C (53.6°F).<|im_end|>
+The temperature in Paris, France right now is 22°C.<|im_end|>
 ```
 
-</hfoption>
-<hfoption id="Mistral/Mixtral">
+> [!WARNING]
+> Although the key in the assistant message is called `tool_calls`, in most cases models only emit a single tool call at a time. Some older models emit multiple tool calls at the same time, but this is a
+> signficantly more complex process, as you need to handle multiple tool responses at once and disambiguate them, often using tool call IDs. If you try this sample code with a model and get an error from the
+> chat template telling you to add a tool call ID, this is probably what's happened! Please refer to the model card to see exactly what format that model expects for tool calls.
 
-For [Mistral](./model_doc/mistral) and [Mixtral](./model_doc/mixtral) models, you need an additional `tool_call_id`. The `tool_call_id` is 9 randomly generated alphanumeric characters assigned to the `id` key in the `tool_call` dictionary.
 
-```py
-tool_call_id = "9Ae3bDc2F"
-tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
-messages.append({"role": "assistant", "tool_calls": [{"type": "function", "id": tool_call_id, "function": tool_call}]})
-```
+## Advanced: Manually writing JSON Schemas
 
-```py
-inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v for k, v in inputs.items()}
-out = model.generate(**inputs, max_new_tokens=128)
-print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
-```
+In the examples above, we passed Python functions to the `tools` argument of [`~PreTrainedTokenizerBase.apply_chat_template`]. This is a convenient way to define tools, but it is not the only way. You can also pass a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) directly.
+You can also manually call the low-level functions that convert Python functions to JSON schemas, and then check or edit the generated schemas. This is usually not necessary, but we include it here so that advanced users can understand the underlying mechanics. It's particularly important
+for chat template authors, since they will need to access the JSON schema to render the tool definitions.
 
-</hfoption>
-</hfoptions>
-
-## Schema
-
-[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the function works technically, it only cares about function **definition** and **arguments**.
-
-The JSON schema is automatically generated behind the scenes as long as your function follows the [rules](#tools) listed earlier above. But you can use [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) to manually convert a schema for more visibility or debugging.
+The function that [`~PreTrainedTokenizerBase.apply_chat_template`] uses to convert Python functions to JSON schema is [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205). Let's try calling it directly:
 
 ```py
 from transformers.utils import get_json_schema
@@ -191,12 +189,7 @@ print(schema)
 }
 ```
 
-You can edit the schema or write one entirely from scratch. This gives you a lot of flexibility to define precise schemas for more complex functions.
-
-> [!WARNING]
-> Try keeping your function signatures simple and the arguments to a minimum. These are easier for a model to understand and use than complex functions for example with nested arguments.
-
-The example below demonstrates writing a schema manually and then passing it to [`~PreTrainedTokenizerBase.apply_chat_template`].
+We won't go into the details of JSON schema itself here, since it's already [very well documented](https://json-schema.org/) elsewhere. We will, however, mention that you can pass JSON schema dicts to the `tools` argument of [`~PreTrainedTokenizerBase.apply_chat_template`] instead of Python functions:
 
 ```py
 # A simple function that takes no arguments
@@ -238,62 +231,4 @@ model_input = tokenizer.apply_chat_template(
     messages,
     tools = [current_time, multiply]
 )
-```
-
-## RAG
-
-Retrieval-augmented generation (RAG) models enhance a models existing knowledge by allowing it to search documents for additional information before returning a query. For RAG models, add a `documents` parameter to [`~PreTrainedTokenizerBase.apply_chat_template`]. This `documents` parameter should be a list of documents, and each document should be a single dict with `title` and `content` keys.
-
-> [!TIP]
-> The `documents` parameter for RAG isn't widely supported and many models have chat templates that ignore `documents`. Verify if a model supports `documents` by reading its model card or executing `print(tokenizer.chat_template)` to see if the `documents` key is present. [Command-R](https://hf.co/CohereForAI/c4ai-command-r-08-2024) and [Command-R+](https://hf.co/CohereForAI/c4ai-command-r-plus-08-2024) both support `documents` in their RAG chat templates.
-
-Create a list of documents to pass to the model.
-
-```py
-documents = [
-    {
-        "title": "The Moon: Our Age-Old Foe", 
-        "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
-    },
-    {
-        "title": "The Sun: Our Age-Old Friend",
-        "text": "Although often underappreciated, the sun provides several notable benefits..."
-    }
-]
-```
-
-Set `chat_template="rag"` in [`~PreTrainedTokenizerBase.apply_chat_template`] and generate a response.
-
-```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-# Load the model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01-4bit")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01-4bit", device_map="auto")
-device = model.device # Get the device the model is loaded on
-
-# Define conversation input
-conversation = [
-    {"role": "user", "content": "What has Man always dreamed of?"}
-]
-
-input_ids = tokenizer.apply_chat_template(
-    conversation=conversation,
-    documents=documents,
-    chat_template="rag",
-    tokenize=True,
-    add_generation_prompt=True,
-    return_tensors="pt").to(device)
-
-# Generate a response 
-generated_tokens = model.generate(
-    input_ids,
-    max_new_tokens=100,
-    do_sample=True,
-    temperature=0.3,
-    )
-
-# Decode and print the generated text along with generation prompt
-generated_text = tokenizer.decode(generated_tokens[0])
-print(generated_text)
 ```
