@@ -198,6 +198,7 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
+    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
