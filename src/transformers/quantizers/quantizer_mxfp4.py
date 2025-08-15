@@ -119,6 +119,20 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 not self.pre_quantized
                 and isinstance(device_map, dict)
                 and ("cpu" in device_map.values() or "disk" in device_map.values())
+            ):
+                raise ValueError(
+                    "You are attempting to load an FP4 model with a device_map that contains a CPU or disk device."
+                    "This is not supported when the model is quantized on the fly. "
+                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
+                )
+
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        if torch_dtype is None:
+            torch_dtype = torch.bfloat16
+            logger.info(
+                "Overriding torch_dtype=%s with `torch_dtype=torch.bfloat16` due to "
+                "requirements of `fbgemm-gpu` to enable model loading in fp4. "
+                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
                 " torch_dtype=torch.bfloat16 to remove this warning.",
                 torch_dtype,
             )
@@ -177,8 +191,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     if "gate_up_proj" in param_name:
-                        right_pad = module.gate_up_proj_right_pad
-                        bottom_pad = module.gate_up_proj_bottom_pad
+                        right_pad = getattr(module, "gate_up_proj_right_pad", 0)
+                        bottom_pad = getattr(module, "gate_up_proj_bottom_pad", 0)
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         )
@@ -214,7 +228,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             rank = kwargs.get("rank")
             device_mesh = kwargs.get("device_mesh")
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
-                # blocks and scales have the same length that's this works for both
+                # blocks and scales have the same length that's why this works for both
                 module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
             else:
                 module, _ = get_module_from_name(model, param_name)
