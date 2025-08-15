@@ -47,6 +47,7 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
@@ -143,11 +144,14 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs.pop("timestamps")
+            # If user has not requested video metadata, pop it
+            if "return_metadata" not in kwargs:
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
-            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -172,14 +176,14 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    if hasattr(timestamps, "tolist"):
-                        timestamps_list = timestamps.tolist()[0]
-                    else:
-                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    # Set the default fps to 2.0 for BC, otherwise `timestamps` can't be inferred
+                    metadata = video_metadata[i]
+                    metadata.fps = 2.0 if metadata.fps is None else metadata.fps
+                    timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list)):
-                        unique_timestamps.append(timestamps_list[idx])
+                    for idx in range(0, len(timestamps)):
+                        unique_timestamps.append(timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
@@ -187,7 +191,7 @@ class Glm4vProcessor(ProcessorMixin):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
