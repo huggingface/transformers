@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Multimodal templates
+# Multimodal chat templates
 
 Multimodal chat models are similar to normal chat models, but they can also accept non-text inputs like images, audio or video.
 

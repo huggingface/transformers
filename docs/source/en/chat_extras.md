@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Using Chat Templates With Tools
+# Tool Use
 
 It is very common for chat models to be trained with support for "function-calling" or "tool-use". These "tools" are functions,
 supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator
@@ -23,7 +23,7 @@ for larger inputs.
 
 This guide will demonstrate how to define tools, how to pass them to a chat model, and how to handle the model's output when it calls a tool.
 
-## Tools
+## Passing tools
 
 When a model supports tool-use, you can pass functions to the `tools` argument of [`~PreTrainedTokenizerBase.apply_chat_template`].
 The tools can be passed as either [JSON schema](https://json-schema.org/learn) or as Python functions. If you pass Python functions,

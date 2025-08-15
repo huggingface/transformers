@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Chat Templates
+# Chat templates
 
 The [chat pipeline](./conversations) guide covers the basics of storing chat histories and generating text from chat models using [`TextGenerationPipeline`]. 
 This guide is intended for more advanced users, and covers the underlying classes and methods, as well as the key concepts you need to understand what's actually going on when you chat with a model.
