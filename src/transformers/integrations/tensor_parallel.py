@@ -677,7 +677,7 @@ class RowwiseParallel(TensorParallelLayer):
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
         outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
-            outputs += mod._bias
+            outputs = outputs + mod._bias
         # back to local tensor if use_local_output is True
         return outputs
 

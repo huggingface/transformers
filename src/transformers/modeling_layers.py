@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABC
 from functools import partial
 from typing import Optional
 
@@ -96,7 +95,7 @@ class GradientCheckpointingLayer(nn.Module):
 
 
 @auto_docstring
-class GenericForSequenceClassification(ABC):
+class GenericForSequenceClassification(object):
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -171,7 +170,7 @@ class GenericForSequenceClassification(ABC):
 
 
 @auto_docstring
-class GenericForQuestionAnswering(ABC):
+class GenericForQuestionAnswering(object):
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -232,7 +231,7 @@ class GenericForQuestionAnswering(ABC):
 
 
 @auto_docstring
-class GenericForTokenClassification(ABC):
+class GenericForTokenClassification(object):
     base_model_prefix = "model"
 
     def __init__(self, config):

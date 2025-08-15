@@ -64,12 +64,13 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForImageClassification.from_pretrained(
     "microsoft/swin-tiny-patch4-window7-224",
-    device_map="cuda"
+    device_map="auto"
 )
 
+device = infer_device()
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits
