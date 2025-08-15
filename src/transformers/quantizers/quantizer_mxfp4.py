@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+triton_kernels_hub = None
 
 
 class Mxfp4HfQuantizer(HfQuantizer):
@@ -177,17 +178,22 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
+            global triton_kernels_hub
+            from kernels import get_kernel
+
+            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
             PrecisionConfig, FlexCtx, InFlexData = (
                 triton_kernels_hub.matmul_ogs.PrecisionConfig,
                 triton_kernels_hub.matmul_ogs.FlexCtx,
                 triton_kernels_hub.matmul_ogs.InFlexData,
             )
             module, _ = get_module_from_name(model, param_name)
-            with torch.cuda.device(target_device):
-                if isinstance(module, Mxfp4GptOssExperts):
+            with torch.device(target_device):
+                if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     if "gate_up_proj" in param_name:
-                        right_pad = module.gate_up_proj_right_pad
-                        bottom_pad = module.gate_up_proj_bottom_pad
+                        right_pad = getattr(module, "gate_up_proj_right_pad", 0)
+                        bottom_pad = getattr(module, "gate_up_proj_bottom_pad", 0)
                         loaded_weight = torch.nn.functional.pad(
                             param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                         )
@@ -213,7 +219,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         module.down_proj_blocks = torch.nn.Parameter(
                             triton_weight_tensor.storage.data, requires_grad=False
                         )
-
+                    print("New module: ", list(module.state_dict().items()))
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
@@ -223,7 +229,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             rank = kwargs.get("rank")
             device_mesh = kwargs.get("device_mesh")
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
-                # blocks and scales have the same length that's this works for both
+                # blocks and scales have the same length that's why this works for both
                 module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
             else:
                 module, _ = get_module_from_name(model, param_name)
@@ -347,7 +353,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None):
         logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:

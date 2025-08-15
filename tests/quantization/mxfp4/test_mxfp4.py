@@ -14,6 +14,7 @@
 
 import gc
 import unittest
+import tempfile
 from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
@@ -479,3 +480,33 @@ class Mxfp4ModelTest(unittest.TestCase):
         quantized_mem = quantized_model.get_memory_footprint()
         dequantized_mem = dequantized_model.get_memory_footprint()
         self.assertLess(quantized_mem, dequantized_mem)
+
+    def test_gpt_oss_model_loading_non_quantized_saving_quantized(self):
+        """Test loading OpenAI MoE model with mxfp4 quantization and device_map"""
+
+        quantization_config = Mxfp4Config(dequantize=True)
+        model = GptOssForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=quantization_config,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        # with tempfile.TemporaryDirectory() as tmp:
+        from contextlib import nullcontext
+
+        with nullcontext():
+            # Save the model in mxfp4 format
+            model.save_pretrained("/fsx/arthur/mxfp4", quantization_config=quantization_config)
+            torch.cuda.empty_cache()
+            gc.collect()
+            quantization_config.dequantize = False
+            quantization_config.dequantize = False
+            # Load the model back from the saved directory
+            loaded_model = GptOssForCausalLM.from_pretrained(
+                "/fsx/arthur/mxfp4",
+                quantization_config=quantization_config,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+            self.check_inference_correctness_quantized(loaded_model, tokenizer)

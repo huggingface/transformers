@@ -49,6 +49,11 @@ FP4_VALUES = [
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w):
+    from kernels import get_kernel
+
+    global triton_kernels_hub
+    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
     downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
 
     w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)

@@ -84,7 +84,8 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
-from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers import HfQuantizer
+from .quantizers.auto import get_hf_quantizer, AutoHfQuantizer
 from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
@@ -3885,6 +3886,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             kwargs["token"] = token
 
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
+        quantization_config = kwargs.pop("quantization_config", None)
+        if quantization_config is not None:
+            self.hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=False)
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
@@ -3927,7 +3931,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-
+        if hf_quantizer is not None:
+            for name, tensor in self.state_dict().items():
+                logger.debug(f"Creating quantized parameter for {name}")
+                print(f"Creating quantized parameter for {name}")
+                hf_quantizer.create_quantized_param(self, tensor, name, self.device, state_dict)
+        state_dict = self.state_dict()
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
@@ -4913,41 +4922,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"{transformers_explicit_filename}"
                 )
 
-        pre_quantized = hasattr(config, "quantization_config")
-        if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
-            pre_quantized = False
-
-        if pre_quantized or quantization_config is not None:
-            if pre_quantized:
-                config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                    config.quantization_config, quantization_config
-                )
-            else:
-                config.quantization_config = quantization_config
-
-            hf_quantizer = AutoHfQuantizer.from_config(
-                config.quantization_config,
-                pre_quantized=pre_quantized,
-            )
-        else:
-            hf_quantizer = None
-
-        if hf_quantizer is not None:
-            hf_quantizer.validate_environment(
-                torch_dtype=torch_dtype,
-                from_tf=from_tf,
-                from_flax=from_flax,
-                device_map=device_map,
-                weights_only=weights_only,
-            )
-            torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
-            device_map = hf_quantizer.update_device_map(device_map)
-            config = hf_quantizer.update_tp_plan(config)
-
-            # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if not getattr(hf_quantizer.quantization_config, "dequantize", False):
-                quant_method = hf_quantizer.quantization_config.quant_method
-                user_agent["quant"] = getattr(quant_method, "value", quant_method)
+        hf_quantizer, config, torch_dtype, device_map = get_hf_quantizer(
+            config, quantization_config, torch_dtype, from_tf, from_flax, use_safetensors, weights_only, user_agent
+        )
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -5363,7 +5340,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         key_mapping: Optional[dict[str, str]] = None,
         weights_only: bool = True,
     ):
-        # Useful flags
+        # TODO: we should only be calling hf_quantizer.skip_placement or something like that
         is_quantized = hf_quantizer is not None
         is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
