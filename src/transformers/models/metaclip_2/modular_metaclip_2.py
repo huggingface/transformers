@@ -199,18 +199,6 @@ class MetaClip2Model(CLIPModel):
     def __init__(self, config: MetaClip2Config):
         super().__init__(config)
 
-        if not isinstance(config.text_config, MetaClip2TextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type MetaClip2TextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, MetaClip2VisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type MetaClip2VisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
-
         text_config = config.text_config
         vision_config = config.vision_config
 
