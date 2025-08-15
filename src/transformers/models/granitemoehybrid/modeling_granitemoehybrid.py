@@ -222,7 +222,7 @@ class GraniteMoeHybridAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class HybridMambaAttentionDynamicCache(Cache):
+class HybridMambaAttentionDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).

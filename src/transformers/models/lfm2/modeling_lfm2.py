@@ -119,7 +119,7 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache(DynamicCache):
+class Lfm2HybridConvCache:
     """
     Attention and conv cache for Lfm2.
 
