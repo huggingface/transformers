@@ -182,7 +182,8 @@ class CircleCIJob:
             {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
             {"run": {
                 "name": "Run tests",
-                "command": f"(python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt)) 2>&1 | tee tests_output.txt"}
+                "command": f"(python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt)) 2>&1 | tee tests_output.txt"}
+                # "command": f"(python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt)) 2>&1 | tee tests_output.txt"}
                 # "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/vit | tee tests_output.txt)"}
             },
             # {"run": {"name": "mkdir mem_info", "command": "mkdir mem_info"}},
