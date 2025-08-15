@@ -596,6 +596,18 @@ def _flash_attention_forward(
         implementation
     )
 
+    # Compatible to TransformersKwargs
+    cumulative_seqlens_q = kwargs.pop("cumulative_seqlens_q", None)
+    cumulative_seqlens_k = kwargs.pop("cumulative_seqlens_k", None)
+    if cumulative_seqlens_q is not None and cu_seq_lens_q is not None:
+        warnings.warn("The conflicts between `cumulative_seqlens_q` in Inputs and `cu_seq_lens_q` in Attention.")
+    if cumulative_seqlens_k is not None and cu_seq_lens_k is not None:
+        warnings.warn("The conflicts between `cumulative_seqlens_k` in Inputs and `cu_seq_lens_k` in Attention.")
+    if cu_seq_lens_q is None and cumulative_seqlens_q is not None:
+        cu_seq_lens_q = cumulative_seqlens_q
+    if cu_seq_lens_k is None and cumulative_seqlens_k is not None:
+        cu_seq_lens_k = cumulative_seqlens_k
+
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
