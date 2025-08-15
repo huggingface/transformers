@@ -137,5 +137,6 @@ if is_torch_available():
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     torch.backends.cudnn.allow_tf32 = False
 
-
-patch_torch_compile_force_graph()
+    # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
+    # the patched version will always run with `fullgraph=True`.
+    patch_torch_compile_force_graph()
