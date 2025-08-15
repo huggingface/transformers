@@ -347,7 +347,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def is_serializable(self, safe_serialization=None):
         logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:
