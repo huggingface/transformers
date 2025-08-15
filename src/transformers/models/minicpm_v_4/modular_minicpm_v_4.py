@@ -142,9 +142,9 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.terminators = ['<|im_end|>', '</s>']
 
     def init_vision_module(self):
+        if self.config._attn_implementation == 'flash_attention_2':
+            self.config.vision_config._attn_implementation = 'flash_attention_2'
         model = MiniCPMVisionTransformer._from_config(self.config.vision_config)
-        if self.config.drop_vision_last_layer:
-            model.encoder.layers = model.encoder.layers[:-1]
 
         return model
 
