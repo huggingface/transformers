@@ -279,6 +279,12 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
+        # Need pixel_values (normalized, channels_first) for equivalence tests
+        pixel_values = [
+            to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+            for image in images
+        ]
+
         if do_color_quantize:
             images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
             # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
@@ -291,14 +297,21 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
             # We need to convert back to a list of images to keep consistent behaviour across processors.
             images = list(images)
+            data = {"input_ids": images, "pixel_values": pixel_values}
         else:
             images = [
                 to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
                 for image in images
             ]
-
-        data = {"input_ids": images}
+            data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Ensure clusters are JSON/equality friendly
+        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
+            output["clusters"] = output["clusters"].tolist()
+        return output
 
 
 __all__ = ["ImageGPTImageProcessor"]
