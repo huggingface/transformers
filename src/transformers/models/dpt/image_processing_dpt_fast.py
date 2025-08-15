@@ -141,6 +141,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     do_reduce_labels = None
 
     valid_kwargs = DPTFastImageProcessorKwargs
+    call_only_args = ["images", "segmentation_maps"]
     do_pad = False
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
