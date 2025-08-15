@@ -514,6 +514,9 @@ class ComprehensiveExitDebugger:
         try:
             fd_count = len(os.listdir('/proc/self/fd'))
             print(f"    Open file descriptors: {fd_count}", file=sys.stderr)
+
+            self.analyze_file_descriptors()
+
         except:
             pass
 
@@ -544,6 +547,60 @@ class ComprehensiveExitDebugger:
             print(f"Skipped: {self.skipped_cleanups}", file=sys.stderr)
 
         sys.stderr.flush()
+
+
+    def analyze_file_descriptors(self):
+        """Simple FD analysis using /proc"""
+        print("  File descriptors:", file=sys.stderr)
+
+        try:
+            import os
+            fd_dir = '/proc/self/fd'
+
+            if not os.path.exists(fd_dir):
+                print("    /proc/self/fd not available (not Linux)", file=sys.stderr)
+                return
+
+            fds = sorted(os.listdir(fd_dir), key=lambda x: int(x) if x.isdigit() else 999)
+            print(f"    Total: {len(fds)}", file=sys.stderr)
+
+            categories = {
+                'stdin/stdout/stderr': [],
+                'regular_files': [],
+                'pipes': [],
+                'sockets': [],
+                'other': []
+            }
+
+            for fd in fds:
+                try:
+                    fd_path = os.path.join(fd_dir, fd)
+                    target = os.readlink(fd_path)
+
+                    # Categorize
+                    if fd in ['0', '1', '2']:
+                        categories['stdin/stdout/stderr'].append(f"FD {fd}: {target}")
+                    elif target.startswith('pipe:'):
+                        categories['pipes'].append(f"FD {fd}: {target}")
+                    elif target.startswith('socket:'):
+                        categories['sockets'].append(f"FD {fd}: {target}")
+                    elif target.startswith('/'):
+                        categories['regular_files'].append(f"FD {fd}: {target}")
+                    else:
+                        categories['other'].append(f"FD {fd}: {target}")
+
+                except (OSError, IOError):
+                    categories['other'].append(f"FD {fd}: (cannot read)")
+
+            # Print categorized results
+            for category, items in categories.items():
+                if items:
+                    print(f"    {category}:", file=sys.stderr)
+                    for item in items:
+                        print(f"      {item}", file=sys.stderr)
+
+        except Exception as e:
+            print(f"    FD analysis failed: {e}", file=sys.stderr)
 
 
 # One-line setup for conftest.py:
