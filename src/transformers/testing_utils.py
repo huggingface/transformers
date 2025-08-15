@@ -66,6 +66,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    TRITON_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
@@ -168,6 +169,7 @@ from .utils import (
     is_torchcodec_available,
     is_torchdynamo_available,
     is_torchvision_available,
+    is_triton_available,
     is_vision_available,
     is_vptq_available,
     strtobool,
@@ -453,6 +455,19 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_triton(min_version: str = TRITON_MIN_VERSION):
+    """
+    Decorator marking a test that requires triton. These tests are skipped when triton isn't installed.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_triton_available(min_version), f"test requires triton version >= {min_version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_gguf(test_case, min_version: str = GGUF_MIN_VERSION):
@@ -2622,9 +2637,7 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):
         return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
-    elif isinstance(obj, (str, int, np.int64)):
-        return obj
-    elif obj is None:
+    elif isinstance(obj, (str, int, np.int64)) or obj is None:
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return nested_simplify(obj.tolist(), decimals)
@@ -2853,7 +2866,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
     if timeout is None:
-        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", "600"))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
@@ -3013,7 +3026,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", False))
+    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3458,3 +3471,23 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
 
     def __repr__(self):
         return f"{self.data}"
+
+
+def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
+    """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+        tmp.write(script)
+        tmp.flush()
+        tmp.seek(0)
+        if is_torchrun:
+            cmd = (
+                f"torchrun --nproc_per_node {nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+            ).split()
+        else:
+            cmd = ["python3", tmp.name]
+
+        # Note that the subprocess will be waited for here, and raise an error if not successful
+        try:
+            _ = subprocess.run(cmd, capture_output=True, env=env, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"The following error was captured: {e.stderr}")

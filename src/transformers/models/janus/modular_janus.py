@@ -1220,7 +1220,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
-                device=device,
                 model_kwargs=model_kwargs,
             )
 
@@ -1437,6 +1436,7 @@ class JanusImageProcessor(BlipImageProcessor):
         self,
         image: np.ndarray,
         size: Union[dict[str, int], int],
+        background_color: Optional[tuple[int, int, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1448,6 +1448,10 @@ class JanusImageProcessor(BlipImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
+            size (`dict[str, int]` or `int`):
+                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
+            background_color (`tuple[int, int, int]`):
+                The background color to use for the padding.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
@@ -1466,6 +1470,7 @@ class JanusImageProcessor(BlipImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+        background_color = background_color if background_color is not None else self.background_color
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -1497,7 +1502,7 @@ class JanusImageProcessor(BlipImageProcessor):
         # Expand and pad the images to obtain a square image of dimensions `size x size`
         image = self.pad_to_square(
             image=image,
-            background_color=self.background_color,
+            background_color=background_color,
             input_data_format=input_data_format,
         )
         return image

@@ -198,8 +198,8 @@ def make_flex_block_causal_mask(
         mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
 
     if offsets is not None:
-        q_offset = offsets[0]
-        kv_offset = offsets[1]
+        q_offset = offsets[0].to(device)
+        kv_offset = offsets[1].to(device)
 
         def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
             offset_q = q_idx + q_offset
@@ -241,6 +241,7 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
+    s_aux: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if head_mask is not None:
@@ -271,13 +272,19 @@ def flex_attention_forward(
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
         if head_mask is not None:
             score = score + head_mask[batch_idx][head_idx][0][0]
+        if s_aux is not None:
+            logits_max = torch.max(score, dim=-1, keepdim=True).values
+            sinks = torch.exp(s_aux - logits_max)
+            unnormalized_scores = torch.exp(score - logits_max)
+            normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
+            score = unnormalized_scores / normalizer
         return score
 
     enable_gqa = True
     num_local_query_heads = query.shape[1]
 
     # When running TP this helps:
-    if not ((num_local_query_heads & (num_local_query_heads - 1)) == 0):
+    if (num_local_query_heads & (num_local_query_heads - 1)) != 0:
         key = repeat_kv(key, query.shape[1] // key.shape[1])
         value = repeat_kv(value, query.shape[1] // value.shape[1])
         enable_gqa = False

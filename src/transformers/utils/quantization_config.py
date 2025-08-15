@@ -65,6 +65,7 @@ class QuantizationMethod(str, Enum):
     QUARK = "quark"
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
+    MXFP4 = "mxfp4"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1630,7 +1631,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        inlcude_embedding (`bool`, default to `False`):
+        include_input_output_embeddings (`bool`, default to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
         untie_embedding_weights (`bool`, default to `False`):
@@ -2048,3 +2049,31 @@ class QuarkConfig(QuantizationConfigMixin):
                 self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
+
+
+@dataclass
+class Mxfp4Config(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using mxfp4 quantization.
+
+    Args:
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[list] = None,
+        dequantize: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.MXFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+
+    def get_loading_attributes(self):
+        return {
+            "dequantize": self.dequantize,
+        }
