@@ -3331,6 +3331,11 @@ class Trainer:
             self._save_scaler(output_dir)
             # Save RNG state
             self._save_rng_state(output_dir)
+        elif self.is_fsdp_enabled and ("SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)):
+            # self.save_model above only handles FULL_STATE_DICT
+            save_fsdp_model(
+                self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **_get_fsdp_ckpt_kwargs()
+            )
 
         # Save the Trainer state
         if self.args.should_save:
