@@ -540,6 +540,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
     def tearDown(self):
