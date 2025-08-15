@@ -136,3 +136,37 @@ if is_torch_available():
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     torch.backends.cudnn.allow_tf32 = False
+
+
+import faulthandler
+import signal
+import sys
+import threading
+import time
+
+
+def dump_stacks_and_exit():
+    print("\n=== TIMEOUT: Dumping all stacks ===", file=sys.stderr)
+    faulthandler.dump_traceback(sys.stderr, all_threads=True)
+    print("=== Active threads ===", file=sys.stderr)
+    for thread in threading.enumerate():
+        print(f"Thread: {thread.name}, daemon: {thread.daemon}, alive: {thread.is_alive()}", file=sys.stderr)
+    sys.stderr.flush()
+
+    # Force exit after showing debug info
+    import os
+    os._exit(1)
+
+
+def setup_timeout_debug(timeout_seconds=600):  # 5 minutes
+    def timeout_handler():
+        time.sleep(timeout_seconds)
+        dump_stacks_and_exit()
+
+    timeout_thread = threading.Thread(target=timeout_handler, daemon=True)
+    timeout_thread.start()
+
+
+# In your conftest.py or at the start of your test
+faulthandler.enable()
+setup_timeout_debug(600)  # Adjust timeout as needed
