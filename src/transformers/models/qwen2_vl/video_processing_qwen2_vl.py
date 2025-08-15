@@ -185,7 +185,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / frame_factor) * frame_factor
             num_frames = total_num_frames / metadata["fps"] * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
             num_frames = math.floor(num_frames / frame_factor) * frame_factor
 
         if num_frames > total_num_frames:
