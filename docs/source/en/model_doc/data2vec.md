@@ -27,9 +27,9 @@ rendered properly in your Markdown viewer.
 You can find all the original Data2Vec checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=data2vec) organization.
 
 > [!TIP]
-> This model was contributed by [facebook](https://huggingface.co/facebook).
+> This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten). The TensorFlow version was contributed by [sayakpaul](https://github.com/sayakpaul) and [Rocketknight1](https://github.com/Rocketknight1).
 >
-> Click on the Data2Vec models in the right sidebar for more examples of how to apply Data2Vec to speech tasks.
+> Click on the Data2Vec models in the right sidebar for more examples of how to apply Data2Vec to other tasks.
 
 The example below demonstrates how to transcribe audio using [`Pipeline`] or the [`AutoModel`] class.
 
