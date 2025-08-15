@@ -63,7 +63,7 @@ model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", t
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -99,7 +99,7 @@ model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", t
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,

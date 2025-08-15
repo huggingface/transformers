@@ -65,7 +65,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa"
 )
 
-inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to("cuda")
+inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
@@ -90,13 +90,13 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-8b-base")
 model = AutoModelForCausalLM.from_pretrained("ibm-granite/granite-3.3-8b-base", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa", quantization_config=quantization_config)
 
-inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to("cuda")
+inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
-tokenizer = AutoTokenizer.from_pretrained(""ibm-granite/granite-3.3-2b-base"")
+tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-2b-base")
 model = AutoModelForCausalLM.from_pretrained(
     "ibm-granite/granite-3.3-2b-base",
     torch_dtype=torch.bfloat16,
@@ -105,7 +105,7 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=quantization_config,
 )
 
-input_ids = tokenizer("Explain artificial intelligence to a 10 year old", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Explain artificial intelligence to a 10 year old", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

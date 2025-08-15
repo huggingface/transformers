@@ -46,14 +46,14 @@ pip install transformers>=4.48.0
 ## Inference
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba2-7B")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="cuda", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba2-7B", device_map="auto", torch_dtype=torch.bfloat16)
 
 input_text = "What factors contributed to the fall of the Roman Empire?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))

@@ -93,7 +93,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -150,7 +150,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -207,7 +207,7 @@ visualizer("<img>What is shown in this image?")
         return_tensors="pt",
         add_generation_prompt=True,
     +   do_pan_and_scan=True,
-        ).to("cuda")
+        ).to(model.device)
     ```
 - For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
@@ -224,7 +224,7 @@ visualizer("<img>What is shown in this image?")
         device_map="auto",
         attn_implementation="sdpa"
     )
-    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))

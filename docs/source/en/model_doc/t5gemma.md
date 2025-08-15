@@ -48,7 +48,7 @@ pipe = pipeline(
     "text2text-generation",
     model="google/t5gemma-2b-2b-prefixlm-it",
     torch_dtype=torch.bfloat16,
-    device="cuda",  # replace with "mps" to run on a Mac device
+    device_map="auto",
 )
 
 messages = [
@@ -64,8 +64,8 @@ pipe(prompt, max_new_tokens=32)
 
 ```python
 # pip install accelerate
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 tokenizer = AutoTokenizer.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
 model = AutoModelForSeq2SeqLM.from_pretrained(
@@ -77,7 +77,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 messages = [
     {"role": "user", "content": "Tell me an unknown interesting biology fact about the brain."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True).to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True).to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32)
 print(tokenizer.decode(outputs[0]))
