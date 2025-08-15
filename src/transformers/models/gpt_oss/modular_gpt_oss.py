@@ -41,7 +41,12 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralForSequenceClassification, MixtralForTokenClassification, MixtralModel
+from ..mixtral.modeling_mixtral import (
+    MixtralForCausalLM,
+    MixtralForSequenceClassification,
+    MixtralForTokenClassification,
+    MixtralModel,
+)
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 from .configuration_gpt_oss import GptOssConfig
 

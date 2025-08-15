@@ -79,7 +79,9 @@ class GptOssModelTester(CausalLMModelTester):
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
-        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification, GptOssForTokenClassification) if is_torch_available() else ()
+        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification, GptOssForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
