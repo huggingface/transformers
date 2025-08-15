@@ -605,3 +605,158 @@ class ComprehensiveExitDebugger:
 
 # One-line setup for conftest.py:
 exit_debugger = ComprehensiveExitDebugger(cleanup_timeout=120, post_atexit_timeout=180)
+
+import gc
+import sys
+import weakref
+import atexit
+import time
+import threading
+import os
+
+import gc
+import sys
+import weakref
+import atexit
+import time
+import threading
+
+
+class NonThreadingHangDebugger:
+    def __init__(self):
+        self.module_refs = weakref.WeakSet()
+        self.large_objects = []
+
+        # Track module imports
+        self.original_import = __builtins__.__import__
+        __builtins__.__import__ = self.tracked_import
+
+        atexit.register(self.debug_non_threading_hang)
+
+    def tracked_import(self, name, *args, **kwargs):
+        """Track imported modules"""
+        module = self.original_import(name, *args, **kwargs)
+        if hasattr(module, '__file__') and module.__file__:
+            if any(pattern in module.__file__ for pattern in ['.so', 'torch', 'numpy']):
+                print(f"Imported C extension: {name} from {module.__file__}", file=sys.stderr)
+        return module
+
+    def debug_non_threading_hang(self):
+        """Debug non-threading hang causes"""
+        print("\n=== NON-THREADING HANG DEBUG ===", file=sys.stderr)
+
+        # 1. Check for objects with finalizers
+        self.check_finalizers()
+
+        # 2. Check garbage collection state
+        self.check_gc_state()
+
+        # 3. Check loaded C extensions
+        self.check_c_extensions()
+
+        # 4. Force garbage collection and see what happens
+        self.force_gc_analysis()
+
+    def check_finalizers(self):
+        """Check for objects with __del__ methods"""
+        print("=== FINALIZER CHECK ===", file=sys.stderr)
+
+        try:
+            # Safer approach - just count types
+            finalizer_types = {}
+            obj_count = 0
+
+            for obj in gc.get_objects():
+                obj_count += 1
+                if obj_count > 10000:  # Limit to prevent hanging here
+                    break
+
+                if hasattr(obj, '__del__'):
+                    obj_type = type(obj).__name__
+                    module = getattr(type(obj), '__module__', 'unknown')
+                    key = f"{module}.{obj_type}"
+                    finalizer_types[key] = finalizer_types.get(key, 0) + 1
+
+            print(f"  Checked {obj_count} objects", file=sys.stderr)
+            print(f"  Objects with finalizers by type:", file=sys.stderr)
+
+            # Show top finalizer types
+            for obj_type, count in sorted(finalizer_types.items(), key=lambda x: x[1], reverse=True)[:10]:
+                print(f"    {obj_type}: {count}", file=sys.stderr)
+
+        except Exception as e:
+            print(f"  Finalizer check failed: {e}", file=sys.stderr)
+
+    def check_gc_state(self):
+        """Check garbage collection state"""
+        print("=== GC STATE CHECK ===", file=sys.stderr)
+
+        print(f"  GC enabled: {gc.isenabled()}", file=sys.stderr)
+        print(f"  GC counts: {gc.get_count()}", file=sys.stderr)
+        print(f"  GC thresholds: {gc.get_threshold()}", file=sys.stderr)
+
+        # Check for uncollectable garbage
+        uncollectable = len(gc.garbage)
+        print(f"  Uncollectable objects: {uncollectable}", file=sys.stderr)
+
+        if uncollectable > 0:
+            print("  Uncollectable object types:", file=sys.stderr)
+            type_counts = {}
+            for obj in gc.garbage[:20]:  # First 20
+                obj_type = type(obj).__name__
+                type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+
+            for obj_type, count in type_counts.items():
+                print(f"    {obj_type}: {count}", file=sys.stderr)
+
+    def check_c_extensions(self):
+        """Check loaded C extensions"""
+        print("=== C EXTENSION CHECK ===", file=sys.stderr)
+
+        c_extensions = []
+        for name, module in sys.modules.items():
+            if hasattr(module, '__file__') and module.__file__:
+                if module.__file__.endswith('.so') or module.__file__.endswith('.pyd'):
+                    c_extensions.append((name, module.__file__))
+
+        print(f"  Loaded C extensions: {len(c_extensions)}", file=sys.stderr)
+
+        # Look for PyTorch related extensions
+        torch_extensions = [ext for ext in c_extensions if 'torch' in ext[0].lower() or 'torch' in ext[1].lower()]
+        if torch_extensions:
+            print("  PyTorch C extensions:", file=sys.stderr)
+            for name, path in torch_extensions:
+                print(f"    {name}: {path}", file=sys.stderr)
+
+    def force_gc_analysis(self):
+        """Force GC and analyze what takes time"""
+        print("=== FORCED GC ANALYSIS ===", file=sys.stderr)
+
+        # Multiple GC passes to see if anything is stuck
+        for i in range(3):
+            start_time = time.time()
+            try:
+                collected = gc.collect()
+                elapsed = time.time() - start_time
+                print(f"  GC pass {i + 1}: collected {collected} objects in {elapsed:.4f}s", file=sys.stderr)
+
+                if elapsed > 1.0:
+                    print(f"    ^ GC pass {i + 1} took unusually long!", file=sys.stderr)
+
+            except Exception as e:
+                elapsed = time.time() - start_time
+                print(f"  GC pass {i + 1} failed after {elapsed:.4f}s: {e}", file=sys.stderr)
+
+        # Check if disabling GC helps identify the issue
+        try:
+            gc.disable()
+            print("  GC disabled for testing", file=sys.stderr)
+            time.sleep(1)
+            gc.enable()
+            print("  GC re-enabled", file=sys.stderr)
+        except Exception as e:
+            print(f"  GC disable/enable test failed: {e}", file=sys.stderr)
+
+
+# Use this:
+non_threading_debugger = NonThreadingHangDebugger()
