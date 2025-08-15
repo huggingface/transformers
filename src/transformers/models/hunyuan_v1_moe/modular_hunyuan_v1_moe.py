@@ -124,10 +124,6 @@ def topkgating(logits: Tensor, topk: int):
     expert_mask = F.one_hot(expert_index, num_experts)
     # For a given token, determine if it was routed to a given expert.
     # Shape: [tokens_per_group, num_experts]
-    expert_mask_aux = expert_mask.max(dim=-2)[0]
-    tokens_per_group_and_expert = torch.mean(expert_mask_aux.float(), dim=-2)
-    router_prob_per_group_and_expert = torch.mean(gates.float(), dim=-2)
-    l_aux = num_experts**2 * torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert)
 
     gates_s = torch.clamp(
         torch.matmul(expert_mask.float(), gates.unsqueeze(-1)).sum(dim=1), min=torch.finfo(gates.dtype).eps
@@ -143,7 +139,6 @@ def topkgating(logits: Tensor, topk: int):
     # Create mask out of indices.
     # Shape: [tokens_per_group * num_selected_experts, num_experts].
     expert_mask = F.one_hot(expert_index, num_experts).to(torch.int32)
-    exp_counts = torch.sum(expert_mask, dim=0).detach()
 
     # Experts have a fixed capacity that we cannot exceed. A token's priority
     # within the expert's buffer is given by the masked, cumulative capacity of
@@ -174,76 +169,10 @@ def topkgating(logits: Tensor, topk: int):
     # The combine array will be used for combining expert outputs, scaled by the
     # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
     # expert_capacity].
-    combine_weights = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
-    exp_counts_capacity = torch.sum(dispatch_mask)
-    exp_capacity_rate = exp_counts_capacity / (logits.shape[0] * topk)
-
-    return [l_aux, exp_capacity_rate], combine_weights, dispatch_mask, exp_counts
-
-
-def top1gating(logits: Tensor, random_routing_dropped_token: bool = False):
-    """Implements Top1Gating on logits."""
-    # everything is in fp32 in this function
-    logits = logits.float()
-    gates = F.softmax(logits, dim=1)
-    capacity = gates.shape[0]
-
-    # Create a mask for 1st's expert per token
-    # noisy gating
-    indices1_s = torch.argmax(gates, dim=1)
-    num_experts = int(gates.shape[1])
-    mask1 = F.one_hot(indices1_s, num_classes=num_experts)
-
-    # gating decisions
-    # exp_counts = torch.sum(mask1, dim=0).detach().to('cpu')
-    exp_counts = torch.sum(mask1, dim=0).detach()
-
-    # Compute l_aux
-    me = torch.mean(gates, dim=0)
-    ce = torch.mean(mask1.float(), dim=0)
-    l_aux = torch.sum(me * ce) * num_experts
-    mask1_rand = mask1
-
-    top_idx = torch.topk(mask1_rand, k=capacity, dim=0)[1]
-
-    new_mask1 = mask1 * torch.zeros_like(mask1).scatter_(0, top_idx, 1)
-    mask1 = new_mask1
-    mask1_bk = mask1
-    if random_routing_dropped_token:
-        not_full = capacity - new_mask1.sum(dim=0)
-        sorted_notfull, indices_notfull = torch.sort(not_full, descending=True)
-        sorted_notfull = sorted_notfull.to(torch.int64)
-        not_full_experts_ids = torch.repeat_interleave(indices_notfull, sorted_notfull)
-        shuffle_not_full_ids = torch.randperm(not_full_experts_ids.shape[0])
-        not_full_experts_ids = not_full_experts_ids[shuffle_not_full_ids]
-        indices1_s_after_drop = torch.argmax(new_mask1, dim=1)
-        # get drop idx
-        drop_mask = 1 - new_mask1.sum(dim=1)
-        drop_mask = drop_mask.bool()
-        drop_idx = drop_mask.nonzero().view(-1)
-        drop_num = drop_mask.sum().to(torch.int64)
-        indices1_s_after_drop.scatter_(0, drop_idx, not_full_experts_ids[:drop_num])
-        nodrop_mask1 = F.one_hot(indices1_s_after_drop, num_classes=num_experts)
-        mask1 = nodrop_mask1
-
-    # Compute locations in capacity buffer
-    locations1 = torch.cumsum(mask1, dim=0) - 1
-
-    # Store the capacity location for each token
-    locations1_s = torch.sum(locations1 * mask1, dim=1)
-
-    # Normalize gate probabilities
-    mask1_float = mask1.float()
-    gates = gates * mask1_float
-
-    locations1_sc = F.one_hot(locations1_s, num_classes=capacity).float()  # one hot to float
-    combine_weights = torch.einsum("se,sc->sec", gates, locations1_sc)
-
-    dispatch_mask = combine_weights.bool()
-
-    exp_counts_capacity = torch.sum(mask1_bk)
-    exp_capacity_rate = exp_counts_capacity / (logits.shape[0])
-    return [l_aux, exp_capacity_rate], combine_weights, dispatch_mask, exp_counts
+    # combine_weights = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
+    router_probs_expanded = router_probs.unsqueeze(-1)
+    combine_weights = router_probs_expanded * dispatch_mask
+    return combine_weights, dispatch_mask
 
 
 class HunYuanTopKGate(nn.Module):
@@ -263,10 +192,7 @@ class HunYuanTopKGate(nn.Module):
         if self.wg.weight.dtype == torch.float32:
             hidden_states = hidden_states.float()
         logits = self.wg(hidden_states)
-        if self.moe_topk == 1:
-            gate_output = top1gating(logits, random_routing_dropped_token=self.random_routing_dropped_token)
-        else:
-            gate_output = topkgating(logits, self.moe_topk)
+        gate_output = topkgating(logits, self.moe_topk)
 
         return gate_output
 
@@ -278,8 +204,7 @@ class HunYuanMoE(nn.Module):
         self.layer_idx = layer_idx
         self.moe_topk = config.moe_topk
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
-        if config.use_mixed_mlp_moe:
-            self.shared_mlp = HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=True)
+        self.shared_mlp = HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=True)
         self.gate = HunYuanTopKGate(config, layer_idx=layer_idx)
         self.experts = nn.ModuleList(
             [HunYuanMoEV1MLP(config, layer_idx=layer_idx, is_shared_mlp=False) for _ in range(self.num_experts)]
@@ -288,14 +213,16 @@ class HunYuanMoE(nn.Module):
     def forward(self, hidden_states):
         bsz, seq_len, hidden_size = hidden_states.shape
 
-        if self.config.use_mixed_mlp_moe:
-            hidden_states_mlp = self.shared_mlp(hidden_states)
+        hidden_states_mlp = self.shared_mlp(hidden_states)
 
-        l_moe, combine_weights, dispatch_mask, exp_counts = self.gate(hidden_states)
+        combine_weights, dispatch_mask = self.gate(hidden_states)
 
         reshaped_input = hidden_states.reshape(-1, hidden_size)
 
-        dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
+        # dispatched_input = torch.einsum("sec,sm->ecm", dispatch_mask.type_as(hidden_states), reshaped_input)
+        dispatch_mask_expanded = dispatch_mask.type_as(hidden_states).unsqueeze(3)  #  (s, e, c, 1)
+        reshaped_input_expanded = reshaped_input.unsqueeze(1).unsqueeze(1)  # (s, 1, 1, m)
+        dispatched_input = (dispatch_mask_expanded * reshaped_input_expanded).sum(dim=(0))  #  (s, m)
 
         chunks = dispatched_input.chunk(self.num_experts, dim=0)
         expert_outputs = []
@@ -303,13 +230,14 @@ class HunYuanMoE(nn.Module):
             expert_outputs.append(expert(chunk))
 
         expert_output = torch.cat(expert_outputs, dim=0)
-        combined_output = torch.einsum("sec,ecm->sm", combine_weights.type_as(hidden_states), expert_output)
+        # combined_output = torch.einsum("sec,ecm->sm", combine_weights.type_as(hidden_states), expert_output)
+        combine_exp = combine_weights.type_as(hidden_states).unsqueeze(3)  # (s, e, c, 1)
+        expert_exp = expert_output.unsqueeze(0)  # (1, e, c, m)
+        combined_output = (combine_exp * expert_exp).sum(dim=(1, 2))  # (s, m)
+
         combined_output = combined_output.reshape(bsz, seq_len, hidden_size)
 
-        if self.config.use_mixed_mlp_moe:
-            output = hidden_states_mlp + combined_output
-        else:
-            output = combined_output
+        output = hidden_states_mlp + combined_output
 
         return output
 

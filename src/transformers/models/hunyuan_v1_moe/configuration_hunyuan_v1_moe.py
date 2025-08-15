@@ -99,8 +99,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_experts (`int` or `List`, *optional*, defaults to 1):
             The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
-        use_mixed_mlp_moe (bool, *optional*, defaults to `False`):
-            Whether to mix MLP and MoE layers. If True, alternates between dense MLP and sparse MoE layers.
         moe_topk (int or List, *optional*, defaults to 1):
             Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
         moe_drop_tokens (bool, *optional*, defaults to `False`):
@@ -139,7 +137,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         num_experts: Union[int, list] = 1,
-        use_mixed_mlp_moe=False,
         moe_topk: Union[int, list] = 1,
         # capacity_factor: Union[int, List]=1.0,
         moe_drop_tokens=False,
@@ -154,7 +151,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
-        self.use_mixed_mlp_moe = use_mixed_mlp_moe
         self.moe_topk = moe_topk
         # self.capacity_factor = capacity_factor
         self.moe_drop_tokens = moe_drop_tokens
