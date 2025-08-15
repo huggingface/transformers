@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-04-18 and added to Hugging Face Transformers on 2024-04-24.*
 
 # Llama3
 
@@ -35,7 +36,7 @@ pipeline("Hey how are you doing today?")
 
 ## Overview
 
-The Llama3 model was proposed in [Introducing Meta Llama 3: The most capable openly available LLM to date](https://ai.meta.com/blog/meta-llama-3/) by the meta AI team.
+The [Llama3](https://huggingface.co/papers/2407.21783) model was proposed in [Introducing Meta Llama 3: The most capable openly available LLM to date](https://ai.meta.com/blog/meta-llama-3/) by the meta AI team.
 
 The abstract from the blogpost is the following:
 

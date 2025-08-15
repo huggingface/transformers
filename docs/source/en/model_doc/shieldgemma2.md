@@ -14,6 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20.*
 
 # ShieldGemma 2
 

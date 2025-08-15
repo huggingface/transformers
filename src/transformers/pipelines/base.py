@@ -449,7 +449,7 @@ def get_default_model_and_revision(
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_xx_to_yy"')
 
     if framework is None:
         framework = "pt"

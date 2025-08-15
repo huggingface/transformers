@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-09-09 and added to Hugging Face Transformers on 2023-11-28.*
 
 # MADLAD-400
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset). 
+MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](https://huggingface.co/papers/2309.04662). 
 
 The abstract from the paper is the following: 
 

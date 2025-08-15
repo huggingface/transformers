@@ -339,6 +339,7 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         return torch.isin(elements, test_elements)
 
 
+@wraps(lru_cache)
 def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
     LRU cache decorator from standard functools library, but with a workaround to disable
@@ -346,19 +347,14 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
 
     def decorator(func):
+        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not is_torchdynamo_compiling():
-                # Cache the function only if the model is not being compiled
-                # check if the function is already cached, otherwise create it
-                if not hasattr(self, f"_cached_{func.__name__}"):
-                    self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
-                    )
-                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+        def wrapper(*args, **kwargs):
+            if is_torchdynamo_compiling():
+                return func(*args, **kwargs)
             else:
-                # Otherwise, just call the original function
-                return func(self, *args, **kwargs)
+                return func_with_cache(*args, **kwargs)
 
         return wrapper
 

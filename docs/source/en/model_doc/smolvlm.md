@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-20.*
 
 # SmolVLM
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 ## Overview
-SmolVLM2 is an adaptation of the Idefics3 model with two main differences:
+[SmolVLM2](https://huggingface.co/papers/2504.05299) ([blog post](https://huggingface.co/blog/smolvlm2)) is an adaptation of the Idefics3 model with two main differences:
 
 - It uses SmolLM2 for the text model.
 - It supports multi-image and video inputs

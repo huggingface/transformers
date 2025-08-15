@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-06-04 and added to Hugging Face Transformers on 2021-08-31.*
 
 # GPT-J
 
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The GPT-J model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
+The [GPT-J](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/) model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
 causal language model trained on [the Pile](https://pile.eleuther.ai/) dataset.
 
 This model was contributed by [Stella Biderman](https://huggingface.co/stellaathena).

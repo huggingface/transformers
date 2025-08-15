@@ -99,6 +99,8 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
     from .donut import *

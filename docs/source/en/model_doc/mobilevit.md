@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be  rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-10-05 and added to Hugging Face Transformers on 2022-06-29.*
 
 
 

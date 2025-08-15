@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-03-03 and added to Hugging Face Transformers on 2023-06-20.*
 
 # FLAN-UL2
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Flan-UL2 is an encoder decoder model based on the T5 architecture. It uses the same configuration as the [UL2](ul2) model released earlier last year. 
+[Flan-UL2](https://www.yitay.net/blog/flan-ul2-20b) is an encoder decoder model based on the T5 architecture. It uses the same configuration as the [UL2](ul2) model released earlier last year. 
 It was fine tuned using the "Flan" prompt tuning and dataset collection. Similar to `Flan-T5`,  one can directly use FLAN-UL2 weights without finetuning the model:
 
 According to the original blog here are the notable improvements:
@@ -35,7 +36,7 @@ According to the original blog here are the notable improvements:
 - The original UL2 model also had mode switch tokens that was rather mandatory to get good performance. However, they were a little cumbersome as this requires often some changes during inference or finetuning. In this update/change, we continue training UL2 20B for an additional 100k steps (with small batch) to forget “mode tokens” before applying Flan instruction tuning. This Flan-UL2 checkpoint does not require mode tokens anymore.
 Google has released the following variants:
 
-The original checkpoints can be found [here](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-ul2-checkpoints).
+The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/ul2).
 
 
 ## Running on low resource devices

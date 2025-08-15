@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2022-05-24.*
 
 # GPT-NeoX
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-We introduce GPT-NeoX-20B, a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
+We introduce [GPT-NeoX-20B](https://huggingface.co/papers/2204.06745), a 20 billion parameter autoregressive language model trained on the Pile, whose weights will
 be made freely and openly available to the public through a permissive license. It is, to the best of our knowledge,
 the largest dense autoregressive model that has publicly available weights at the time of submission. In this work,
 we describe GPT-NeoX-20B's architecture and training and evaluate its performance on a range of language-understanding,

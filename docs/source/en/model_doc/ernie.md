@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-04-19 and added to Hugging Face Transformers on 2022-09-09.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -22,8 +23,8 @@ rendered properly in your Markdown viewer.
 
 # ERNIE
 
-[ERNIE1.0](https://arxiv.org/abs/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),
-[ERNIE3.0](https://arxiv.org/abs/2107.02137), [ERNIE-Gram](https://arxiv.org/abs/2010.12148), [ERNIE-health](https://arxiv.org/abs/2110.07244) are a series of powerful models proposed by baidu, especially in Chinese tasks.
+[ERNIE1.0](https://huggingface.co/papers/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),
+[ERNIE3.0](https://huggingface.co/papers/2107.02137), [ERNIE-Gram](https://huggingface.co/papers/2010.12148), [ERNIE-health](https://huggingface.co/papers/2110.07244) are a series of powerful models proposed by baidu, especially in Chinese tasks.
 
 ERNIE (Enhanced Representation through kNowledge IntEgration) is designed to learn language representation enhanced by knowledge masking strategies, which includes entity-level masking and phrase-level masking.
 
