@@ -621,25 +621,57 @@ import atexit
 import time
 import threading
 
+import gc
+import sys
+import atexit
+import time
+import threading
+import os
+
 
 class NonThreadingHangDebugger:
     def __init__(self):
-        self.module_refs = weakref.WeakSet()
-        self.large_objects = []
+        # Fixed import tracking
+        self.setup_import_tracking()
 
-        # Track module imports
-        self.original_import = __builtins__.__import__
-        __builtins__.__import__ = self.tracked_import
+        # Emergency timeout
+        def emergency():
+            time.sleep(120)
+            print("=== EMERGENCY EXIT ===", file=sys.stderr)
+            os._exit(1)
+
+        threading.Thread(target=emergency, daemon=True).start()
 
         atexit.register(self.debug_non_threading_hang)
 
+    def setup_import_tracking(self):
+        """Set up import tracking (fixed version)"""
+        try:
+            # Handle both dict and module cases for __builtins__
+            if isinstance(__builtins__, dict):
+                self.original_import = __builtins__['__import__']
+                __builtins__['__import__'] = self.tracked_import
+            else:
+                self.original_import = __builtins__.__import__
+                __builtins__.__import__ = self.tracked_import
+
+            print("=== Import tracking enabled ===", file=sys.stderr)
+        except Exception as e:
+            print(f"=== Import tracking failed: {e} ===", file=sys.stderr)
+            # Fallback - no import tracking
+            self.original_import = __import__
+
     def tracked_import(self, name, *args, **kwargs):
         """Track imported modules"""
-        module = self.original_import(name, *args, **kwargs)
-        if hasattr(module, '__file__') and module.__file__:
-            if any(pattern in module.__file__ for pattern in ['.so', 'torch', 'numpy']):
-                print(f"Imported C extension: {name} from {module.__file__}", file=sys.stderr)
-        return module
+        try:
+            module = self.original_import(name, *args, **kwargs)
+            if hasattr(module, '__file__') and module.__file__:
+                if any(pattern in module.__file__ for pattern in ['.so', 'torch', 'numpy']):
+                    print(f"Imported C extension: {name} from {module.__file__}", file=sys.stderr)
+            return module
+        except Exception as e:
+            # Fallback to original import if tracking fails
+            return self.original_import(name, *args, **kwargs)
 
     def debug_non_threading_hang(self):
         """Debug non-threading hang causes"""
@@ -651,10 +683,7 @@ class NonThreadingHangDebugger:
         # 2. Check garbage collection state
         self.check_gc_state()
 
-        # 3. Check loaded C extensions
-        self.check_c_extensions()
-
-        # 4. Force garbage collection and see what happens
+        # 3. Force garbage collection and see what happens
         self.force_gc_analysis()
 
     def check_finalizers(self):
@@ -662,7 +691,6 @@ class NonThreadingHangDebugger:
         print("=== FINALIZER CHECK ===", file=sys.stderr)
 
         try:
-            # Safer approach - just count types
             finalizer_types = {}
             obj_count = 0
 
@@ -709,25 +737,6 @@ class NonThreadingHangDebugger:
             for obj_type, count in type_counts.items():
                 print(f"    {obj_type}: {count}", file=sys.stderr)
 
-    def check_c_extensions(self):
-        """Check loaded C extensions"""
-        print("=== C EXTENSION CHECK ===", file=sys.stderr)
-
-        c_extensions = []
-        for name, module in sys.modules.items():
-            if hasattr(module, '__file__') and module.__file__:
-                if module.__file__.endswith('.so') or module.__file__.endswith('.pyd'):
-                    c_extensions.append((name, module.__file__))
-
-        print(f"  Loaded C extensions: {len(c_extensions)}", file=sys.stderr)
-
-        # Look for PyTorch related extensions
-        torch_extensions = [ext for ext in c_extensions if 'torch' in ext[0].lower() or 'torch' in ext[1].lower()]
-        if torch_extensions:
-            print("  PyTorch C extensions:", file=sys.stderr)
-            for name, path in torch_extensions:
-                print(f"    {name}: {path}", file=sys.stderr)
-
     def force_gc_analysis(self):
         """Force GC and analyze what takes time"""
         print("=== FORCED GC ANALYSIS ===", file=sys.stderr)
@@ -747,15 +756,9 @@ class NonThreadingHangDebugger:
                 elapsed = time.time() - start_time
                 print(f"  GC pass {i + 1} failed after {elapsed:.4f}s: {e}", file=sys.stderr)
 
-        # Check if disabling GC helps identify the issue
-        try:
-            gc.disable()
-            print("  GC disabled for testing", file=sys.stderr)
-            time.sleep(1)
-            gc.enable()
-            print("  GC re-enabled", file=sys.stderr)
-        except Exception as e:
-            print(f"  GC disable/enable test failed: {e}", file=sys.stderr)
+
+# Use this:
+non_threading_debugger = NonThreadingHangDebugger()
 
 
 # Use this:
