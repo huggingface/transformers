@@ -16,6 +16,7 @@ import codecs
 import os
 import tempfile
 import unittest
+import warnings
 from io import BytesIO
 from typing import Optional
 
@@ -33,6 +34,7 @@ from transformers.image_utils import (
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
+    validate_kwargs,
 )
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 
@@ -931,3 +933,105 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (1, 3, 4, 5))
         inferred_axis = get_channel_dimension_axis(image)
         self.assertEqual(inferred_axis, 1)
+
+
+class ValidateKwargsTest(unittest.TestCase):
+    """Test the validate_kwargs function for proper warning behavior."""
+
+    def test_validate_kwargs_no_unused_keys(self):
+        """Test that no warning is raised when all kwargs are valid."""
+        valid_keys = ["height", "width", "do_resize", "do_normalize"]
+        captured_keys = ["height", "width", "do_resize"]
+
+        # Should not raise any warning
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs(valid_keys, captured_keys)
+
+        # Verify no warnings were raised
+        self.assertEqual(len(warning_list), 0)
+
+    def test_validate_kwargs_with_unused_keys(self):
+        """Test that UserWarning is raised when unused kwargs are found."""
+        valid_keys = ["height", "width", "do_resize", "do_normalize"]
+        captured_keys = ["height", "width", "invalid_param", "another_invalid"]
+
+        # Should raise a UserWarning
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid_param", warning_message)
+        self.assertIn("another_invalid", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
+
+    def test_validate_kwargs_single_unused_key(self):
+        """Test warning with a single unused key."""
+        valid_keys = ["height", "width"]
+        captured_keys = ["height", "invalid_param"]
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid_param", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
+
+    def test_validate_kwargs_all_unused_keys(self):
+        """Test warning when all captured keys are unused."""
+        valid_keys = ["height", "width"]
+        captured_keys = ["invalid1", "invalid2"]
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs(valid_keys, captured_keys)
+
+        # Verify warning was raised
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("invalid1", warning_message)
+        self.assertIn("invalid2", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
+
+    def test_validate_kwargs_empty_lists(self):
+        """Test that empty lists don't cause issues."""
+        # Empty captured keys should not warn
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs(["height", "width"], [])
+        self.assertEqual(len(warning_list), 0)
+
+        # Empty valid keys with captured keys should warn
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            validate_kwargs([], ["height"])
+
+        self.assertEqual(len(warning_list), 1)
+        warning_message = str(warning_list[0].message)
+        self.assertIn("height", warning_message)
+        self.assertIn("Unused or unrecognized kwargs", warning_message)
+        self.assertEqual(warning_list[0].category, UserWarning)
+
+    def test_validate_kwargs_warning_stacklevel(self):
+        """Test that warnings are raised with correct stacklevel for proper attribution."""
+
+        def call_validate():
+            validate_kwargs(["valid"], ["invalid"])
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            call_validate()
+
+        # Warning should be attributed to call_validate, not validate_kwargs itself
+        # (stacklevel=2 means it points to the caller of validate_kwargs)
+        self.assertEqual(len(warning_list), 1)
+        self.assertEqual(warning_list[0].category, UserWarning)
