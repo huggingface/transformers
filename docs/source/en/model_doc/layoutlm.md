@@ -33,12 +33,7 @@ You can find all the original LayoutLM checkpoints under the [LayoutLM](https://
 
 The example below demonstrates question answering with the [`AutoModel`] class. 
 
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-Note, that the original LayoutLM version cannot be readily used with the [`Pipeline`] class unlike later versions such as [**LayoutLMv3**](https://huggingface.co/docs/transformers/en/model_doc/layoutlmv3). 
-
-</hfoption>
+<hfoptions>
 <hfoption id="AutoModel">
 
 ```py
@@ -88,7 +83,7 @@ print(" ".join(words[start : end + 1]))
 
 - The original LayoutLM was not designed with a unified processing workflow. Instead, it expects preprocessed text (`words`) and bounding boxes (`boxes`) from an external OCR engine (like [Pytesseract](https://pypi.org/project/pytesseract/)) and provide them as additional inputs to the tokenizer. 
 
-- The [`~LayoutLM.forward`] method expects the input `bbox` (bounding boxes of the input tokens). Each bounding box should be in the format `(x0, y0, x1, y1)`.  `(x0, y0)` corresponds to the upper left corner of the bounding box and `{x1, y1)` corresponds to the lower right corner. The bounding boxes need to be normalized on a 0-1000 scale as shown below.
+- The [`~LayoutLMModel.forward`] method expects the input `bbox` (bounding boxes of the input tokens). Each bounding box should be in the format `(x0, y0, x1, y1)`.  `(x0, y0)` corresponds to the upper left corner of the bounding box and `{x1, y1)` corresponds to the lower right corner. The bounding boxes need to be normalized on a 0-1000 scale as shown below.
 
 ```python
 def normalize_bbox(bbox, width, height):
