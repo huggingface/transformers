@@ -111,7 +111,7 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
-        self.install_steps.append("sudo apt-get install -y gdb python3-dbg")
+        self.install_steps.append("apt-get install -y gdb python3-dbg")
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
 
         if self.pytest_options is None:
