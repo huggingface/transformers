@@ -797,7 +797,7 @@ def find_executable_batch_size(
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
         function (`callable`, *optional*)
             A function to wrap
