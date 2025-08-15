@@ -228,74 +228,76 @@ import atexit
 import threading
 import time
 import sys
-import os
+import ctypes
 
 
-class HangingCleanupDetector:
+class ThreadTimeoutCleanup:
     def __init__(self, cleanup_timeout=30):
         self.cleanup_timeout = cleanup_timeout
-        self.cleanup_in_progress = None
-        self.cleanup_start_time = None
-        self.monitor_thread = None
-
         self.hook_cleanup_registration()
 
     def hook_cleanup_registration(self):
         original_register = atexit.register
 
-        def monitored_register(func, *args, **kwargs):
+        def timeout_register(func, *args, **kwargs):
             module = getattr(func, '__module__', 'unknown')
             name = getattr(func, '__name__', str(func))
+            func_id = f"{module}.{name}"
 
-            print(f"CLEANUP REGISTERED: {module}.{name}", file=sys.stderr)
+            print(f"CLEANUP REGISTERED: {func_id}", file=sys.stderr)
 
-            def monitored_wrapper(*wrapper_args, **wrapper_kwargs):
-                # Signal that cleanup started
-                self.cleanup_in_progress = f"{module}.{name}"
-                self.cleanup_start_time = time.time()
+            def timeout_wrapper(*wrapper_args, **wrapper_kwargs):
+                print(f"CLEANUP START: {func_id}", file=sys.stderr)
+                start_time = time.time()
 
-                print(f"CLEANUP START: {self.cleanup_in_progress}", file=sys.stderr)
-                sys.stderr.flush()
+                # Create a container for the result
+                result_container = {'result': None, 'exception': None, 'completed': False}
 
-                # Start monitoring thread for this specific cleanup
-                self.start_cleanup_monitor()
+                def run_cleanup():
+                    try:
+                        result_container['result'] = func(*wrapper_args, **wrapper_kwargs)
+                        result_container['completed'] = True
+                    except Exception as e:
+                        result_container['exception'] = e
+                        result_container['completed'] = True
 
-                try:
-                    result = func(*wrapper_args, **wrapper_kwargs)
-                    elapsed = time.time() - self.cleanup_start_time
-                    print(f"CLEANUP DONE: {self.cleanup_in_progress} ({elapsed:.3f}s)", file=sys.stderr)
-                    self.cleanup_in_progress = None
-                    return result
-                except Exception as e:
-                    elapsed = time.time() - self.cleanup_start_time
-                    print(f"CLEANUP FAILED: {self.cleanup_in_progress} ({elapsed:.3f}s) - {e}", file=sys.stderr)
-                    self.cleanup_in_progress = None
-                    raise
+                # Run cleanup in a separate thread
+                cleanup_thread = threading.Thread(target=run_cleanup)
+                cleanup_thread.daemon = True  # Don't block exit
+                cleanup_thread.start()
 
-            return original_register(monitored_wrapper, *args, **kwargs)
+                # Wait for completion or timeout
+                cleanup_thread.join(timeout=self.cleanup_timeout)
 
-        atexit.register = monitored_register
+                elapsed = time.time() - start_time
 
-    def start_cleanup_monitor(self):
-        """Start a monitoring thread for the current cleanup"""
+                if cleanup_thread.is_alive():
+                    # Cleanup is hanging
+                    print(f"CLEANUP HANGING: {func_id} ({elapsed:.1f}s) - abandoning and continuing", file=sys.stderr)
 
-        def monitor():
-            time.sleep(self.cleanup_timeout)
-            if self.cleanup_in_progress:
-                elapsed = time.time() - self.cleanup_start_time
-                print(f"\n=== CLEANUP HANGING: {self.cleanup_in_progress} ({elapsed:.1f}s) ===", file=sys.stderr)
+                    # Dump stack trace
+                    import faulthandler
+                    faulthandler.dump_traceback(sys.stderr, all_threads=True)
 
-                # Dump all thread stacks
-                import faulthandler
-                faulthandler.dump_traceback(sys.stderr, all_threads=True)
+                    print(f"CLEANUP ABANDONED: {func_id} - thread left running", file=sys.stderr)
+                    return None  # Continue to next cleanup
 
-                print(f"=== FORCE EXIT: {self.cleanup_in_progress} hung ===", file=sys.stderr)
-                sys.stderr.flush()
-                os._exit(1)
+                elif result_container['completed']:
+                    if result_container['exception']:
+                        print(f"CLEANUP FAILED: {func_id} ({elapsed:.3f}s) - {result_container['exception']}",
+                              file=sys.stderr)
+                    else:
+                        print(f"CLEANUP DONE: {func_id} ({elapsed:.3f}s)", file=sys.stderr)
+                    return result_container['result']
 
-        self.monitor_thread = threading.Thread(target=monitor, daemon=True)
-        self.monitor_thread.start()
+                else:
+                    print(f"CLEANUP UNKNOWN STATE: {func_id} ({elapsed:.3f}s)", file=sys.stderr)
+                    return None
+
+            return original_register(timeout_wrapper, *args, **kwargs)
+
+        atexit.register = timeout_register
 
 
 # Use it:
-detector = HangingCleanupDetector(cleanup_timeout=120)
+thread_timeout_cleanup = ThreadTimeoutCleanup(cleanup_timeout=120)
