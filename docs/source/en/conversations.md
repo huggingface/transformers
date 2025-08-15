@@ -20,7 +20,7 @@ Chat models are conversational models which you communicate with by sending and 
 
 If you're just looking for a general chat model, try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to help you identify the top performers. Be careful, though! Models that are specialized in certain domains (medical/legal text, non-English languages, etc.) can often outperform larger general purpose models, so the top leaderboard models may not be the best at your particular task.
 
-This guide shows you how to quickly start chatting with chat models in Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
+This guide shows you how to quickly load chat models in Transformers from the command line, how to build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
 ## chat CLI
 
@@ -90,16 +90,17 @@ response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
 
-By repeating this process, you can continue the conversation as long as you like.
+By repeating this process, you can continue the conversation as long as you like, at least until the model runs out of context window
+or you run out of memory.
 
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! You can reduce memory usage using the `torch_dtype="auto"` argument, which will generally use `bfloat16`. To go even lower, you can quantize the model to 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index).
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! You can reduce memory usage using the `torch_dtype="auto"` argument, which will generally use `bfloat16` for models that were trained with it. To go even lower, you can quantize the model to 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index).
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.
 
-Create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter. The example below quantizes a model to 8-bits.
+To load in 8-bit precision, create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter. The example below quantizes a model to 8-bits.
 
 ```py
 from transformers import pipeline, BitsAndBytesConfig
@@ -108,19 +109,11 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", model_kwargs={"quantization_config": quantization_config})
 ```
 
-In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because text generation is bottlenecked by **memory bandwidth** instead of compute power. Each active parameter must be read from memory for every generated token. For a model with 16GB of active parameters, 16GB must be read from memory for every generated token.
+In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because each active parameter must be read from memory for every generated token. 
+This turns out to be the bottleneck for generating text from an LLM, which means that the main options for improving generation speed are to either quantize a model or use hardware with higher memory bandwidth. Adding
+more compute power has surprisingly little effect!
 
-The number of generated tokens/sec is proportional to the total memory bandwidth of the system divided by the model size. Depending on your hardware, total memory bandwidth can vary. Refer to the table below for approximate generation speeds for different hardware types.
-
-| Hardware                                                                   | Memory bandwidth |
-|----------------------------------------------------------------------------|---|
-| consumer CPU                                                               | 20-100GB/sec |
-| specialized CPU (Intel Xeon, AMD Threadripper/Epyc, High-end Apple Silicon) | 200-900GB/sec |
-| datacenter GPU (NVIDIA A100/H100/B100)                                     | 2-3TB/sec |
-
-The easiest solution for improving generation speed is to either quantize a model or use hardware with higher memory bandwidth.
-
-You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token per `forward` pass. This significantly alleviates the bandwidth bottleneck and improves generation speed.
+You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
-> Parameters may not be active for every generated token in MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt-oss). As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.
+> MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt-oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.
