@@ -1219,26 +1219,6 @@ class SyntheticCacheTest(unittest.TestCase):
             [[1.0, 2.0], [100.0, 200.0]],
         )
 
-    def test_dynamic_cache_select_indices_copy_and_inplace(self):
-        """Select along the sequence axis with copy and in-place behavior."""
-        cache = DynamicCache()
-        # Batch=1, seq_len=3
-        prefill = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
-        cache.update(prefill, prefill, 0)
-
-        # Return a copy with tokens at positions 0 and 2
-        copied = cache.select_indices(-2, torch.tensor([0, 2]), return_copy=True)
-        self.assertIsInstance(copied, DynamicCache)
-        self.assertIsNot(copied, cache)
-        # Original unchanged
-        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0])
-        # Copy contains only selected positions
-        self.assertEqual(copied.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 3.0])
-
-        # In-place: keep only token at position 1
-        cache.select_indices(-2, torch.tensor([1]), return_copy=False)
-        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [2.0])
-
     def test_hybrid_cache(self):
         """
         Test HybridCache with a mix of static and sliding layers,

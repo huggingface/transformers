@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
-from ..cache_utils import Cache
 from ..utils.generic import ModelOutput
 
 
@@ -87,15 +86,16 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
-                    # Those are stored as lists of tensors so need specific unbatching.
-                    if isinstance(element[0], torch.Tensor):
-                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
-                    elif isinstance(element[0], np.ndarray):
-                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
-                    continue
-                if isinstance(element, Cache):
-                    loader_batched[k] = element.select_indices(-2, self._loader_batch_index, return_copy=True)
+                if k in {"hidden_states", "past_key_values", "attentions"}:
+                    if isinstance(element, tuple):
+                        # Those are stored as lists of tensors so need specific unbatching.
+                        if isinstance(element[0], torch.Tensor):
+                            loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                        elif isinstance(element[0], np.ndarray):
+                            loader_batched[k] = tuple(
+                                np.expand_dims(el[self._loader_batch_index], 0) for el in element
+                            )
+                    # Cache objects are skipped here
                     continue
                 if element is None:
                     # This can happen for optional data that get passed around

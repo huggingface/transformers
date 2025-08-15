@@ -1,4 +1,3 @@
-import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any, Optional
@@ -132,8 +131,6 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the sequence length of the cached states."""
         if self.keys is None or self.keys.numel() == 0:
             return 0
-        if len(self.keys.shape) < 2:
-            return 0
         return self.keys.shape[-2]
 
     def get_max_cache_shape(self) -> int:
@@ -162,15 +159,9 @@ class DynamicLayer(CacheLayerMixin):
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         """Only keep the `indices` in the batch dimension of the cache."""
-        # Axis 0 is the batch dimension ([batch_size, num_heads, seq_len, head_dim])
-        self.select_indices(0, indices)
-
-    def select_indices(self, axis: int, indices: torch.Tensor) -> None:
-        """Only keep the `indices` in the selected dimension of the cache."""
         if self.get_seq_length() > 0:
-            indices = torch.as_tensor(indices, dtype=torch.long, device=self.keys.device)
-            self.keys = self.keys.index_select(dim=axis, index=indices)
-            self.values = self.values.index_select(dim=axis, index=indices)
+            self.keys = self.keys[indices, ...]
+            self.values = self.values[indices, ...]
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):
@@ -914,15 +905,9 @@ class Cache:
             self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
-        """Select batch indices from the cache"""
-        self.select_indices(0, indices, return_copy=False)
-
-    def select_indices(self, axis: int, indices: torch.Tensor, return_copy: bool = False):
         """Select indices from the cache"""
-        cache = copy.deepcopy(self) if return_copy else self
-        for layer_idx in range(len(cache.layers)):
-            cache.layers[layer_idx].select_indices(axis, indices)
-        return cache
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].batch_select_indices(indices)
 
     @property
     def max_batch_size(self) -> int:
@@ -1615,11 +1600,9 @@ class EncoderDecoderCache(Cache):
 
     def select_indices(self, axis: int, indices: torch.Tensor, return_copy: bool = False):
         """Select indices from the cache"""
-        self.check_dynamic_cache(self.select_indices.__name__)
-        cache = copy.deepcopy(self) if return_copy else self
-        cache.self_attention_cache.select_indices(axis, indices, return_copy=False)
-        cache.cross_attention_cache.select_indices(axis, indices, return_copy=False)
-        return cache
+        self.check_dynamic_cache(self.batch_select_indices.__name__)
+        self.self_attention_cache.batch_select_indices(indices)
+        self.cross_attention_cache.batch_select_indices(indices)
 
     def get_max_cache_shape(self) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
