@@ -519,7 +519,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
     Returns:
         (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
         (removed alias and options). The actual dictionary required to initialize the pipeline and some extra task
-        options for parametrized tasks like "translation_XX_to_YY"
+        options for parametrized tasks like "translation_xx_to_yy"
 
 
     """
