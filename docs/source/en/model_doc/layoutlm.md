@@ -22,8 +22,6 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
-
 # LayoutLM
 
 [LayoutLM](https://huggingface.co/papers/1912.13318) jointly learns text and the document layout rather than focusing only on text. It incorporates positional layout information and visual features of words from the document images.
@@ -34,7 +32,6 @@ You can find all the original LayoutLM checkpoints under the [LayoutLM](https://
 > Click on the LayoutLM models in the right sidebar for more examples of how to apply LayoutLM to different vision and language tasks.
 
 The example below demonstrates question answering with the [`AutoModel`] class. 
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -114,6 +111,18 @@ image = Image.open(name_of_your_document).convert("RGB")
 width, height = image.size
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+- Read [fine-tuning LayoutLM for document-understanding using Keras & Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras) to learn more.  
+- Read [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm) for more information.  
+- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb) for a practical example of how to fine-tune LayoutLM.  
+- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb) for an example of how to fine-tune LayoutLM for sequence classification.  
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb) for an example of how to fine-tune LayoutLM for token classification.  
+- Read [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm) to learn how to deploy LayoutLM.  
+
+
 ## LayoutLMConfig
 
 [[autodoc]] LayoutLMConfig
@@ -176,14 +185,3 @@ width, height = image.size
 
 </tf>
 </frameworkcontent>
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-- Read [fine-tuning LayoutLM for document-understanding using Keras & Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras) to learn more.  
-- Read [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm) for more information.  
-- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb) for a practical example of how to fine-tune LayoutLM.  
-- Refer to this [notebook](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb) for an example of how to fine-tune LayoutLM for sequence classification.  
-- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb) for an example of how to fine-tune LayoutLM for token classification.  
-- Read [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm) to learn how to deploy LayoutLM.  
