@@ -130,13 +130,7 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
         self.vpm = self.init_vision_module()
         self.vision_dim = self.vpm.embed_dim
         self.embed_dim = self.language_model.config.hidden_size
-        self.resampler = MiniCPM4VResampler(
-            num_queries=self.config.query_num,
-            embed_dim=self.embed_dim,
-            num_heads=self.embed_dim // 128,
-            kv_dim=self.vision_dim,
-            adaptive=True,
-        )
+        self.resampler = MiniCPM4VResampler(config, adaptive=True)
         self.processor = None
 
         self.terminators = ['<|im_end|>', '</s>']
@@ -689,17 +683,17 @@ class MiniCPM4VResampler(nn.Module):
     """
 
     def __init__(
-            self,
-            num_queries,
-            embed_dim,
-            num_heads,
-            kv_dim=None,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6),
-            adaptive=False,
-            max_size=(70, 70),
+        self,
+        config,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        adaptive=False,
+        max_size=(70, 70),
     ):
         super().__init__()
-        self.num_queries = num_queries
+        embed_dim = config.hidden_size
+        num_heads = embed_dim // 128
+        kv_dim = config.vision_config.hidden_size
+        self.num_queries = config.query_num
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.adaptive = adaptive
