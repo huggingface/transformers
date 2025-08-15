@@ -64,8 +64,8 @@ from IPython.display import Audio
 from transformers import AutoTokenizer, VitsModel, set_seed
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng", torch_dtype=torch.float16).to("cuda")
-inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to("cuda")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto", torch_dtype=torch.float16)
+inputs = tokenizer("Hello, my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)
 

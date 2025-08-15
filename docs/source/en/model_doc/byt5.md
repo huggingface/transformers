@@ -65,7 +65,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     device_map="auto"
 )
 
-input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -102,7 +102,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("google/byt5-xl")
-input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
