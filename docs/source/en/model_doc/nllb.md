@@ -143,3 +143,11 @@ visualizer("UN Chief says there is no military solution in Syria")
     >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
     Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
     ```
+## NllbTokenizer
+
+[[autodoc]] NllbTokenizer
+    - build_inputs_with_special_tokens
+
+## NllbTokenizerFast
+
+[[autodoc]] NllbTokenizerFast
