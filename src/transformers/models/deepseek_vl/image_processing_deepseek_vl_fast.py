@@ -69,7 +69,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         self.background_color = tuple(background_color)
 
     def resize(
