@@ -27,6 +27,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 
 import numpy as np
+import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
@@ -3825,6 +3826,7 @@ class ModelTesterMixin:
                 "sam_hq",
                 "zamba2",
                 "sam_vision_model",
+                "sam2_vision_model",
                 "sam_hq_vision_model",
             ]:
                 self.skipTest(
@@ -3865,6 +3867,7 @@ class ModelTesterMixin:
 
     @require_torch_sdpa
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @slow
     def test_sdpa_can_compile_dynamic(self):
         if not self.has_attentions:
@@ -4113,6 +4116,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @pytest.mark.torch_compile_test
     @slow
     def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
@@ -4580,6 +4584,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
@@ -4652,6 +4657,7 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.5")
+    @pytest.mark.torch_export_test
     def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
         """
         Test if model can be exported with torch.export.export()
@@ -5017,16 +5023,9 @@ class ModelTesterMixin:
             for subconfig_key in model.config.sub_configs:
                 self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
-            # Check we cannot set it to random values, and it raises a warning (but no crash)
-            with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
+            # Check we cannot set it to random values, and it raises an error
+            with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
                 model.set_attn_implementation("foo")
-                self.assertTrue(
-                    any(
-                        "Impossible to set the requested `attn_implementation`. The following error was captured:"
-                        in warning
-                        for warning in cm.output
-                    )
-                )
 
             # Should still be sdpa everywhere
             self.assertTrue(model.config._attn_implementation == "sdpa")

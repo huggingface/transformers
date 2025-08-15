@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-01-23.*
 
 # Granite Vision
 
 ## Overview
 
-The Granite Vision model is a variant of [LLaVA-NeXT](llava_next), leveraging a [Granite](granite) language model alongside a [SigLIP](SigLIP) visual encoder. It utilizes multiple concatenated vision hidden states as its image features, similar to [VipLlava](vipllava). It also uses a larger set of image grid pinpoints than the original LlaVa-NeXT models to support additional aspect ratios.
+The [Granite Vision](https://www.ibm.com/new/announcements/ibm-granite-3-1-powerful-performance-long-context-and-more) model is a variant of [LLaVA-NeXT](llava_next), leveraging a [Granite](granite) language model alongside a [SigLIP](SigLIP) visual encoder. It utilizes multiple concatenated vision hidden states as its image features, similar to [VipLlava](vipllava). It also uses a larger set of image grid pinpoints than the original LlaVa-NeXT models to support additional aspect ratios.
 
 Tips:
 - This model is loaded into Transformers as an instance of LlaVA-Next. The usage and tips from [LLaVA-NeXT](llava_next) apply to this model as well.
@@ -30,12 +31,14 @@ Tips:
 
 Sample inference:
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
+
+device = infer_device()
 
 model_path = "ibm-granite/granite-vision-3.1-2b-preview"
 processor = LlavaNextProcessor.from_pretrained(model_path)
 
-model = LlavaNextForConditionalGeneration.from_pretrained(model_path).to("cuda")
+model = LlavaNextForConditionalGeneration.from_pretrained(model_path).to(device)
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
@@ -55,7 +58,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to("cuda")
+).to(model.device)
 
 
 # autoregressively complete prompt
