@@ -584,6 +584,7 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(
         _TOKENIZER_PATH.value,
         add_bos_token=True,
+        add_eos_token=True if variant == _VARIANT_EMBEDDINGGEMMA else False,
         padding_side="right" if variant == _VARIANT_EMBEDDINGGEMMA else "left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
@@ -629,12 +630,23 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
+        task_prompts = {
+            'clustering': 'task: clustering | query: ',
+            'classification': 'task: classification | query: ',
+            'question_answering': 'task: question answering | query: ',
+            'search_result': 'task: search result | query: ',
+            'sentence_similarity': 'task: sentence similarity | query: ',
+            'fact_checking': 'task: fact checking | query: ',
+            'retrieval_document': 'title: | text: '
+        }
+
         transformer = models.Transformer(output_path)
         pooling = models.Pooling(config.text_config.hidden_size, pooling_mode="mean")
+        normalize = models.Normalize()
         linears = []
-
+      
         for linear_weight in st_linears:
-            in_size, out_size = linear_weight.shape[:2]
+            out_size, in_size = linear_weight.shape[:2]
             dense = models.Dense(in_size, out_size, bias=False, activation_function=None)
             dense.linear.weight.data = torch.from_numpy(linear_weight.astype("float32")).type(
                 getattr(torch, _TRANSFORMER_DTYPE.value)
@@ -645,7 +657,7 @@ def main(*args):
         # SentenceTransformers; and 2) any MTEB tasks we want to specifically include for reproducibility purposes,
         # following the docs at
         # https://github.com/embeddings-benchmark/mteb/blob/main/docs/usage/usage.md#running-sentencetransformer-model-with-prompts
-        model = SentenceTransformer(modules=[transformer, pooling, *linears])
+        model = SentenceTransformer(modules=[transformer, pooling, *linears, normalize], prompts=task_prompts)
         model.save_pretrained(output_path)
 
 
