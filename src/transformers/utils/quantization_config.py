@@ -2061,19 +2061,27 @@ class Mxfp4Config(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
+        dequantize (`bool`, *optional*, default to `False`):
+            Whether to dequantize the model to bfloat16 after loading.
+        enable_training (`bool`, *optional*, default to `False`):
+            Whether to enable native mxfp4 training with backward kernels. When True, allows training
+            with quantized weights without converting to bfloat16, providing 4X memory savings.
     """
 
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
         dequantize: bool = False,
+        enable_training: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.MXFP4
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
+        self.enable_training = enable_training
 
     def get_loading_attributes(self):
         return {
             "dequantize": self.dequantize,
+            "enable_training": self.enable_training,
         }
