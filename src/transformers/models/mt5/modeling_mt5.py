@@ -379,6 +379,7 @@ class MT5Attention(nn.Module):
             curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
+        print("HEREEE")
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
             key_states = curr_past_key_value.layers[self.layer_idx].keys
