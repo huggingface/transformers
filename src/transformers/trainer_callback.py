@@ -19,9 +19,13 @@ import dataclasses
 import json
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
+
+
+if TYPE_CHECKING:
+    from accelerate import ParallelismConfig
 from tqdm.auto import tqdm
 
 from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
@@ -91,6 +95,8 @@ class TrainerState:
         stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
+        parallelism_config (`ParallelismConfig`, *optional*):
+            Configuration for parallel training modes including context parallelism.
     """
 
     epoch: Optional[float] = None
@@ -113,6 +119,7 @@ class TrainerState:
     trial_name: Optional[str] = None
     trial_params: dict[str, Union[str, float, int, bool]] = None
     stateful_callbacks: list["TrainerCallback"] = None
+    parallelism_config: Optional["ParallelismConfig"] = None
 
     def __post_init__(self):
         if self.log_history is None:

@@ -778,6 +778,7 @@ class Trainer:
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
+            parallelism_config=getattr(self, "parallelism_config", None),
         )
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
@@ -2424,7 +2425,8 @@ class Trainer:
         self.state = TrainerState(
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
-            ]
+            ],
+            parallelism_config=self.parallelism_config,
         )
         self.state.is_hyper_param_search = trial is not None
         self.state.train_batch_size = self._train_batch_size
@@ -3876,16 +3878,7 @@ class Trainer:
                 buffers = []
                 buffer_seq_dims = []
 
-                # Ensure position_ids exist before context parallel splitting
-                if "input_ids" in inputs and ("position_ids" not in inputs or inputs["position_ids"] is None):
-                    # Create position_ids if not present (needed for Flash Attention compatibility)
-                    seq_len = inputs["input_ids"].shape[1]
-                    batch_size = inputs["input_ids"].shape[0]
-                    inputs["position_ids"] = (
-                        torch.arange(0, seq_len, dtype=torch.long, device=inputs["input_ids"].device)
-                        .unsqueeze(0)
-                        .expand(batch_size, -1)
-                    )
+                # position_ids are already provided by the data collator, no need to create them manually
 
                 if "input_ids" in inputs:
                     buffers.append(inputs["input_ids"])
@@ -5400,10 +5393,11 @@ class Trainer:
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
         self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
-        self.is_cp_enabled = (
-            getattr(self.accelerator.state, "parallelism_config", None) is not None
-            and self.accelerator.state.parallelism_config.cp_enabled
-        )
+        self.parallelism_config = getattr(self.accelerator.state, "parallelism_config", None)
+        self.is_cp_enabled = self.parallelism_config and self.parallelism_config.cp_enabled
+        # Update state with parallelism config for callbacks and logging (if state exists)
+        if hasattr(self, "state") and self.state is not None:
+            self.state.parallelism_config = self.parallelism_config
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
