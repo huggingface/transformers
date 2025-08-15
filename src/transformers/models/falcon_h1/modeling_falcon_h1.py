@@ -62,7 +62,7 @@ else:
 logger = logging.get_logger(__name__)
 
 
-class FalconHybridMambaAttentionDynamicCache(Cache):
+class FalconHybridMambaAttentionDynamicCache:
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
     (which has a constant shape regardless of seq_len).

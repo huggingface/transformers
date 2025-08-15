@@ -46,6 +46,7 @@ from ..dynamic_module_utils import (
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
+from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -57,7 +58,6 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
-from ..modeling_flash_attention_utils import prepare_fa_kwargs_from_position_ids
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -1811,7 +1811,8 @@ class GenerationMixin(ContinuousMixin):
         if model_kwargs.get("past_key_values") is not None:
             cache = model_kwargs["past_key_values"]
             past_length = 0
-            if not isinstance(cache, Cache):
+            # Support for BC tuple cache format
+            if isinstance(cache, tuple):
                 past_length = cache[0][0].shape[2]
             elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
                 past_length = cache.get_seq_length()

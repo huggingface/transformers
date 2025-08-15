@@ -80,7 +80,7 @@ class Lfm2MLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
-class Lfm2HybridConvCache(DynamicCache):
+class Lfm2HybridConvCache:
     """
     Attention and conv cache for Lfm2.
 
@@ -211,6 +211,9 @@ class Lfm2HybridConvCache(DynamicCache):
             if self.key_cache[idx].numel():
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
+
+    def __len__(self) -> int:
+        return len(self.key_cache)
 
     def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
