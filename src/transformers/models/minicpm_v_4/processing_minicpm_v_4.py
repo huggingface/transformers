@@ -21,10 +21,10 @@ from typing import Optional, Union
 
 import torch
 
-from transformers.image_utils import ImageInput
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from transformers.utils import TensorType
+from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TensorType
 
 from .image_processing_minicpm import MiniCPMVBatchFeature
 
