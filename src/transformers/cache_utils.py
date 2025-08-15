@@ -1470,6 +1470,12 @@ class EncoderDecoderCache(Cache):
         for layer_idx in range(len(cross_attention_cache)):
             self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(self_attention_cache={self.self_attention_cache}, cross_attention_cache="
+            f"{self.cross_attention_cache})"
+        )
+
     def __iter__(self):
         """
         Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
