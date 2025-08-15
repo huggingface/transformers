@@ -85,11 +85,6 @@ print(" ".join(words[start : end + 1]))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
-
-For the original LayoutLM version, `transformers-cli` usage is not readily applicable unlike later versions such as [**LayoutLMv3**](https://huggingface.co/docs/transformers/en/model_doc/layoutlmv3). 
-
-</hfoption>
 </hfoptions>
 
 ## Notes
@@ -119,16 +114,16 @@ image = Image.open(name_of_your_document).convert("RGB")
 width, height = image.size
 ```
 
-### LayoutLMConfig
+## LayoutLMConfig
 
 [[autodoc]] LayoutLMConfig
 
-### LayoutLMTokenizer
+## LayoutLMTokenizer
 
 [[autodoc]] LayoutLMTokenizer
     - __call__
 
-### LayoutLMTokenizerFast
+## LayoutLMTokenizerFast
 
 [[autodoc]] LayoutLMTokenizerFast
     - __call__
@@ -136,46 +131,46 @@ width, height = image.size
 <frameworkcontent>
 <pt>
 
-### LayoutLMModel
+## LayoutLMModel
 
 [[autodoc]] LayoutLMModel
 
-### LayoutLMForMaskedLM
+## LayoutLMForMaskedLM
 
 [[autodoc]] LayoutLMForMaskedLM
 
-### LayoutLMForSequenceClassification
+## LayoutLMForSequenceClassification
 
 [[autodoc]] LayoutLMForSequenceClassification
 
-### LayoutLMForTokenClassification
+## LayoutLMForTokenClassification
 
 [[autodoc]] LayoutLMForTokenClassification
 
-### LayoutLMForQuestionAnswering
+## LayoutLMForQuestionAnswering
 
 [[autodoc]] LayoutLMForQuestionAnswering
 
 </pt>
 <tf>
 
-### TFLayoutLMModel
+## TFLayoutLMModel
 
 [[autodoc]] TFLayoutLMModel
 
-### TFLayoutLMForMaskedLM
+## TFLayoutLMForMaskedLM
 
 [[autodoc]] TFLayoutLMForMaskedLM
 
-### TFLayoutLMForSequenceClassification
+## TFLayoutLMForSequenceClassification
 
 [[autodoc]] TFLayoutLMForSequenceClassification
 
-### TFLayoutLMForTokenClassification
+## TFLayoutLMForTokenClassification
 
 [[autodoc]] TFLayoutLMForTokenClassification
 
-### TFLayoutLMForQuestionAnswering
+## TFLayoutLMForQuestionAnswering
 
 [[autodoc]] TFLayoutLMForQuestionAnswering
 
