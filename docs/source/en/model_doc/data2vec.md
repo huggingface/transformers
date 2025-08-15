@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 [Data2Vec](https://huggingface.co/papers/2202.03555) is a unified self-supervised learning framework that works across multiple modalities. It predicts contextualized latent representations that capture information from the entire input rather than modality-specific objectives like words or visual tokens.
 
-You can find all the original Data2Vec checkpoints under the [Data2Vec](https://huggingface.co/facebook/data2vec-audio-base-960h) collection.
+You can find all the original Data2Vec checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=data2vec) organization.
 
 > [!TIP]
 > This model was contributed by [facebook](https://huggingface.co/facebook).
