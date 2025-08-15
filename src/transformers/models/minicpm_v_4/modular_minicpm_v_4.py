@@ -166,74 +166,102 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
     def get_decoder(self):
         return self.language_model
 
-    def get_vllm_embedding(self, data):
-        if 'vision_hidden_states' not in data:
-            dtype = self.language_model.embed_tokens.weight.dtype
-            device = self.language_model.embed_tokens.weight.device
-            tgt_sizes = data['tgt_sizes']
-            pixel_values_list = data['pixel_values']
-            vision_hidden_states = []
-            all_pixel_values = []
-            img_cnt = []
+    def get_image_features(self, pixel_values_list, tgt_sizes):
+        """
+        Encodes a batch of images into feature embeddings.
+
+        This method takes raw pixel values, processes them through the vision model (vpm)
+        and a resampler to produce a concise set of vision features. It handles
+        batching of images with different sizes by padding and using an attention mask.
+
+        Args:
+            pixel_values_list (list[list[torch.Tensor]]): A list of lists of image tensors.
+                Outer list is for batch samples, inner for multiple images per sample.
+            tgt_sizes (list[torch.Tensor]): A list of tensors indicating the effective
+                patch sizes for each image.
+
+        Returns:
+            list[torch.Tensor or list]: A list where each element corresponds to a batch sample.
+            The element is a tensor of vision features if images exist for that sample,
+            otherwise it's an empty list.
+        """
+        dtype = self.language_model.embed_tokens.weight.dtype
+        device = self.language_model.embed_tokens.weight.device
+        vision_hidden_states = []
+        all_pixel_values = []
+        img_cnt = []
+        for pixel_values in pixel_values_list:
+            img_cnt.append(len(pixel_values))
+            all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
+
+        # exist image
+        if all_pixel_values:
+            tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
+            tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
+
+            max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
+
+            all_pixel_values = torch.nn.utils.rnn.pad_sequence(
+                all_pixel_values, batch_first=True, padding_value=0.0
+            )
+            B, L, _ = all_pixel_values.shape
+            all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
+
+            patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
+            for i in range(B):
+                patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
+
+            vision_batch_size = self.config.vision_batch_size
+            all_pixel_values = all_pixel_values.type(dtype).to(device=device)
+            if B > vision_batch_size:
+                hs = []
+                for i in range(0, B, vision_batch_size):
+                    start_idx = i
+                    end_idx = i + vision_batch_size
+                    tmp_hs = self.vpm(
+                        all_pixel_values[start_idx:end_idx],
+                        patch_attention_mask=patch_attn_mask[start_idx:end_idx],
+                        tgt_sizes=tgt_sizes[start_idx:end_idx],
+                    ).last_hidden_state
+                    hs.append(tmp_hs)
+                vision_embedding = torch.cat(hs, dim=0)
+            else:
+                vision_embedding = self.vpm(
+                    all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
+                ).last_hidden_state
+            vision_embedding = self.resampler(vision_embedding, tgt_sizes)
+
+            start = 0
             for pixel_values in pixel_values_list:
-                img_cnt.append(len(pixel_values))
-                all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
-
-            # exist image
-            if all_pixel_values:
-                tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
-                tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
-
-                max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
-
-                all_pixel_values = torch.nn.utils.rnn.pad_sequence(all_pixel_values, batch_first=True,
-                                                                   padding_value=0.0)
-                B, L, _ = all_pixel_values.shape
-                all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
-
-                patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
-                for i in range(B):
-                    patch_attn_mask[i, 0, :tgt_sizes[i][0] * tgt_sizes[i][1]] = True
-
-                vision_batch_size = self.config.vision_batch_size
-                all_pixel_values = all_pixel_values.type(dtype).to(device=device)
-                if B > vision_batch_size:
-                    hs = []
-                    for i in range(0, B, vision_batch_size):
-                        start_idx = i
-                        end_idx = i + vision_batch_size
-                        tmp_hs = self.vpm(all_pixel_values[start_idx:end_idx], patch_attention_mask=patch_attn_mask[start_idx:end_idx], tgt_sizes=tgt_sizes[start_idx:end_idx]).last_hidden_state
-                        hs.append(tmp_hs)
-                    vision_embedding = torch.cat(hs, dim=0)
+                img_cnt = len(pixel_values)
+                if img_cnt > 0:
+                    vision_hidden_states.append(vision_embedding[start : start + img_cnt])
+                    start += img_cnt
                 else:
-                    vision_embedding = self.vpm(all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes).last_hidden_state
-                vision_embedding = self.resampler(vision_embedding, tgt_sizes)
+                    vision_hidden_states.append([])
+        else:  # no image
+            dummy_feature = []
+            for _ in range(len(pixel_values_list)):
+                vision_hidden_states.append(dummy_feature)
 
-                start = 0
-                for pixel_values in pixel_values_list:
-                    img_cnt = len(pixel_values)
-                    if img_cnt > 0:
-                        vision_hidden_states.append(vision_embedding[start: start + img_cnt])
-                        start += img_cnt
-                    else:
-                        vision_hidden_states.append([])
-            else: # no image
-                dummy_feature = []
-                for _ in range(len(pixel_values_list)):
-                    vision_hidden_states.append(dummy_feature)
+        return vision_hidden_states
 
+    def get_vllm_embedding(self, data):
+        if "vision_hidden_states" not in data:
+            vision_hidden_states = self.get_image_features(pixel_values_list=data["pixel_values"], tgt_sizes=data["tgt_sizes"])
         else:
-            vision_hidden_states = data['vision_hidden_states']
+            vision_hidden_states = data["vision_hidden_states"]
 
-        if hasattr(self.language_model.config, 'scale_emb'):
-            vllm_embedding = self.language_model.embed_tokens(data['input_ids']) * self.language_model.config.scale_emb
+        if hasattr(self.language_model.config, "scale_emb"):
+            vllm_embedding = self.language_model.embed_tokens(data["input_ids"]) * self.language_model.config.scale_emb
         else:
-            vllm_embedding = self.language_model.embed_tokens(data['input_ids'])
+            vllm_embedding = self.language_model.embed_tokens(data["input_ids"])
 
-        vision_hidden_states = [i.type(vllm_embedding.dtype) if isinstance(
-            i, torch.Tensor) else i for i in vision_hidden_states]
+        vision_hidden_states = [
+            i.type(vllm_embedding.dtype) if isinstance(i, torch.Tensor) else i for i in vision_hidden_states
+        ]
 
-        bs = len(data['input_ids'])
+        bs = len(data["input_ids"])
         device = vllm_embedding.device
         embed_dim = vllm_embedding.shape[-1]
 
@@ -247,13 +275,14 @@ class MiniCPM_V_4Model(MiniCPM_V_4PreTrainedModel):
                 new_vllm_embeddings.append(cur_vllm_emb)
                 continue
 
-            cur_image_bound = data['image_bound'][i]
+            cur_image_bound = data["image_bound"][i]
 
             if len(cur_image_bound) > 0:
-                image_indices = torch.stack([
-                    torch.arange(r[0], r[1], dtype=torch.long)
-                    for r in cur_image_bound
-                ], dim=0).flatten().to(device)
+                image_indices = (
+                    torch.stack([torch.arange(r[0], r[1], dtype=torch.long) for r in cur_image_bound], dim=0)
+                    .flatten()
+                    .to(device)
+                )
 
                 indices_expanded = image_indices.view(-1, 1).expand(-1, embed_dim)
                 vision_features = cur_vs_hs.view(-1, embed_dim)
