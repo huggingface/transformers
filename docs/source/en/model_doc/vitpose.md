@@ -293,6 +293,12 @@ Refer to resources below to learn more about using ViTPose.
     - preprocess
     - post_process_pose_estimation
 
+## VitPoseImageProcessorFast
+
+[[autodoc]] VitPoseImageProcessorFast
+    - preprocess
+    - post_process_pose_estimation
+
 ## VitPoseConfig
 
 [[autodoc]] VitPoseConfig
