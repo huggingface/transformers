@@ -172,7 +172,7 @@ class Mxfp4GptOssExperts(nn.Module):
             torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
         self.alpha = 1.702
-
+        self.limit = getattr(config, "swiglu_limit", 7.0)
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
 
@@ -185,7 +185,7 @@ class Mxfp4GptOssExperts(nn.Module):
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
-            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
+            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, self.limit), 2)
 
             intermediate_cache1 = matmul_ogs(
                 hidden_states,
