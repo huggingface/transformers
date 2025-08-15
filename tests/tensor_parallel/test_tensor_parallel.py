@@ -126,6 +126,32 @@ class TestTensorParallel(TestCasePlus):
         )
         self.torchrun(script_to_run)
 
+    def test_model_backward_pass(self):
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import os
+            from transformers import AutoModelForCausalLM
+            from torch import nn
+
+            model_id = "JackFram/llama-68m"
+
+            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, tp_plan="auto")
+            torch.distributed.barrier()
+
+            # Dummy forward and backward pass
+            # Note that loss.backward() will fail if there is a bug in the TP implementation
+            inputs = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+            labels = torch.randint(0, model.config.vocab_size, (2, 10), device=model.device)
+            loss = model(inputs, labels=labels).loss
+            loss.backward()
+
+            torch.distributed.barrier()
+            torch.distributed.destroy_process_group()
+            """
+        )
+        self.torchrun(script_to_run)
+
     def test_model_generate(self):
         script_to_run = textwrap.dedent(
             """
