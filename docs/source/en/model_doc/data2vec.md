@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 # Data2Vec
 
-[Data2Vec](https://huggingface.co/papers/2202.03555) is a self-supervised model developed by Meta AI that works across multiple modalities including speech, vision, and text. This model card focuses on the audio variant: `data2vec-audio-base-960h`, which learns contextualized representations directly from raw audio using a masked prediction task.
+[Data2Vec](https://huggingface.co/papers/2202.03555) is a unified self-supervised learning framework that works across multiple modalities. It predicts contextualized latent representations that capture information from the entire input rather than modality-specific objectives like words or visual tokens.
 
 You can find all the original Data2Vec checkpoints under the [Data2Vec](https://huggingface.co/facebook/data2vec-audio-base-960h) collection.
 
