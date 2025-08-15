@@ -318,6 +318,7 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
     @is_flaky
     def test_generate_compile_model_forward(self):
         super().test_generate_compile_model_forward()
