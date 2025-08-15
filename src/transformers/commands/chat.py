@@ -22,9 +22,10 @@ import re
 import string
 import time
 from argparse import ArgumentParser, Namespace
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import AsyncIterator, Optional
+from typing import Optional
 
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput

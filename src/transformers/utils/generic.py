@@ -22,11 +22,11 @@ import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Iterable, MutableMapping
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, Optional, TypedDict
+from typing import Any, Callable, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -551,7 +551,7 @@ class ContextManagers:
     in the `fastcore` library.
     """
 
-    def __init__(self, context_managers: list[ContextManager]):
+    def __init__(self, context_managers: list[AbstractContextManager]):
         self.context_managers = context_managers
         self.stack = ExitStack()
 
