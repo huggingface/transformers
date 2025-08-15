@@ -26,6 +26,8 @@ from transformers import (
     AddedToken,
     MarkupLMTokenizerFast,
     SpecialTokensMixin,
+    is_flax_available,
+    is_mlx_available,
     is_tf_available,
     is_torch_available,
     logging,
@@ -98,6 +100,48 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         xpaths = [
             ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
             ["/html/body/div/li[2]/div/span"],
+        ]
+
+        return questions, nodes, xpaths
+
+    def get_empty_nodes_and_xpaths(self):
+        nodes = ["test", "empty", ""]
+        xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"]
+
+        return nodes, xpaths
+
+    def get_empty_nodes_and_xpaths_batch(self):
+        nodes = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        xpaths = [
+            ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+            [
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+            ],
+        ]
+
+        return nodes, xpaths
+
+    def get_empty_question_nodes_and_xpaths(self):
+        question = ""
+        nodes = ["test", "empty", ""]
+        xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"]
+
+        return question, nodes, xpaths
+
+    def get_empty_question_nodes_and_xpaths_batch(self):
+        questions = ["what's his name?", ""]
+        nodes = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        xpaths = [
+            ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+            [
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+                "/html/body/div/li[2]/div/span",
+            ],
         ]
 
         return questions, nodes, xpaths
@@ -2218,3 +2262,60 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Chat is not supported")
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
+
+    def test_empty_input_string(self):
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_tf_available():
+            import tensorflow as tf
+
+            tokenizer_return_type.append("tf")
+            output_tensor_type.append(tf.int32)
+
+        if is_flax_available():
+            import jax.numpy as jnp
+
+            tokenizer_return_type.append("jax")
+            output_tensor_type.append(jnp.int32)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT, TF, JAX or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                nodes, xpaths = self.get_empty_nodes_and_xpaths()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(nodes, xpaths=xpaths, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, nodes, xpaths = self.get_empty_question_nodes_and_xpaths()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(nodes, xpaths=xpaths, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                nodes, xpaths = self.get_empty_nodes_and_xpaths_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(nodes, xpaths=xpaths, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, nodes, xpaths = self.get_empty_question_nodes_and_xpaths_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(nodes, xpaths=xpaths, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
