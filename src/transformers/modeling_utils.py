@@ -1615,9 +1615,7 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    is_quantized
-                    and new_state_dict[key].shape[-1] == 1
-                    and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                    is_quantized and tensor.shape[-1] == 1 and tensor.numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
                     mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
@@ -2523,7 +2521,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
@@ -2611,7 +2609,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
@@ -2948,13 +2946,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
-        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
-        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value accross the library
+            # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):

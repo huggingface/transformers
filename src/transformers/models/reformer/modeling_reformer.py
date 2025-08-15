@@ -17,10 +17,11 @@
 
 import sys
 from collections import namedtuple
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch

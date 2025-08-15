@@ -67,7 +67,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 
-input_ids = tokenizer("Explain the difference between transformers and SSMs", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Explain the difference between transformers and SSMs", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, max_new_tokens=100, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -106,7 +106,7 @@ model = FalconMambaForCausalLM.from_pretrained(
     quantization_config=quantization_config,
 )
 
-inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to("cuda")
+inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
