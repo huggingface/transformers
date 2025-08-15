@@ -778,6 +778,7 @@ class Trainer:
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
+            parallelism_config=getattr(self, "parallelism_config", None),
         )
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
@@ -2424,7 +2425,8 @@ class Trainer:
         self.state = TrainerState(
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
-            ]
+            ],
+            parallelism_config=self.parallelism_config,
         )
         self.state.is_hyper_param_search = trial is not None
         self.state.train_batch_size = self._train_batch_size
@@ -3810,6 +3812,49 @@ class Trainer:
 
         return inputs
 
+    def _is_attention_mask_causal(self, attention_mask):
+        """
+        Check if an attention mask is causal (compatible with causal attention).
+        Context parallelism only supports causal attention patterns. This function
+        checks if the provided attention mask is compatible.
+
+        Args:
+            attention_mask (torch.Tensor): The attention mask to check
+
+        Returns:
+            bool: True if the mask is causal or compatible with causal attention
+        """
+        if attention_mask is None:
+            return True  # No mask is considered causal (model uses default causal masking)
+
+        # Handle different mask dimensions
+        if attention_mask.dim() == 2:
+            # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+            return True
+        elif attention_mask.dim() in [3, 4]:
+            # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+            # Check if it's lower triangular (causal)
+            seq_len = attention_mask.shape[-1]
+            if seq_len <= 1:
+                return True  # Single token or empty is always causal
+
+            # Take first batch and head (if 4D) for checking pattern
+            if attention_mask.dim() == 4:
+                mask = attention_mask[0, 0]  # First batch, first head
+            else:
+                mask = attention_mask[0]  # First batch
+
+            # Check if upper triangular part is masked (should be 0 or very negative for causal)
+            upper_triangular = torch.triu(mask, diagonal=1)
+
+            # For causal masks, upper triangular should be 0 or very negative (like -inf)
+            # Use a reasonable threshold to handle float precision issues
+            is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+            return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+        # For unknown dimensions, be conservative and reject
+        return False
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3870,7 +3915,42 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            # Prepare buffers for context parallelism
+            buffers = []
+            buffer_seq_dims = []
+
+            # position_ids are already provided by the data collator, no need to create them manually
+
+            if "input_ids" in inputs:
+                buffers.append(inputs["input_ids"])
+                buffer_seq_dims.append(1)  # Sequence dimension
+            if "labels" in inputs:
+                buffers.append(inputs["labels"])
+                buffer_seq_dims.append(1)
+            if "attention_mask" in inputs:
+                # Context parallel currently doesn't support other masks than causal
+                # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+                # Check if the mask is really causal and if not throw an error
+                attention_mask = inputs["attention_mask"]
+                if getattr(self, "is_cp_enabled", False) and not self._is_attention_mask_causal(attention_mask):
+                    raise ValueError(
+                        "Context parallelism only supports causal attention masks. "
+                        "The provided attention_mask is not causal. "
+                        "Please ensure your data uses causal masking (lower triangular) "
+                        "or remove the attention_mask to use the model's default causal masking."
+                    )
+                buffers.append(inputs["attention_mask"])
+                buffer_seq_dims.append(1)
+            # Include position_ids in context parallelism splitting (key for Flash Attention compatibility)
+            if "position_ids" in inputs and inputs["position_ids"] is not None:
+                buffers.append(inputs["position_ids"])
+                buffer_seq_dims.append(1)
+
+            # Context manager is no-op if CP isn't enabled
+            with self.accelerator.maybe_context_parallel(
+                buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=set(buffers)
+            ):
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -4149,6 +4229,11 @@ class Trainer:
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
+
+        # Handle context parallelism state dict properly
+        if state_dict is None and self.is_cp_enabled:
+            # Use accelerator.get_state_dict() for proper gathering when context parallelism is enabled
+            state_dict = self.accelerator.get_state_dict(self.model)
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
@@ -5324,6 +5409,14 @@ class Trainer:
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
+
+        # Add parallelism_config if context parallelism is enabled
+        if getattr(self.args, "parallelism_config", None) is not None:
+            args["parallelism_config"] = self.args.parallelism_config
+
+        # Add fsdp_plugin if it was created for context parallelism
+        if getattr(self.args, "fsdp_plugin", None) is not None:
+            args["fsdp_plugin"] = self.args.fsdp_plugin
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
@@ -5351,6 +5444,11 @@ class Trainer:
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
         self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+        self.parallelism_config = getattr(self.accelerator.state, "parallelism_config", None)
+        self.is_cp_enabled = self.parallelism_config and self.parallelism_config.cp_enabled
+        # Update state with parallelism config for callbacks and logging (if state exists)
+        if hasattr(self, "state") and self.state is not None:
+            self.state.parallelism_config = self.parallelism_config
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
@@ -5457,7 +5555,22 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices:
+            # Handle context parallelism token counting
+            if self.is_cp_enabled:
+                # For context parallelism, use AVG instead of SUM to avoid over-accounting tokens
+                import torch.distributed as dist
+
+                if dist.is_initialized():
+                    # Convert to tensor for all_reduce
+                    if not torch.is_tensor(num_items_in_batch):
+                        num_items_in_batch = torch.tensor(num_items_in_batch, dtype=torch.long)
+                    num_items_in_batch = num_items_in_batch.to(device)
+
+                    # All-reduce with AVG across context parallel group
+                    cp_group = self.accelerator.torch_device_mesh["cp"].get_group()
+                    dist.all_reduce(num_items_in_batch, op=dist.ReduceOp.AVG, group=cp_group)
+                    num_items_in_batch = int(num_items_in_batch.item())
+            elif self.args.average_tokens_across_devices:
                 num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum()
 
             if torch.is_tensor(num_items_in_batch):
