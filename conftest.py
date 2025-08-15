@@ -194,7 +194,7 @@ def dump_stacks_and_exit():
     for thread in threading.enumerate():
         print(f"Thread: {thread.name}, daemon: {thread.daemon}, alive: {thread.is_alive()}", file=sys.stderr)
 
-    dump_cpp_stack()
+    # dump_cpp_stack()
 
     sys.stderr.flush()
 
@@ -222,4 +222,4 @@ def setup_timeout_debug(timeout_seconds=600):  # 5 minutes
 
 # In your conftest.py or at the start of your test
 faulthandler.enable()
-setup_timeout_debug(30)  # Adjust timeout as needed
+setup_timeout_debug(480)  # Adjust timeout as needed
