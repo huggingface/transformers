@@ -54,6 +54,7 @@ TODO: switch to using AutoProcessor? and use XCodec2 from transformers
 
 ```python
 """
+TODO remove when XCodec2 merged
 pip install torchao xcodec2==0.1.3
 """
 
@@ -72,12 +73,14 @@ processor = LlasaProcessor(
     LlasaTokenizer.from_pretrained(model_repo),
     XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval().to(torch_device)
 )
+# # -- TODO: use below when `XCodec2Model` integrated into `transformers`
+# processor = LlasaProcessor.from_pretrained(model_repo)
 
 # load model
 model = LlasaForCausalLM.from_pretrained(model_repo)
 model.eval().to(torch_device)
 
-# TTS, some text inputs don't work which shows limitations of this approach
+# perform TTS
 input_text = "How much wood would a woodchuck chuck if a woodchuck could chuck speech tokens?"
 with torch.no_grad():
 
@@ -99,6 +102,9 @@ fn = f"gen_{model_repo.split('/')[-1]}.wav"
 sf.write(fn, gen_wav.cpu().numpy(), model.config.sampling_rate)
 print(f"Generated speech saved to {fn}")
 ```
+
+**Limitations**: Some text inputs fail to produce meaningful audio outputs. This has also been observed with the original model (see [this example](https://gist.github.com/ebezzam/1863ec8eb7ec4afff02c26bdcb7691f9#file-breaking_example-py)).
+
 
 ### Training
 

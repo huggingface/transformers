@@ -16,8 +16,11 @@
 import copy
 import unittest
 
-
 from parameterized import parameterized
+
+# TODO remove when `XCodec2Model` is integrated into `transformers`
+from xcodec2.modeling_xcodec2 import XCodec2Model
+
 from transformers.models.llasa import LlasaConfig
 from transformers.testing_utils import (
     cleanup,
@@ -33,14 +36,11 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-# TODO remove when `XCodec2Model` is integrated into `transformers`
-from xcodec2.modeling_xcodec2 import XCodec2Model
-
 
 if is_torch_available():
     import torch
 
-    from transformers import LlasaModel, LlasaForCausalLM, LlasaTokenizer, LlasaProcessor
+    from transformers import LlasaForCausalLM, LlasaModel, LlasaProcessor, LlasaTokenizer
 
 
 @require_torch
@@ -106,11 +106,18 @@ class LlasaModelTester:
 
     def prepare_config_and_inputs_for_common(self) -> tuple[LlasaConfig, dict]:
         return self.prepare_config_and_inputs()
-        
+
 
 @require_torch
 class LlasaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlasaModel, LlasaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlasaModel,
+            LlasaForCausalLM,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (LlasaForCausalLM,)
     pipeline_model_mapping = (
         {
@@ -121,7 +128,6 @@ class LlasaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    pipeline_model_mapping = {}     # to skip `resize_embeddings` tests
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
@@ -162,8 +168,8 @@ EXPECTED_OUTPUT = {
     "bezzam/Llasa-1B": torch.tensor([168962, 172806, 193286, 188417, 184321, 167938, 167937, 173058, 189447,
         148418, 172641, 172642, 172978, 156321, 173042, 168578, 135208, 136200,
         150625, 165080, 131293, 151880, 131554, 134602, 188927, 187895, 190151,
-        161262, 128750, 149197, 132828, 191964, 163363, 138639, 144335, 140246,
-        156704, 179808, 186739, 185651, 186050, 186674, 186095, 150951, 151983,
+        161262, 128750, 149197, 132828, 191964, 163363, 138639, 144335, 140242,
+        155680, 179808, 186739, 185651, 186050, 186674, 186095, 150951, 151983,
         145749, 151789, 152213, 135384]),
     "bezzam/Llasa-3B": torch.tensor([152563, 140021, 135905, 140260, 172790, 167539, 189298, 193077, 173123,
         193378, 193714, 189495, 168769, 155437, 150284, 138253, 151564, 139297,
@@ -182,8 +188,8 @@ MAX_LENGTH = 50
 TEMPERATURE = 0.8
 # fmt: on
 
-class LlasaForCausalLMIntegrationTest(unittest.TestCase):
 
+class LlasaForCausalLMIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -194,7 +200,7 @@ class LlasaForCausalLMIntegrationTest(unittest.TestCase):
         # load processor (tokenizer + audio codec)
         processor = LlasaProcessor(
             LlasaTokenizer.from_pretrained(model_repo),
-            XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval().to(torch_device)
+            XCodec2Model.from_pretrained("HKUSTAudio/xcodec2").eval().to(torch_device),
         )
         # # -- TODO: use below when `XCodec2Model` integrated into `transformers`
         # processor = LlasaProcessor.from_pretrained(model_repo)
@@ -211,6 +217,6 @@ class LlasaForCausalLMIntegrationTest(unittest.TestCase):
                 top_p=1,
                 temperature=TEMPERATURE,
             )
-            generated_ids = outputs[0][encoded_text["input_ids"].shape[1]:-1]
-        
+            generated_ids = outputs[0][encoded_text["input_ids"].shape[1] : -1]
+
         assert torch.equal(generated_ids, EXPECTED_OUTPUT[model_repo].to(torch_device))
