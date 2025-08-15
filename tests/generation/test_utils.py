@@ -1737,9 +1737,9 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, most old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. So we use this attribute as a proxy
-            # (it is less restrictive than `_can_compile_fullgraph`)
-            if not model_class._supports_attention_backend:
+            # use a static cache because they don't create the causal masks correctly. So we use the union of
+            # `_supports_attention_backend` and `_can_compile_fullgraph` as a proxy to know if they support it
+            if not model_class._supports_attention_backend and not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1960,9 +1960,9 @@ class GenerationTesterMixin:
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, most old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. So we use this attribute as a proxy
-            # (it is less restrictive than `_can_compile_fullgraph`)
-            if not model_class._supports_attention_backend:
+            # use a static cache because they don't create the causal masks correctly. So we use the union of
+            # `_supports_attention_backend` and `_can_compile_fullgraph` as a proxy to know if they support it
+            if not model_class._supports_attention_backend and not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -2181,9 +2181,9 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, most old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. So we use this attribute as a proxy
-            # (it is less restrictive than `_can_compile_fullgraph`)
-            if not model_class._supports_attention_backend:
+            # use a static cache because they don't create the causal masks correctly. So we use the union of
+            # `_supports_attention_backend` and `_can_compile_fullgraph` as a proxy to know if they support it
+            if not model_class._supports_attention_backend and not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
