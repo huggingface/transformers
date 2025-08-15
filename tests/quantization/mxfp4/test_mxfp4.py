@@ -14,7 +14,7 @@
 
 import gc
 import unittest
-from tempfile import tempdir
+import tempfile
 from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
@@ -485,10 +485,6 @@ class Mxfp4ModelTest(unittest.TestCase):
         """Test loading OpenAI MoE model with mxfp4 quantization and device_map"""
 
         quantization_config = Mxfp4Config(dequantize=True)
-
-        # Test that config is properly set up
-        self.assertFalse(quantization_config.dequantize)
-
         model = GptOssForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
@@ -496,7 +492,7 @@ class Mxfp4ModelTest(unittest.TestCase):
             device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        with tempdir.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             # Save the model in mxfp4 format
             model.save_pretrained(tmp, quantization_config=quantization_config)
             torch.cuda.empty_cache()

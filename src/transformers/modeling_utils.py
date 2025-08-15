@@ -3873,7 +3873,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
         quantization_config = kwargs.pop("quantization_config", None)
         if quantization_config is not None:
-            self.hf_quantizer = HfQuantizer.from_config(quantization_config)
+            self.hf_quantizer = HfQuantizer(quantization_config)
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
