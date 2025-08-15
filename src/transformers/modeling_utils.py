@@ -84,7 +84,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
-from .quantizers import AutoHfQuantizer, HfQuantizer
+from .quantizers import HfQuantizer
 from .quantizers.quantizers_utils import get_hf_quantizer, get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
