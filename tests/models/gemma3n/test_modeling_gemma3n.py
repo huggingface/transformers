@@ -436,6 +436,14 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_generate_with_quant_cache(self):
         pass
 
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
@@ -644,6 +652,14 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
     )
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     def test_automodelforcausallm(self):
