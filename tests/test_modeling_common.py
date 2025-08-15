@@ -3680,6 +3680,20 @@ class ModelTesterMixin:
             model = model_class(config)
             self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
 
+            # Test that using `dict` atttention implementation works with `from_pretrained`
+            #  Set all backbones to "eager" because "eager" attention is always available
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                new_model = model.from_pretrained(tmpdirname, attn_implementation=attn_implementation_per_subconfig)
+                self.assertTrue(new_model.config._attn_implementation == "eager")
+                for submodule in new_model.modules():
+                    if (
+                        submodule is not new_model
+                        and isinstance(submodule, PreTrainedModel)
+                        and submodule.config.__class__ != new_model.config.__class__
+                    ):
+                        self.assertTrue(submodule.config._attn_implementation == "eager")
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
         """
