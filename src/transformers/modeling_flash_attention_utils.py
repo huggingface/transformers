@@ -506,7 +506,7 @@ def _process_flash_attention_kwargs(
     """
     Returns a set of kwargs that are passed down to the according flash attention function based on
     requested features and whether it is supported - depends on the version and kernel implementation
-    which is dynamically configued at `lazy_import_flash_attention`. The (un)supported features can be
+    which is dynamically configured at `lazy_import_flash_attention`. The (un)supported features can be
     inspected in `supports_mapping`, see `_lazy_define_process_function` for more details.
 
     Args:
@@ -629,7 +629,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
     # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
     #
-    # NOTE: it is user's responsibility to take care of flattenning `position_ids` if that's needed by the model.
+    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
     is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
     is_fa_with_varlen_kwargs = all(
