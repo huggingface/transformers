@@ -218,7 +218,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         closest_aspect_ratio = None
         if target_aspect_ratio >= 1:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k <= target_aspect_ratio],
+                [k for k in asp_dict if k <= target_aspect_ratio],
                 key=lambda x: abs(x - target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
@@ -226,7 +226,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             return max(tiles_given_aspect_ratio, key=lambda x: x[0])
         else:
             closest_aspect_ratio = min(
-                [k for k in asp_dict.keys() if k > target_aspect_ratio],
+                [k for k in asp_dict if k > target_aspect_ratio],
                 key=lambda x: abs(1 / x - 1 / target_aspect_ratio),
             )
             tiles_given_aspect_ratio = asp_dict[closest_aspect_ratio]
@@ -310,7 +310,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
             )
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
+        processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

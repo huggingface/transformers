@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -113,6 +114,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## ModernBertForTokenClassification
 
 [[autodoc]] ModernBertForTokenClassification
+    - forward
+
+## ModernBertForMultipleChoice
+
+[[autodoc]] ModernBertForMultipleChoice
     - forward
 
 ## ModernBertForQuestionAnswering

@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.7.1'
+ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 # Disable kernel mapping for now until all tests pass

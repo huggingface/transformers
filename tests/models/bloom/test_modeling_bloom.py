@@ -290,7 +290,7 @@ class BloomModelTester:
     def create_and_check_bloom_weight_initialization(self, config, *args):
         model = BloomModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -739,7 +739,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
-            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
@@ -747,7 +747,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             output_dict["max"][idx] = embeddings.max(dim=-1).values[0][i].item()
             output_dict["mean"][idx] = embeddings.mean(dim=-1)[0][i].item()
 
-        for key in TEST_EMBEDDINGS[str(model.dtype)].keys():
+        for key in TEST_EMBEDDINGS[str(model.dtype)]:
             self.assertDictEqual(TEST_EMBEDDINGS[str(model.dtype)][key], output_dict[key])
 
         output_dict_norm = {"min": {}, "max": {}, "mean": {}}

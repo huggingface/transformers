@@ -1203,7 +1203,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1449,7 +1449,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             if not isinstance(message, dict):
                 return
             maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
-                "content", None
+                "content"
             )
             if not maybe_list_content or isinstance(maybe_list_content, str):
                 return
@@ -1784,9 +1784,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 pathlib_repo_file = Path(path)
                 file_name = pathlib_repo_file.name
                 suffix = "".join(pathlib_repo_file.suffixes)
-                if file_name == "tekken.json":
-                    valid_tokenizer_files.append(file_name)
-                elif suffix in sentencepiece_suffixes:
+                if file_name == "tekken.json" or suffix in sentencepiece_suffixes:
                     valid_tokenizer_files.append(file_name)
 
             if len(valid_tokenizer_files) == 0:

@@ -375,9 +375,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargs_encoder:
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
@@ -612,7 +612,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
             output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
-            output = tuple([x for x in output if x is not None])
+            output = tuple(x for x in output if x is not None)
             return output
 
         return TFSeq2SeqLMOutput(
@@ -658,7 +658,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        decoder_attention_mask = decoder_inputs.get("attention_mask", None)
         past_key_values = decoder_inputs.get("past_key_values")
         input_dict = {
             "pixel_values": None,  # needs to be passed to make Keras.layer.__call__ happy

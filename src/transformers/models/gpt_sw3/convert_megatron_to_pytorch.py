@@ -34,7 +34,7 @@ def recursive_print(name, val, spaces=0):
     if isinstance(val, dict):
         if msg is not None:
             print(msg)
-        for k in val.keys():
+        for k in val:
             recursive_print(k, val[k], spaces + 2)
     elif isinstance(val, torch.Tensor):
         print(msg, ":", val.size())
