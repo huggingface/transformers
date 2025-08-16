@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import os
-import warnings
 from functools import partial
 from typing import Optional, TypedDict
 
@@ -355,12 +354,12 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
         max_length_q = int(q_len.max())
         max_length_k = int(last_position_ids.max()) + 1
     else:
-        position_ids = position_ids.flatten()
-        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+        position_ids = position_ids.view(-1)
+        indices_q = (position_ids == 0).nonzero().view(-1)
 
         cu_seq_lens_q = torch.cat(
             (
-                indices_q[position_ids == 0],
+                indices_q,
                 torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
             )
         )
@@ -424,14 +423,6 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
     )
 
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
-
-
-def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
-    warnings.warn(
-        "The function `_prepare_flash_attention_from_position_ids` in `transformers.modeling_flash_attention_utils` is deprecated and will be removed in a future version. Please use `_prepare_from_posids` instead.",
-        FutureWarning,
-    )
-    return _prepare_from_posids(query, key, value, position_ids)
 
 
 def _is_packed_sequence(position_ids, batch_size):
@@ -506,7 +497,7 @@ def _process_flash_attention_kwargs(
     """
     Returns a set of kwargs that are passed down to the according flash attention function based on
     requested features and whether it is supported - depends on the version and kernel implementation
-    which is dynamically configued at `lazy_import_flash_attention`. The (un)supported features can be
+    which is dynamically configured at `lazy_import_flash_attention`. The (un)supported features can be
     inspected in `supports_mapping`, see `_lazy_define_process_function` for more details.
 
     Args:
@@ -629,7 +620,7 @@ def _flash_attention_forward(
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is safe to
     # use `flash_varlen_fn` knowing we already have all necessary the kwargs.
     #
-    # NOTE: it is user's responsibility to take care of flattenning `position_ids` if that's needed by the model.
+    # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
     is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
     is_fa_with_varlen_kwargs = all(
