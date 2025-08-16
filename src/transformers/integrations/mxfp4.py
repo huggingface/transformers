@@ -228,7 +228,7 @@ def routing_torch_dist(
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
-        rank = int(os.environ.get("LOCAL_RANK", 0))
+        rank = int(os.environ.get("LOCAL_RANK", "0"))
         replace_value = -1
 
         n_tokens = logits.shape[0]
