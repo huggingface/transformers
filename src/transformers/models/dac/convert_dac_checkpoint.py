@@ -18,7 +18,6 @@ import re
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from transformers import (
     DacConfig,
@@ -187,50 +186,22 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def apply_weight_norm(model):
-    weight_norm = nn.utils.weight_norm
-
-    for layer in model.quantizer.quantizers:
-        weight_norm(layer.in_proj)
-        weight_norm(layer.out_proj)
-
-    weight_norm(model.encoder.conv1)
-    weight_norm(model.encoder.conv2)
-
-    for layer in model.encoder.block:
-        weight_norm(layer.conv1)
-        weight_norm(layer.res_unit1.conv1)
-        weight_norm(layer.res_unit1.conv2)
-        weight_norm(layer.res_unit2.conv1)
-        weight_norm(layer.res_unit2.conv2)
-        weight_norm(layer.res_unit3.conv1)
-        weight_norm(layer.res_unit3.conv2)
-
-    weight_norm(model.decoder.conv1)
-    weight_norm(model.decoder.conv2)
-
-    for layer in model.decoder.block:
-        weight_norm(layer.conv_t1)
-        weight_norm(layer.res_unit1.conv1)
-        weight_norm(layer.res_unit1.conv2)
-        weight_norm(layer.res_unit2.conv1)
-        weight_norm(layer.res_unit2.conv2)
-        weight_norm(layer.res_unit3.conv1)
-        weight_norm(layer.res_unit3.conv2)
-
-
 @torch.no_grad()
 def convert_checkpoint(
     model_name,
     checkpoint_path,
     pytorch_dump_folder_path,
-    sample_rate=16000,
     repo_id=None,
 ):
-    model_dict = torch.load(checkpoint_path, "cpu", weights_only=True)
+    # check if cuda is available
+    if not torch.cuda.is_available():
+        raise ValueError(
+            "Please run this script on a machine with a GPU for weight nor layers to be correctly copied."
+        )
+    torch_device = "cuda"
+    model_dict = torch.load(checkpoint_path, torch_device, weights_only=True)
 
     config = DacConfig()
-
     metadata = model_dict["metadata"]["kwargs"]
     config.encoder_hidden_size = metadata["encoder_dim"]
     config.downsampling_ratios = metadata["encoder_rates"]
@@ -240,18 +211,20 @@ def convert_checkpoint(
     config.decoder_hidden_size = metadata["decoder_dim"]
     config.upsampling_ratios = metadata["decoder_rates"]
     config.quantizer_dropout = float(metadata["quantizer_dropout"])
-    config.sampling_rate = sample_rate
+    config.sampling_rate = int(metadata["sample_rate"])
     config.hop_length = int(np.prod(config.downsampling_ratios))
 
-    model = DacModel(config)
+    model = DacModel(config).to(torch_device)
     feature_extractor = DacFeatureExtractor()
-    feature_extractor.sampling_rate = sample_rate
+    feature_extractor.sampling_rate = config.sampling_rate
+    feature_extractor.hop_length = config.hop_length
 
     original_checkpoint = model_dict["state_dict"]
 
-    apply_weight_norm(model)
+    # original model uses old weight norm function
+    model.apply_weight_norm(old_weight_norm=True)
     recursively_load_weights(original_checkpoint, model, model_name)
-    model.remove_weight_norm()
+    model.remove_weight_norm(old_weight_norm=True)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -276,9 +249,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
-    parser.add_argument("--sample_rate", default=None, type=str, help="Sample rate used by DacFeatureExtractor")
     args = parser.parse_args()
 
-    convert_checkpoint(
-        args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.sample_rate, args.push_to_hub
-    )
+    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
