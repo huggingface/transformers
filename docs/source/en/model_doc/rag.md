@@ -17,48 +17,111 @@ rendered properly in your Markdown viewer.
 
 # RAG
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+  </div>
 </div>
 
-## Overview
+[Retrieval-Augmented Generation (RAG)](https://huggingface.co/papers/2005.11401) mixes a **parametric generator** (seq2seq like BART/T5) with a **non-parametric memory** (a dense index queried by a neural retriever). At inference time, RAG fetches relevant passages and conditions its generation on them, effectively marginalizing over multiple documents. This often makes the answers **more factual** and lets you **update knowledge** by changing the index instead of retraining the whole model.
 
-Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and
-sequence-to-sequence models. RAG models retrieve documents, pass them to a seq2seq model, then marginalize to generate
-outputs. The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing
-both retrieval and generation to adapt to downstream tasks.
+You can find official checkpoints under the RAG collection, for example: `facebook/rag-sequence-nq` and `facebook/rag-token-nq`.
 
-It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
-Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
+> [!TIP]
+> This model was contributed by [ola13](https://huggingface.co/ola13).
+>
+> Click on the RAG models in the right sidebar for more examples of how to apply RAG to different tasks.
 
-The abstract from the paper is the following:
+The examples below show how to use RAG with a `pipeline` (when available) and with the explicit RAG classes.
 
-*Large pre-trained language models have been shown to store factual knowledge in their parameters, and achieve
-state-of-the-art results when fine-tuned on downstream NLP tasks. However, their ability to access and precisely
-manipulate knowledge is still limited, and hence on knowledge-intensive tasks, their performance lags behind
-task-specific architectures. Additionally, providing provenance for their decisions and updating their world knowledge
-remain open research problems. Pre-trained models with a differentiable access mechanism to explicit nonparametric
-memory can overcome this issue, but have so far been only investigated for extractive downstream tasks. We explore a
-general-purpose fine-tuning recipe for retrieval-augmented generation (RAG) — models which combine pre-trained
-parametric and non-parametric memory for language generation. We introduce RAG models where the parametric memory is a
-pre-trained seq2seq model and the non-parametric memory is a dense vector index of Wikipedia, accessed with a
-pre-trained neural retriever. We compare two RAG formulations, one which conditions on the same retrieved passages
-across the whole generated sequence, the other can use different passages per token. We fine-tune and evaluate our
-models on a wide range of knowledge-intensive NLP tasks and set the state-of-the-art on three open domain QA tasks,
-outperforming parametric seq2seq models and task-specific retrieve-and-extract architectures. For language generation
-tasks, we find that RAG models generate more specific, diverse and factual language than a state-of-the-art
-parametric-only seq2seq baseline.*
+<hfoptions id="usage">
 
-This model was contributed by [ola13](https://huggingface.co/ola13).
+<hfoption id="Pipeline">
 
-## Usage tips
+```py
+from transformers import pipeline
 
-Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and Seq2Seq models. 
-RAG models retrieve docs, pass them to a seq2seq model, then marginalize to generate outputs. The retriever and seq2seq 
-modules are initialized from pretrained models, and fine-tuned jointly, allowing both retrieval and generation to adapt 
-to downstream tasks.
+qa = pipeline("text2text-generation", model="facebook/rag-sequence-nq")
+out = qa("Who wrote The Old Man and the Sea?")
+print(out[0]["generated_text"])
+```
+
+</hfoption>
+
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
+
+tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+
+retriever = RagRetriever.from_pretrained(
+    "facebook/rag-sequence-nq",
+    index_name="exact",
+    use_dummy_dataset=True,
+)
+
+model = RagSequenceForGeneration.from_pretrained(
+    "facebook/rag-sequence-nq",
+    retriever=retriever,
+)
+
+inputs = tokenizer("Who discovered penicillin?", return_tensors="pt")
+with torch.no_grad():
+    output_ids = model.generate(**inputs, max_new_tokens=32)
+
+print(tokenizer.batch_decode(output_ids, skip_special_tokens=True))
+```
+
+</hfoption>
+
+<hfoption id="transformers-cli">
+<!-- No transformers-cli example for RAG, closing this block per the template. -->
+</hfoption>
+
+</hfoptions>
+
+Quantization reduces memory by storing weights in lower precision. See the [Quantization](../quantization/overview) overview for supported backends.
+**Note:** quantization here applies to the **generator weights**. The **retriever and vector index** keep their own formats/backends.
+
+```py
+import torch
+from transformers import BitsAndBytesConfig, RagTokenizer, RagRetriever, RagSequenceForGeneration
+
+bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+
+tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
+
+model = RagSequenceForGeneration.from_pretrained(
+    "facebook/rag-sequence-nq",
+    retriever=retriever,
+    quantization_config=bnb,   # quantizes generator weights to 4bit
+    device_map="auto",
+)
+
+inputs = tokenizer("When was CRISPR discovered?", return_tensors="pt")
+print(tokenizer.decode(model.generate(**inputs, max_new_tokens=32)[0], skip_special_tokens=True))
+```
+
+<!-- AttentionMaskVisualizer is not added for RAG -->
+
+<div class="flex justify-center">
+  <img src=""/>
+</div>
+
+## Notes
+
+- **RAG-Sequence vs RAG-Token:** Sequence conditions on the same retrieved passages for the whole answer. Token can vary passages per token (more flexible, slightly slower).
+- **Updating knowledge:** Rebuild or swap the index to refresh facts. No need to retrain the generator.
+- **Latency:** Retrieval adds overhead. Tune top-k and batch retrieval for speed/quality trade-offs.
+
+## Resources
+- Paper: *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks* (Lewis et al., 2020)
+- Checkpoints: `facebook/rag-sequence-nq`, `facebook/rag-token-nq`
+- Dense retriever used in RAG: DPR
 
 ## RagConfig
 
