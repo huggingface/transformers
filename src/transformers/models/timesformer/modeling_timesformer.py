@@ -460,18 +460,20 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.weight, std=std)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, TimesformerEmbeddings):
-            nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
-            module.patch_embeddings.apply(self._init_weights)
+            nn.init.trunc_normal_(module.cls_token, std=std)
+            nn.init.trunc_normal_(module.position_embeddings, std=std)
+            if self.config.attention_type != "space_only":
+                module.time_embeddings.data.zero_()
 
 
 @auto_docstring
