@@ -146,9 +146,9 @@ class CircleCIJob:
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
-        pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        )
+        # pytest_flags.append(
+        #     f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+        # )
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
