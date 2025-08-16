@@ -320,7 +320,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
     ):
         return self.model.get_image_features(pixel_values=pixel_values, vision_feature_layers=vision_feature_layers)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

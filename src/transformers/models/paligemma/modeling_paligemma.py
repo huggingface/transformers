@@ -332,7 +332,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()
@@ -421,7 +421,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

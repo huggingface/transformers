@@ -2201,7 +2201,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     def get_image_features(self, pixel_values):
         return self.model.get_image_features(pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

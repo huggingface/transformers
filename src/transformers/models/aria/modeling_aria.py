@@ -1123,7 +1123,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
