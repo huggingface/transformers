@@ -52,7 +52,6 @@ elif is_torchvision_available():
     import torchvision.transforms.functional as F
 
 if is_vision_available():
-    import PIL
     from PIL import Image, ImageDraw
 
 
@@ -84,7 +83,6 @@ def convert_to_grayscale(
     if is_grayscale(image):
         return image
     return F.rgb_to_grayscale(image, num_output_channels=3)
-
 
 
 class EfficientLoFTRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -125,10 +123,10 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         # Note: images here are already converted to torch tensors by BaseImageProcessorFast
         # But we need to handle image pairs validation and flattening
-        
+
         # First convert any non-torch images and validate pairs
-        from ...image_utils import to_numpy_array, is_pil_image, is_valid_image, get_image_type, ImageType
-        
+        from ...image_utils import ImageType, get_image_type, is_pil_image, is_valid_image
+
         def _is_valid_image(image):
             return is_pil_image(image) or (
                 is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
@@ -136,7 +134,9 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
 
         # Handle the pair validation and flattening similar to slow processor
         if isinstance(images, list):
-            if len(images) == 2 and all((_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images):
+            if len(images) == 2 and all(
+                (_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images
+            ):
                 # Single pair of images - keep as is, they'll be processed by the base class
                 pass
             elif all(
@@ -147,10 +147,10 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
             ):
                 # Multiple pairs - flatten them
                 images = [image for image_pair in images for image in image_pair]
-        
+
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        
+
         for shape, stacked_images in grouped_images.items():
             if do_grayscale:
                 stacked_images = convert_to_grayscale(stacked_images)
@@ -159,21 +159,29 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             processed_images_grouped[shape] = stacked_images
-            
+
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        
+
         # Convert back to pairs format
         image_pairs = [processed_images[i : i + 2] for i in range(0, len(processed_images), 2)]
-        
-        # Stack pairs if return_tensors is requested
+
+        # Stack each pair into a single tensor to match slow processor format
+        stacked_pairs = []
+        for pair in image_pairs:
+            stacked_pair = torch.stack(pair, dim=0)
+            stacked_pairs.append(stacked_pair)
+
+        # Return in same format as slow processor
         if return_tensors:
-            # Stack each pair into a single tensor
-            stacked_pairs = []
-            for pair in image_pairs:
-                stacked_pair = torch.stack(pair, dim=0)
-                stacked_pairs.append(stacked_pair)
+            if len(stacked_pairs) == 1:
+                # Single pair: add batch dimension to match slow processor format
+                image_pairs = stacked_pairs[0].unsqueeze(0)  # Shape: [1, 2, 3, H, W]
+            else:
+                # Multiple pairs: stack to get [batch_size, 2, 3, H, W]
+                image_pairs = torch.stack(stacked_pairs, dim=0)
+        else:
             image_pairs = stacked_pairs
-            
+
         return BatchFeature(data={"pixel_values": image_pairs})
 
     def post_process_keypoint_matching(
@@ -256,7 +264,7 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         """
         from ...image_utils import to_numpy_array
         from .image_processing_efficientloftr import validate_and_format_image_pairs
-        
+
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]

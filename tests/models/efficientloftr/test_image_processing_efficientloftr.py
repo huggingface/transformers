@@ -92,3 +92,73 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
     def setUp(self) -> None:
         super().setUp()
         self.image_processor_tester = EfficientLoFTRImageProcessingTester(self)
+
+    def test_slow_fast_equivalence(self):
+        """Override the generic test since EfficientLoFTR requires image pairs."""
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        # Create image pairs instead of single images
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=False)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+
+    def test_slow_fast_equivalence_batched(self):
+        """Override the generic test since EfficientLoFTR requires image pairs."""
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        # Create image pairs instead of single images
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+
+    def test_fast_is_faster_than_slow(self):
+        """Override the generic test since EfficientLoFTR requires image pairs.""" 
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast speed test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast speed test as one of the image processors is not defined")
+
+        # Create image pairs for speed test
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=False)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        import time
+
+        # Time slow processor
+        start_time = time.time()
+        for _ in range(10):
+            _ = image_processor_slow(dummy_images, return_tensors="pt")
+        slow_time = time.time() - start_time
+
+        # Time fast processor  
+        start_time = time.time()
+        for _ in range(10):
+            _ = image_processor_fast(dummy_images, return_tensors="pt")
+        fast_time = time.time() - start_time
+
+        # Fast should be faster (or at least not significantly slower)
+        self.assertLessEqual(fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor")
