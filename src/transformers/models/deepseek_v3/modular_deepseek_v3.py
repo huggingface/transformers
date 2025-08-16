@@ -9,6 +9,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -354,8 +355,13 @@ class DeepseekV3ForCausalLM(LlamaForCausalLM):
     pass
 
 
+class DeepseekV3ForSequenceClassification(GenericForSequenceClassification, DeepseekV3PreTrainedModel):
+    pass
+
+
 __all__ = [
     "DeepseekV3PreTrainedModel",
     "DeepseekV3Model",
     "DeepseekV3ForCausalLM",
+    "DeepseekV3ForSequenceClassification",
 ]
