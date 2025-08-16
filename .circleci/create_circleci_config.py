@@ -26,6 +26,7 @@ import yaml
 COMMON_ENV_VARIABLES = {
     "UV_PYTHON": "/opt/circleci/.pyenv/versions/3.13.0/bin/python3",
     "NEEDRESTART_SUSPEND": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
     "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
@@ -172,7 +173,12 @@ class CircleCIJob:
             {"run": "echo $NEEDRESTART_SUSPEND"},
             {"run": "sudo apt-get remove --purge needrestart -y"},
             {"run": 'sudo apt-get install -y python3-dbg'},
+            {"run": '"sudo apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git git-lfs ffmpeg"'},
             {"run": "pip install uv"},
+            {"run": "uv pip install --no-cache-dir -U pip setuptools"},
+            {"run": "uv pip install --no-cache-dir 'torch' 'torchaudio' 'torchvision' 'torchcodec' --index-url https://download.pytorch.org/whl/cpu"},
+            {"run": "uv pip install --no-deps timm accelerate --extra-index-url https://download.pytorch.org/whl/cpu"},
+            {"run": 'uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/transformers.git@main#egg=transformers[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]"'},
             {"run": " && ".join(self.install_steps)},
             {"run": {"name": "Download NLTK files", "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """} if "example" in self.name else "echo Skipping"},
             {"run": {
