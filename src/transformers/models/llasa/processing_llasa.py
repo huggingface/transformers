@@ -14,8 +14,8 @@
 # limitations under the License.
 """Processor class for Llasa."""
 
-from typing import Union
 import re
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -115,9 +115,7 @@ class LlasaProcessor(ProcessorMixin):
         # data.update({"input_ids": input_ids})
         # data.update({"input_offset": [len(input_id) for input_id in input_ids]})
 
-        formatted_texts = self.tokenizer.apply_chat_template(
-            chats, **text_kwargs
-        )
+        formatted_texts = self.tokenizer.apply_chat_template(chats, **text_kwargs)
         inputs = self.tokenizer(
             formatted_texts,
             padding=True,
@@ -145,7 +143,7 @@ class LlasaProcessor(ProcessorMixin):
         Args:
             decoder_input_ids (`torch.Tensor`): The complete output sequence of the decoder.
         """
-        generated_ids = decoder_input_ids[:, input_offset : -1]
+        generated_ids = decoder_input_ids[:, input_offset:-1]
         speech_tokens_str = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         audios = []
         for i, _str in enumerate(speech_tokens_str):
