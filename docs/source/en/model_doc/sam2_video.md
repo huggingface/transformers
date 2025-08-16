@@ -274,10 +274,11 @@ Tracked 2 objects through 180 frames
 ```
 
 <!-- TODO replace with sam2 resources -->
-<!-- ## Resources -->
-<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+## Resources
 
-- [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything_2.ipynb) for using the model. -->
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM.
+
+- [Demo notebook 🌎](https://colab.research.google.com/drive/1Z0NGLE7p8qnc9UpuI8KBETHd2xBbOEhv?usp=sharing) for using the model, contributed by [Sangbum Choi](https://github.com/SangbumChoi).
 
 ## Sam2VideoConfig
 
