@@ -141,7 +141,7 @@ class CircleCIJob:
 
         job = {
             "machine": {
-                "image": "ubuntu-2004:current"
+                "image": "ubuntu-2004:2024.01.1"
             },
             "environment": env,
         }
