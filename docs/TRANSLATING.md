@@ -1,4 +1,4 @@
-# Translating the Transformers documentation into your language
+# Translating the Transformers Documentation Into Your Language
 
 As part of our mission to democratize machine learning, we aim to make the Transformers library available in many more languages! Follow the steps below to help translate the documentation into your language.
 
@@ -18,7 +18,7 @@ As part of our mission to democratize machine learning, we aim to make the Trans
     git clone https://github.com/YOUR-USERNAME/transformers.git
     ```
    
-   Replace `YOUR-USERNAME` with your GitHub username.
+   Replace `GITHUB-USERNAME` with your GitHub username.
 
 ## Copy-paste the English version with a new language code
 

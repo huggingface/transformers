@@ -39,14 +39,14 @@ check how they look before committing for instance). You don't have to commit th
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+Once you have set up the `doc-builder` and additional packages, you can generate the documentation by 
 typing the following command:
 
 ```bash
 doc-builder build transformers docs/source/en/ --build_dir ~/tmp/test-build
 ```
 
-You can adapt the `--build_dir` to set any temporary folder that you prefer. This command will create it and generate
+You can change the `--build_dir` to set any temporary folder that you prefer. This command will create it and generate
 the MDX files that will be rendered as the documentation on the main website. You can inspect them in your favorite
 Markdown editor.
 
@@ -83,7 +83,7 @@ The `preview` command only works with existing doc files. When you add a complet
 
 Accepted files are Markdown (.md).
 
-Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
+Create a file with its extension and put it in the source directory. You can then link it to the toctree by putting
 the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
@@ -238,7 +238,7 @@ following signature:
 def my_function(x: str = None, a: float = 1):
 ```
 
-then its documentation should look like this:
+then the documentation should look like this:
 
 ```
     Args:
