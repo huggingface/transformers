@@ -100,10 +100,6 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
     @unittest.skip("Gemma3 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
@@ -399,10 +395,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     @pytest.mark.generate
     @unittest.skip("Gemma3 has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
         pass
 
     @unittest.skip("Gemma3 has HybridCache and doesn't support continue from past kv")

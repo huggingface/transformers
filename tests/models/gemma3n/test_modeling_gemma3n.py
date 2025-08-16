@@ -425,13 +425,6 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         pass
 
     @pytest.mark.generate
-    @unittest.skip(
-        "Gemma3n has a special shape for hidden states (due to per-layer projs) which is not compatible with dola decoding"
-    )
-    def test_dola_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
         pass
@@ -600,10 +593,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     @pytest.mark.generate
     @unittest.skip("Gemma3n has HybridCache which is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Gemma3n has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
         pass
 
     @unittest.skip("Gemma3n has HybridCache and doesn't support continue from past kv")

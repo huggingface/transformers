@@ -248,11 +248,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="CSM does not support Dola decoding.")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @pytest.mark.generate
     @unittest.skip(reason="CSM does not support beam search.")
     def test_beam_sample_generate(self):
         pass
