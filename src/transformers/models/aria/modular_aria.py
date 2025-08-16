@@ -1091,7 +1091,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
     """
 
     def __init__(self, config: AriaTextConfig):
-        super().__init__(self)
+        super().__init__(config)
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
@@ -1255,8 +1255,7 @@ class AriaTextMoELayer(nn.Module):
 class AriaTextAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: AriaTextConfig, layer_idx: int):
-        super().__init__()
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -1273,7 +1272,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
-        super().__init__(self)
+        super().__init__(config, layer_idx)
         self.mlp = AriaTextMoELayer(config)
 
 
@@ -1306,7 +1305,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 

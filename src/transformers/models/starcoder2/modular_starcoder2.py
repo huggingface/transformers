@@ -72,7 +72,7 @@ class Starcoder2MLP(nn.Module):
 
 class Starcoder2Attention(MistralAttention):
     def __init__(self, config: Starcoder2Config, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config=config, layer_idx=layer_idx)
         self.residual_dropout = config.residual_dropout
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
@@ -131,7 +131,7 @@ class Starcoder2Attention(MistralAttention):
 
 class Starcoder2DecoderLayer(MistralDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
-        super().__init__(self)
+        super().__init__(config, layer_idx)
         self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)

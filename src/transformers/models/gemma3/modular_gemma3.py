@@ -530,7 +530,7 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     ]
 
     def _init_weights(self, module):
-        Gemma2PreTrainedModel._init_weights(module)
+        Gemma2PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
             module.mm_input_projection_weight.data.zero_()
 

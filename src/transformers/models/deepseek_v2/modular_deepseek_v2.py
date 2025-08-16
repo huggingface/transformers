@@ -505,7 +505,7 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2MoEGate):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 

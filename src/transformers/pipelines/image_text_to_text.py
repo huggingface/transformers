@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import enum
-from collections.abc import Iterable  # pylint: disable=g-importing-member
+from collections.abc import Iterable
 from typing import Any, Optional, Union, overload
 
 from ..generation import GenerationConfig
