@@ -24,6 +24,7 @@ import yaml
 
 
 COMMON_ENV_VARIABLES = {
+    "UV_PYTHON": "/opt/circleci/.pyenv/versions/3.13.0/bin/python3",
     "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
@@ -164,6 +165,7 @@ class CircleCIJob:
             # {"run": "sudo apt-get update && apt-get install -y curl"},
             {"run": "sudo apt-get install -y curl"},
             {"run": "python3 -V"},
+            {"run": "echo $UV_PYTHON"},
             {"run": 'python3 -c "import sys; print(sys.executable)"'},
             {"run": "pip install uv"},
             {"run": " && ".join(self.install_steps)},
