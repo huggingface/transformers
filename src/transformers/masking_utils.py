@@ -960,6 +960,14 @@ def create_chunked_causal_mask(
     )
     if early_exit:
         return attention_mask
+    
+    if attention_mask is not None and attention_mask.dim() == 2:
+        first_valid = (attention_mask > 0).int().argmax(dim=-1)  
+        max_shift = first_valid.min().item()
+        if max_shift > 0:
+            cache_position = cache_position - max_shift
+            cache_position = torch.clamp(cache_position, min=0)
+            kv_length = kv_length - max_shift
 
     chunk_size = getattr(config, "attention_chunk_size", None)
     if chunk_size is None:
