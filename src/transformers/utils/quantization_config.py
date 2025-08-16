@@ -1568,7 +1568,7 @@ class FPQuantConfig(QuantizationConfigMixin):
             The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32). If `None`, it will be set to 16 for `"nvfp4"` and 32 for `"mxfp4"`.
         pseudoquantization (`bool`, *optional*, defaults to `False`):
             Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
-        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"` or `"identity"`.
+        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"`, `"identity"` or `"gsr"`.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1628,8 +1628,8 @@ class FPQuantConfig(QuantizationConfigMixin):
 
         if self.backward_dtype not in ["bf16"]:
             raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
-        if self.transform_init not in ["hadamard", "identity"]:
-            raise ValueError("Only 'hadamard' and 'identity' are supported for transform_init.")
+        if self.transform_init not in ["hadamard", "identity", "gsr"]:
+            raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
 
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
