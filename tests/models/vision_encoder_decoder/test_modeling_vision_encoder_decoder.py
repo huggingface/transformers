@@ -372,6 +372,63 @@ class EncoderDecoderMixin:
         loss = model(**model_inputs).loss
         loss.backward()
 
+    def test_loss_calculation_without_decoder_input_ids(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            inputs_dict["config"], inputs_dict["decoder_config"]
+        )
+
+        model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.to(torch_device)
+        model.train()
+        model.config.decoder_start_token_id = 0
+        model.config.pad_token_id = 0
+
+        # Test without decoder_input_ids - should use shifted labels path
+        model_inputs = {
+            "pixel_values": inputs_dict["pixel_values"],
+            "labels": inputs_dict["labels"],
+            # Explicitly not providing decoder_input_ids
+        }
+
+        outputs = model(**model_inputs)
+        self.assertIsNotNone(outputs.loss)
+        self.assertTrue(torch.is_tensor(outputs.loss))
+        self.assertEqual(outputs.loss.dim(), 0)  # Loss should be scalar
+
+    def test_loss_calculation_paths_comparison(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            inputs_dict["config"], inputs_dict["decoder_config"]
+        )
+
+        model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.to(torch_device)
+        model.train()
+        model.config.decoder_start_token_id = 0
+        model.config.pad_token_id = 0
+
+        # Test both paths produce valid losses
+        model_inputs_without_decoder = {
+            "pixel_values": inputs_dict["pixel_values"],
+            "labels": inputs_dict["labels"],
+        }
+
+        model_inputs_with_decoder = {
+            "pixel_values": inputs_dict["pixel_values"],
+            "labels": inputs_dict["labels"],
+            "decoder_input_ids": inputs_dict["decoder_input_ids"],
+        }
+
+        # Both should produce valid losses
+        outputs_without = model(**model_inputs_without_decoder)
+        outputs_with = model(**model_inputs_with_decoder)
+
+        self.assertIsNotNone(outputs_without.loss)
+        self.assertIsNotNone(outputs_with.loss)
+        self.assertTrue(torch.is_tensor(outputs_without.loss))
+        self.assertTrue(torch.is_tensor(outputs_with.loss))
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
