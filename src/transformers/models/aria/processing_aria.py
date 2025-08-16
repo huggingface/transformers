@@ -198,6 +198,3 @@ class AriaProcessor(ProcessorMixin):
         # otherwise `self.image_processor.model_input_names` is also modified
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-
-__all__ = ["AriaProcessor"]

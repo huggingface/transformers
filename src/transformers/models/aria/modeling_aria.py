@@ -1274,13 +1274,3 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             model_inputs["pixel_mask"] = pixel_mask
 
         return model_inputs
-
-
-__all__ = [
-    "AriaForConditionalGeneration",
-    "AriaPreTrainedModel",
-    "AriaTextPreTrainedModel",
-    "AriaTextModel",
-    "AriaModel",
-    "AriaTextForCausalLM",
-]
