@@ -712,7 +712,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "yonigozlan/sam2.1_hiera_tiny_hf"
+        model_name = "facebook/sam2.1-hiera-tiny"
         model = Sam2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -749,9 +749,8 @@ def prepare_video():
 class Sam2ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
-        self.model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(torch.float32)
-        self.processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
+        self.model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
+        self.processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-tiny")
         self.model.to(torch_device)
         self.model.eval()
 
@@ -1007,7 +1006,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_tiny_hf", device=torch_device)
+        generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-tiny", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
