@@ -25,7 +25,7 @@ import yaml
 
 COMMON_ENV_VARIABLES = {
     "UV_PYTHON": "/opt/circleci/.pyenv/versions/3.13.0/bin/python3",
-    "NEEDRESTART_MODE": "a",
+    "NEEDRESTART_SUSPEND": "1",
     "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
@@ -169,6 +169,7 @@ class CircleCIJob:
             {"run": 'python3 -c "import sys; print(sys.executable)"'},
             {"run": 'sudo apt-get update'},
             {"run": 'sudo apt-get install -y gdb'},
+            {"run": "echo $NEEDRESTART_SUSPEND"},
             {"run": 'sudo apt-get install -y python3-dbg'},
             {"run": "pip install uv"},
             {"run": " && ".join(self.install_steps)},
