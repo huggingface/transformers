@@ -126,7 +126,7 @@ GOT-OCR2 can also generate formatted text, such as markdown or LaTeX. Here is an
 
 ### Inference on multiple pages
 
-Although it might be reasonable in most cases to use a “for loop” for multi-page processing, some text data with formatting across several pages make it necessary to process all pages at once. GOT introduces a multi-page OCR (without “for loop”) feature, where multiple pages can be processed by the model at once, whith the output being one continuous text.
+Although it might be reasonable in most cases to use a “for loop” for multi-page processing, some text data with formatting across several pages make it necessary to process all pages at once. GOT introduces a multi-page OCR (without “for loop”) feature, where multiple pages can be processed by the model at once, with the output being one continuous text.
 Here is an example of how to process multiple pages at once:
 
 

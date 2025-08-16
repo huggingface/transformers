@@ -112,7 +112,7 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Base NewTaskModel model which consists of a vision backbone and a language model withou language modeling head.,
+    The Base NewTaskModel model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
 class NewTaskModelModel(NewTaskModelPreTrainedModel):
@@ -310,7 +310,7 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
 
         is_training = token_type_ids is not None and labels is not None
 
-        # Replace image id woth PAD if the image token if OOV, to avoid index-errors
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
             special_image_mask = input_ids == self.config.image_token_id
             llm_input_ids = input_ids.clone()

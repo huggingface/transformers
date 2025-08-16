@@ -161,7 +161,7 @@ from torchao.dtypes import MarlinSparseLayout
 quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
-# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
     torch_dtype=torch.float16,
@@ -260,7 +260,7 @@ from torchao.dtypes import MarlinSparseLayout
 quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
-# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuraccy loss
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
     torch_dtype=torch.float16,
