@@ -4,11 +4,15 @@ original repository to the Hugging Face format.
 
 URL: https://github.com/facebookresearch/MetaCLIP
 
-To convert, git clone the MetaCLIP repository and place it in the same directory as this script.
+To convert:
+1. git clone the MetaCLIP repository
+2. place it in the same directory as this script
+3. move the conversion script to the MetaCLIP repository.
 
 Then run the script with:
 
 ```bash
+cd MetaCLIP
 python convert_metaclip_2_to_hf.py --checkpoint_path /path/to/checkpoint --model_name ViT-H-14-quickgelu-worldwide
 ```
 """
@@ -53,67 +57,109 @@ def create_hf_config(
     """Create Hugging Face MetaClip2Config from MetaCLIP model."""
     print("Creating Hugging Face config...")
 
-    # Get model dimensions
-    visual = metaclip_model.visual
-    transformer = metaclip_model.transformer
-
     # Vision config
-    if hasattr(visual, "image_size"):
-        image_size = visual.image_size
-        # Ensure image_size is an integer, not tuple
-        if isinstance(image_size, (tuple, list)):
-            image_size = image_size[0]
-    else:
-        image_size = 224  # default
-
-    if hasattr(visual, "patch_size"):
-        patch_size = visual.patch_size
-        # Ensure patch_size is an integer, not tuple
-        if isinstance(patch_size, (tuple, list)):
-            patch_size = patch_size[0]
-    else:
-        patch_size = 14 if "H-14" in model_name or "G-14" in model_name else 16
-
-    # Get vision model dimensions
-    if hasattr(visual, "conv1"):
-        hidden_size = visual.conv1.out_channels
-    elif hasattr(visual, "width"):
-        hidden_size = visual.width
-    else:
-        hidden_size = 1280  # H-14 default
-
-    if hasattr(visual, "transformer") and hasattr(visual.transformer, "resblocks"):
-        num_layers = len(visual.transformer.resblocks)
-    else:
-        num_layers = 32  # H-14 default
-
-    vision_config = {
-        "hidden_size": hidden_size,
-        "intermediate_size": hidden_size * 4,
-        "num_hidden_layers": num_layers,
-        "num_attention_heads": hidden_size // 80 if "H-14" in model_name else hidden_size // 64,
-        "image_size": image_size,
-        "patch_size": patch_size,
-        "hidden_act": "quick_gelu" if "quickgelu" in model_name.lower() else "gelu",
+    vision_configs = {
+        "ViT-H-14-quickgelu-worldwide": {
+            "image_size": 224,
+            "patch_size": 14,
+            "hidden_size": 1280,
+            "intermediate_size": 1280 * 4,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_act": "quick_gelu",
+            "projection_dim": 1024,
+        },
+        "ViT-H-14-378-worldwide": {
+            "image_size": 378,
+            "patch_size": 14,
+            "hidden_size": 1280,
+            "intermediate_size": 1280 * 4,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 32,
+            "hidden_act": "gelu",
+            "projection_dim": 1024,
+        },
+        "ViT-bigG-14-worldwide": {
+            "image_size": 224,
+            "patch_size": 14,
+            "hidden_size": 1664,
+            "intermediate_size": 8192,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 48,
+            "hidden_act": "gelu",
+            "projection_dim": 1280,
+        },
+        "ViT-bigG-14-378-worldwide": {
+            "image_size": 378,
+            "patch_size": 14,
+            "hidden_size": 1664,
+            "intermediate_size": 8192,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 48,
+            "hidden_act": "gelu",
+            "projection_dim": 1280,
+        },
     }
+
+    vision_config = vision_configs[model_name]
+    image_size = vision_config["image_size"]
 
     # Text config
-    text_config = {
-        "hidden_size": transformer.width,
-        "intermediate_size": transformer.width * 4,
-        "num_hidden_layers": len(transformer.resblocks),
-        "num_attention_heads": transformer.width // 64,
-        "max_position_embeddings": metaclip_model.positional_embedding.shape[0],
-        "vocab_size": metaclip_model.token_embedding.num_embeddings,
-        "eos_token_id": tokenizer.eos_token_id,
-        "hidden_act": "quick_gelu" if "quickgelu" in model_name.lower() else "gelu",
+    text_configs = {
+        "ViT-H-14-quickgelu-worldwide": {
+            "hidden_size": 1024,
+            "intermediate_size": 1024 * 4,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 24,
+            "max_position_embeddings": 77,
+            "vocab_size": 901629,
+            "eos_token_id": tokenizer.eos_token_id,
+            "hidden_act": "quick_gelu",
+            "projection_dim": 1024,
+        },
+        "ViT-H-14-378-worldwide": {
+            "hidden_size": 1024,
+            "intermediate_size": 1024 * 4,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 24,
+            "max_position_embeddings": 77,
+            "vocab_size": 901629,
+            "eos_token_id": tokenizer.eos_token_id,
+            "hidden_act": "gelu",
+            "projection_dim": 1024,
+        },
+        "ViT-bigG-14-worldwide": {
+            "hidden_size": 1280,
+            "intermediate_size": 1280 * 4,
+            "num_attention_heads": 20,
+            "num_hidden_layers": 32,
+            "max_position_embeddings": 77,
+            "vocab_size": 901629,
+            "eos_token_id": tokenizer.eos_token_id,
+            "hidden_act": "gelu",
+            "projection_dim": 1280,
+        },
+        "ViT-bigG-14-378-worldwide": {
+            "hidden_size": 1280,
+            "intermediate_size": 1280 * 4,
+            "num_attention_heads": 20,
+            "num_hidden_layers": 32,
+            "max_position_embeddings": 77,
+            "vocab_size": 901629,
+            "eos_token_id": tokenizer.eos_token_id,
+            "hidden_act": "gelu",
+            "projection_dim": 1280,
+        },
     }
+
+    text_config = text_configs[model_name]
+    projection_dim = text_config["projection_dim"]
 
     # Create config
     config = MetaClip2Config(
         vision_config=vision_config,
         text_config=text_config,
-        projection_dim=metaclip_model.text_projection.shape[1],
+        projection_dim=projection_dim,
     )
 
     return config, image_size

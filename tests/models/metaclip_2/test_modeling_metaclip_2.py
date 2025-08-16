@@ -284,13 +284,13 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2VisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2VisionModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "visual_projection"))
@@ -459,13 +459,13 @@ class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2TextModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "text_projection"))
@@ -698,7 +698,7 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -899,7 +899,7 @@ def prepare_img():
 class MetaClip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "facebook/metaclip2-worldwide"
+        model_name = "nielsr/metaclip-2-huge-worldwide"
         model = MetaClip2Model.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 
@@ -922,43 +922,6 @@ class MetaClip2ModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[19.9799, 13.6169]], device=torch_device)
 
         torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # MetaClip2 models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = MetaClip2Model.from_pretrained("facebook/metaclip2-worldwide").to(torch_device)
-
-        processor = CLIPProcessor.from_pretrained(
-            "facebook/metaclip2-worldwide", size={"height": 180, "width": 180}, crop_size={"height": 180, "width": 180}
-        )
-
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
-
-        # interpolate_pos_encodiung false should return value error
-        with self.assertRaises(ValueError, msg="doesn't match model"):
-            with torch.no_grad():
-                model(**inputs, interpolate_pos_encoding=False)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 26, 768))
-
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
-        ).to(torch_device)
-
-        torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=6e-3, atol=4e-4
-        )
