@@ -18,7 +18,7 @@ from tests.models.superglue.test_image_processing_superglue import (
     SuperGlueImageProcessingTester,
 )
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 if is_torch_available():
@@ -29,6 +29,9 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import EfficientLoFTRImageProcessor
+
+    if is_torchvision_available():
+        from transformers import EfficientLoFTRImageProcessorFast
 
 
 def random_array(size):
@@ -84,6 +87,7 @@ class EfficientLoFTRImageProcessingTester(SuperGlueImageProcessingTester):
 @require_vision
 class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
     image_processing_class = EfficientLoFTRImageProcessor if is_vision_available() else None
+    fast_image_processing_class = EfficientLoFTRImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self) -> None:
         super().setUp()
