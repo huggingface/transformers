@@ -15,6 +15,7 @@
 """Processor class for Llasa."""
 
 from typing import Union
+import re
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -28,7 +29,8 @@ if is_torch_available():
 class LlasaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "tokenize": True,
+            # "tokenize": True,
+            "tokenize": False,
             "continue_final_message": True,
         },
         "common_kwargs": {"return_tensors": "pt"},
@@ -109,15 +111,29 @@ class LlasaProcessor(ProcessorMixin):
                     {"role": "assistant", "content": self.tokenizer.llasa_token["speech_generation_start"]},
                 ]
             )
-        input_ids = self.tokenizer.apply_chat_template(chats, **text_kwargs)
-        data.update({"input_ids": input_ids})
-        data.update({"input_offset": [len(input_id) for input_id in input_ids]})
+        # input_ids = self.tokenizer.apply_chat_template(chats, **text_kwargs)
+        # data.update({"input_ids": input_ids})
+        # data.update({"input_offset": [len(input_id) for input_id in input_ids]})
+
+        formatted_texts = self.tokenizer.apply_chat_template(
+            chats, **text_kwargs
+        )
+        inputs = self.tokenizer(
+            formatted_texts,
+            padding=True,
+            return_tensors="pt",
+        )
+        input_ids = inputs["input_ids"][:, 1:]
+        attention_mask = inputs["attention_mask"][:, 1:]
+        data.update({"input_ids": input_ids})  # remove repeated start token
+        data.update({"attention_mask": attention_mask})
+        data.update({"input_offset": int(input_ids.shape[1])})
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def batch_decode(
         self,
         decoder_input_ids: "torch.Tensor",
-        input_offset: list[int],
+        input_offset: int,
         **kwargs: Unpack[LlasaProcessorKwargs],
     ) -> list["torch.Tensor"]:
         """
@@ -129,18 +145,30 @@ class LlasaProcessor(ProcessorMixin):
         Args:
             decoder_input_ids (`torch.Tensor`): The complete output sequence of the decoder.
         """
+        generated_ids = decoder_input_ids[:, input_offset : -1]
+        speech_tokens_str = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         audios = []
-        for i in range(decoder_input_ids.shape[0]):
-            # extract generated audio and remove end token
-            generated_ids = decoder_input_ids[i, input_offset[i] : -1]
-
+        for i, _str in enumerate(speech_tokens_str):
             # to speech tokens
-            speech_tokens = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-            speech_tokens = self.extract_speech_ids(speech_tokens)
-
+            speech_tokens_list = re.findall(r"<\|s_\d+\|>", _str)
+            speech_tokens = self.extract_speech_ids(speech_tokens_list)
             # decode speech tokens to waveform
+            # -- codec does not support batch decoding for inputs of different lengths
             speech_tokens = torch.tensor(speech_tokens).to(self.audio_codec.device).unsqueeze(0).unsqueeze(0)
             audios.append(self.audio_codec.decode_code(speech_tokens)[0, 0, :])
+
+        # audios = []
+        # for i in range(decoder_input_ids.shape[0]):
+        #     # extract generated audio and remove end token
+        #     generated_ids = decoder_input_ids[i, input_offset[i] : -1]
+
+        #     # to speech tokens
+        #     speech_tokens = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        #     speech_tokens = self.extract_speech_ids(speech_tokens)
+
+        #     # decode speech tokens to waveform
+        #     speech_tokens = torch.tensor(speech_tokens).to(self.audio_codec.device).unsqueeze(0).unsqueeze(0)
+        #     audios.append(self.audio_codec.decode_code(speech_tokens)[0, 0, :])
         return audios
 
     def decode(

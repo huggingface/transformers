@@ -90,7 +90,7 @@ with torch.no_grad():
     # Generate the speech autoregressively
     outputs = model.generate(
         encoded_text["input_ids"],
-        do_sample=False,
+        do_sample=True,    # False for deterministic
         max_length=600,    # generates up to ~10s. Max allowed length is 2048, as Llasa was trained with max length 2048
         top_p=1,           # Adjusts the diversity of generated content
         temperature=0.8,   # Controls randomness in output
