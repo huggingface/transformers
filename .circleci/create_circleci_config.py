@@ -173,7 +173,7 @@ class CircleCIJob:
             {"run": "echo $NEEDRESTART_SUSPEND"},
             {"run": "sudo apt-get remove --purge needrestart -y"},
             {"run": 'sudo apt-get install -y python3-dbg'},
-            {"run": '"sudo apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git git-lfs ffmpeg"'},
+            {"run": "sudo apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git git-lfs ffmpeg"},
             {"run": "pip install uv"},
             {"run": "uv pip install --no-cache-dir -U pip setuptools"},
             {"run": "uv pip install --no-cache-dir 'torch' 'torchaudio' 'torchvision' 'torchcodec' --index-url https://download.pytorch.org/whl/cpu"},
