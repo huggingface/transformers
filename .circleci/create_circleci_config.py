@@ -166,7 +166,7 @@ class CircleCIJob:
             {"run": "python3 -V"},
             {"run": "echo $UV_PYTHON"},
             {"run": 'python3 -c "import sys; print(sys.executable)"'},
-            {"run": 'apt-get update'},
+            {"run": 'sudo apt-get update'},
             {"run": 'sudo apt-get install -y gdb'},
             {"run": 'sudo apt-get install -y python3-dbg'},
             {"run": "pip install uv"},
