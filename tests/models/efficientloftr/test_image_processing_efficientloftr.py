@@ -134,7 +134,7 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_fast_is_faster_than_slow(self):
-        """Override the generic test since EfficientLoFTR requires image pairs.""" 
+        """Override the generic test since EfficientLoFTR requires image pairs."""
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast speed test")
 
@@ -154,7 +154,7 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
             _ = image_processor_slow(dummy_images, return_tensors="pt")
         slow_time = time.time() - start_time
 
-        # Time fast processor  
+        # Time fast processor
         start_time = time.time()
         for _ in range(10):
             _ = image_processor_fast(dummy_images, return_tensors="pt")
