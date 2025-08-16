@@ -138,7 +138,7 @@ class CircleCIJob:
         env.update(self.additional_env)
 
         job = {
-            "docker": self.docker_image,
+            "machine": "ubuntu-2204:current",
             "environment": env,
         }
         if self.resource_class is not None:
