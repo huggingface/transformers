@@ -21,7 +21,7 @@ import unittest
 
 import pytest
 
-from transformers import T5Config, is_torch_available
+from transformers import T5Config, UMT5Config, UMT5EncoderModel, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
@@ -36,8 +36,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 from transformers.utils.fx import symbolic_trace
-from transformers import UMT5EncoderModel, UMT5Config
-from transformers.testing_utils import require_gguf
+from transformers.utils.import_utils import is_gguf_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -876,25 +875,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model_name = "google-t5/t5-small"
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-    
-    # @slow
-    # def test_umt5_gguf_model_loading_from_hub(self):
-    #     """
-    #     Tests that a UMT5 model loaded from a GGUF checkpoint on the Hub is loaded with the
-    #     correct UMT5Config, not the base T5Config.
-    #     """
-    #     model_id = ""
-    #     model = UMT5EncoderModel.from_pretrained(model_id)
-
-    #     self.assertIsNotNone(model)
-    #     self.assertIsInstance(model.config, UMT5Config)
-    #     self.assertEqual(model.config.model_type, "umt5")
-    #     self.assertIn("UMT5EncoderModel", model.config.architectures)
-
-    #     # Optional forward pass check
-    #     input_ids = torch.ones((1, 5), dtype=torch.long)
-    #     outputs = model(input_ids=input_ids)
-    #     self.assertIn("last_hidden_state", outputs)
 
 
 class T5EncoderOnlyModelTester:
@@ -1876,12 +1856,6 @@ class TestAsymmetricT5(unittest.TestCase):
         # num_hidden_layers is passed to T5Config as num_layers
         model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
         assert len(model.decoder.block) == len(model.encoder.block) == 2
-
-import unittest
-
-from transformers import UMT5EncoderModel, UMT5Config
-from transformers.testing_utils import require_torch, slow
-from transformers.utils.import_utils import is_gguf_available
 
 
 @slow
