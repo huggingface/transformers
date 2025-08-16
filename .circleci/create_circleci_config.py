@@ -170,6 +170,7 @@ class CircleCIJob:
             {"run": 'sudo apt-get update'},
             {"run": 'sudo apt-get install -y gdb'},
             {"run": "echo $NEEDRESTART_SUSPEND"},
+            {"run": "sudo apt-get remove --purge needrestart -y"},
             {"run": 'sudo apt-get install -y python3-dbg'},
             {"run": "pip install uv"},
             {"run": " && ".join(self.install_steps)},
