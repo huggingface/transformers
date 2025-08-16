@@ -138,7 +138,9 @@ class CircleCIJob:
         env.update(self.additional_env)
 
         job = {
-            "machine": "ubuntu-2204:current",
+            "machine": {
+                "image": "ubuntu-2204:current"
+            },
             "environment": env,
         }
         if self.resource_class is not None:
