@@ -25,6 +25,7 @@ import yaml
 
 COMMON_ENV_VARIABLES = {
     "UV_PYTHON": "/opt/circleci/.pyenv/versions/3.13.0/bin/python3",
+    "NEEDRESTART_MODE": "a",
     "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
