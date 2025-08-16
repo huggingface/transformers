@@ -17,6 +17,7 @@ import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers.cache_utils import EncoderDecoderCache
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
@@ -716,8 +717,8 @@ class BertModelIntegrationTest(unittest.TestCase):
             # Case where query length != kv_length. Note that model needs to be a decoder so we can use cache
             model.config.is_decoder = True
             model_sdpa.config.is_decoder = True
-            res_eager = model(**inp, past_key_values=pkv, use_cache=True)
-            res_sdpa = model_sdpa(**inp, past_key_values=pkv, use_cache=True)
+            res_eager = model(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
+            res_sdpa = model_sdpa(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
             self.assertTrue(
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )

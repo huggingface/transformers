@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1050,8 +1050,14 @@ class Kosmos2TextTransformer(nn.Module):
                 )
                 use_cache = False
 
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
+                if encoder_hidden_states is not None
+                else DynamicCache()
+            )
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "

@@ -572,7 +572,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             if past_key_values is None:
                 return_legacy_cache = True
                 past_key_values = DynamicCache()
-            elif not isinstance(past_key_values, Cache):
+            elif isinstance(past_key_values, tuple):
                 return_legacy_cache = True
                 logger.warning_once(
                     "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.53.0. "
@@ -580,6 +580,8 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                     "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
                 )
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            elif past_key_values is None:
+                past_key_values = DynamicCache()
 
             if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())

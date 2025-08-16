@@ -435,7 +435,7 @@ class BlipTextEncoder(nn.Module):
 
         return_legacy_cache = False
         if use_cache:
-            if not isinstance(past_key_values, Cache):
+            if isinstance(past_key_values, tuple):
                 logger.warning_once(
                     "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                     "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -447,6 +447,10 @@ class BlipTextEncoder(nn.Module):
             # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
             elif isinstance(past_key_values, DynamicCache):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
+            elif past_key_values is None:
+                past_key_values = EncoderDecoderCache(
+                    self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
+                )
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None

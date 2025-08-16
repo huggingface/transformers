@@ -842,9 +842,8 @@ class GPT2Model(GPT2PreTrainedModel):
         return_legacy_cache = False
         if use_cache:
             if past_key_values is None:
-                return_legacy_cache = True
                 past_key_values = DynamicCache()
-            elif not isinstance(past_key_values, Cache):
+            elif isinstance(past_key_values, tuple):
                 return_legacy_cache = True
                 logger.warning_once(
                     "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.53.0. "

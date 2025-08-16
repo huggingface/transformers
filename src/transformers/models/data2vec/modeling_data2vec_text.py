@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -484,8 +484,13 @@ class Data2VecTextEncoder(nn.Module):
                 )
                 use_cache = False
 
+        if use_cache and self.config.is_decoder and past_key_values is None:
+            past_key_values = EncoderDecoderCache(
+                self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
+            )
+
         return_legacy_cache = False
-        if use_cache and self.config.is_decoder and not isinstance(past_key_values, Cache):
+        if use_cache and self.config.is_decoder and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "

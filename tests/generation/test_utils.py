@@ -2043,7 +2043,12 @@ class GenerationTesterMixin:
                 model.generate(past_key_valyes=DynamicCache(), **generation_kwargs, **inputs_dict)
 
             # setting incorrect cache_config args should raise an Error, i.e. nbits=60 does not make sense
-            generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
+            generation_kwargs["cache_config"] = {
+                "backend": "quanto",
+                "nbits": 60,
+                "q_group_size": 8,
+                "residual_length": 128,
+            }
             with self.assertRaises(ValueError):
                 model.generate(**generation_kwargs, **inputs_dict)
 
