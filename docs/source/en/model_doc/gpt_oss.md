@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-08-05 and added to Hugging Face Transformers on 2025-08-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -28,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The GptOss model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The GptOss model was proposed in [blog post](https://openai.com/index/introducing-gpt-oss/) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -55,4 +56,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## GptOssForCausalLM
 
 [[autodoc]] GptOssForCausalLM
+    - forward
+
+## GptOssForSequenceClassification
+
+[[autodoc]] GptOssForSequenceClassification
     - forward
