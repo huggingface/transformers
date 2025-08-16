@@ -161,4 +161,6 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
         fast_time = time.time() - start_time
 
         # Fast should be faster (or at least not significantly slower)
-        self.assertLessEqual(fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor")
+        self.assertLessEqual(
+            fast_time, slow_time * 1.2, "Fast processor should not be significantly slower than slow processor"
+        )
