@@ -13,7 +13,6 @@
 # limitations under the License.
 import inspect
 import os
-import warnings
 from functools import partial
 from typing import Optional, TypedDict
 
@@ -355,12 +354,12 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
         max_length_q = int(q_len.max())
         max_length_k = int(last_position_ids.max()) + 1
     else:
-        position_ids = position_ids.flatten()
-        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+        position_ids = position_ids.view(-1)
+        indices_q = (position_ids == 0).nonzero().view(-1)
 
         cu_seq_lens_q = torch.cat(
             (
-                indices_q[position_ids == 0],
+                indices_q,
                 torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
             )
         )
@@ -424,14 +423,6 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
     )
 
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
-
-
-def _prepare_flash_attention_from_position_ids(query, key, value, position_ids):
-    warnings.warn(
-        "The function `_prepare_flash_attention_from_position_ids` in `transformers.modeling_flash_attention_utils` is deprecated and will be removed in a future version. Please use `_prepare_from_posids` instead.",
-        FutureWarning,
-    )
-    return _prepare_from_posids(query, key, value, position_ids)
 
 
 def _is_packed_sequence(position_ids, batch_size):

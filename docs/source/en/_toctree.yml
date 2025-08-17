@@ -693,6 +693,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/xcodec
+        title: X-CODEC
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
