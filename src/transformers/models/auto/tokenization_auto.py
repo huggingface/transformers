@@ -405,7 +405,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         (
-            "metaclip-2",
+            "metaclip_2",
             (
                 "XLMRobertaTokenizer",
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,

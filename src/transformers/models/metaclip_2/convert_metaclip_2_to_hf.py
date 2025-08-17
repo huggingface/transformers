@@ -51,10 +51,11 @@ def load_metaclip2_checkpoint(checkpoint_path: str, model_name: str) -> torch.nn
     return model, preprocess
 
 
-def create_hf_config(
-    metaclip_model: torch.nn.Module, tokenizer: AutoTokenizer, model_name: str
-) -> tuple[MetaClip2Config, int]:
-    """Create Hugging Face MetaClip2Config from MetaCLIP model."""
+def create_hf_config(tokenizer: AutoTokenizer, model_name: str) -> tuple[MetaClip2Config, int]:
+    """Create Hugging Face MetaClip2Config from MetaCLIP model.
+
+    This is based on the configs found at https://github.com/facebookresearch/MetaCLIP/tree/main/src/mini_clip/model_configs.
+    """
     print("Creating Hugging Face config...")
 
     # Vision config
@@ -385,9 +386,7 @@ def main():
     # Create HF config
     # Requires the tokenizer for the eos token id
     tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-v-base")
-    config, image_size = create_hf_config(
-        metaclip_model=original_model, tokenizer=tokenizer, model_name=args.model_name
-    )
+    config, image_size = create_hf_config(tokenizer=tokenizer, model_name=args.model_name)
 
     # Create processor
     image_processor = CLIPImageProcessor(
