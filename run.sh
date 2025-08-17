@@ -38,10 +38,19 @@ if kill -0 $PYTEST_PID 2>/dev/null; then
 
   # Find the pytest process ID inside container
   PYTEST_IN_CONTAINER_PID=$(docker exec $(cat CONTAINER_ID.txt) pgrep -f "python3 -m pytest -m not generate -n 8")
+  echo "PYTEST_IN_CONTAINER_PID 1"
   echo $PYTEST_IN_CONTAINER_PID
   echo $PYTEST_IN_CONTAINER_PID > PYTEST_IN_CONTAINER_PID.txt
+  echo "PYTEST_IN_CONTAINER_PID 2"
   cat PYTEST_IN_CONTAINER_PID.txt
+  echo "PYTEST_IN_CONTAINER_PID 3"
   echo $(cat PYTEST_IN_CONTAINER_PID.txt)
+
+  echo "PYTEST_IN_CONTAINER_PID 4"
+  docker exec --privileged $(cat CONTAINER_ID.txt) cat PYTEST_IN_CONTAINER_PID.txt
+  docker cp PYTEST_IN_CONTAINER_PID.txt $(cat CONTAINER_ID.txt):/PYTEST_IN_CONTAINER_PID.txt
+  echo "PYTEST_IN_CONTAINER_PID 4"
+  docker exec --privileged $(cat CONTAINER_ID.txt) cat PYTEST_IN_CONTAINER_PID.txt
 
   # Attach GDB to the hung process
   docker exec --privileged -it $(cat CONTAINER_ID.txt) gdb -batch -x gdb_commands.txt -p $(cat PYTEST_IN_CONTAINER_PID.txt) > gdb_output.txt 2>&1
