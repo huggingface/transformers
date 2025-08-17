@@ -166,14 +166,20 @@ class CircleCIJob:
             {"run": {"name": "", "command": "curl -fsSL https://get.docker.com -o get-docker.sh"}},
             {"run": {"name": "", "command": "sudo sh ./get-docker.sh --dry-run"}},
             {"run": {"name": "", "command": "docker image pull huggingface/transformers-torch-light:dev"}},
-            {"run": {"name": "", "command": "export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt"}},
-            {"run": {"name": "", "command": "cat CONTAINER_ID.txt"}},
-            {"run": {"name": "", "command": "docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh"}},
-            {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh"}},
-            {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) cat /pytest.sh"}},
-            {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh"}},
-            {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) /pytest.sh"}},
-            {"run": {"name": "", "command": "docker stop $(cat CONTAINER_ID.txt)"}},
+
+
+            # {"run": {"name": "", "command": "export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt"}},
+            # {"run": {"name": "", "command": "cat CONTAINER_ID.txt"}},
+            # {"run": {"name": "", "command": "docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh"}},
+            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh"}},
+            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) cat /pytest.sh"}},
+            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh"}},
+            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) /pytest.sh"}},
+            # {"run": {"name": "", "command": "docker stop $(cat CONTAINER_ID.txt)"}},
+
+            {"run": {"name": "", "command": "chmod +x run.sh"}},
+            {"run": {"name": "", "command": "./run.sh"}},
+
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
@@ -390,14 +396,26 @@ curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh ./get-docker.sh --dry-run
 docker image pull huggingface/transformers-torch-light:dev
 
+cd project
+git fetch origin
+git pull origin debug_too_long_no_output
+
 # docker run --privileged -it huggingface/transformers-torch-light:dev bash
 
-CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600)
-echo $CONTAINER_ID
-docker cp pytest.sh $CONTAINER_ID:/pytest.sh
-docker exec $CONTAINER_ID ls -la /pytest.sh
-docker exec $CONTAINER_ID cat /pytest.sh
-docker exec $CONTAINER_ID chmod +x /pytest.sh
-docker exec $CONTAINER_ID /pytest.sh
-docker stop $CONTAINER_ID
+export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
+cat CONTAINER_ID.txt
+docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh
+docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh
+docker exec $(cat CONTAINER_ID.txt) cat /pytest.sh
+docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh
+docker exec $(cat CONTAINER_ID.txt) /pytest.sh
+docker stop $(cat CONTAINER_ID.txt)
+
+
+#### 
+
+timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh &
+PYTEST_PID=$!
+echo $PYTEST_PID
+
 """

@@ -1,0 +1,8 @@
+source /usr/share/gdb/auto-load/usr/bin/python3.9-gdb.py
+set pagination off
+bt
+py-bt
+thread apply all bt
+thread apply all py-bt
+info threads
+quit
