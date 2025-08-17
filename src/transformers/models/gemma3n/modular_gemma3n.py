@@ -690,7 +690,7 @@ class Gemma3nRMSNorm(Gemma3RMSNorm):
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim))
+            self.weight = nn.Parameter(torch.zeros(dim))
         else:
             self.register_buffer("weight", torch.tensor(1.0), persistent=False)
 
@@ -700,7 +700,7 @@ class Gemma3nRMSNorm(Gemma3RMSNorm):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Llama does x.to(float16) * w whilst Gemma2 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
-        output = self._norm(x.float()) * self.weight.float()
+        output = self._norm(x.float()) * (1.0 + self.weight.float())
         return output.type_as(x)
 
 
