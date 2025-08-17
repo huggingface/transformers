@@ -1,10 +1,4 @@
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS=1
-export TRANSFORMERS_IS_CI=true
-export PYTEST_TIMEOUT=120
-export RUN_PIPELINE_TESTS=false
-export RUN_FLAKY=true
+export PYTHONDONTWRITEBYTECODE=1 && export PYTHONUNBUFFERED=1 && export OMP_NUM_THREADS=1 && export TRANSFORMERS_IS_CI=true && export PYTEST_TIMEOUT=120 && export RUN_PIPELINE_TESTS=false && export RUN_FLAKY=true
 
 git clone https://github.com/huggingface/transformers.git
 cd transformers/
