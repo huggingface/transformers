@@ -511,8 +511,6 @@ class BltLocalEncoder(BltPreTrainedModel):
                     batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size
                 )
                 layer_idx = idx if self.config.cross_attn_all_layers else 0
-                # Remove cross_attention_states from kwargs if present to avoid multiple values error
-                kwargs.pop("cross_attention_states", None)
                 cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
@@ -616,8 +614,6 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         for i, layer in enumerate(self.layers):
             if i == 0 or self.config.cross_attn_all_layers:
-                # Remove cross_attention_states from kwargs if present to avoid multiple values error
-                kwargs.pop("cross_attention_states", None)
                 cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
@@ -1212,7 +1208,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        cross_attention_states: Optional[torch.LongTensor] = None,
         cross_attention_mask: Optional[torch.LongTensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
@@ -1224,9 +1219,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
-        cross_attention_states (`torch.FloatTensor`, *optional*):
-            Output of the vision model, used for cross-attention. This tensor contains the processed image features that
-            the language model will attend to.
         cross_attention_mask (`torch.Tensor` of shape `(batch_size, seq_length, max_num_images, max_num_tiles)`, *optional*):
             Cross-attention mask to control the interaction between text tokens and image tiles.
             This 4D tensor defines which image tiles each text token should attend to.
@@ -1270,7 +1262,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
-            cross_attention_states=cross_attention_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cross_attention_mask=cross_attention_mask,
