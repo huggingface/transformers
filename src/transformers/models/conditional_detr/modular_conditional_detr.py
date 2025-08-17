@@ -44,12 +44,18 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        topk_values, topk_indexes = torch.topk(
+            prob.view(out_logits.shape[0], -1), 300, dim=1
+        )
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
@@ -61,12 +67,19 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = [
+            {"scores": s, "labels": l, "boxes": b}
+            for s, l, b in zip(scores, labels, boxes)
+        ]
 
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, list[tuple]] = None,
+        top_k: int = 100,
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -112,7 +125,9 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
@@ -125,13 +140,19 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
         return results
 
     def post_process_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for Conditional DETR yet.")
+        raise NotImplementedError(
+            "Segmentation post-processing is not implemented for Conditional DETR yet."
+        )
 
     def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for Conditional DETR yet.")
+        raise NotImplementedError(
+            "Instance post-processing is not implemented for Conditional DETR yet."
+        )
 
     def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for Conditional DETR yet.")
+        raise NotImplementedError(
+            "Panoptic post-processing is not implemented for Conditional DETR yet."
+        )
 
 
 __all__ = ["ConditionalDetrImageProcessorFast"]

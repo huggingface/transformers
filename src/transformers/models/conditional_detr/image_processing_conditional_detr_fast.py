@@ -94,11 +94,16 @@ class ConditionalDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     return_segmentation_masks: Optional[bool]
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (
+    AnnotationFormat.COCO_DETECTION,
+    AnnotationFormat.COCO_PANOPTIC,
+)
 
 
 # inspired by https://github.com/facebookresearch/conditional_detr/blob/master/datasets/coco.py#L33
-def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: torch.device) -> torch.Tensor:
+def convert_coco_poly_to_mask(
+    segmentations, height: int, width: int, device: torch.device
+) -> torch.Tensor:
     """
     Convert a COCO polygon annotation to a mask.
 
@@ -165,7 +170,9 @@ def prepare_coco_detection_annotation(
     area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
     iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
+    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(
+        -1, 4
+    )
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
@@ -178,7 +185,11 @@ def prepare_coco_detection_annotation(
         "boxes": boxes[keep],
         "area": area[keep],
         "iscrowd": iscrowd[keep],
-        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
+        "orig_size": torch.as_tensor(
+            [int(image_height), int(image_width)],
+            dtype=torch.int64,
+            device=image.device,
+        ),
     }
 
     if keypoints:
@@ -191,7 +202,9 @@ def prepare_coco_detection_annotation(
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width, device=image.device)
+        masks = convert_coco_poly_to_mask(
+            segmentation_masks, image_height, image_width, device=image.device
+        )
         new_target["masks"] = masks[keep]
 
     return new_target
@@ -219,13 +232,17 @@ def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
     x_mask = masks * torch.unsqueeze(x, 0)
     x_max = x_mask.view(x_mask.shape[0], -1).max(-1)[0]
     x_min = (
-        torch.where(masks, x.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
+        torch.where(masks, x.unsqueeze(0), torch.tensor(1e8, device=masks.device))
+        .view(masks.shape[0], -1)
+        .min(-1)[0]
     )
 
     y_mask = masks * torch.unsqueeze(y, 0)
     y_max = y_mask.view(y_mask.shape[0], -1).max(-1)[0]
     y_min = (
-        torch.where(masks, y.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
+        torch.where(masks, y.unsqueeze(0), torch.tensor(1e8, device=masks.device))
+        .view(masks.shape[0], -1)
+        .min(-1)[0]
     )
 
     return torch.stack([x_min, y_min, x_max, y_max], 1)
@@ -260,16 +277,29 @@ def prepare_coco_panoptic_annotation(
 
     new_target = {}
     new_target["image_id"] = torch.as_tensor(
-        [target["image_id"] if "image_id" in target else target["id"]], dtype=torch.int64, device=image.device
+        [target["image_id"] if "image_id" in target else target["id"]],
+        dtype=torch.int64,
+        device=image.device,
     )
-    new_target["size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
-    new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
+    new_target["size"] = torch.as_tensor(
+        [image_height, image_width], dtype=torch.int64, device=image.device
+    )
+    new_target["orig_size"] = torch.as_tensor(
+        [image_height, image_width], dtype=torch.int64, device=image.device
+    )
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(dtype=torch.int32, device=image.device)
+        masks = (
+            read_image(annotation_path)
+            .permute(1, 2, 0)
+            .to(dtype=torch.int32, device=image.device)
+        )
         masks = rgb_to_id(masks)
 
-        ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
+        ids = torch.as_tensor(
+            [segment_info["id"] for segment_info in target["segments_info"]],
+            device=image.device,
+        )
         masks = masks == ids[:, None, None]
         masks = masks.to(torch.bool)
         if return_masks:
@@ -310,19 +340,30 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "pixel_mask"]
     valid_kwargs = ConditionalDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConditionalDetrFastImageProcessorKwargs]) -> None:
+    def __init__(
+        self, **kwargs: Unpack[ConditionalDetrFastImageProcessorKwargs]
+    ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
             size = kwargs.pop("size", None)
-            size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+            size = (
+                size
+                if size is not None
+                else {"shortest_edge": 800, "longest_edge": 1333}
+            )
             self.size = get_size_dict(size, default_to_square=False)
- 
+
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
-        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+        if (
+            do_convert_annotations is None
+            and getattr(self, "do_convert_annotations", None) is None
+        ):
+            self.do_convert_annotations = (
+                do_normalize if do_normalize is not None else self.do_normalize
+            )
 
         super().__init__(**kwargs)
 
@@ -330,9 +371,10 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         image_processor_dict = image_processor_dict.copy()
         if "pad_and_return_pixel_mask" in kwargs:
-             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop(
+                "pad_and_return_pixel_mask"
+            )
         return super().from_dict(image_processor_dict, **kwargs)
-
 
     def prepare_annotation(
         self,
@@ -349,12 +391,21 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                False
+                if return_segmentation_masks is None
+                else return_segmentation_masks
+            )
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                True if return_segmentation_masks is None else return_segmentation_masks
+            )
             target = prepare_coco_panoptic_annotation(
                 image,
                 target,
@@ -393,7 +444,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -403,7 +456,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 size["longest_edge"],
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+            new_size = get_image_size_for_max_height_width(
+                image.size()[-2:], size["max_height"], size["max_width"]
+            )
         elif size.height and size.width:
             new_size = (size["height"], size["width"])
         else:
@@ -446,11 +501,15 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         interpolation = (
             interpolation
             if interpolation is not None
-            else F.InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else F.InterpolationMode.NEAREST
+            else (
+                F.InterpolationMode.NEAREST_EXACT
+                if is_torchvision_v2_available()
+                else F.InterpolationMode.NEAREST
+            )
         )
-        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
+        ratio_height, ratio_width = [
+            target / orig for target, orig in zip(target_size, orig_size)
+        ]
 
         new_annotation = {}
         new_annotation["size"] = target_size
@@ -459,7 +518,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 new_annotation["boxes"] = scaled_boxes
             elif key == "area":
@@ -468,7 +529,10 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["area"] = scaled_area
             elif key == "masks":
                 masks = value[:, None]
-                masks = [F.resize(mask, target_size, interpolation=interpolation) for mask in masks]
+                masks = [
+                    F.resize(mask, target_size, interpolation=interpolation)
+                    for mask in masks
+                ]
                 masks = torch.stack(masks).to(torch.float32)
                 masks = masks[:, 0] > threshold
                 new_annotation["masks"] = masks
@@ -479,7 +543,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
         return new_annotation
 
-    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
+    def normalize_annotation(
+        self, annotation: dict, image_size: tuple[int, int]
+    ) -> dict:
         image_height, image_width = image_size
         norm_annotation = {}
         for key, value in annotation.items():
@@ -487,7 +553,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 boxes = value
                 boxes = corners_to_center_format(boxes)
                 boxes /= torch.as_tensor(
-                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
+                    [image_width, image_height, image_width, image_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 norm_annotation[key] = boxes
             else:
@@ -507,7 +575,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         """
         new_annotation = {}
         new_annotation["size"] = output_image_size
-        ratio_height, ratio_width = (input / output for output, input in zip(output_image_size, input_image_size))
+        ratio_height, ratio_width = (
+            input / output for output, input in zip(output_image_size, input_image_size)
+        )
 
         for key, value in annotation.items():
             if key == "masks":
@@ -521,7 +591,10 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["masks"] = masks
             elif key == "boxes" and update_bboxes:
                 boxes = value
-                boxes *= torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], device=boxes.device)
+                boxes *= torch.as_tensor(
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    device=boxes.device,
+                )
                 new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
@@ -585,12 +658,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
-            "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-            "use `do_pad` instead."
-        )
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
+                "use `do_pad` instead."
+            )
 
         return super().preprocess(images, annotations, masks_path, **kwargs)
-
 
     def _preprocess(
         self,
@@ -643,7 +715,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         processed_images = []
         processed_annotations = []
         pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+        for image, annotation in zip(
+            images, annotations if annotations is not None else [None] * len(images)
+        ):
             # prepare (COCO annotations as a list of Dict -> CONDITIONAL_DETR target as a single Dict per image)
             if annotations is not None:
                 annotation = self.prepare_annotation(
@@ -656,7 +730,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(
+                    image, size=size, interpolation=interpolation
+                )
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
@@ -665,9 +741,13 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                     )
                 image = resized_image
             # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(
+                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
             if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
+                annotation = self.normalize_annotation(
+                    annotation, get_image_size(image, ChannelDimension.FIRST)
+                )
 
             processed_images.append(image)
             processed_annotations.append(annotation)
@@ -683,15 +763,22 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
             padded_images = []
             padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            for image, annotation in zip(
+                images, annotations if annotations is not None else [None] * len(images)
+            ):
                 # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
                 if padded_size == image.size()[-2:]:
                     padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    pixel_masks.append(
+                        torch.ones(padded_size, dtype=torch.int64, device=image.device)
+                    )
                     padded_annotations.append(annotation)
                     continue
                 image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                    image,
+                    padded_size,
+                    annotation=annotation,
+                    update_bboxes=do_convert_annotations,
                 )
                 padded_images.append(image)
                 padded_annotations.append(annotation)
@@ -704,7 +791,8 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors)
+                for annotation in annotations
             ]
         return encoded_inputs
 
@@ -732,12 +820,18 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        topk_values, topk_indexes = torch.topk(
+            prob.view(out_logits.shape[0], -1), 300, dim=1
+        )
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
@@ -749,12 +843,19 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = [
+            {"scores": s, "labels": l, "boxes": b}
+            for s, l, b in zip(scores, labels, boxes)
+        ]
 
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, list[tuple]] = None,
+        top_k: int = 100,
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -800,7 +901,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
@@ -812,7 +915,9 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
+    ):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -828,12 +933,18 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.pred_masks
+        )  # [batch_size, num_queries, height, width]
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        masks_probs = (
+            masks_queries_logits.sigmoid()
+        )  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
@@ -849,13 +960,18 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             semantic_segmentation = []
             for idx in range(batch_size):
                 resized_logits = nn.functional.interpolate(
-                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    segmentation[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation
 
@@ -897,28 +1013,42 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.pred_masks
+        )  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        mask_probs = (
+            masks_queries_logits.sigmoid()
+        )  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        pred_scores, pred_labels = nn.functional.softmax(
+            class_queries_logits, dim=-1
+        ).max(-1)
 
         # Loop over items in batch size
         results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            mask_probs_item, pred_scores_item, pred_labels_item = (
+                remove_low_and_no_objects(
+                    mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+                )
             )
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                height, width = (
+                    target_sizes[i]
+                    if target_sizes is not None
+                    else mask_probs_item.shape[1:]
+                )
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
@@ -989,28 +1119,42 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
 
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+        class_queries_logits = (
+            outputs.logits
+        )  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = (
+            outputs.pred_masks
+        )  # [batch_size, num_queries, height, width]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+        mask_probs = (
+            masks_queries_logits.sigmoid()
+        )  # [batch_size, num_queries, height, width]
 
         # Predicted label and score of each query (batch_size, num_queries)
-        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        pred_scores, pred_labels = nn.functional.softmax(
+            class_queries_logits, dim=-1
+        ).max(-1)
 
         # Loop over items in batch size
         results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            mask_probs_item, pred_scores_item, pred_labels_item = (
+                remove_low_and_no_objects(
+                    mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+                )
             )
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                height, width = (
+                    target_sizes[i]
+                    if target_sizes is not None
+                    else mask_probs_item.shape[1:]
+                )
                 segmentation = torch.zeros((height, width)) - 1
                 results.append({"segmentation": segmentation, "segments_info": []})
                 continue
