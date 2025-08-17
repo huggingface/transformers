@@ -8,6 +8,7 @@
 
 export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
 cat CONTAINER_ID.txt
+echo "" > gdb_output.txt
 
 docker cp pytest_prepare.sh $(cat CONTAINER_ID.txt):/pytest_prepare.sh
 docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh

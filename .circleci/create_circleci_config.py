@@ -184,7 +184,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
             # {"store_artifacts": {"path": "mem_info"}},
-            {"store_artifacts": {"path": "tests.txt"}},
+            {"store_artifacts": {"path": "gdb_output.txt"}},
             {"store_artifacts": {"path": "tests_output.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
