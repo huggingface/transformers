@@ -3,7 +3,8 @@
 export PYTHONDONTWRITEBYTECODE=1 && export PYTHONUNBUFFERED=1 && export OMP_NUM_THREADS=1 && export TRANSFORMERS_IS_CI=true && export PYTEST_TIMEOUT=120 && export RUN_PIPELINE_TESTS=false && export RUN_FLAKY=true && UV_PYTHON=/usr/bin/python3.9-dbg
 cd transformers/
 
-
+# Enable aliases in script
+shopt -s expand_aliases
 alias python3='python3.9-dbg'
 
 

@@ -29,6 +29,8 @@ python3 -V
 python3 -c "import sys; print(sys.executable)"
 
 
+# Enable aliases in script
+shopt -s expand_aliases
 alias python3='python3.9-dbg'
 
 
