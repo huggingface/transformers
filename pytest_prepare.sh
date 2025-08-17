@@ -8,6 +8,7 @@ python3 -V
 echo $UV_PYTHON
 python3 -c "import sys; print(sys.executable)"
 
+uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh
 uv pip install .
 
 mkdir test-results
