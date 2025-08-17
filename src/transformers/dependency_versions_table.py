@@ -9,7 +9,7 @@ deps = {
     "blobfile": "blobfile",
     "codecarbon": "codecarbon>=2.8.1",
     "cookiecutter": "cookiecutter==1.7.3",
-    "dataclasses": "dataclasses",
+    "dataclasses;python_version": "dataclasses;python_version<'3.7'",
     "datasets": "datasets>=2.15.0",
     "deepspeed": "deepspeed>=0.9.3",
     "diffusers": "diffusers",
