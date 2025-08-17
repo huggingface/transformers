@@ -46,8 +46,6 @@ if kill -0 $PYTEST_PID 2>/dev/null; then
   echo "PYTEST_IN_CONTAINER_PID 3"
   echo $(cat PYTEST_IN_CONTAINER_PID.txt)
 
-  echo "PYTEST_IN_CONTAINER_PID 4"
-  docker exec --privileged $(cat CONTAINER_ID.txt) cat PYTEST_IN_CONTAINER_PID.txt
   docker cp PYTEST_IN_CONTAINER_PID.txt $(cat CONTAINER_ID.txt):/PYTEST_IN_CONTAINER_PID.txt
   echo "PYTEST_IN_CONTAINER_PID 4"
   docker exec --privileged $(cat CONTAINER_ID.txt) cat PYTEST_IN_CONTAINER_PID.txt
