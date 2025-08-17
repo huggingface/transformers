@@ -1592,10 +1592,10 @@ class LEDEncoder(LEDPreTrainedModel):
             # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
             hidden_states = hidden_states[:, :-padding_len]
             if output_hidden_states:
-                encoder_states = tuple([state[:, :-padding_len] for state in encoder_states])
+                encoder_states = tuple(state[:, :-padding_len] for state in encoder_states)
 
             if output_attentions:
-                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+                all_attentions = tuple(state[:, :, :-padding_len, :] for state in all_attentions)
 
         if not return_dict:
             return tuple(
