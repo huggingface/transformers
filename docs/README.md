@@ -20,8 +20,11 @@ To generate the documentation, you first have to build it. Several packages are 
 you can install them with the following command, at the root of the code repository:
 
 ```bash
-pip install -e ".[docs]"
+pip install -e ".[dev]"
 ```
+
+> [!NOTE]
+> This command might fail for some OS due to missing dependencies for those OS. In that case, check `CONTRIBUTING.md` for workarounds.
 
 Then you need to install our special tool that builds the documentation:
 
@@ -29,13 +32,9 @@ Then you need to install our special tool that builds the documentation:
 pip install git+https://github.com/huggingface/doc-builder
 ```
 
----
-**NOTE**
-
-You only need to generate the documentation to inspect it locally (if you're planning changes and want to
-check how they look before committing for instance). You don't have to commit the built documentation.
-
----
+> [!NOTE]
+> You only need to generate the documentation to inspect it locally (if you're planning changes and want to
+> check how they look before committing for instance). You don't have to commit the built documentation.
 
 ## Building the documentation
 
@@ -72,12 +71,8 @@ doc-builder preview transformers docs/source/en/
 
 The docs will be viewable at [http://localhost:3000](http://localhost:3000). You can also preview the docs once you have opened a PR. You will see a bot add a comment to a link where the documentation with your changes lives.
 
----
-**NOTE**
-
-The `preview` command only works with existing doc files. When you add a completely new file, you need to update `_toctree.yml` & restart `preview` command (`ctrl-c` to stop it & call `doc-builder preview ...` again).
-
----
+> [!NOTE]
+> The `preview` command only works with existing doc files. When you add a completely new file, you need to update `_toctree.yml` & restart `preview` command (`ctrl-c` to stop it & call `doc-builder preview ...` again).
 
 ## Adding a new element to the navigation bar
 
@@ -163,6 +158,9 @@ These classes should be added using our Markdown syntax. Usually as follows:
 
 [[autodoc]] XXXConfig
 ```
+
+> [!IMPORTANT]
+> The line with [[autodoc]] should always be followed by another line (either blank or not) for the correct parsing by the CI/CD workflow.
 
 This will include every public method of the configuration that is documented. If for some reason you wish for a method
 not to be displayed in the documentation, you can do so by specifying which methods should be in the docs:
