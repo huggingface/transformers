@@ -14,8 +14,10 @@
 # limitations under the License.
 """Auto Model class."""
 
+import os
 import warnings
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Union
 
 from ...utils import logging
 from .auto_factory import (
@@ -25,6 +27,15 @@ from .auto_factory import (
     auto_class_update,
 )
 from .configuration_auto import CONFIG_MAPPING_NAMES
+
+
+if TYPE_CHECKING:
+    from ...generation import GenerationMixin
+    from ...modeling_utils import PreTrainedModel
+
+    # class for better type annotations
+    class _BaseModelWithGenerate(PreTrainedModel, GenerationMixin):
+        pass
 
 
 logger = logging.get_logger(__name__)
@@ -110,6 +121,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),
+        ("dinov3_convnext", "DINOv3ConvNextModel"),
+        ("dinov3_vit", "DINOv3ViTModel"),
         ("distilbert", "DistilBertModel"),
         ("doge", "DogeModel"),
         ("donut-swin", "DonutSwinModel"),
@@ -154,6 +167,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4", "Glm4Model"),
         ("glm4_moe", "Glm4MoeModel"),
         ("glm4v", "Glm4vModel"),
+        ("glm4v_moe", "Glm4vMoeModel"),
+        ("glm4v_moe_text", "Glm4vMoeTextModel"),
         ("glm4v_text", "Glm4vTextModel"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
@@ -163,6 +178,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "GPTNeoModel"),
         ("gpt_neox", "GPTNeoXModel"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
+        ("gpt_oss", "GptOssModel"),
         ("gptj", "GPTJModel"),
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
         ("granite", "GraniteModel"),
@@ -308,6 +324,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
+        ("sam2", "Sam2Model"),
+        ("sam2_hiera_det_model", "Sam2HieraDetModel"),
+        ("sam2_video", "Sam2VideoModel"),
+        ("sam2_vision_model", "Sam2VisionModel"),
         ("sam_hq", "SamHQModel"),
         ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
@@ -376,6 +396,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("wavlm", "WavLMModel"),
         ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
+        ("xcodec", "XcodecModel"),
         ("xglm", "XGLMModel"),
         ("xlm", "XLMModel"),
         ("xlm-prophetnet", "XLMProphetNetModel"),
@@ -631,6 +652,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
+        ("gpt_oss", "GptOssForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("granite", "GraniteForCausalLM"),
         ("granitemoe", "GraniteMoeForCausalLM"),
@@ -727,6 +749,8 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("dinov2_with_registers", "Dinov2WithRegistersModel"),
+        ("dinov3_convnext", "DINOv3ConvNextModel"),
+        ("dinov3_vit", "DINOv3ViTModel"),
         ("dpt", "DPTModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientnet", "EfficientNetModel"),
@@ -957,6 +981,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("glm4v", "Glm4vForConditionalGeneration"),
+        ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
@@ -1169,6 +1194,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
         ("gpt_neo", "GPTNeoForSequenceClassification"),
         ("gpt_neox", "GPTNeoXForSequenceClassification"),
+        ("gpt_oss", "GptOssForSequenceClassification"),
         ("gptj", "GPTJForSequenceClassification"),
         ("helium", "HeliumForSequenceClassification"),
         ("ibert", "IBertForSequenceClassification"),
@@ -1458,6 +1484,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaForMultipleChoice"),
         ("megatron-bert", "MegatronBertForMultipleChoice"),
         ("mobilebert", "MobileBertForMultipleChoice"),
+        ("modernbert", "ModernBertForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("mra", "MraForMultipleChoice"),
         ("nezha", "NezhaForMultipleChoice"),
@@ -1618,6 +1645,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
+        ("sam2", "Sam2Model"),
+        ("sam2_video", "Sam2Model"),
         ("sam_hq", "SamHQModel"),
     ]
 )
@@ -1863,6 +1892,16 @@ _AutoModelWithLMHead = auto_class_update(_AutoModelWithLMHead, head_doc="languag
 class AutoModelForCausalLM(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
 
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForCausalLM"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> "_BaseModelWithGenerate":
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
 
 AutoModelForCausalLM = auto_class_update(AutoModelForCausalLM, head_doc="causal language modeling")
 
@@ -2056,6 +2095,16 @@ _AutoModelForVision2Seq = auto_class_update(_AutoModelForVision2Seq, head_doc="v
 
 class AutoModelForImageTextToText(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
+
+    # override to give better return typehint
+    @classmethod
+    def from_pretrained(
+        cls: type["AutoModelForImageTextToText"],
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        *model_args,
+        **kwargs,
+    ) -> "_BaseModelWithGenerate":
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")

@@ -99,11 +99,8 @@ model.generation_config.max_new_tokens = 16
 
 past_key_values = StaticCache(
     config=model.config,
-    max_batch_size=1,
     # 캐시를 재사용할 계획이 있는 경우, 모든 경우에 충분한 캐시 길이를 설정해야 합니다
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
-    device=model.device,
-    dtype=model.dtype
 )
 outputs = model.generate(**input_ids, past_key_values=past_key_values)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -161,7 +158,7 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
     past_key_values = StaticCache(
-        config=model.config, max_batch_size=2, max_cache_len=4096, device=torch_device, dtype=model.dtype
+        config=model.config, max_cache_len=4096
     )
     cache_position = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(

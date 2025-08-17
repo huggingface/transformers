@@ -260,7 +260,7 @@ class MMGroundingDinoConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config["model_type"] = text_config.get("model_type", "bert")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["bert"]()
@@ -287,6 +287,17 @@ class MMGroundingDinoConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @property
+    def sub_configs(self):
+        sub_configs = {}
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PretrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PretrainedConfig):
+            sub_configs["text_config"] = type(self.text_config)
+        return sub_configs
 
 
 __all__ = ["MMGroundingDinoConfig"]
