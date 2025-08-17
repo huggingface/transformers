@@ -422,9 +422,31 @@ class BltCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class BltLocalEncoder(nn.Module):
+@auto_docstring
+class BltPreTrainedModel(PreTrainedModel):
+    config: BltConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
+        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
+        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
+        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
+    }
+
+
+class BltLocalEncoder(BltPreTrainedModel):
+    config_class = BltLocalEncoderConfig
+    base_model_prefix = "local_encoder"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltLocalEncoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
         self.layers = nn.ModuleList(
@@ -443,6 +465,7 @@ class BltLocalEncoder(nn.Module):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+        self.post_init()
 
     def forward(
         self,
@@ -532,9 +555,13 @@ class BltLocalEncoder(nn.Module):
         return reduced_embeddings
 
 
-class BltLocalDecoder(nn.Module):
+class BltLocalDecoder(BltPreTrainedModel):
+    config_class = BltLocalDecoderConfig
+    base_model_prefix = "local_decoder"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltLocalDecoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
         self.cross_attn_decoder = True
@@ -554,6 +581,7 @@ class BltLocalDecoder(nn.Module):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+        self.post_init()
 
     @check_model_inputs
     def forward(
@@ -609,14 +637,19 @@ class BltLocalDecoder(nn.Module):
         return logits
 
 
-class BltGlobalTransformer(nn.Module):
+class BltGlobalTransformer(BltPreTrainedModel):
+    config_class = BltGlobalTransformerConfig
+    base_model_prefix = "global_transformer"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltGlobalTransformerConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.layers = nn.ModuleList()
         for layer_idx in range(config.num_hidden_layers):
             self.layers.append(BltTransformerLayer(config, layer_idx))
         self.rotary_emb = BltRotaryEmbedding(config=config)
+        self.post_init()
 
     def forward(
         self,
@@ -645,29 +678,6 @@ class BltGlobalTransformer(nn.Module):
                 **kwargs,
             )
         return hidden_states
-
-
-@auto_docstring
-class BltPreTrainedModel(PreTrainedModel):
-    config: BltConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
-    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
-        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
-        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
-        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
-    }
-
-    _supports_static_cache = False  # static cache cannot have different shapes for each layer
-
-
 
 
 def rolling_polynomial_hash(token_tensor, hash_func_nb: int = 0):
@@ -856,10 +866,6 @@ class BltModel(BltPreTrainedModel):
     def __init__(self, config: BltConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
-        config.patcher_config._attn_implementation = config._attn_implementation
-        config.encoder_config._attn_implementation = config._attn_implementation
-        config.decoder_config._attn_implementation = config._attn_implementation
-        config.global_config._attn_implementation = config._attn_implementation
 
         self.config = config
         self.local_encoder = BltLocalEncoder(config.encoder_config)
