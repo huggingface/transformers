@@ -34,7 +34,7 @@ if kill -0 $PYTEST_PID 2>/dev/null; then
   echo "Process seems hung, launching GDB debugger..."
 
   # Install gdb in the container if needed
-  docker exec $(cat CONTAINER_ID.txt) bash -c "apt-get update && apt-get install -y gdb && apt-get remove --purge needrestart -y && echo 'deb http://deb.debian.org/debian bullseye main' >> /etc/apt/sources.list && apt-get update && apt-get install -y python3.9-dbg && sed -i '/bullseye/d' /etc/apt/sources.list"
+  # docker exec $(cat CONTAINER_ID.txt) bash -c "apt-get update && apt-get install -y gdb && apt-get remove --purge needrestart -y && echo 'deb http://deb.debian.org/debian bullseye main' >> /etc/apt/sources.list && apt-get update && apt-get install -y python3.9-dbg && sed -i '/bullseye/d' /etc/apt/sources.list"
 
   # Find the pytest process ID inside container
   PYTEST_IN_CONTAINER_PID=$(docker exec $(cat CONTAINER_ID.txt) pgrep -f "python3 -m pytest -m not generate -n 8")
