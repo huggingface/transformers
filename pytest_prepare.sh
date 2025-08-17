@@ -48,7 +48,9 @@ echo $UV_PYTHON
 
 
 echo 000
-python3.9-dbg -m ensurepip --upgrade
+curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+python3.9-dbg get-pip.py
+python3.9-dbg -m pip --version
 
 echo 111
 python3 -m pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
