@@ -21,7 +21,7 @@ docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh
 docker exec $(cat CONTAINER_ID.txt) /pytest_prepare.sh
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
-timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
+timeout 600 docker exec --memory=16g $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
 sleep 240
