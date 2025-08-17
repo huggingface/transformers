@@ -6,7 +6,7 @@
 # git pull origin debug_too_long_no_output
 
 
-export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
+export CONTAINER_ID=$(docker run --memory=16g --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
 cat CONTAINER_ID.txt
 echo "" > gdb_output.txt
 
@@ -21,7 +21,7 @@ docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh
 docker exec $(cat CONTAINER_ID.txt) /pytest_prepare.sh
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
-timeout 600 docker exec --memory=16g $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
+timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
 sleep 240
