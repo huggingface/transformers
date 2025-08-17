@@ -23,7 +23,7 @@ echo $(date "+%Y-%m-%d %H:%M:%S")
 timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
-sleep 360
+sleep 240
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
