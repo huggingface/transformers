@@ -40,6 +40,9 @@ python3 -c "import sys; print(sys.executable)"
 
 echo $UV_PYTHON
 
+
+apt-get install -y python3.9-distutils python3.9-dev python3.9-setuptools python3-pip
+
 echo 111
 python3 -m pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
 
