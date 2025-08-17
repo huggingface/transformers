@@ -40,13 +40,22 @@ python3 -c "import sys; print(sys.executable)"
 
 echo $UV_PYTHON
 
-
+echo 111
 python3 -m pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
+
+echo 222
 uv pip install --no-cache-dir 'torch' 'torchaudio' 'torchvision' 'torchcodec' --index-url https://download.pytorch.org/whl/cpu
+
+echo 333
 uv pip install --no-deps timm accelerate --extra-index-url https://download.pytorch.org/whl/cpu
+
+echo 444
 uv pip install --no-cache-dir librosa "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]"
+
+echo 555
 uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh
 
+echo 666
 uv pip install .
 
 mkdir test-results
