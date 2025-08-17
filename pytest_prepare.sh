@@ -12,6 +12,7 @@ python3 -c "import sys; print(sys.executable)"
 
 
 apt-get update
+apt-get install -y curl
 apt-get install -y gdb
 apt-get remove --purge needrestart -y
 echo 'deb http://deb.debian.org/debian bullseye main' >> /etc/apt/sources.list
