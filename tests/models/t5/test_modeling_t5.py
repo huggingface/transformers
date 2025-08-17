@@ -36,6 +36,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property
 from transformers.utils.fx import symbolic_trace
+from transformers import UMT5EncoderModel, UMT5Config
+from transformers.testing_utils import require_gguf
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -874,6 +876,25 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model_name = "google-t5/t5-small"
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
+    
+    # @slow
+    # def test_umt5_gguf_model_loading_from_hub(self):
+    #     """
+    #     Tests that a UMT5 model loaded from a GGUF checkpoint on the Hub is loaded with the
+    #     correct UMT5Config, not the base T5Config.
+    #     """
+    #     model_id = ""
+    #     model = UMT5EncoderModel.from_pretrained(model_id)
+
+    #     self.assertIsNotNone(model)
+    #     self.assertIsInstance(model.config, UMT5Config)
+    #     self.assertEqual(model.config.model_type, "umt5")
+    #     self.assertIn("UMT5EncoderModel", model.config.architectures)
+
+    #     # Optional forward pass check
+    #     input_ids = torch.ones((1, 5), dtype=torch.long)
+    #     outputs = model(input_ids=input_ids)
+    #     self.assertIn("last_hidden_state", outputs)
 
 
 class T5EncoderOnlyModelTester:
@@ -1855,3 +1876,44 @@ class TestAsymmetricT5(unittest.TestCase):
         # num_hidden_layers is passed to T5Config as num_layers
         model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
         assert len(model.decoder.block) == len(model.encoder.block) == 2
+
+import unittest
+
+from transformers import UMT5EncoderModel, UMT5Config
+from transformers.testing_utils import require_torch, slow
+from transformers.utils.import_utils import is_gguf_available
+
+
+@slow
+@require_torch
+class T5GGUFIntegrationTests(unittest.TestCase):
+    def test_umt5_encoder_can_load_gguf_from_hub_path(self):
+        """
+        Verifies that a UMT5 encoder loads directly from a GGUF file using
+        UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
+        """
+        if not is_gguf_available():
+            self.skipTest("gguf is not available in this environment")
+
+        model_id = "city96/umt5-xxl-encoder-gguf"
+        gguf_path = "umt5-xxl-encoder-Q8_0.gguf"
+        model = UMT5EncoderModel.from_pretrained(
+            model_id,
+            gguf_file=gguf_path,
+            torch_dtype=torch.float16,
+        )
+        model.eval()
+
+        # --- Assert: correct class + correct config type and fields ---
+        self.assertIsInstance(model, UMT5EncoderModel)
+        self.assertIsInstance(model.config, UMT5Config)
+        self.assertEqual(model.config.model_type, "umt5")
+        # architectures should reflect the encoder variant
+        self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
+
+        # --- Smoke: tiny forward pass to ensure weights/tensor mapping are valid ---
+        input_ids = torch.ones((1, 4), dtype=torch.long)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+        self.assertTrue(hasattr(outputs, "last_hidden_state"))
+        self.assertEqual(outputs.last_hidden_state.dim(), 3)  # (batch, seq_len, hidden)
