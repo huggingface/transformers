@@ -46,6 +46,7 @@ class BltLocalEncoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=2816,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -65,6 +66,7 @@ class BltLocalEncoderConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -93,6 +95,7 @@ class BltLocalDecoderConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=2816,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -111,6 +114,7 @@ class BltLocalDecoderConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -135,6 +139,7 @@ class BltGlobalTransformerConfig(PretrainedConfig):
         rope_scaling=None,
         hidden_act="silu",
         intermediate_size=5632,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -149,6 +154,7 @@ class BltGlobalTransformerConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -202,6 +208,7 @@ class BltPatcherConfig(PretrainedConfig):
         attn_bias_type="local_block_causal",
         intermediate_size=2048,
         rope_scaling=None,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -218,6 +225,7 @@ class BltPatcherConfig(PretrainedConfig):
         self.hidden_act = "silu"  # Blt uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.rope_scaling = rope_scaling
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -350,33 +358,37 @@ class BltConfig(PretrainedConfig):
 
         # Initialize component configurations
         if patcher_config is None:
-            self.patcher_config = BltPatcherConfig()
+            self.patcher_config = BltPatcherConfig(initializer_range=initializer_range)
             logger.info("patcher_config is None, using default Blt patcher config")
         elif isinstance(patcher_config, dict):
+            patcher_config.setdefault("initializer_range", initializer_range)
             self.patcher_config = BltPatcherConfig(**patcher_config)
         elif isinstance(patcher_config, BltPatcherConfig):
             self.patcher_config = patcher_config
 
         if encoder_config is None:
-            self.encoder_config = BltLocalEncoderConfig()
+            self.encoder_config = BltLocalEncoderConfig(initializer_range=initializer_range)
             logger.info("encoder_config is None, using default Blt encoder config")
         elif isinstance(encoder_config, dict):
+            encoder_config.setdefault("initializer_range", initializer_range)
             self.encoder_config = BltLocalEncoderConfig(**encoder_config)
         elif isinstance(encoder_config, BltLocalEncoderConfig):
             self.encoder_config = encoder_config
 
         if decoder_config is None:
-            self.decoder_config = BltLocalDecoderConfig()
+            self.decoder_config = BltLocalDecoderConfig(initializer_range=initializer_range)
             logger.info("decoder_config is None, using default Blt decoder config")
         elif isinstance(decoder_config, dict):
+            decoder_config.setdefault("initializer_range", initializer_range)
             self.decoder_config = BltLocalDecoderConfig(**decoder_config)
         elif isinstance(decoder_config, BltLocalDecoderConfig):
             self.decoder_config = decoder_config
 
         if global_config is None:
-            self.global_config = BltGlobalTransformerConfig()
+            self.global_config = BltGlobalTransformerConfig(initializer_range=initializer_range)
             logger.info("global_config is None, using default Blt global config")
         elif isinstance(global_config, dict):
+            global_config.setdefault("initializer_range", initializer_range)
             self.global_config = BltGlobalTransformerConfig(**global_config)
         elif isinstance(global_config, BltGlobalTransformerConfig):
             self.global_config = global_config
