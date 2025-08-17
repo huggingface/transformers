@@ -314,19 +314,10 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
-        size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
-
+            size = kwargs.pop("size", None)
+            size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+            self.size = get_size_dict(size, default_to_square=False)
+ 
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
@@ -337,17 +328,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
     @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `ConditionalDetrImageProcessorFast.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
         image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
+
 
     def prepare_annotation(
         self,
@@ -600,18 +585,12 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
+            "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
+            "use `do_pad` instead."
+        )
 
         return super().preprocess(images, annotations, masks_path, **kwargs)
+
 
     def _preprocess(
         self,
