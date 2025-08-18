@@ -1,13 +1,14 @@
 #!/bin/bash
 
 export PYTHONDONTWRITEBYTECODE=1 && export PYTHONUNBUFFERED=1 && export OMP_NUM_THREADS=1 && export TRANSFORMERS_IS_CI=true && export PYTEST_TIMEOUT=120 && export RUN_PIPELINE_TESTS=false && export RUN_FLAKY=true
+apt-get install -y net-tools iproute2
 python3 utils/fetch_hub_objects_for_ci.py
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
 timeout 600  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
-sleep 90
+sleep 150
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
@@ -99,7 +100,7 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
      echo "No pytest process found"
      break
    fi
-   sleep 30
+   sleep 1
  done
 
  # Clean up
