@@ -50,6 +50,17 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
+        self.triton_kernels_hub = None
+
+    def _lazy_import_kernels(self):
+        """Lazy import and initialize kernels only when needed"""
+        if self.triton_kernels_hub is None:
+            try:
+                from kernels import get_kernel
+                self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+            except ImportError:
+                raise ImportError("kernels package is required for MXFP4 quantization")
+        return self.triton_kernels_hub
 
     def validate_environment(self, *args, **kwargs):
         if not is_torch_available():
@@ -104,10 +115,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
 
         if not self.pre_quantized:
-            from kernels import get_kernel
-
-            global triton_kernels_hub
-            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+            self._lazy_import_kernels()
 
         device_map = kwargs.get("device_map")
         if device_map is None:
@@ -178,10 +186,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
-            global triton_kernels_hub
-            from kernels import get_kernel
-
-            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+            triton_kernels_hub = self._lazy_import_kernels()
             downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
 
             module, _ = get_module_from_name(model, param_name)
