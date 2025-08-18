@@ -12,31 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Mock benchmark for testing and demonstration purposes.
-This benchmark simulates model operations without requiring heavy ML dependencies.
-It's skipped by default but can be enabled for testing the framework.
-"""
-
 import os
 import sys
 import time
 import random
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 # Add parent directory to path for framework imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from framework import ModelBenchmark, BenchmarkConfig, TimingResult, flush_memory
+from benchmark_framework import ModelBenchmark, BenchmarkConfig, BenchmarkScenario, TimingResult, flush_memory, CUDATimer
 
 
 class MockBenchmark(ModelBenchmark):
     """
     Mock benchmark that simulates model operations for testing purposes.
-    
-    This benchmark doesn't require any ML dependencies and generates
-    realistic-looking timing data for framework testing.
     """
     
     def __init__(self, logger: logging.Logger):
@@ -45,6 +36,68 @@ class MockBenchmark(ModelBenchmark):
         self.base_latency = 1.0  # Base latency in seconds
         self.base_ttft = 0.15    # Base time-to-first-token in seconds
         self.tokens_per_sec_base = 50.0  # Base tokens per second
+    
+    def create_scenarios(self, **kwargs) -> Dict[str, BenchmarkScenario]:
+        """Create mock benchmark scenarios."""
+        scenarios = {}
+        
+        # Extract parameters
+        model_id = kwargs.get('model_id', 'mock-model-v1')
+        warmup_iterations = kwargs.get('warmup_iterations', 2)
+        measurement_iterations = kwargs.get('measurement_iterations', 3)
+        num_tokens_to_generate = kwargs.get('num_tokens_to_generate', 20)
+        
+        # Define scenario configurations (simplified for mock)
+        scenario_configs = [
+            {"variant": "eager", "compile_mode": None, "description": "Eager execution"},
+            {"variant": "compiled", "compile_mode": "default", "description": "Compiled execution"},
+        ]
+        
+        # Mock SDPA backends
+        mock_sdpa_backends = [None, "math", "flash_attention"]
+        
+        # Create scenarios
+        for scenario_config in scenario_configs:
+            for sdpa_backend in mock_sdpa_backends:
+                # Create unique config for this scenario
+                config = BenchmarkConfig(
+                    name=f"mock_{scenario_config['variant']}",
+                    model_id=model_id,
+                    variant=scenario_config["variant"],
+                    compile_mode=scenario_config["compile_mode"],
+                    batch_size=1,  # Fixed batch size
+                    warmup_iterations=warmup_iterations,
+                    measurement_iterations=measurement_iterations,
+                    num_tokens_to_generate=num_tokens_to_generate,
+                    device="cpu",  # Mock always uses CPU
+                    torch_dtype="float32",
+                    sdpa_backend=sdpa_backend
+                )
+                
+                # Create scenario name
+                scenario_name_parts = [scenario_config["variant"]]
+                if scenario_config["compile_mode"]:
+                    scenario_name_parts.append(f"compile_{scenario_config['compile_mode']}")
+                if sdpa_backend:
+                    scenario_name_parts.append(f"sdpa_{sdpa_backend}")
+                
+                scenario_name = "_".join(scenario_name_parts)
+                
+                # Create description
+                description = scenario_config["description"]
+                if sdpa_backend:
+                    description += f" with SDPA {sdpa_backend} backend"
+                
+                # Create scenario
+                scenario = BenchmarkScenario(
+                    name=scenario_name,
+                    config=config,
+                    description=description
+                )
+                
+                scenarios[scenario_name] = scenario
+        
+        return scenarios
         
     def setup_model(self, config: BenchmarkConfig) -> None:
         """Setup the mock model based on configuration."""
@@ -137,16 +190,13 @@ class MockBenchmark(ModelBenchmark):
         tokens_to_generate = config.num_tokens_to_generate
         base_latency = self.base_latency + (tokens_to_generate / self.tokens_per_sec_base)
         
-        # Add variation based on batch size (larger batches are slightly less efficient per sample)
-        if config.batch_size > 1:
-            base_latency *= (1 + (config.batch_size - 1) * 0.1)
-        
         # Add some random variation (±5%)
         variation = random.uniform(-0.05, 0.05)
         actual_latency = base_latency * (1 + variation)
         
-        # Calculate tokens per second
+        # Calculate tokens per second and time per output token
         actual_tokens_per_sec = tokens_to_generate / actual_latency
+        time_per_output_token = actual_latency / tokens_to_generate if tokens_to_generate > 0 else None
         
         # Simulate the actual processing (cap sleep time for testing)
         time.sleep(min(actual_latency * 0.1, 0.05))
@@ -154,11 +204,11 @@ class MockBenchmark(ModelBenchmark):
         return TimingResult(
             latency=actual_latency,
             tokens_per_second=actual_tokens_per_sec,
+            time_per_output_token_seconds=time_per_output_token,
             total_tokens_generated=tokens_to_generate,
             metadata={
                 "variant": config.variant,
                 "compile_mode": config.compile_mode,
-                "batch_size": config.batch_size,
                 "attn_implementation": config.attn_implementation,
                 "sdpa_backend": config.sdpa_backend,
                 "mock_benchmark": True
@@ -173,48 +223,6 @@ class MockBenchmark(ModelBenchmark):
         }
 
 
-def create_mock_configs(
-    warmup_iterations: int = 2,
-    measurement_iterations: int = 3,
-    num_tokens_to_generate: int = 50
-) -> list:
-    """Create a set of mock benchmark configurations for testing."""
-    from framework import BenchmarkConfig, create_config_variants
-    
-    base_config = BenchmarkConfig(
-        name="mock_benchmark",
-        model_id="mock-model-v1",
-        warmup_iterations=warmup_iterations,
-        measurement_iterations=measurement_iterations,
-        num_tokens_to_generate=num_tokens_to_generate,
-        device="cpu",  # Mock doesn't need GPU
-        torch_dtype="float32"
-    )
-    
-    # Create variants for different execution modes and SDPA backends
-    configs = create_config_variants(
-        base_config,
-        {
-            "variant": ["eager", "compiled"],  # Reduced for mock
-            "compile_mode": [None, "default"],
-            "batch_size": [1, 2],
-            "sdpa_backend": [None, "math", "flash_attention"]  # Mock SDPA variants
-        }
-    )
-    
-    # Filter out invalid combinations (same as in llama_benchmark)
-    valid_configs = []
-    for config in configs:
-        # Only apply compile_mode when variant is compiled or kernelized
-        if config.variant == "eager" and config.compile_mode is not None:
-            continue
-        # Kernelized mode should use max-autotune
-        if config.variant == "kernelized" and config.compile_mode not in ["max-autotune", None]:
-            continue
-        
-        valid_configs.append(config)
-    
-    return valid_configs
 
 
 def run_mock_benchmark(
@@ -242,7 +250,7 @@ def run_mock_benchmark(
         logger.info("Mock benchmark is skipped by default. Use --enable-mock to run it.")
         return None
     
-    from framework import BenchmarkRunner
+    from benchmark_framework import BenchmarkRunner
     
     logger.info("Running mock benchmark (for testing/demonstration)")
     
@@ -250,17 +258,12 @@ def run_mock_benchmark(
     benchmark = MockBenchmark(logger)
     runner = BenchmarkRunner(logger, output_dir)
     
-    # Create configurations with fast settings for testing
-    configs = create_mock_configs(
-        warmup_iterations=kwargs.get('warmup_iterations', 1),
-        measurement_iterations=kwargs.get('measurement_iterations', 2),
-        num_tokens_to_generate=kwargs.get('num_tokens_to_generate', 20)
-    )
-    
-    logger.info(f"Running mock benchmark with {len(configs)} configurations")
+    # Run scenarios
+    scenarios = benchmark.get_scenarios(**kwargs)
+    logger.info(f"Running mock benchmark with {len(scenarios)} scenarios")
     
     # Run benchmarks
-    results = runner.run_benchmark(benchmark, configs, collect_gpu_metrics=False)
+    results = runner.run_benchmark(benchmark, scenarios, collect_gpu_metrics=False)
     
     # Save results
     output_file = runner.save_results("mock_model", results)
