@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_bitsandbytes,
+    require_optimum_quanto,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -344,7 +345,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
+    @require_optimum_quanto
+    @pytest.mark.generate
+    @unittest.skip("Mllama is actually an encoder decoder cache and thus can't supports quant cache")
+    def test_generate_with_quant_cache(self):
+        pass
+
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

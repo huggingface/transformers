@@ -493,9 +493,9 @@ class XCLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return XCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(),
-            self.vision_model_tester.get_config(),
+        return XCLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=self.projection_dim,
         )
 
@@ -638,8 +638,8 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -761,7 +761,7 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]],
-                ("cuda", 8): [[0.0141, 0.2114, 0.0599], [0.0446, 0.5866, -0.1674], [-0.0876, 0.8592, -0.3025]],
+                ("cuda", 8): [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

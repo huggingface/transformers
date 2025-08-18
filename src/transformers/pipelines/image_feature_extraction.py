@@ -45,6 +45,11 @@ class ImageFeatureExtractionPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, pool=None, **kwargs):
         preprocess_params = {} if image_processor_kwargs is None else image_processor_kwargs
 

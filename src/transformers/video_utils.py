@@ -227,7 +227,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
             `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Desired frames per second. Takes priority over num_frames if both are provided.
 
     Returns:
@@ -514,7 +514,7 @@ VIDEO_DECODERS = {
 def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
+    fps: Optional[Union[int, float]] = None,
     backend: str = "pyav",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
@@ -527,7 +527,7 @@ def load_video(
             The video to convert to the numpy array format. Can be a link to video or local path.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not passed, the whole video is loaded.
-        fps (`int`, *optional*):
+        fps (`int` or `float`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
         backend (`str`, *optional*, defaults to `"pyav"`):
@@ -563,6 +563,14 @@ def load_video(
 
         sample_indices_fn = sample_indices_fn_func
 
+    if is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
+        # Case 1: Video is provided as a 4D numpy array or torch tensor (frames, height, width, channels)
+        if not is_valid_video(video):
+            raise ValueError(
+                f"When passing video as decoded frames, video should be a 4D numpy array or torch tensor, but got {video.ndim} dimensions instead."
+            )
+        return video, None
+
     if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
@@ -579,8 +587,6 @@ def load_video(
         file_obj = BytesIO(requests.get(video).content)
     elif os.path.isfile(video):
         file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
-        file_obj = None
     else:
         raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")
 
@@ -629,7 +635,7 @@ def convert_to_rgb(
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
     if not isinstance(video, np.ndarray):
-        raise ValueError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
+        raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
     # np.array usually comes with ChannelDimension.LAST so leet's convert it
     if input_data_format is None:

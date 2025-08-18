@@ -73,12 +73,12 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
-    config_class = EncoderDecoderConfig
+    config: EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
@@ -373,9 +373,9 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargs_encoder:
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
@@ -606,10 +606,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             " respective methods of the wrapped objects (model.encoder.resize_token_embeddings(...) or"
             " model.decoder.resize_token_embeddings(...))"
         )
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
 
 __all__ = ["EncoderDecoderModel"]

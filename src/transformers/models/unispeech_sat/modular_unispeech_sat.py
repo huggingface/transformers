@@ -150,11 +150,11 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
 
 @auto_docstring
 class UniSpeechSatPreTrainedModel(PreTrainedModel):
-    config_class = UniSpeechSatConfig
+    config: UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 

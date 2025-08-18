@@ -267,7 +267,7 @@ def write_model(
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
-    if hasattr(params, "moe_args"):
+    if params.get("moe_args", False):
         num_experts = params["moe_args"]["num_experts"]
         interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
     else:

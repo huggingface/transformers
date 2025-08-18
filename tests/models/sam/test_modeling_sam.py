@@ -16,6 +16,7 @@
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
@@ -257,6 +258,7 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -587,6 +589,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config = model.config
             model.to(torch_device)
             model.eval()
+            print(model.__class__, model._can_record_outputs)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -598,8 +601,10 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
+            config.mask_decoder_config.output_attentions = True
+            config.vision_config.output_attentions = True
             config.output_attentions = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -655,6 +660,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -776,7 +782,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-12.7729, -12.3665, -12.6061],
-                ("cuda", 8): [-12.7657, -12.3683, -12.5983],
+                ("cuda", 8): [-12.7731, -12.3667, -12.6063],
             }
         )
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)

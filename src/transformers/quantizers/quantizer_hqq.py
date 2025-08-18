@@ -71,9 +71,6 @@ class HqqHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-
         if self.torch_dtype is None:
             if "torch_dtype" in kwargs:
                 self.torch_dtype = kwargs["torch_dtype"]
@@ -81,7 +78,7 @@ class HqqHfQuantizer(HfQuantizer):
                 self.torch_dtype = torch.float32
                 logger.info("Setting torch_dtype to torch.float32 as the default value since it was not specified.")
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if isinstance(device_map, dict):
             if "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
@@ -174,7 +171,7 @@ class HqqHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            return (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear)) and tensor_name != "weight"
+            return (isinstance(module, (torch.nn.Linear, HQQLinear))) and tensor_name != "weight"
         else:
             return (
                 isinstance(module, torch.nn.Linear)
@@ -256,8 +253,8 @@ class HqqHfQuantizer(HfQuantizer):
             return
 
         # Step 1: populate module with weight/bias from module state dict
-        for key in module_state_dict:
-            setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
+        for key, tensor in module_state_dict.items():
+            setattr(module, key, torch.nn.Parameter(tensor))
 
         # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
         # directly doesn't work.

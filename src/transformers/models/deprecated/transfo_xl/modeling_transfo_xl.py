@@ -458,7 +458,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = TransfoXLConfig
+    config: TransfoXLConfig
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 

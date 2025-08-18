@@ -26,7 +26,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
@@ -181,8 +180,6 @@ class Idefics2Processor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,

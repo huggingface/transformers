@@ -52,7 +52,7 @@ class Glm4vVideoProcessingTester:
         image_std=IMAGENET_STANDARD_STD,
         do_convert_rgb=True,
     ):
-        size = size if size is not None else {"longest_edge": 20}
+        size = size if size is not None else {"longest_edge": 20, "shortest_edge": 10}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -129,6 +129,8 @@ class Glm4vVideoProcessingTester:
                 height,
                 width,
                 factor=self.patch_size * self.merge_size,
+                min_pixels=self.size["shortest_edge"],
+                max_pixels=self.size["longest_edge"],
             )
             grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
             seq_len += grid_t * grid_h * grid_w
@@ -163,10 +165,12 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"longest_edge": 20})
+        self.assertEqual(video_processor.size, {"longest_edge": 20, "shortest_edge": 10})
 
-        video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
-        self.assertEqual(video_processor.size, {"height": 42, "width": 42})
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict, size={"longest_edge": 42, "shortest_edge": 42}
+        )
+        self.assertEqual(video_processor.size, {"longest_edge": 42, "shortest_edge": 42})
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
@@ -228,7 +232,7 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
-    @unittest.skip("Skip for now, the test needs adjustment fo GLM-4.1V")
+    @unittest.skip("Skip for now, the test needs adjustment for GLM-4.1V")
     def test_call_numpy_4_channels(self):
         for video_processing_class in self.video_processor_list:
             # Test that can process videos which have an arbitrary number of channels
