@@ -5,10 +5,10 @@ apt-get install -y net-tools iproute2
 python3 utils/fetch_hub_objects_for_ci.py
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
-timeout 1200  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
+timeout 600  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
-sleep 160
+sleep 80
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
@@ -28,7 +28,7 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
 
  # Monitor with timeout
  MONITOR_START=$(date +%s)
- MONITOR_TIMEOUT=600  # 7 minutes max
+ MONITOR_TIMEOUT=420  # 7 minutes max
 
  while true; do
    # Check monitoring timeout
