@@ -98,7 +98,8 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
      fi
    else
      echo "No pytest process found"
-     break
+     kill $TIMEOUT_PID 2>/dev/null || true
+     exit 0
    fi
    sleep 1
  done
