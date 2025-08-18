@@ -42,7 +42,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer, AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring
+from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring, LossKwargs
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation import GenerationMixin
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
@@ -371,6 +371,8 @@ class MiniCPM_o_2_6TextRotaryEmbedding(nn.Module):
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 @auto_docstring
 class MiniCPM_o_2_6TextModel(MiniCPM_o_2_6PreTrainedModel):
@@ -1018,49 +1020,121 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         return input_embeddings
 
-    def forward(self, data = None, **kwargs):
+    # def forward(self, data = None, **kwargs):
+    #     r"""
+    #     Perform a forward pass with multimodal inputs including vision and optional audio features.
+
+    #     Args:
+    #         data (`Dict`):
+    #             A dictionary containing multimodal inputs required to compute embeddings:
+
+    #             - `pixel_values` (`torch.FloatTensor` of shape `(B, C, H, W)`): Image tensors used for visual embedding.
+    #             - `tgt_sizes` (`torch.LongTensor` of shape `(num_images, 2)`): Target spatial size (H, W) after patch embedding.
+    #             - `image_bound` (`torch.LongTensor` of shape `(num_images, 2)`): Token index boundaries in the input sequence for each image.
+    #             - `input_ids` (`torch.LongTensor`): Tokenized input ids including placeholders for multimodal tokens.
+    #             - `position_ids` (`torch.LongTensor`): Positional indices, will be cast to `torch.int64` if needed.
+    #             - `audio_values` (`torch.FloatTensor`, *optional*): Optional raw audio input, used if `config.init_audio` is True.
+
+    #         **kwargs:
+    #             Additional standard generation/model arguments passed to the underlying language model, e.g.:
+    #             - `attention_mask`
+    #             - `past_key_values`
+    #             - `use_cache`
+    #             - `output_attentions`
+    #             - `output_hidden_states`
+    #             - `return_dict`
+
+    #     Returns:
+    #         Model outputs from the underlying language model, depending on `return_dict`.
+    #     """
+    #     output_attentions = kwargs.pop('output_attentions') if kwargs.get('output_attentions', None) is not None else self.config.output_attentions
+    #     output_hidden_states = (
+    #         kwargs.pop('output_hidden_states') if kwargs.get('output_hidden_states', None) is not None else self.config.output_hidden_states
+    #     )
+    #     outputs = self.language_model(
+    #         output_attentions=output_attentions,
+    #         output_hidden_states=output_hidden_states,
+    #         **kwargs
+    #     )
+    #     hidden_states = outputs.last_hidden_state
+    #     # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+    #     slice_indices = slice(0, None)
+    #     logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+    #     return CausalLMOutputWithPast(
+    #         loss=None,
+    #         logits=logits,
+    #         past_key_values=outputs.past_key_values,
+    #         hidden_states=outputs.hidden_states,
+    #         attentions=outputs.attentions,
+    #     )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> CausalLMOutputWithPast:
         r"""
-        Perform a forward pass with multimodal inputs including vision and optional audio features.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-        Args:
-            data (`Dict`):
-                A dictionary containing multimodal inputs required to compute embeddings:
+        Example:
 
-                - `pixel_values` (`torch.FloatTensor` of shape `(B, C, H, W)`): Image tensors used for visual embedding.
-                - `tgt_sizes` (`torch.LongTensor` of shape `(num_images, 2)`): Target spatial size (H, W) after patch embedding.
-                - `image_bound` (`torch.LongTensor` of shape `(num_images, 2)`): Token index boundaries in the input sequence for each image.
-                - `input_ids` (`torch.LongTensor`): Tokenized input ids including placeholders for multimodal tokens.
-                - `position_ids` (`torch.LongTensor`): Positional indices, will be cast to `torch.int64` if needed.
-                - `audio_values` (`torch.FloatTensor`, *optional*): Optional raw audio input, used if `config.init_audio` is True.
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen2ForCausalLM
 
-            **kwargs:
-                Additional standard generation/model arguments passed to the underlying language model, e.g.:
-                - `attention_mask`
-                - `past_key_values`
-                - `use_cache`
-                - `output_attentions`
-                - `output_hidden_states`
-                - `return_dict`
+        >>> model = Qwen2ForCausalLM.from_pretrained("meta-qwen2/Qwen2-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-qwen2/Qwen2-2-7b-hf")
 
-        Returns:
-            Model outputs from the underlying language model, depending on `return_dict`.
-        """
-        output_attentions = kwargs.pop('output_attentions') if kwargs.get('output_attentions', None) is not None else self.config.output_attentions
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            kwargs.pop('output_hidden_states') if kwargs.get('output_hidden_states', None) is not None else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        outputs = self.language_model(
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: BaseModelOutputWithPast = self.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            **kwargs
+            cache_position=cache_position,
+            **kwargs,
         )
+
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(0, None)
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
         return CausalLMOutputWithPast(
-            loss=None,
+            loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -1478,32 +1552,102 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         attention_mask = torch.ones((1, cache_length + inputs_embeds.shape[1]), dtype=torch.bool, device=self.device)
 
         # 2. do prefill and predict listen/speak label
-        outputs = self.language_model(
+        outputs = self.forward(
             past_key_values=self.llm_past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            position_ids=None,  # position_ids,
+            position_ids=None,
             use_cache=True,
             return_dict=True,
-            outpu_attentions=self.output_attentions,
-            output_hidden_states=self.output_hidden_states,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(0, None) 
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        outputs = CausalLMOutputWithPast(
-            loss=None,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
         self.llm_past_key_values = outputs["past_key_values"]
         return
+        
+    # Copy and modified from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
+    # if use the same method in `GenerationMixin`, it will cause an error in `_cache_dependant_input_preparation`, the error message is as follows:
+    #   (cache_position[-1] >= input_ids.shape[1])  # Exception 3
+    #   IndexError: index -1 is out of bounds for dimension 0 with size 0
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        **kwargs,
+    ):
+        if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+            else:
+                cache_length = past_length = past_key_values[0][0].shape[2]
+
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+        #print("--------- my prepare_inputs_for_generation")
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            dtype = self.lm_head.weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                #"cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
 
     @torch.inference_mode()
     def streaming_generate(
@@ -1588,7 +1732,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         while True:
             outputs = super().generate(
                 input_ids=input_ids,
-                past_key_values=self.llm_past_key_values,
+                past_key_values=self.llm_past_key_values.to_legacy_cache() if isinstance(self.llm_past_key_values, DynamicCache) else self.llm_past_key_values,
                 attention_mask=attention_mask,
                 use_cache=True,
                 max_new_tokens=3,  # reduce first token delay
@@ -1609,7 +1753,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             end = check_uncompleted_token(cur_ids[0])
             left_ids = cur_ids[:, end:]
             cur_ids = cur_ids[:, :end]
-            text = self._decode_text(cur_ids, tokenizer)[0] if end > 0 else ""
+            text = self.processor.decode_text(cur_ids, tokenizer, self.terminators)[0] if end > 0 else ""
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
@@ -3378,11 +3522,10 @@ class ConditionalChatTTS(PreTrainedModel):
             )
 
         # Model forward
-        past_key_values_for_prefill = DynamicCache.from_legacy_cache(past_key_values_for_prefill)
         outputs_prefill: BaseModelOutputWithPast = self.model(
             attention_mask=None,  # because for text, it is standard causal attention mask, do nothing
             position_ids=position_ids,  # position_ids denotes the position of new text tokens in the sequence
-            past_key_values=past_key_values_for_prefill,  # `past_key_values` will be updated by the model
+            past_key_values=DynamicCache.from_legacy_cache(past_key_values_for_prefill),  # `past_key_values` will be updated by the model
             inputs_embeds=inputs_embeds,  # contains text and language model embedding
             use_cache=True,
             output_attentions=False,
@@ -3458,13 +3601,13 @@ class ConditionalChatTTS(PreTrainedModel):
         outputs: BaseModelOutputWithPast = self.model(
             attention_mask=causal_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            past_key_values=DynamicCache.from_legacy_cache(past_key_values),
             inputs_embeds=inputs_embeds,
             use_cache=True,
             output_attentions=False,
             cache_position=cache_position,
         )
-        past_key_values = outputs.past_key_values
+        past_key_values = outputs.past_key_values.to_legacy_cache()
         return past_key_values
 
     @torch.inference_mode()
@@ -3582,11 +3725,10 @@ class ConditionalChatTTS(PreTrainedModel):
             )
 
             # Model forward
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             outputs: BaseModelOutputWithPast = self.model(
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                past_key_values=DynamicCache.from_legacy_cache(past_key_values),
                 inputs_embeds=inputs_embeds,
                 use_cache=True,
                 output_attentions=False,
