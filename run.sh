@@ -16,7 +16,7 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
   echo "Process seems hung ..."
 
  # Find the pytest process ID
- PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 4")
+ PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 7")
 
  echo "PYTEST_PID 1"
  echo $PYTEST_PID
@@ -39,7 +39,7 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
    fi
 
    # Find the pytest process ID
-   PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 4")
+   PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 7")
 
    if [ -n "$PYTEST_PID" ]; then
      echo "=== $(date) ==="
