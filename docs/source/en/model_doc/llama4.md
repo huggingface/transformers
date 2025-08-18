@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-05 and added to Hugging Face Transformers on 2025-04-05.*
 
 # Llama4
 
@@ -21,10 +22,11 @@ rendered properly in your Markdown viewer.
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
-Llama 4, developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
+[Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/), developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
 This generation includes two models:
 - The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
 - The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.

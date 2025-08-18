@@ -306,7 +306,7 @@ def _fuse_awq_layernorm(fuse_module_names, module, target_cls):
     Fuse the LayerNorm layers into a target class using autoawq
 
     Args:
-        fuse_module_names (`List[str]`):
+        fuse_module_names (`list[str]`):
             The list of module names to fuse
         module (`nn.Module`):
             The pytorch parent module that has layernorm modules to fuse
@@ -333,7 +333,7 @@ def _fuse_awq_mlp(model, current_module_name, fuse_module_names, module, target_
             The input pretrained model
         current_module_name (`str`):
             The current submodule name
-        fuse_module_names (`List[str]`):
+        fuse_module_names (`list[str]`):
             The list of module names to fuse. For the MLP layers it has to be an array
             of length 3 that consists of the 3 MLP layers in the order (gate (dense layer post-attention) / up / down layers)
         module (`nn.Module`):
@@ -374,7 +374,7 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             The input pretrained model
         module (`nn.Module`):
             The pytorch parent module that has layernorm modules to fuse
-        modules_to_fuse (`List[str]`):
+        modules_to_fuse (`list[str]`):
             The module fusing mapping. The dictionary has to contain a field `attention` with attention module names
             in the correct order: q, k, v, o layer
         current_module_name (`str`):

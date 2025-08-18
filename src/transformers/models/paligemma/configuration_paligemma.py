@@ -13,8 +13,6 @@
 # limitations under the License.
 """PaliGemmamodel configuration"""
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -39,8 +37,6 @@ class PaliGemmaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 256000):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
@@ -83,25 +79,20 @@ class PaliGemmaConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=256000,
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
         **kwargs,
     ):
-        self._ignore_index = ignore_index
         self.image_token_index = image_token_index
-        self._vocab_size = vocab_size
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
         self.is_encoder_decoder = False
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
@@ -117,7 +108,7 @@ class PaliGemmaConfig(PretrainedConfig):
 
         self.text_config = text_config
         if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            text_config["model_type"] = text_config.get("model_type", "gemma")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
@@ -132,23 +123,6 @@ class PaliGemmaConfig(PretrainedConfig):
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
-
-    @property
-    def ignore_index(self):
-        warnings.warn(
-            "The `ignore_index` attribute is deprecated and will be removed in v4.47.",
-            FutureWarning,
-        )
-        return self._ignore_index
-
-    @ignore_index.setter
-    def ignore_index(self, value):
-        self._ignore_index = value
-
-    def to_dict(self):
-        output = super().to_dict()
-        output.pop("_ignore_index", None)
-        return output
 
 
 __all__ = ["PaliGemmaConfig"]

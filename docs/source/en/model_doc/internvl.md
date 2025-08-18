@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-14 and added to Hugging Face Transformers on 2025-04-18.*
 
 
 <div style="float: right;">
@@ -340,6 +341,11 @@ This example showcases how to handle a batch of chat conversations with interlea
 [[autodoc]] InternVLVisionModel
     - forward
 
+## InternVLModel
+
+[[autodoc]] InternVLModel
+    - forward
+
 ## InternVLForConditionalGeneration
 
 [[autodoc]] InternVLForConditionalGeneration
@@ -348,3 +354,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ## InternVLProcessor
 
 [[autodoc]] InternVLProcessor
+
+## InternVLVideoProcessor
+
+[[autodoc]] InternVLVideoProcessor

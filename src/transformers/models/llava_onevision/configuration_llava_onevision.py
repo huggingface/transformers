@@ -49,7 +49,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -165,9 +165,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
         self.image_grid_pinpoints = image_grid_pinpoints
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["siglip_vision_model"](
@@ -176,14 +174,14 @@ class LlavaOnevisionConfig(PretrainedConfig):
                 patch_size=14,
                 image_size=384,
                 num_hidden_layers=26,
-                num_attention_heads=14,
+                num_attention_heads=16,
                 vision_use_head=False,
             )
 
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()

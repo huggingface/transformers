@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-07-29 and added to Hugging Face Transformers on 2020-11-16.*
 
 # BertGeneration
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using
 [`EncoderDecoderModel`] as proposed in [Leveraging Pre-trained Checkpoints for Sequence Generation
-Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
+Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 
 The abstract from the paper is the following:
 

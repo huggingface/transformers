@@ -15,7 +15,8 @@
 """PyTorch Graphormer model."""
 
 import math
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -134,7 +135,7 @@ class LayerDropModuleList(nn.ModuleList):
     From:
     https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/layer_drop.py
     A LayerDrop implementation based on [`torch.nn.ModuleList`]. LayerDrop as described in
-    https://arxiv.org/abs/1909.11556.
+    https://huggingface.co/papers/1909.11556.
 
     We refresh the choice of which layers to drop every time we iterate over the LayerDropModuleList instance. During
     evaluation we always iterate over all layers.
@@ -368,7 +369,7 @@ class GraphormerMultiheadAttention(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             key_padding_mask (Bytetorch.Tensor, optional): mask to exclude
@@ -529,7 +530,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_bias: Optional[torch.Tensor] = None,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
         Transformer implementation.
@@ -627,7 +628,7 @@ class GraphormerGraphEncoder(nn.Module):
         last_state_only: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[Union[torch.Tensor, List[torch.LongTensor]], torch.Tensor]:
+    ) -> tuple[Union[torch.Tensor, list[torch.LongTensor]], torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
         data_x = input_nodes
         n_graph, n_node = data_x.size()[:2]
@@ -703,7 +704,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GraphormerConfig
+    config: GraphormerConfig
     base_model_prefix = "graphormer"
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"
@@ -807,7 +808,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         masked_tokens: None = None,
         return_dict: Optional[bool] = None,
         **unused,
-    ) -> Union[Tuple[torch.LongTensor], BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple[torch.LongTensor], BaseModelOutputWithNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inner_states, graph_rep = self.graph_encoder(
@@ -871,7 +872,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         **unused,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(

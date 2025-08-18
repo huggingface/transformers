@@ -47,7 +47,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
 
 output = quantized_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

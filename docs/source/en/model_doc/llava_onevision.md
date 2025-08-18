@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-08-06 and added to Hugging Face Transformers on 2024-09-05.*
 
 # LLaVA-OneVision
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://arxiv.org/abs/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
+The LLaVA-OneVision model was proposed in [LLaVA-OneVision: Easy Visual Task Transfer](https://huggingface.co/papers/2408.03326) by <Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, Chunyuan Li
 
 LLaVA-OneVision is a Vision-Language Model that can generate text conditioned on one or several images/videos. The model consists of SigLIP vision encoder and a Qwen2 language backbone. The images are processed with anyres-9 technique where the image is split into 9 patches to better process high resolution images and capture as much details as possible. However, videos are pooled to a total sequence length of 196 tokens each frame for more memory efficient computation. LLaVA-OneVision is available in three sizes: 0.5B, 7B and 72B and achieves remarkable performance on benchmark evaluations.
 
@@ -38,10 +39,10 @@ yielding new emerging capabilities. In particular, strong video understanding an
 cross-scenario capabilities are demonstrated through task transfer from images to
 videos.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-acrhitecture.png"
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava-ov-architecture.png"
 alt="drawing" width="600"/>
 
-<small> LLaVA-OneVision architecture. Taken from the <a href="https://arxiv.org/abs/2408.03326">original paper.</a> </small>
+<small> LLaVA-OneVision architecture. Taken from the <a href="https://huggingface.co/papers/2408.03326">original paper.</a> </small>
 
 Tips:
 
@@ -121,7 +122,6 @@ processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     device_map="cuda:0"
 )
 
@@ -147,7 +147,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Multi image inference
 
-LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. Here is how you can do it:
+LLaVa-OneVision can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). For that you have to use checkpoints with an "ov" suffix. For multi-image cases, we recommend using a **nested list of images** as input. Otherwise, every image will be patchified and consume a lot of memory. Here is how you can do it:
 
 ```python
 import requests
@@ -166,20 +166,20 @@ conversation_1 = [
         "content": [
             {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
     {
         "role": "assistant",
         "content": [
             {"type": "text", "text": "There is a red stop sign in the image."},
-            ],
+        ],
     },
     {
         "role": "user",
         "content": [
             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
             {"type": "text", "text": "What about this image? How many cats do you see?"},
-            ],
+        ],
     },
 ]
 
@@ -189,7 +189,7 @@ conversation_2 = [
         "content": [
             {"type": "image", "url": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
-            ],
+        ],
     },
 ]
 
@@ -199,13 +199,14 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     padding=True,
-    return_tensors="pt"
+    padding_side="left",
+    return_tensors="pt",
 ).to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\n']
+['user\n\nWhat is shown in this image?\nassistant\nThere is a red stop sign in the image.\nuser\n\nWhat about this image? How many cats do you see?\nassistant\ntwo', 'user\n\nWhat is shown in this image?\nassistant\nThe image shows a whimsical scene of a snowman sitting by a campfire. The snowman is anthropomorphized, wearing a hat and']
 ```
 
 ### Video inference
@@ -286,7 +287,6 @@ from transformers import LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)
 ```
@@ -303,6 +303,7 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionImageProcessor
 
 [[autodoc]] LlavaOnevisionImageProcessor
+    - preprocess
 
 ## LlavaOnevisionImageProcessorFast
 
@@ -312,6 +313,10 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionVideoProcessor
 
 [[autodoc]] LlavaOnevisionVideoProcessor
+
+## LlavaOnevisionModel
+
+[[autodoc]] LlavaOnevisionModel
 
 ## LlavaOnevisionForConditionalGeneration
 

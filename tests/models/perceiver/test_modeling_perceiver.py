@@ -431,7 +431,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits per modality, let's verify each modality
-                for modality in first.keys():
+                for modality in first:
                     out_1 = first[modality].cpu().numpy()
                     out_2 = second[modality].cpu().numpy()
                     out_1 = out_1[~np.isnan(out_1)]
@@ -456,7 +456,8 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -676,7 +677,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
                 # model outputs a dictionary with logits for each modality
-                for modality in hidden_states_no_chunk.keys():
+                for modality in hidden_states_no_chunk:
                     self.assertTrue(
                         torch.allclose(hidden_states_no_chunk[modality], hidden_states_with_chunk[modality], atol=1e-3)
                     )
@@ -694,7 +695,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             if model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-                for modality in outputs[0].keys():
+                for modality in outputs[0]:
                     out_2 = outputs[0][modality].cpu().numpy()
                     out_2[np.isnan(out_2)] = 0
 
@@ -841,11 +842,8 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
-    image1 = Image.open(dataset[0]["file"]).convert("RGB")
-    image2 = Image.open(dataset[0]["file"]).convert("RGB")
-
-    return image1, image2
+    ds = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    return list(ds["image"][:2])
 
 
 def normalize(img):

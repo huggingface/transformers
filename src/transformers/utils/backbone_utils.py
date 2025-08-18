@@ -91,9 +91,9 @@ def _align_output_features_output_indices(
         - `out_indices` and `out_features` set: input `out_indices` and `out_features` are returned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     if out_indices is None and out_features is None:
         out_indices = [len(stage_names) - 1]
@@ -122,9 +122,9 @@ def get_aligned_output_features_output_indices(
         - `out_indices` and `out_features` set: they are verified to be aligned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
@@ -323,13 +323,8 @@ def load_backbone(config):
     if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
         raise ValueError("Cannot specify both config.backbone_config and config.backbone")
 
-    # If any of thhe following are set, then the config passed in is from a model which contains a backbone.
-    if (
-        backbone_config is None
-        and use_timm_backbone is None
-        and backbone_checkpoint is None
-        and backbone_checkpoint is None
-    ):
+    # If any of the following are set, then the config passed in is from a model which contains a backbone.
+    if backbone_config is None and use_timm_backbone is None and backbone_checkpoint is None:
         return AutoBackbone.from_config(config=config, **backbone_kwargs)
 
     # config from the parent model that has a backbone

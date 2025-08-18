@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2025-04-16.*
 
 # TimesFM
 
@@ -37,6 +38,7 @@ The original code can be found [here](https://github.com/google-research/timesfm
 To use the model:
 
 ```python
+import numpy as np
 import torch
 from transformers import TimesFmModelForPrediction
 

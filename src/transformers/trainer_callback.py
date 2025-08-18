@@ -69,7 +69,7 @@ class TrainerState:
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
-        log_history (`List[Dict[str, float]]`, *optional*):
+        log_history (`list[dict[str, float]]`, *optional*):
             The list of logs done since the beginning of training.
         best_metric (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
@@ -88,7 +88,7 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
-        stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
+        stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
     """
@@ -321,11 +321,11 @@ class TrainerCallback:
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for evaluation.
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
             Those are only accessible in the event `on_evaluate`.
-        logs  (`Dict[str, float]`):
+        logs  (`dict[str, float]`):
             The values to log.
 
             Those are only accessible in the event `on_log`.

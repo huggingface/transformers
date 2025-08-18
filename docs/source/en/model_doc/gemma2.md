@@ -14,6 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-31 and added to Hugging Face Transformers on 2024-06-27.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -22,6 +23,7 @@ rendered properly in your Markdown viewer.
         ">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
@@ -137,8 +139,7 @@ visualizer("You are an assistant. Make sure you print me")
 
     inputs = tokenizer(text="My name is Gemma", return_tensors="pt")
     max_generated_length = inputs.input_ids.shape[1] + 10
-    past_key_values = HybridCache(config=model.config, max_batch_size=1,
-    max_cache_len=max_generated_length, device=model.device, dtype=model.dtype)
+    past_key_values = HybridCache(config=model.config, max_cache_len=max_generated_length)
     outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
     ```
 

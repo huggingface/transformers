@@ -167,7 +167,7 @@ def main():
         "--model_size",
         default="2B",
         choices=["2B", "7B", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/google/gemma-7b",
+        help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, check out the original repo: https://huggingface.co/google/gemma-7b",
     )
     parser.add_argument(
         "--output_dir",

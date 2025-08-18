@@ -13,26 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-)
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..bamba.configuration_bamba import BambaConfig
-from ..bamba.modeling_bamba import (
-    BambaMixer,
-    BambaRMSNormGated,
-    HybridMambaAttentionDynamicCache,
-)
+from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
 from ..granitemoeshared.modeling_granitemoeshared import (
+    GraniteFlashAttentionKwargs,
     GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
@@ -80,25 +74,29 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
 
+        # Accept 0 experts: skip MoE if num_local_experts == 0
+        self.has_experts = getattr(config, "num_local_experts", 0) > 0
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -110,12 +108,12 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             output_router_logits (`bool`, *optional*):
                 Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
                 should not be returned during inference.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
+                Arbitrary kwargs.Can be used to provide `GraniteFlashAttentionKwargs` for
+                padding-free training and/or improve torch.compile performance.
         """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -124,16 +122,17 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_position=cache_position,
-                cache_params=past_key_value,
+                cache_params=past_key_values,
                 attention_mask=attention_mask,
+                **kwargs,
             )
             # No attention weights for state space layers
             self_attn_weights = None
         else:
-            hidden_states, self_attn_weights, _ = self.self_attn(
+            hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -146,9 +145,14 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
-        hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        if self.has_experts:
+            moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        else:
+            hidden_states = self.shared_mlp(hidden_states)
+            router_logits = None
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
@@ -156,49 +160,20 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
-            outputs += (past_key_value,)
-
         if output_router_logits:
             outputs += (router_logits,)
 
         return outputs
 
 
-GRANITEMOEHYBRID_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GraniteMoeHybridConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare GraniteMoeHybrid Model outputting raw hidden-states without any specific head on top.",
-    GRANITEMOEHYBRID_START_DOCSTRING,
-)
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
-    config_class = GraniteMoeHybridConfig
+    config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
     def _init_weights(self, module):
-        super()._init_weights()
-        # Initialize Mamba modules
-        if isinstance(module, (nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, GraniteMoeHybridMambaLayer):
+        super()._init_weights(module)
+        if isinstance(module, GraniteMoeHybridMambaLayer):
             module.dt_bias.data.fill_(1.0)
             module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
             module.D.data.fill_(1.0)
@@ -206,93 +181,7 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-GRANITEMOEHYBRID_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance;
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare GraniteMoeHybrid Model outputting raw hidden-states without any specific head on top.",
-    GRANITEMOEHYBRID_START_DOCSTRING,
-)
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers.
-    Each layer is a [`GraniteMoeHybridDecoderLayer`]
-
-    Args:
-        config: GraniteMoeHybridConfig
-    """
-
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -300,13 +189,13 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         )
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(GRANITEMOEHYBRID_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -314,7 +203,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        **kwargs: Unpack[GraniteFlashAttentionKwargs],
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -368,7 +258,6 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
-        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
@@ -380,18 +269,16 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 output_router_logits=output_router_logits,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 if layer_outputs[1] is not None:
@@ -409,11 +296,12 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        if past_key_values and not past_key_values.has_previous_state:
+            past_key_values.has_previous_state = True
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             router_logits=all_router_logits,
@@ -468,7 +356,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
-        else:
+        elif use_cache:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
@@ -496,15 +384,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
             }
         )
         return model_inputs
-
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
 
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

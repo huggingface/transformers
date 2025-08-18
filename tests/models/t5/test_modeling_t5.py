@@ -19,6 +19,8 @@ import pickle
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import T5Config, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -873,40 +875,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = T5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -1143,14 +1111,16 @@ class T5ModelFp16Tests(unittest.TestCase):
 
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            "google-t5/t5-small",
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
+            "google-t5/t5-small",
+            torch_dtype=torch.float16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
@@ -1642,6 +1612,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
@@ -1682,6 +1653,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache_encoder(self):
         prompts = [
             "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
@@ -1700,6 +1672,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         logits_compiled = model(**inputs)
         torch.testing.assert_close(logits[0][:, -3:, -3], logits_compiled[0][:, -3:, -3], rtol=1e-5, atol=1e-5)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_encoder(self):
         """Test exporting T5EncoderModel to torch export format."""
@@ -1736,6 +1709,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         # Verify outputs are close enough
         self.assertTrue(torch.allclose(original_output, exported_output, atol=1e-5))
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_decoder(self):
         """Test exporting T5 decoder with static cache to torch export format."""
@@ -1797,6 +1771,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             # Verify cache buffers are 3D
             self.assertEqual(buffer.shape[2], max_cache_len)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_t5_summarization(self):
         """Test composing exported T5 encoder and decoder for summarization."""
@@ -1806,7 +1781,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
         from transformers.integrations.executorch import Seq2SeqLMExportableModule
 
-        device = "cpu"
+        device = torch_device
         batch_size = 1
         max_cache_length = 1234
         max_hidden_seq_length = 5678

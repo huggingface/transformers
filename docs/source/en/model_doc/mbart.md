@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-22 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -34,6 +35,9 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
+
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
 

@@ -418,15 +418,8 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(
             dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
         )
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
-        self.assertTrue(
-            torch.allclose(encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values, atol=1e-1)
-        )
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.codebook_pixel_values - encoding_fast.codebook_pixel_values)).item(),
-            1e-3,
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values
         )

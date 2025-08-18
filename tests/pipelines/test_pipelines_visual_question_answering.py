@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -246,8 +245,3 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
                 [{"score": ANY(float), "answer": ANY(str)}],
             ],
         )
-
-    @require_tf
-    @unittest.skip(reason="Visual question answering not implemented in TF")
-    def test_small_model_tf(self):
-        pass

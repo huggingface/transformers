@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # BORT
 
@@ -34,7 +35,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://arxiv.org/abs/2010.10499) by
+The BORT model was proposed in [Optimal Subarchitecture Extraction for BERT](https://huggingface.co/papers/2010.10499) by
 Adrian de Wynter and Daniel J. Perry. It is an optimal subset of architectural parameters for the BERT, which the
 authors refer to as "Bort".
 

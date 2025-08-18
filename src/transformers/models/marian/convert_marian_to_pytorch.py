@@ -19,7 +19,7 @@ import socket
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Union
 from zipfile import ZipFile
 
 import numpy as np
@@ -61,7 +61,7 @@ def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decod
         layer.load_state_dict(sd, strict=False)
 
 
-def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> list[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     model_list = list_models()
@@ -94,7 +94,7 @@ def _cast_yaml_str(v):
         return v
 
 
-def cast_marian_config(raw_cfg: Dict[str, str]) -> Dict:
+def cast_marian_config(raw_cfg: dict[str, str]) -> dict:
     return {k: _cast_yaml_str(v) for k, v in raw_cfg.items()}
 
 
@@ -315,7 +315,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=P
     return save_paths
 
 
-def lmap(f, x) -> List:
+def lmap(f, x) -> list:
     return list(map(f, x))
 
 
@@ -370,7 +370,7 @@ def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
-def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
+def add_to_vocab_(vocab: dict[str, int], special_tokens: list[str]):
     start = max(vocab.values()) + 1
     added = 0
     for tok in special_tokens:
@@ -685,7 +685,7 @@ def load_yaml(path):
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 
-def save_json(content: Union[Dict, List], path: str) -> None:
+def save_json(content: Union[dict, list], path: str) -> None:
     with open(path, "w") as f:
         json.dump(content, f)
 

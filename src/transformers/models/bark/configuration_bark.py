@@ -14,7 +14,7 @@
 # limitations under the License.
 """BARK model configuration"""
 
-from typing import Dict, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
@@ -243,10 +243,10 @@ class BarkConfig(PretrainedConfig):
 
     def __init__(
         self,
-        semantic_config: Optional[Dict] = None,
-        coarse_acoustics_config: Optional[Dict] = None,
-        fine_acoustics_config: Optional[Dict] = None,
-        codec_config: Optional[Dict] = None,
+        semantic_config: Optional[dict] = None,
+        coarse_acoustics_config: Optional[dict] = None,
+        fine_acoustics_config: Optional[dict] = None,
+        codec_config: Optional[dict] = None,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -269,7 +269,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        codec_model_type = codec_config["model_type"] if "model_type" in codec_config else "encodec"
+        codec_model_type = codec_config.get("model_type", "encodec")
         self.codec_config = CONFIG_MAPPING[codec_model_type](**codec_config)
 
         self.initializer_range = initializer_range

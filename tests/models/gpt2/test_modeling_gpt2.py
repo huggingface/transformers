@@ -20,6 +20,7 @@ import pytest
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -418,7 +419,7 @@ class GPT2ModelTester:
     def create_and_check_gpt2_weight_initialization(self, config, *args):
         model = GPT2Model(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -817,10 +818,16 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        expected_outputs = Expectations(
+            {
+                ("rocm", None): 'Today is a nice day and we can do this again."\n\nDana said that she will',
+                ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("xpu", 3): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = expected_outputs.get_expectation()
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output

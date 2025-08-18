@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-02-07 and added to Hugging Face Transformers on 2022-03-01.*
 
 # Data2Vec
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Data2Vec model was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and Michael Auli.
+The Data2Vec model was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language](https://huggingface.co/papers/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and Michael Auli.
 Data2Vec proposes a unified framework for self-supervised learning across different data modalities - text, audio and images.
 Importantly, predicted targets for pre-training are contextualized latent representations of the inputs, rather than modality-specific, context-independent targets.
 
@@ -53,6 +54,7 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
+- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`  
 
 ### Using Scaled Dot Product Attention (SDPA)
 

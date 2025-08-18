@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-19 and added to Hugging Face Transformers on 2025-01-23.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -240,6 +241,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLProcessor
 
+## Qwen2_5_VLTextModel
+
+[[autodoc]] Qwen2_5_VLTextModel
+    - forward
 
 ## Qwen2_5_VLModel
 

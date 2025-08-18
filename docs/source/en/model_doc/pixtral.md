@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-09-14.*
 
 # Pixtral
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Pixtral model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). Pixtral is a multimodal version of [Mistral](mistral), incorporating a 400 million parameter vision encoder trained from scratch.
+The [Pixtral](https://huggingface.co/papers/2410.07073) model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). Pixtral is a multimodal version of [Mistral](mistral), incorporating a 400 million parameter vision encoder trained from scratch.
 
 The intro from the blog says the following:
 
@@ -85,6 +86,10 @@ output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up
 ## PixtralVisionConfig
 
 [[autodoc]] PixtralVisionConfig
+
+## MistralCommonTokenizer
+
+[[autodoc]] MistralCommonTokenizer
 
 ## PixtralVisionModel
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-05-22 and added to Hugging Face Transformers on 2020-11-16.*
 
 # RAG
 
@@ -29,7 +30,7 @@ sequence-to-sequence models. RAG models retrieve documents, pass them to a seq2s
 outputs. The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing
 both retrieval and generation to adapt to downstream tasks.
 
-It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
+It is based on the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://huggingface.co/papers/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
 Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela.
 
 The abstract from the paper is the following:

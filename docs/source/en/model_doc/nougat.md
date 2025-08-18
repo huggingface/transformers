@@ -12,6 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
+*This model was released on 2023-08-25 and added to Hugging Face Transformers on 2023-09-26.*
 
 # Nougat
 
@@ -24,7 +25,7 @@ specific language governing permissions and limitations under the License. -->
 
 ## Overview
 
-The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) by
+The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://huggingface.co/papers/2308.13418) by
 Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic. Nougat uses the same architecture as [Donut](donut), meaning an image Transformer
 encoder and an autoregressive text Transformer decoder to translate scientific PDFs to markdown, enabling easier access to them.
 
@@ -35,7 +36,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/nougat_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Nougat high-level overview. Taken from the <a href="https://arxiv.org/abs/2308.13418">original paper</a>. </small>
+<small> Nougat high-level overview. Taken from the <a href="https://huggingface.co/papers/2308.13418">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/facebookresearch/nougat).
@@ -105,6 +106,11 @@ The model is identical to [Donut](donut) in terms of architecture.
 ## NougatImageProcessor
 
 [[autodoc]] NougatImageProcessor
+    - preprocess
+
+## NougatImageProcessorFast
+
+[[autodoc]] NougatImageProcessorFast
     - preprocess
 
 ## NougatTokenizerFast
