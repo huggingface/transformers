@@ -88,34 +88,46 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
   netstat -p 2>/dev/null | grep $PYTEST_PID | head -10
 
   # Your existing thread details section, but enhanced:
-  echo "Thread details with socket ownership:"
-  if [ -d "/proc/$PYTEST_PID/task" ]; then
-    for tid in /proc/$PYTEST_PID/task/*; do
-      if [ -d "$tid" ]; then
-        TID_NUM=$(basename "$tid")
-        THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
-        THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
+echo "Socket details by file descriptor:"
+if [ -d "/proc/$PYTEST_PID/fd" ]; then
+  for fd in /proc/$PYTEST_PID/fd/*; do
+    if [ -L "$fd" ] && readlink "$fd" | grep -q socket; then
+      FD_NUM=$(basename "$fd")
+      SOCKET_LINK=$(readlink "$fd")
+      SOCKET_INODE=$(echo "$SOCKET_LINK" | sed 's/socket:\[\([0-9]*\)\]/\1/')
 
-        # Check which sockets this thread owns
-        THREAD_SOCKETS=""
-        for fd in /proc/$PYTEST_PID/fd/*; do
-          if [ -L "$fd" ] && readlink "$fd" | grep -q socket; then
-            FD_NUM=$(basename "$fd")
-            SOCKET_INODE=$(readlink "$fd" | sed 's/socket:\[\([0-9]*\)\]/\1/')
+      echo ""
+      echo "FD$FD_NUM -> $SOCKET_LINK"
 
-            # Check if this thread has this FD open
-            if [ -L "/proc/$PYTEST_PID/task/$TID_NUM/fd/$FD_NUM" ] 2>/dev/null; then
-              # Find which connection this socket belongs to
-              CONNECTION=$(ss -anp | grep "$SOCKET_INODE" | head -1 | awk '{print $4 " -> " $5}')
-              THREAD_SOCKETS="$THREAD_SOCKETS FD$FD_NUM($CONNECTION)"
-            fi
-          fi
-        done
-
-        echo "  TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE) Sockets: $THREAD_SOCKETS"
+      # Get detailed socket info
+      SOCKET_INFO=$(ss -anp | grep "$SOCKET_INODE" | head -1)
+      if [ -n "$SOCKET_INFO" ]; then
+        echo "  Connection: $SOCKET_INFO"
+      else
+        echo "  Connection info not found"
       fi
-    done
-  fi
+
+      # Also show netstat info for comparison
+      NETSTAT_INFO=$(netstat -anp | grep "$SOCKET_INODE" | head -1)
+      if [ -n "$NETSTAT_INFO" ]; then
+        echo "  Netstat: $NETSTAT_INFO"
+      fi
+    fi
+  done
+fi
+
+echo ""
+echo "Thread summary (sockets are shared across all threads):"
+if [ -d "/proc/$PYTEST_PID/task" ]; then
+  for tid in /proc/$PYTEST_PID/task/*; do
+    if [ -d "$tid" ]; then
+      TID_NUM=$(basename "$tid")
+      THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
+      THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
+      echo "  TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE)"
+    fi
+  done
+fi
 
   echo "Monitor if sockets are changing"
   echo "Socket fingerprint: $(ls /proc/$PYTEST_PID/fd/ | grep socket | wc -l)"
