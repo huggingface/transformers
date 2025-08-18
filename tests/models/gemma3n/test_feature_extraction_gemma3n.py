@@ -18,7 +18,8 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 import numpy as np
 from parameterized import parameterized

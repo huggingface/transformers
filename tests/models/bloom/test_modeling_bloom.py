@@ -739,7 +739,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         tensor_ids = torch.LongTensor([EXAMPLE_IDS])
         with torch.no_grad():
             embeddings = model.transformer.word_embeddings(tensor_ids)
-            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)  #
+            embeddings_ln = model.transformer.word_embeddings_layernorm(embeddings)
         # first check the embeddings before LN
         output_dict = {"min": {}, "max": {}, "mean": {}, "sum": {"value": embeddings.sum().item()}}
         for i, idx in enumerate(EXAMPLE_IDS):
