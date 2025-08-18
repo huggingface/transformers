@@ -187,6 +187,7 @@ class Mxfp4GptOssExperts(nn.Module):
 
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
+        self.limit = getattr(config, "swiglu_limit", 7.0)
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
         FnSpecs, FusedActivation, matmul_ogs = (
@@ -197,7 +198,7 @@ class Mxfp4GptOssExperts(nn.Module):
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
-            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
+            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, self.limit), 2)
 
             intermediate_cache1 = matmul_ogs(
                 hidden_states,
@@ -397,9 +398,9 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
         # need it for ep
         local_experts = blocks.size(0)
         if proj == "gate_up_proj":
-            blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
+            blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
         else:
-            blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
+            blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
         # TODO: we need to have the weights on cuda, refactor later
         if getattr(target_device, "type", target_device) == "cpu":
             target_device = "cuda"

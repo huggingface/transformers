@@ -186,19 +186,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
+            # this is either when loading bfloa16 into quantized model
+            # or when saving bfloat16 to quantized format (say after training)
             triton_kernels_hub = self._lazy_import_kernels()
             downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
 
             module, _ = get_module_from_name(model, param_name)
-            with torch.device(target_device):
+            with torch.device(target_device): 
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     if "gate_up_proj" in param_name and "bias" not in param_name:
-                        right_pad = getattr(module, "gate_up_proj_right_pad", 0)
-                        bottom_pad = getattr(module, "gate_up_proj_bottom_pad", 0)
-                        if right_pad != 0 and bottom_pad != 0:
-                            param_value = torch.nn.functional.pad(
-                                param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                            )
                         triton_weight_tensor, weight_scale = downcast_to_mxfp(
                             param_value.to(torch.bfloat16), torch.uint8, axis=1
                         )
@@ -210,17 +206,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         )
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
-                        # module.gate_up_proj = triton_weight_tensor
-                        # module.gate_up_proj_blocks = torch.nn.Parameter(
-                        #     triton_weight_tensor.storage.data, requires_grad=False
-                        # )
                     elif "down_proj" in param_name and "bias" not in param_name:
-                        right_pad = getattr(module, "down_proj_right_pad", 0)
-                        bottom_pad = getattr(module, "down_proj_bottom_pad", 0)
-                        if right_pad != 0 and bottom_pad != 0:
-                            param_value = torch.nn.functional.pad(
-                                param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                            ).to(target_device)
                         triton_weight_tensor, weight_scale = downcast_to_mxfp(
                             param_value.to(torch.bfloat16), torch.uint8, axis=1
                         )
@@ -229,18 +215,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         )
                         if hasattr(module, "down_proj"):
                             delattr(module, "down_proj")
-                        setattr(
-                            module,
-                            "down_proj_blocks",
-                            torch.nn.Parameter(triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False),
-                        )
-                        # module.down_proj_blocks = torch.nn.Parameter(
-                        #     triton_weight_tensor.storage.data, requires_grad=False
-                        # )
+                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False)
                     logger.debug(f"Created quantized weights for {param_name}")
-        # we take this path if already quantized but not in a compatible way
+        # we take this path if already quantized but not in a compatible waddy
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
+            #  This is when loading a quantized model (blocks and scales exist)
             empty_param = kwargs.get("empty_param")
             casting_dtype = kwargs.get("casting_dtype")
             to_contiguous = kwargs.get("to_contiguous")
