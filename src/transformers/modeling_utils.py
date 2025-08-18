@@ -3919,8 +3919,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hf_quantizer is not None:
             for name, tensor in self.state_dict().items():
                 logger.debug(f"Creating quantized parameter for {name}")
-                print(f"Creating quantized parameter for {name}")
-                # TODO: So mxfp4 quantize does not support cpu (done in triton)
                 hf_quantizer.create_quantized_param(self, tensor.to("cuda:0"), name, "cuda:0", state_dict)
         state_dict = self.state_dict()
         # safe_save_file(self.state_dict(), os.path.join("/fsx/arthur/mxfp4", "model.safetensors"), metadata={"format": "pt"})
