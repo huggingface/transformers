@@ -4010,14 +4010,15 @@ class Resampler(nn.Module):
             self.max_size = [max(max_h, self.max_size[0]), max(max_w, self.max_size[1])]
             self._set_2d_pos_cache(self.max_size, device)
 
-    def _initialize_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+    # this method is useless
+    # def _initialize_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x, tgt_sizes=None):
         assert x.shape[0] == tgt_sizes.shape[0]
