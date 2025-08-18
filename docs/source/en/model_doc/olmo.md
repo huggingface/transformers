@@ -89,7 +89,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [insert quantization method here](link to quantization method) to only quantize the weights to __.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```py
 import torch
