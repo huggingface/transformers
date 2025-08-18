@@ -153,8 +153,8 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
     # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
-    # TODO: enhance the common test to avoid overwriting
-    @unittest.skip("failing with `AttributeError: 'StrictLessThan' object has no attribute 'diff'`")
+    # TODO: enhance the common test to avoid overwriting + fix this compile test.
+    @unittest.skip("Failing with `AttributeError: 'StrictLessThan' object has no attribute 'diff'`.")
     @slow
     @require_torch_accelerator
     @require_vision
