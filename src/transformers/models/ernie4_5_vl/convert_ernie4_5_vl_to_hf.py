@@ -8,7 +8,6 @@ from safetensors.torch import load_file, save_file
 
 IS_TIED = True
 SAVE_DIR = "TODO"
-SAVE_DIR = "/raid/anton/code/forks/transformers/tmp/ernie_vl"
 
 
 def convert_file(state_dict):
