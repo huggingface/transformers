@@ -146,6 +146,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "marian",
     "mbart",
     "megatron-bert",
+    "ministral",
     "mistral",
     "mixtral",
     "mobilebert",
