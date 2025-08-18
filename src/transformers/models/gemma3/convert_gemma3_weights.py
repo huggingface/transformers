@@ -630,6 +630,11 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
+        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` interally and construct this
+        # from split-records cached data, but externally these come through as a single string with components
+        # separated by a newline. This should be used for `passage` for SentenceTransformers and the relevant MTEB
+        # Retrieval tasks.
+        # https://github.com/embeddings-benchmark/mteb/blob/main/docs/usage/usage.md#running-sentencetransformer-model-with-prompts
         task_prompts = {
             "clustering": "task: clustering | query: ",
             "classification": "task: classification | query: ",
@@ -638,6 +643,7 @@ def main(*args):
             "sentence_similarity": "task: sentence similarity | query: ",
             "fact_checking": "task: fact checking | query: ",
             "retrieval_document": "title: | text: ",
+            "query": "task: search result | query: ",
         }
 
         transformer = models.Transformer(output_path)
@@ -653,10 +659,6 @@ def main(*args):
             )
             linears.append(dense)
 
-        # TODO - sindhusindhuraghuram: Add `prompts` to cover: 1) the `query` and `document` default options for
-        # SentenceTransformers; and 2) any MTEB tasks we want to specifically include for reproducibility purposes,
-        # following the docs at
-        # https://github.com/embeddings-benchmark/mteb/blob/main/docs/usage/usage.md#running-sentencetransformer-model-with-prompts
         model = SentenceTransformer(modules=[transformer, pooling, *linears, normalize], prompts=task_prompts)
         model.save_pretrained(output_path)
 
