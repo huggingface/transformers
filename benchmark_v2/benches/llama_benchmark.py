@@ -289,7 +289,8 @@ def create_llama_configs(
     warmup_iterations: int = 3,
     measurement_iterations: int = 5,
     num_tokens_to_generate: int = 100,
-    include_sdpa_variants: bool = True
+    include_sdpa_variants: bool = True,
+    **kwargs  # Accept additional arguments and ignore them
 ) -> list:
     """Create a comprehensive set of LLaMA benchmark configurations."""
     from framework import BenchmarkConfig, create_config_variants, get_available_sdpa_backends
