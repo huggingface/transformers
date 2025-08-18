@@ -194,32 +194,35 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     if "gate_up_proj" in param_name:
                         right_pad = getattr(module, "gate_up_proj_right_pad", 0)
                         bottom_pad = getattr(module, "gate_up_proj_bottom_pad", 0)
-                        loaded_weight = torch.nn.functional.pad(
-                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                        )
-                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
-                        module.gate_up_proj_precision_config = PrecisionConfig(
-                            weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
-                        )
-                        module.gate_up_proj = triton_weight_tensor
-                        module.gate_up_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.storage.data, requires_grad=False
-                        )
+                        if right_pad != 0 and bottom_pad != 0:
+                            param_value = torch.nn.functional.pad(
+                                param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
+                            )
+                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value)
+                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False)
+                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
+                        if hasattr(module, "gate_up_proj"):
+                            delattr(module, "gate_up_proj")
+                        # module.gate_up_proj = triton_weight_tensor
+                        # module.gate_up_proj_blocks = torch.nn.Parameter(
+                        #     triton_weight_tensor.storage.data, requires_grad=False
+                        # )
                     elif "down_proj" in param_name:
-                        right_pad = module.down_proj_right_pad
-                        bottom_pad = module.down_proj_bottom_pad
-                        loaded_weight = torch.nn.functional.pad(
-                            param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
-                        ).to(target_device)
-                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(loaded_weight)
-                        module.down_proj_precision_config = PrecisionConfig(
-                            weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())
-                        )
-                        module.down_proj = triton_weight_tensor
-                        module.down_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.storage.data, requires_grad=False
-                        )
-                    print("New module: ", list(module.state_dict().items()))
+                        right_pad = getattr(module, "down_proj_right_pad", 0)
+                        bottom_pad = getattr(module, "down_proj_bottom_pad", 0)
+                        if right_pad != 0 and bottom_pad != 0:
+                            param_value = torch.nn.functional.pad(
+                                param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
+                            ).to(target_device)
+                        triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value)
+                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
+                        if hasattr(module, "down_proj"):
+                            delattr(module, "down_proj")
+                        setattr(module, "down_proj_blocks", torch.nn.Parameter(triton_weight_tensor.data ,requires_grad=False))
+                        # module.down_proj_blocks = torch.nn.Parameter(
+                        #     triton_weight_tensor.storage.data, requires_grad=False
+                        # )
+                    logger.debug(f"Created quantized weights for {param_name}")
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:

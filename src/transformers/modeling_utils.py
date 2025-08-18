@@ -3920,7 +3920,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for name, tensor in self.state_dict().items():
                 logger.debug(f"Creating quantized parameter for {name}")
                 print(f"Creating quantized parameter for {name}")
-                hf_quantizer.create_quantized_param(self, tensor, name, self.device, state_dict)
+                # TODO: So mxfp4 quantize does not support cpu (done in triton)
+                hf_quantizer.create_quantized_param(self, tensor.to("cuda:0"), name, "cuda:0", state_dict)
         state_dict = self.state_dict()
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
@@ -4908,7 +4909,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
 
         hf_quantizer, config, torch_dtype, device_map = get_hf_quantizer(
-            config, quantization_config, torch_dtype, from_tf, from_flax, use_safetensors, weights_only, user_agent
+            config, quantization_config, torch_dtype, from_tf, from_flax, device_map, weights_only, user_agent
         )
 
         if gguf_file is not None and hf_quantizer is not None:
@@ -5038,6 +5039,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 config=config,
                 use_kernels=use_kernels,
             )
+            hf_quantizer.pre_quantized = True
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will

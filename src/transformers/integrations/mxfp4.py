@@ -62,6 +62,9 @@ def quantize_to_mxfp4(w):
 
 
 def swizzle_mxfp4(w, w_scale):
+    """ TODO this needs to be documented
+    But is seems to only inform torch of what's inside, not actually changing the values inside
+    """
     FP4, convert_layout, wrap_torch_tensor = (
         triton_kernels_hub.tensor.FP4,
         triton_kernels_hub.tensor.convert_layout,
@@ -141,6 +144,10 @@ def convert_moe_packed_tensors(
     # Move back to CPU if needed
     # if need_to_move_back:
     #     out = out.cpu()
+    # b,s = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
+    # b,s = quantize_to_mxfp4a(out)
+    # torch.testing.assert_close(b, blocks)
+    # torch.testing.assert_close(s, scales)
     del blocks, scales, lut
     return out
 
@@ -293,8 +300,8 @@ def mlp_forward(self, hidden_states):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing
+        # routing = routing
 
-        routing = routing
     batch_size = hidden_states.shape[0]
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
@@ -355,10 +362,14 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
-    PrecisionConfig, FlexCtx, InFlexData = (
+    """
+    This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
+    """
+    PrecisionConfig, FlexCtx, InFlexData, downcast_to_mxfp= (
         triton_kernels_hub.matmul_ogs.PrecisionConfig,
         triton_kernels_hub.matmul_ogs.FlexCtx,
         triton_kernels_hub.matmul_ogs.InFlexData,
+        triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
     )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
@@ -379,9 +390,9 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
                 setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
-            blocks = getattr(module, blocks_attr)
+            blocks = getattr(module, blocks_attr) # at this point values were loaded from ckpt
             scales = getattr(module, scales_attr)
-            # Check if both blocks and scales both not on on meta device
+            # Check if both blocks and scales both not on meta device
             if blocks.device.type != "meta" and scales.device.type != "meta":
                 # need it for ep
                 local_experts = blocks.size(0)
@@ -399,6 +410,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
                     triton_weight_tensor, weight_scale = swizzle_mxfp4(
                         blocks.transpose(-2, -1), scales.transpose(-2, -1)
                     )
+
 
                 # need to overwrite the shapes for the kernels
                 if proj == "gate_up_proj":

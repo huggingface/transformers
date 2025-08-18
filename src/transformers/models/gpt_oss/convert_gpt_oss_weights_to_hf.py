@@ -102,6 +102,9 @@ def convert_moe_packed_tensors(
     dtype: torch.dtype = torch.bfloat16,
     rows_per_chunk: int = 32768 * 1024,
 ) -> torch.Tensor:
+    """
+    TODO this needs to be documented
+    """
     import math
 
     scales = scales.to(torch.int32) - 127
