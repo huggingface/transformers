@@ -19,8 +19,6 @@ from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -28,7 +26,7 @@ from ...image_processing_utils_fast import (
 )
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import Unpack
-from ...utils import TensorType, add_start_docstrings, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -66,17 +64,7 @@ class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     max_patches: Optional[int]
 
 
-@add_start_docstrings(
-    "Constructs a fast Kosmos2_5 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 4096):
-            The maximum number of patches to extract from the image as per the
-            [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
-    """,
-)
+@auto_docstring
 class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
     # None values left after checking can be removed
@@ -90,17 +78,15 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]) -> BatchFeature:
+        r"""
         patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
             The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 4096):
             The maximum number of patches to extract from the image as per the
             [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
-        """,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Kosmos2_5FastImageProcessorKwargs]) -> BatchFeature:
+        """
         # return super().preprocess(images, **kwargs)
         # TODO: revert once the issue is fixed: https://huggingface.slack.com/archives/C02TXKQQLE5/p1743411133979019
         return super().preprocess(images, image_mean=0.0, image_std=0.0, **kwargs)

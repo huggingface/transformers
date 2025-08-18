@@ -26,7 +26,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -38,8 +37,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    LossKwargs,
     ModelOutput,
+    TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -504,7 +503,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Self-attention block
@@ -558,7 +557,7 @@ class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         residual = hidden_states
 
@@ -612,7 +611,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -623,7 +622,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions, **flash_attn_kwargs)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions, **kwargs)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -795,7 +794,7 @@ class Kosmos2_5TextAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -873,7 +872,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
@@ -1073,7 +1072,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1161,7 +1160,7 @@ class Kosmos2_5TextTransformer(nn.Module):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                **flash_attn_kwargs,
+                **kwargs,
             )
             hidden_states = layer_outputs[0]
 
@@ -1296,7 +1295,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1317,7 +1316,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
@@ -1360,7 +1359,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Returns:
@@ -1378,7 +1377,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
 
@@ -1426,7 +1425,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ModelOutput:
         r"""
         Returns:
@@ -1474,7 +1473,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
                     flattened_patches=flattened_patches,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
-                    **flash_attn_kwargs,
+                    **kwargs,
                 )
                 # normalized features
                 image_embeds = nn.functional.normalize(vision_model_output.last_hidden_state, dim=-1)
@@ -1492,7 +1491,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
 
         return Kosmos2_5ModelOutput(
@@ -1506,9 +1505,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             projection_attentions=projection_attentions,
             vision_model_output=vision_model_output,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @add_start_docstrings(
@@ -1558,7 +1554,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1716,7 +1712,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ForConditionalGenerationModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
