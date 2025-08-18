@@ -631,20 +631,20 @@ def main(*args):
         from sentence_transformers import SentenceTransformer, models
 
         task_prompts = {
-            'clustering': 'task: clustering | query: ',
-            'classification': 'task: classification | query: ',
-            'question_answering': 'task: question answering | query: ',
-            'search_result': 'task: search result | query: ',
-            'sentence_similarity': 'task: sentence similarity | query: ',
-            'fact_checking': 'task: fact checking | query: ',
-            'retrieval_document': 'title: | text: '
+            "clustering": "task: clustering | query: ",
+            "classification": "task: classification | query: ",
+            "question_answering": "task: question answering | query: ",
+            "search_result": "task: search result | query: ",
+            "sentence_similarity": "task: sentence similarity | query: ",
+            "fact_checking": "task: fact checking | query: ",
+            "retrieval_document": "title: | text: ",
         }
 
         transformer = models.Transformer(output_path)
         pooling = models.Pooling(config.text_config.hidden_size, pooling_mode="mean")
         normalize = models.Normalize()
         linears = []
-      
+
         for linear_weight in st_linears:
             out_size, in_size = linear_weight.shape[:2]
             dense = models.Dense(in_size, out_size, bias=False, activation_function=None)
