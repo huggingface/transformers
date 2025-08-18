@@ -25,7 +25,6 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType
-
 from .image_processing_minicpm import MiniCPMVBatchFeature
 
 
