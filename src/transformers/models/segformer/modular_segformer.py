@@ -30,7 +30,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -100,7 +99,9 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT
+                    if is_torchvision_v2_available()
+                    else F.InterpolationMode.NEAREST,
                 }
             )
             processed_segmentation_maps = self._preprocess(

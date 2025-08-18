@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, StaticCache, is_torch_available
@@ -256,6 +257,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -296,6 +298,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
     @slow
+    @pytest.mark.torch_export_test
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
@@ -504,7 +507,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(max_cache_len=max_cache_len, config=self.model.config)
+        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -546,7 +549,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(max_cache_len=max_cache_len, config=self.model.config)
+        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point
