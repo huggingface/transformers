@@ -28,7 +28,7 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
 
  # Monitor with timeout
  MONITOR_START=$(date +%s)
- MONITOR_TIMEOUT=600  # 10 minutes max
+ MONITOR_TIMEOUT=420  # 7 minutes max
 
  while true; do
    # Check monitoring timeout
