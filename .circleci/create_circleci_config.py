@@ -174,6 +174,7 @@ class CircleCIJob:
                 "name": "Show biggest libraries",
                 "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
+            {"run": {"name": "", "command": "chmod +x run.sh"}},
             {"run": "./run.sh"},
             # {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             # {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>> --header "Circle-Token: $CIRCLE_TOKEN"' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
