@@ -195,7 +195,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             module, _ = get_module_from_name(model, param_name)
             with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
-                    if "gate_up_proj" in param_name:
+                    if "gate_up_proj" in param_name and "bias" not in param_name:
                         right_pad = getattr(module, "gate_up_proj_right_pad", 0)
                         bottom_pad = getattr(module, "gate_up_proj_bottom_pad", 0)
                         if right_pad != 0 and bottom_pad != 0:
@@ -211,7 +211,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         # module.gate_up_proj_blocks = torch.nn.Parameter(
                         #     triton_weight_tensor.storage.data, requires_grad=False
                         # )
-                    elif "down_proj" in param_name:
+                    elif "down_proj" in param_name and "bias" not in param_name:
                         right_pad = getattr(module, "down_proj_right_pad", 0)
                         bottom_pad = getattr(module, "down_proj_bottom_pad", 0)
                         if right_pad != 0 and bottom_pad != 0:
