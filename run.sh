@@ -7,7 +7,7 @@ echo $(date "+%Y-%m-%d %H:%M:%S")
 timeout 600  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
-sleep 240
+sleep 90
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
@@ -78,6 +78,17 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
         fi
       done
     fi
+
+  echo "Monitor socket activity:"
+  netstat -p | grep $PYTEST_PID
+  ss -p | grep $PYTEST_PID
+
+  echo "See what the sockets are connected to"
+  netstat -p 2>/dev/null | grep $PYTEST_PID | head -10
+
+
+  echo "Monitor if sockets are changing"
+  echo "Socket fingerprint: $(ls /proc/$PYTEST_PID/fd/ | grep socket | wc -l)"
 
      # Try to get kernel stack if permissions allow
      if [ -r "/proc/$PYTEST_PID/stack" ]; then
