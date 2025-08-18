@@ -746,8 +746,7 @@ def infer_framework(model_class):
             return "pt"
         elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
             return "flax"
-    else:
-        raise TypeError(f"Could not infer framework from class {model_class}.")
+    raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def torch_int(x):
