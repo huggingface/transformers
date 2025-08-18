@@ -1063,6 +1063,8 @@ class DynamicCache(Cache):
         backward compatibility.
         """
         cache = cls()
+        if past_key_values is None:
+            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
@@ -1528,6 +1530,8 @@ class EncoderDecoderCache(Cache):
         cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
+        if past_key_values is None:
+            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
         cache = cls(
             self_attention_cache=DynamicCache(),
             cross_attention_cache=DynamicCache(),
