@@ -243,9 +243,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
+                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT
                     if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    else F_t.InterpolationMode.NEAREST,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                     "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
                 }

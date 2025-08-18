@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-21 and added to Hugging Face Transformers on 2025-06-26.*
 
 # Dia
 
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Dia is an open-source text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
+[Dia](https://github.com/nari-labs/dia) is an open-source text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
 It can generate highly realistic dialogue from transcript including non-verbal communications such as laughter and coughing.
 Furthermore, emotion and tone control is also possible via audio conditioning (voice cloning).
 

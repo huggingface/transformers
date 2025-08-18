@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-05-01 and added to Hugging Face Transformers on 2020-11-16.*
 
 # HerBERT
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://www.aclweb.org/anthology/2020.acl-main.111.pdf) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
+The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://huggingface.co/papers/2005.00630) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
 Ireneusz Gawlik. It is a BERT-based Language Model trained on Polish Corpora using only MLM objective with dynamic
 masking of whole words.
 
