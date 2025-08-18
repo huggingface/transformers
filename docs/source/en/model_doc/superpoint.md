@@ -11,6 +11,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2017-12-20 and added to Hugging Face Transformers on 2024-03-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -130,6 +131,11 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
 
 [[autodoc]] SuperPointImageProcessor
 
+- preprocess
+
+## SuperPointImageProcessorFast
+
+[[autodoc]] SuperPointImageProcessorFast
 - preprocess
 - post_process_keypoint_detection
 

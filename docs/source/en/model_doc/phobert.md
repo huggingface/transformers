@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-03-02 and added to Hugging Face Transformers on 2020-11-16.*
 
 # PhoBERT
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://www.aclweb.org/anthology/2020.findings-emnlp.92.pdf) by Dat Quoc Nguyen, Anh Tuan Nguyen.
+The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://huggingface.co/papers/2003.00744) by Dat Quoc Nguyen, Anh Tuan Nguyen.
 
 The abstract from the paper is the following:
 

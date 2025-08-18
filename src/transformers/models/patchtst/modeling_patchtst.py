@@ -28,7 +28,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_patchtst import PatchTSTConfig
 
 
@@ -101,7 +100,6 @@ class PatchTSTAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", version="4.54.0")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1886,7 +1884,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
                 # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
-                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
+                y_hat = tuple(item.view(-1, self.config.num_targets) for item in y_hat)
                 loss = nll(distribution, target_values)
                 # take average of the loss
                 loss = weighted_average(loss)

@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
+from .utils import is_torch_xpu_available
 from .utils.generic import GeneralInterface
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
 
@@ -33,6 +34,7 @@ else:
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+_is_torch_xpu_available = is_torch_xpu_available()
 
 if _is_torch_greater_or_equal_than_2_6:
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
@@ -46,7 +48,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     def and_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_ones((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result & mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result & mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return and_mask
@@ -60,7 +62,7 @@ def or_masks(*mask_functions: list[Callable]) -> Callable:
     def or_mask(batch_idx, head_idx, q_idx, kv_idx):
         result = q_idx.new_zeros((), dtype=torch.bool)
         for mask in mask_functions:
-            result = result | mask(batch_idx, head_idx, q_idx, kv_idx)
+            result = result | mask(batch_idx, head_idx, q_idx, kv_idx).to(result.device)
         return result
 
     return or_mask
@@ -87,7 +89,7 @@ def sliding_window_overlay(sliding_window: int) -> Callable:
 
 def chunked_overlay(chunk_size: int) -> Callable:
     """
-    This is an overlay depicting a chuned attention pattern. Add it on top of a causal mask for a proper chunked
+    This is an overlay depicting a chunked attention pattern. Add it on top of a causal mask for a proper chunked
     attention mask.
     """
 
@@ -184,7 +186,7 @@ def prepare_padding_mask(
     """
     local_padding_mask = attention_mask
     if attention_mask is not None:
-        # Pad it if necesary
+        # Pad it if necessary
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
         # For flex, we should not slice them, only use an offset
@@ -225,11 +227,18 @@ def _ignore_causal_mask_sdpa(
     if (
         not is_tracing
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or kv_length == query_length)
+        and (query_length == 1 or (kv_length == query_length or _is_torch_xpu_available))
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
+        and (
+            padding_mask is None
+            or (
+                padding_mask.all()
+                if not _is_torch_xpu_available or query_length == 1
+                else padding_mask[:, :query_length].all()
+            )
+        )
     ):
         return True
 
@@ -506,7 +515,7 @@ def flash_attention_mask(
     **kwargs,
 ):
     """
-    Create the attention mask necesary to use FA2. Since FA2 is un-padded by definition, here we simply return
+    Create the attention mask necessary to use FA2. Since FA2 is un-padded by definition, here we simply return
     `None` if the mask is fully causal, or we return the 2D mask which will then be used to extract the seq_lens.
     We just slice it in case of sliding window.
 
@@ -695,7 +704,7 @@ def _preprocess_mask_arguments(
     if attention_mask is not None and attention_mask.ndim == 2:
         attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
-    # If using a cache, it can give all informations about mask sizes based on seen tokens
+    # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
         kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
     # Otherwise, the sizes are simply the input sizes
@@ -770,7 +779,10 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    if _is_torch_xpu_available:
+        allow_is_causal_skip = True
+    else:
+        allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
 
     # If we detected packing format
     if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:

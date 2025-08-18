@@ -416,7 +416,7 @@ def validate_model_outputs(
         logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape
-        if not ort_value.shape == ref_value.shape:
+        if ort_value.shape != ref_value.shape:
             logger.info(f"\t\t-[x] shape {ort_value.shape} doesn't match {ref_value.shape}")
             raise ValueError(
                 "Outputs shape doesn't match between reference model and ONNX exported model: "
@@ -457,5 +457,5 @@ def ensure_model_and_config_inputs_match(
 
     # Make sure the input order match (VERY IMPORTANT !!!!)
     matching_inputs = forward_inputs_set.intersection(model_inputs_set)
-    ordered_inputs = [parameter for parameter in forward_parameters.keys() if parameter in matching_inputs]
+    ordered_inputs = [parameter for parameter in forward_parameters if parameter in matching_inputs]
     return is_ok, ordered_inputs
