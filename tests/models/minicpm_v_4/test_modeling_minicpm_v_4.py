@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MiniCPM-V-4 model. """
+"""Testing suite for the PyTorch MiniCPM-V-4 model."""
 
-import unittest
-import os
 import math
-import tempfile
+import os
+import unittest
+from io import BytesIO
+
 import numpy as np
-import librosa
-import soundfile as sf
+import requests
 from moviepy.editor import VideoFileClip
 from PIL import Image
-import requests
-from io import BytesIO
 
 from transformers import (
     AutoModel,
@@ -32,16 +30,18 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-    require_vision,
     require_sentencepiece,
     require_tokenizers,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
 )
+
 
 if is_torch_available():
     import torch
+
 
 @require_torch
 class MiniCPM_V_4ModelIngestionTest(unittest.TestCase):
@@ -53,24 +53,24 @@ class MiniCPM_V_4ModelIngestionTest(unittest.TestCase):
         os.makedirs(self.assets_dir, exist_ok=True)
 
         self.video_path = os.path.join(self.assets_dir, "Skiing.mp4")
-        
+
         if not os.path.exists(self.video_path):
             video_url = "https://huggingface.co/openbmb/MiniCPM-V-4/resolve/main/assets/Skiing.mp4"
             response = requests.get(video_url, stream=True)
             response.raise_for_status()
-            with open(self.video_path, 'wb') as f:
+            with open(self.video_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
         self.model = AutoModel.from_pretrained(
             "openbmb/MiniCPM-V-4",
             trust_remote_code=True,
-            attn_implementation='sdpa',
+            attn_implementation="sdpa",
             torch_dtype=torch.bfloat16,
-            init_vision=True
+            init_vision=True,
         )
         self.model = self.model.eval().to(torch_device)
-        self.tokenizer = AutoTokenizer.from_pretrained('openbmb/MiniCPM-V-4', trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM-V-4", trust_remote_code=True)
 
     def tearDown(self):
         """clean up test environment"""
@@ -88,19 +88,19 @@ class MiniCPM_V_4ModelIngestionTest(unittest.TestCase):
     def _get_video_chunk_content(self, video_path, flatten=True):
         """process video content, extract frames"""
         video = VideoFileClip(video_path)
-        
+
         num_units = math.ceil(video.duration)
         contents = []
-        
+
         for i in range(num_units):
-            frame = video.get_frame(i+1)
+            frame = video.get_frame(i + 1)
             image = Image.fromarray(frame.astype(np.uint8))
-            
+
             if flatten:
                 contents.extend([image])
             else:
                 contents.append([image])
-                
+
         video.close()
         return contents
 
@@ -113,38 +113,27 @@ class MiniCPM_V_4ModelIngestionTest(unittest.TestCase):
             image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
             response = requests.get(image_url, stream=True)
             response.raise_for_status()
-            
-            image = Image.open(BytesIO(response.content)).convert('RGB')
-            question = 'What is in the image?'
-            
-            msgs = [{'role': 'user', 'content': [image, question]}]
-        
-            res = self.model.chat(
-                image=None,
-                msgs=msgs,
-                tokenizer=self.tokenizer
-            )
-            
+
+            image = Image.open(BytesIO(response.content)).convert("RGB")
+            question = "What is in the image?"
+
+            msgs = [{"role": "user", "content": [image, question]}]
+
+            res = self.model.chat(image=None, msgs=msgs, tokenizer=self.tokenizer)
+
             self.assertIsNotNone(res, "Normal inference response should not be empty")
             self.assertTrue(len(res) > 0, "Normal inference response text should not be empty")
-            
-            res = self.model.chat(
-                msgs=msgs,
-                tokenizer=self.tokenizer,
-                sampling=True,
-                stream=True
-            )
-            
+
+            res = self.model.chat(msgs=msgs, tokenizer=self.tokenizer, sampling=True, stream=True)
+
             generated_text = ""
             for new_text in res:
                 generated_text += new_text
                 self.assertIsNotNone(new_text, "Each part of streaming reasoning should not be empty")
-            
+
             self.assertTrue(len(generated_text) > 0, "Text should not be empty")
-            
+
         except requests.exceptions.RequestException as e:
             self.skipTest(f"Failed to download image: {str(e)}")
         except Exception as e:
             self.fail(f"Single image inference test failed: {str(e)}")
-        
-        

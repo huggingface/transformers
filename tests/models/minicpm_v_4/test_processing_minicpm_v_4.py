@@ -13,33 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import shutil
 import tempfile
 import unittest
 
 import numpy as np
 import pytest
-import librosa
 import requests
+from PIL import Image
 
 from transformers import (
     AutoProcessor,
     MiniCPM_V_4Processor,
-    AutoTokenizer,
-    WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_av, require_librosa, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_vision_available():
-    from transformers import AutoImageProcessor
+    pass
 
 
 @require_vision
@@ -127,7 +124,7 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "Test text"
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input)
-        
+
         keys = list(inputs.keys())
         self.assertListEqual(
             keys,
@@ -141,7 +138,7 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         )
 
-        # no input  
+        # no input
         with pytest.raises(ValueError):
             processor()
 
@@ -188,9 +185,7 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True
-        )
+        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
         expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
@@ -198,15 +193,15 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Testing number to text conversion functions"""
         processor = self.get_processor()
         converter = processor.NumberToTextConverter()
-        
+
         # test chinese number conversion
         chinese_text = converter.replace_numbers_with_text("我有2个苹果", language="chinese")
         self.assertEqual(chinese_text, "我有两个苹果")
-        
+
         # test english number conversion
         english_text = converter.replace_numbers_with_text("I have 23 books", language="english")
         self.assertEqual(english_text, "I have two three books")
-        
+
         # test automatic language detection
         mixed_text = converter.replace_numbers_with_text("我有3个苹果和4个梨")
         self.assertIn("三", mixed_text)
@@ -215,20 +210,20 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor_basic(self):
         """Testing basic image processor functions"""
         image_processor = self.get_image_processor()
-        
+
         # test image preprocessing
         image = self.prepare_image_inputs()
         processed = image_processor.preprocess(image)
-        
+
         self.assertIn("pixel_values", processed)
         self.assertIn("image_sizes", processed)
         self.assertIn("tgt_sizes", processed)
-        
+
         # test image slicing function
         sliced_images = image_processor.get_sliced_images(image)
         self.assertIsInstance(sliced_images, list)
         self.assertTrue(len(sliced_images) > 0)
-        
+
         # test image placeholder generation
         placeholder = image_processor.get_slice_image_placeholder(image.size)
         self.assertIsInstance(placeholder, str)
@@ -237,41 +232,37 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor_edge_cases(self):
         """Testing image processor edge cases"""
         image_processor = self.get_image_processor()
-        
+
         # test empty image list
         with self.assertRaises(ValueError):
             image_processor.preprocess([])
-            
+
         # test invalid image
         invalid_image = np.zeros((100, 100))
         with self.assertRaises(ValueError):
             image_processor.preprocess(invalid_image)
-            
+
         # test large image
-        large_image = Image.new('RGB', (2000, 2000))
+        large_image = Image.new("RGB", (2000, 2000))
         processed = image_processor.preprocess(large_image)
         self.assertIn("pixel_values", processed)
 
     def test_batch_processing(self):
         """Testing batch processing functions"""
         processor = self.get_processor()
-        
+
         # prepare batch processing data
         texts = ["Text 1", "Text 2", "Text 3"]
         images = [self.prepare_image_inputs() for _ in range(3)]
-        
+
         # test batch processing
-        batch_outputs = processor(
-            text=texts,
-            images=images,
-            return_tensors="pt"
-        )
-        
+        batch_outputs = processor(text=texts, images=images, return_tensors="pt")
+
         # verify outputs
         self.assertIn("input_ids", batch_outputs)
         self.assertIn("attention_mask", batch_outputs)
         self.assertIn("pixel_values", batch_outputs)
-        
+
         # verify batch size
         self.assertEqual(batch_outputs["input_ids"].shape[0], len(texts))
         self.assertEqual(len(batch_outputs["pixel_values"]), len(images))
@@ -279,14 +270,11 @@ class MiniCPM_V_4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_error_handling(self):
         """Testing error handling functions"""
         processor = self.get_processor()
-        
+
         # test invalid input
         with self.assertRaises(ValueError):
             processor(text=None, images=None)
-            
+
         # test mismatch input length
         with self.assertRaises(AssertionError):
-            processor(
-                text=["Text 1", "Text 2"],
-                images=[self.prepare_image_inputs()]
-            )
+            processor(text=["Text 1", "Text 2"], images=[self.prepare_image_inputs()])

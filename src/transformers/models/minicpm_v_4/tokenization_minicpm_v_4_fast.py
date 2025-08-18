@@ -31,6 +31,7 @@ class MiniCPM_V_4TokenizerFast(LlamaTokenizerFast):
         self.slice_end = "</slice>"
         self.im_id_start = "<image_id>"
         self.im_id_end = "</image_id>"
+        self.unk = "<unk>"
 
     @property
     def eos_id(self):
@@ -55,7 +56,7 @@ class MiniCPM_V_4TokenizerFast(LlamaTokenizerFast):
     @property
     def slice_start_id(self):
         return self.convert_tokens_to_ids(self.slice_start)
-    
+
     @property
     def slice_end_id(self):
         return self.convert_tokens_to_ids(self.slice_end)
@@ -63,11 +64,11 @@ class MiniCPM_V_4TokenizerFast(LlamaTokenizerFast):
     @property
     def im_id_start_id(self):
         return self.convert_tokens_to_ids(self.im_id_start)
-    
+
     @property
     def im_id_end_id(self):
         return self.convert_tokens_to_ids(self.im_id_end)
-    
+
     @property
     def newline_id(self):
         return self.convert_tokens_to_ids('\n')

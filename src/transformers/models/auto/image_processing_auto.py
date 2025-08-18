@@ -120,6 +120,7 @@ else:
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("minicpm_v_4", ("MiniCPMVImageProcessor", "MiniCPMVImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),

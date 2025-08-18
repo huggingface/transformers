@@ -22,10 +22,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_minicpm_v_4 import *
     from .image_processing_minicpm import *
+    from .image_processing_minicpm_fast import *
     from .modeling_minicpm_v_4 import *
     from .processing_minicpm_v_4 import *
-    from .tokenization_minicpm_v_4_fast import *
     from .tokenization_minicpm_v_4 import *
+    from .tokenization_minicpm_v_4_fast import *
 else:
     import sys
 
