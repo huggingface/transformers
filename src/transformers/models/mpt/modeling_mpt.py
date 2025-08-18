@@ -356,7 +356,6 @@ class MptModel(MptPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
-        return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -405,9 +404,6 @@ class MptModel(MptPreTrainedModel):
 
         # Add last hidden state
         hidden_states = self.norm_f(hidden_states)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

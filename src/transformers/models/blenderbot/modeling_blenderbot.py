@@ -1004,9 +1004,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
                 if encoder_hidden_states is not None
                 else DynamicCache()
             )
-        return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
-            return_legacy_cache = True
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -1101,9 +1099,6 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(

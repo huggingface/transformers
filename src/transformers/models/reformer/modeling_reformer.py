@@ -1826,14 +1826,12 @@ class ReformerEncoder(nn.Module):
         all_attentions = []
 
         # init cached hidden states if necessary
-        return_legacy_cache = False
         if use_cache or not isinstance(past_buckets_states, ReformerDynamicCache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
                 "`past_key_values=ReformerDynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_buckets_states = ReformerDynamicCache.from_legacy_cache(past_buckets_states)
 
         # concat same tensor for reversible ResNet
@@ -1860,8 +1858,6 @@ class ReformerEncoder(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         next_cache = past_buckets_states if use_cache else None
-        if return_legacy_cache:
-            next_cache = past_buckets_states.to_legacy_cache()
 
         return ReformerEncoderOutput(
             hidden_states=hidden_states,

@@ -433,7 +433,6 @@ class BlipTextEncoder(nn.Module):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
         if use_cache:
             if isinstance(past_key_values, tuple):
                 logger.warning_once(
@@ -441,7 +440,6 @@ class BlipTextEncoder(nn.Module):
                     "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                     "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
                 )
-                return_legacy_cache = True
                 past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
             # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
             # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
@@ -482,9 +480,6 @@ class BlipTextEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(

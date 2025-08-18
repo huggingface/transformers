@@ -1586,14 +1586,12 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             past_key_values = EncoderDecoderCache(
                 self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
             )
-        return_legacy_cache = False
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                 "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1658,9 +1656,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
