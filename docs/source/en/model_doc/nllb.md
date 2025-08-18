@@ -106,7 +106,7 @@ visualizer("UN Chief says there is no military solution in Syria")
 ```
 
 <div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/blob/main/transformers/model_doc/NLLB-Attn-Mask.png"/>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/NLLB-Attn-Mask.png"/>
 </div>
 
 ## Notes
