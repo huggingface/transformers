@@ -129,7 +129,6 @@ if serve_dependencies_available:
         """
 
         generation_config: str
-        request_id: Optional[str] = None
 
     class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
         """
