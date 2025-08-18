@@ -3192,12 +3192,17 @@ class Trainer:
             logs: dict[str, float] = {}
 
             # all_gather + mean() to get average loss over all processes
-            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+            # tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+
+            tr_loss_scalar = tr_loss.item()
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss"] = round(
+                tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged),
+                4,
+            )
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
@@ -3905,101 +3910,118 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        model.train()
-        if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
-            self.optimizer.train()
+        # Prepare buffers for context parallelism
+        buffers = []
+        buffer_seq_dims = []
 
-        inputs = self._prepare_inputs(inputs)
-        if is_sagemaker_mp_enabled():
-            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
-            return loss_mb.reduce_mean().detach().to(self.args.device)
+        # position_ids are already provided by the data collator, no need to create them manually
 
-        with self.compute_loss_context_manager():
-            # Prepare buffers for context parallelism
-            buffers = []
-            buffer_seq_dims = []
+        if "input_ids" in inputs:
+            buffers.append(inputs["input_ids"])
+            buffer_seq_dims.append(1)  # Sequence dimension
+        if "labels" in inputs:
+            buffers.append(inputs["labels"])
+            buffer_seq_dims.append(1)
+        if "shift_labels" in inputs:
+            buffers.append(inputs["shift_labels"])
+            buffer_seq_dims.append(1)
+        if "attention_mask" in inputs:
+            # Context parallel currently doesn't support other masks than causal
+            # Accelerate applies hooks to replace mask with is_causal arg in SDPA
+            # Check if the mask is really causal and if not throw an error
+            attention_mask = inputs["attention_mask"]
+            if getattr(self, "is_cp_enabled", False) and not self._is_attention_mask_causal(attention_mask):
+                raise ValueError(
+                    "Context parallelism only supports causal attention masks. "
+                    "The provided attention_mask is not causal. "
+                    "Please ensure your data uses causal masking (lower triangular) "
+                    "or remove the attention_mask to use the model's default causal masking."
+                )
+            buffers.append(inputs["attention_mask"])
+            buffer_seq_dims.append(1)
+        # Include position_ids in context parallelism splitting
+        if "position_ids" in inputs and inputs["position_ids"] is not None:
+            buffers.append(inputs["position_ids"])
+            buffer_seq_dims.append(1)
 
-            # position_ids are already provided by the data collator, no need to create them manually
+        # Context manager is no-op if CP isn't enabled
+        with self.accelerator.maybe_context_parallel(
+            buffers=buffers,
+            buffer_seq_dims=buffer_seq_dims,
+            no_restore_buffers=set(buffers),
+        ):
+            model.train()
+            if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
+                self.optimizer.train()
 
-            if "input_ids" in inputs:
-                buffers.append(inputs["input_ids"])
-                buffer_seq_dims.append(1)  # Sequence dimension
-            if "labels" in inputs:
-                buffers.append(inputs["labels"])
-                buffer_seq_dims.append(1)
-            if "attention_mask" in inputs:
-                # Context parallel currently doesn't support other masks than causal
-                # Accelerate applies hooks to replace mask with is_causal arg in SDPA
-                # Check if the mask is really causal and if not throw an error
-                attention_mask = inputs["attention_mask"]
-                if getattr(self, "is_cp_enabled", False) and not self._is_attention_mask_causal(attention_mask):
-                    raise ValueError(
-                        "Context parallelism only supports causal attention masks. "
-                        "The provided attention_mask is not causal. "
-                        "Please ensure your data uses causal masking (lower triangular) "
-                        "or remove the attention_mask to use the model's default causal masking."
-                    )
-                buffers.append(inputs["attention_mask"])
-                buffer_seq_dims.append(1)
-            # Include position_ids in context parallelism splitting (key for Flash Attention compatibility)
-            if "position_ids" in inputs and inputs["position_ids"] is not None:
-                buffers.append(inputs["position_ids"])
-                buffer_seq_dims.append(1)
+            inputs = self._prepare_inputs(inputs)
+            if is_sagemaker_mp_enabled():
+                loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+                return loss_mb.reduce_mean().detach().to(self.args.device)
 
-            # Context manager is no-op if CP isn't enabled
-            with self.accelerator.maybe_context_parallel(
-                buffers=buffers, buffer_seq_dims=buffer_seq_dims, no_restore_buffers=set(buffers)
-            ):
+            with self.compute_loss_context_manager():
                 loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
-        del inputs
-        if (
-            self.args.torch_empty_cache_steps is not None
-            and self.state.global_step % self.args.torch_empty_cache_steps == 0
-        ):
-            if is_torch_xpu_available():
-                torch.xpu.empty_cache()
-            elif is_torch_mlu_available():
-                torch.mlu.empty_cache()
-            elif is_torch_musa_available():
-                torch.musa.empty_cache()
-            elif is_torch_npu_available():
-                torch.npu.empty_cache()
-            elif is_torch_mps_available():
-                torch.mps.empty_cache()
-            elif is_torch_hpu_available():
-                logger.warning(
-                    "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                )
+            del inputs
+            if (
+                self.args.torch_empty_cache_steps is not None
+                and self.state.global_step % self.args.torch_empty_cache_steps == 0
+            ):
+                if is_torch_xpu_available():
+                    torch.xpu.empty_cache()
+                elif is_torch_mlu_available():
+                    torch.mlu.empty_cache()
+                elif is_torch_musa_available():
+                    torch.musa.empty_cache()
+                elif is_torch_npu_available():
+                    torch.npu.empty_cache()
+                elif is_torch_mps_available():
+                    torch.mps.empty_cache()
+                elif is_torch_hpu_available():
+                    logger.warning(
+                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
+                    )
+                else:
+                    torch.cuda.empty_cache()
+
+            kwargs = {}
+
+            # For LOMO optimizers you need to explicitly use the learning rate
+            if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+                kwargs["learning_rate"] = self._get_learning_rate()
+
+            if self.args.n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+            if self.use_apex:
+                from apex import amp
+
+                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
             else:
-                torch.cuda.empty_cache()
+                # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
+                if (
+                    not self.model_accepts_loss_kwargs or num_items_in_batch is None
+                ) and self.compute_loss_func is None:
+                    # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+                    loss = loss / self.current_gradient_accumulation_steps
 
-        kwargs = {}
+                # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+                # https://github.com/huggingface/transformers/pull/35808
+                if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                    kwargs["scale_wrt_gas"] = False
 
-        # For LOMO optimizers you need to explicitly use the learning rate
-        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-            kwargs["learning_rate"] = self._get_learning_rate()
+                self.accelerator.backward(loss, **kwargs)
 
-        if self.args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                loss_reduce_grp = (
+                    self.accelerator.torch_device_mesh["dp_cp"].get_group()
+                    if self.accelerator.parallelism_config.dp_cp_dim_names
+                    else None
+                )
 
-        if self.use_apex:
-            from apex import amp
+                import torch.distributed as dist
 
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
-                loss = loss / self.current_gradient_accumulation_steps
-
-            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
-            # https://github.com/huggingface/transformers/pull/35808
-            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                kwargs["scale_wrt_gas"] = False
-
-            self.accelerator.backward(loss, **kwargs)
+                dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
 
             return loss.detach()
 
@@ -4035,8 +4057,8 @@ class Trainer:
             labels = None
         if self.model_accepts_loss_kwargs:
             kwargs = {}
-            if num_items_in_batch is not None:
-                kwargs["num_items_in_batch"] = num_items_in_batch
+            # if num_items_in_batch is not None:
+            #     kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
         # Save past state if it exists
@@ -4066,12 +4088,12 @@ class Trainer:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
-        if (
-            self.args.average_tokens_across_devices
-            and (self.model_accepts_loss_kwargs or self.compute_loss_func)
-            and num_items_in_batch is not None
-        ):
-            loss *= self.accelerator.num_processes
+        # if (
+        #     self.args.average_tokens_across_devices
+        #     and (self.model_accepts_loss_kwargs or self.compute_loss_func)
+        #     and num_items_in_batch is not None
+        # ):
+        #     loss *= self.accelerator.num_processes
 
         return (loss, outputs) if return_outputs else loss
 
