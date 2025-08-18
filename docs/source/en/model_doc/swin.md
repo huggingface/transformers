@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-03-25 and added to Hugging Face Transformers on 2022-01-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -45,7 +46,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 </hfoption>
 
@@ -63,12 +64,13 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForImageClassification.from_pretrained(
     "microsoft/swin-tiny-patch4-window7-224",
-    device_map="cuda"
+    device_map="auto"
 )
 
+device = infer_device()
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits

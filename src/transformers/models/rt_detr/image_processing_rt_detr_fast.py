@@ -160,8 +160,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
         # Backwards compatibility
-        do_convert_annotations = kwargs.get("do_convert_annotations", None)
-        do_normalize = kwargs.get("do_normalize", None)
+        do_convert_annotations = kwargs.get("do_convert_annotations")
+        do_normalize = kwargs.get("do_normalize")
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
@@ -264,10 +264,16 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST`):
+            resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST
+        interpolation = (
+            interpolation
+            if interpolation is not None
+            else F.InterpolationMode.NEAREST_EXACT
+            if is_torchvision_v2_available()
+            else F.InterpolationMode.NEAREST
+        )
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}

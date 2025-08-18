@@ -186,8 +186,7 @@ class SamHQVisionLayer(SamVisionLayer):
 
 
 class SamHQPreTrainedModel(SamPreTrainedModel):
-    def _init_weights(self, module):
-        super()._init_weights(module)
+    pass
 
 
 class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):

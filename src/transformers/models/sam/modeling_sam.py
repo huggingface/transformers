@@ -402,7 +402,7 @@ class SamTwoWayTransformer(nn.Module):
                 attention_similarity=attention_similarity,
                 **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
@@ -1017,19 +1017,8 @@ class SamPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (SamLayerNorm, nn.LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SamVisionAttention):
+        super()._init_weights(module)
+        if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
                 module.rel_pos_w.data.zero_()
@@ -1121,6 +1110,7 @@ class SamVisionModel(SamPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     Segment Anything Model (SAM) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
     """
 )
 class SamModel(SamPreTrainedModel):
@@ -1129,7 +1119,7 @@ class SamModel(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
-    def __init__(self, config):
+    def __init__(self, config: SamConfig):
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 

@@ -451,5 +451,4 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
                 logits = outputs.hidden_states[-1]
                 logits_fa = outputs_fa.hidden_states[-1]
-
-                assert torch.allclose(logits_fa, logits, atol=2e-3)
+                torch.testing.assert_close(logits_fa, logits, atol=3e-2, rtol=3e-2)

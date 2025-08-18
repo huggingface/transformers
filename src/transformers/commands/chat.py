@@ -22,9 +22,10 @@ import re
 import string
 import time
 from argparse import ArgumentParser, Namespace
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import AsyncIterator, Optional
+from typing import Optional
 
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -426,7 +427,7 @@ class ChatCommand(BaseTransformersCLICommand):
         # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
         # We also mention in the help message that we only accept lists of ints for now.
 
-        # 3. Join the the result into a comma separated string
+        # 3. Join the result into a comma separated string
         generate_flags_string = ", ".join([f"{k}: {v}" for k, v in generate_flags_as_dict.items()])
 
         # 4. Add the opening/closing brackets
