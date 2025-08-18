@@ -174,7 +174,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
+        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
@@ -190,8 +190,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp,
             )
 
-
-            
             module, _ = get_module_from_name(model, param_name)
             with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
@@ -202,9 +200,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
                             param_value = torch.nn.functional.pad(
                                 param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                             )
-                        triton_weight_tensor, weight_scale = downcast_to_mxfp(param_value.to(torch.bfloat16), torch.uint8, axis=1)
-                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.reshape(32,-1, 90, 16), requires_grad=False)
-                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data.reshape(32,-1, 90), requires_grad=False)
+                        triton_weight_tensor, weight_scale = downcast_to_mxfp(
+                            param_value.to(torch.bfloat16), torch.uint8, axis=1
+                        )
+                        module.gate_up_proj_blocks = torch.nn.Parameter(
+                            triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False
+                        )
+                        module.gate_up_proj_scales = torch.nn.Parameter(
+                            weight_scale.data.reshape(32, -1, 90), requires_grad=False
+                        )
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
                         # module.gate_up_proj = triton_weight_tensor
@@ -218,11 +222,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
                             param_value = torch.nn.functional.pad(
                                 param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                             ).to(target_device)
-                        triton_weight_tensor, weight_scale = downcast_to_mxfp(param_value.to(torch.bfloat16), torch.uint8, axis=1)
-                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data.reshape(32,-1, 90), requires_grad=False)
+                        triton_weight_tensor, weight_scale = downcast_to_mxfp(
+                            param_value.to(torch.bfloat16), torch.uint8, axis=1
+                        )
+                        module.down_proj_scales = torch.nn.Parameter(
+                            weight_scale.data.reshape(32, -1, 90), requires_grad=False
+                        )
                         if hasattr(module, "down_proj"):
                             delattr(module, "down_proj")
-                        setattr(module, "down_proj_blocks", torch.nn.Parameter(triton_weight_tensor.data.reshape(32,-1, 90, 16) ,requires_grad=False))
+                        setattr(
+                            module,
+                            "down_proj_blocks",
+                            torch.nn.Parameter(triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False),
+                        )
                         # module.down_proj_blocks = torch.nn.Parameter(
                         #     triton_weight_tensor.storage.data, requires_grad=False
                         # )

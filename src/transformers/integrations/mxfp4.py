@@ -62,7 +62,7 @@ def quantize_to_mxfp4(w):
 
 
 def swizzle_mxfp4(w, w_scale):
-    """ TODO this needs to be documented
+    """TODO this needs to be documented
     But is seems to only inform torch of what's inside, not actually changing the values inside
     """
     FP4, convert_layout, wrap_torch_tensor = (
@@ -365,11 +365,10 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """
-    PrecisionConfig, FlexCtx, InFlexData, downcast_to_mxfp= (
+    PrecisionConfig, FlexCtx, InFlexData= (
         triton_kernels_hub.matmul_ogs.PrecisionConfig,
         triton_kernels_hub.matmul_ogs.FlexCtx,
         triton_kernels_hub.matmul_ogs.InFlexData,
-        triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
     )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
@@ -390,7 +389,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
                 setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
-            blocks = getattr(module, blocks_attr) # at this point values were loaded from ckpt
+            blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
             scales = getattr(module, scales_attr)
             # Check if both blocks and scales both not on meta device
             if blocks.device.type != "meta" and scales.device.type != "meta":
@@ -410,7 +409,6 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
                     triton_weight_tensor, weight_scale = swizzle_mxfp4(
                         blocks.transpose(-2, -1), scales.transpose(-2, -1)
                     )
-
 
                 # need to overwrite the shapes for the kernels
                 if proj == "gate_up_proj":

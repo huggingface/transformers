@@ -14,7 +14,6 @@
 
 import gc
 import unittest
-import tempfile
 from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
