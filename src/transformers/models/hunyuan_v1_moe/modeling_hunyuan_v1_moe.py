@@ -483,8 +483,15 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        if self.rope_type == "dynamic" and config.rope_scaling["alpha"]:
+            # DynamicNTKAlphaRotary
+            self.dim = config.head_dim
+            base = config.rope_theta * config.rope_scaling.get("alpha") ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            self.attention_scaling = 1.0
+        else:
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
