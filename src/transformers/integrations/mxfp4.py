@@ -378,61 +378,62 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     to_contiguous = kwargs.get("to_contiguous")
     rank = kwargs.get("rank")
     device_mesh = kwargs.get("device_mesh")
+    if "blocks" in param_name:
+        proj = param_name.split(".")[-1].split("_blocks")[0]
+    if "scales" in param_name:
+        proj = param_name.split(".")[-1].split("_scales")[0]
+    if device_mesh is not None:
+        shard_and_distribute_module(
+            model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
+        )
+    else:
+        setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
+    blocks_attr = f"{proj}_blocks"
+    scales_attr = f"{proj}_scales"
+    blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
+    scales = getattr(module, scales_attr)
+    # Check if both blocks and scales both not on meta device
+    if blocks.device.type != "meta" and scales.device.type != "meta":
+        # need it for ep
+        local_experts = blocks.size(0)
+        if proj == "gate_up_proj":
+            blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
+        else:
+            blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
+        # TODO: we need to have the weights on cuda, refactor later
+        if getattr(target_device, "type", target_device) == "cpu":
+            target_device = "cuda"
+        # TODO: check why we still do move the tensors despite the context manager
+        blocks = blocks.to(target_device)
+        scales = scales.to(target_device)
+        with torch.cuda.device(target_device):
+            triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                blocks.transpose(-2, -1), scales.transpose(-2, -1)
+            )
 
-    for proj in ["gate_up_proj", "down_proj"]:
-        if proj in param_name:
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    model, param_value, empty_param, param_name, casting_dtype, to_contiguous, rank, device_mesh
-                )
-            else:
-                setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
-            blocks_attr = f"{proj}_blocks"
-            scales_attr = f"{proj}_scales"
-            blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
-            scales = getattr(module, scales_attr)
-            # Check if both blocks and scales both not on meta device
-            if blocks.device.type != "meta" and scales.device.type != "meta":
-                # need it for ep
-                local_experts = blocks.size(0)
-                if proj == "gate_up_proj":
-                    blocks = blocks.view(local_experts, module.intermediate_size * 2, -1)
-                else:
-                    blocks = blocks.view(local_experts, -1, module.intermediate_size // 2)
-                # TODO: we need to have the weights on cuda, refactor later
-                if getattr(target_device, "type", target_device) == "cpu":
-                    target_device = "cuda"
-                # TODO: check why we still do move the tensors despite the context manager
-                blocks = blocks.to(target_device)
-                scales = scales.to(target_device)
-                with torch.cuda.device(target_device):
-                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                        blocks.transpose(-2, -1), scales.transpose(-2, -1)
-                    )
+        # need to overwrite the shapes for the kernels
+        if proj == "gate_up_proj":
+            triton_weight_tensor.shape = torch.Size(
+                [local_experts, module.hidden_size, module.intermediate_size * 2]
+            )
+        else:
+            triton_weight_tensor.shape = torch.Size(
+                [local_experts, module.intermediate_size, module.hidden_size]
+            )
 
-                # need to overwrite the shapes for the kernels
-                if proj == "gate_up_proj":
-                    triton_weight_tensor.shape = torch.Size(
-                        [local_experts, module.hidden_size, module.intermediate_size * 2]
-                    )
-                else:
-                    triton_weight_tensor.shape = torch.Size(
-                        [local_experts, module.intermediate_size, module.hidden_size]
-                    )
+        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+        setattr(module, proj, triton_weight_tensor)
+        setattr(
+            module,
+            f"{proj}_precision_config",
+            PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+        )
 
-                # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
-                setattr(module, proj, triton_weight_tensor)
-                setattr(
-                    module,
-                    f"{proj}_precision_config",
-                    PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
-                )
-
-                # delete blocks and scales
-                delattr(module, scales_attr)
-                delattr(module, blocks_attr)
-                # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
-                del blocks
+        # delete blocks and scales
+        delattr(module, scales_attr)
+        delattr(module, blocks_attr)
+        # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
+        del blocks
 
 
 def _replace_with_mxfp4_linear(

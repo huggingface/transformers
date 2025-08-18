@@ -881,6 +881,7 @@ def _load_state_dict_into_meta_model(
                 _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
+                # TODO naming is stupid it loads it as well
                 hf_quantizer.create_quantized_param(
                     model, param, param_name, param_device, state_dict, unexpected_keys
                 )

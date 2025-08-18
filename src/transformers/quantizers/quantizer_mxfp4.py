@@ -278,6 +278,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         **shard_kwargs,
                     )
 
+
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # we are not really dequantizing, we are just removing everthing related to quantization here
         if self.quantization_config.dequantize:
