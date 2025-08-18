@@ -160,7 +160,7 @@ These classes should be added using our Markdown syntax. Usually as follows:
 ```
 
 > [!IMPORTANT]
-> The line with [[autodoc]] should always be followed by another line (either blank or not) for the correct parsing by the CI/CD workflow.
+> Always add a blank line after `[[autodoc]]` to ensure it passes the CI/CD checks.
 
 This will include every public method of the configuration that is documented. If for some reason you wish for a method
 not to be displayed in the documentation, you can do so by specifying which methods should be in the docs:
