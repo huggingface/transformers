@@ -1064,7 +1064,7 @@ class DynamicCache(Cache):
         """
         cache = cls()
         if past_key_values is None:
-            logger.warning_once("past_key_values should be None in from_legacy_cache()")
+            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
