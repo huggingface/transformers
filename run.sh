@@ -4,7 +4,7 @@ export PYTHONDONTWRITEBYTECODE=1 && export PYTHONUNBUFFERED=1 && export OMP_NUM_
 python3 utils/fetch_hub_objects_for_ci.py
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
-timeout 600  pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
+timeout 600  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
 sleep 240
