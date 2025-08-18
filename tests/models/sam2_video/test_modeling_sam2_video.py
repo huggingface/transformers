@@ -66,11 +66,8 @@ def prepare_video():
 class Sam2VideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        # fill_hole area is set to 0 to avoid running the `get_connected_components` cuda kernel
-        self.video_model = Sam2VideoModel.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf", fill_hole_area=0).to(
-            torch.float32
-        )
-        self.processor = Sam2VideoProcessor.from_pretrained("yonigozlan/sam2.1_hiera_tiny_hf")
+        self.video_model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(torch.float32)
+        self.processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
         self.video_model.to(torch_device)
         self.video_model.eval()
 

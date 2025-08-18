@@ -33,7 +33,7 @@ The [Granite Speech](https://huggingface.co/papers/2505.08699) model ([blog post
 4. LoRA adapter(s): The Granite Speech model contains a modality specific LoRA, which will be enabled when audio features are provided, and disabled otherwise.
 
 
-Note that most of the aforementioned components are implemented generically to enable compatability and potential integration with other model architectures in transformers.
+Note that most of the aforementioned components are implemented generically to enable compatibility and potential integration with other model architectures in transformers.
 
 
 This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9944), [Avihu Dekel](https://huggingface.co/Avihu), and [George Saon](https://huggingface.co/gsaon).

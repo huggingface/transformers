@@ -312,7 +312,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images
