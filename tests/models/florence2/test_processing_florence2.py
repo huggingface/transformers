@@ -38,9 +38,9 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor.from_pretrained("microsoft/Florence-2-base")
+        image_processor = CLIPImageProcessor.from_pretrained("ducviet00/Florence-2-base-hf")
         image_processor.image_seq_length = 0
-        tokenizer = BartTokenizerFast.from_pretrained("microsoft/Florence-2-base")
+        tokenizer = BartTokenizerFast.from_pretrained("ducviet00/Florence-2-base-hf")
         tokenizer.image_token = "<image>"
         tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
         tokenizer.extra_special_tokens = {"image_token": "<image>"}
@@ -48,6 +48,24 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Florence2Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "post_processor_config": {
+                "ocr": {
+                    "pattern": r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>",
+                    "area_threshold": 0.0,
+                },
+                "phrase_grounding": {"banned_grounding_tokens": ["the image"]},
+                "pure_text": {},
+                "description_with_bboxes": {},
+                "description_with_polygons": {},
+                "polygons": {},
+                "bboxes": {},
+                "description_with_bboxes_or_polygons": {},
+            }
+        }
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

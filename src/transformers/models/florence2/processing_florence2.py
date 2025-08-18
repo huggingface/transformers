@@ -59,6 +59,9 @@ class Florence2Processor(ProcessorMixin):
         num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
+        post_processor_config (`dict`,  *optional*, defaults to 0):
+            Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
+            thresholds, or banned tokens.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -69,7 +72,8 @@ class Florence2Processor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        num_additional_image_tokens=0,
+        num_additional_image_tokens: int = 0,
+        post_processor_config: Optional[dict] = None,
         **kwargs,
     ):
         self.tasks_answer_post_processing_type = {
@@ -113,7 +117,8 @@ class Florence2Processor(ProcessorMixin):
 
         self.num_image_tokens = image_processor.image_seq_length
         self.num_additional_image_tokens = num_additional_image_tokens
-        self.post_processor = Florence2PostProcessor(tokenizer=tokenizer)
+        self.post_processor_config = post_processor_config
+        self.post_processor = Florence2PostProcessor(config=post_processor_config, tokenizer=tokenizer)
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
 
@@ -386,139 +391,14 @@ class Florence2PostProcessor:
             The tokenizer used for decoding model outputs.
     """
 
-    def __init__(self, tokenizer):
+    def __init__(self, config, tokenizer):
         self.tokenizer = tokenizer
+        self.parse_task_config = config or {}
+        self.banned_grounding_tokens = set(
+            self.parse_task_config.get("phrase_grounding", {}).get("banned_grounding_tokens", [])
+        )
         self.all_special_tokens = set(self.tokenizer.all_special_tokens)
-
-        self.config = self._create_default_config()
-        self.parse_tasks = [task["TASK_NAME"] for task in self.config["PARSE_TASKS"]]
-        self.parse_task_configs = {task["TASK_NAME"]: task for task in self.config["PARSE_TASKS"]}
-
-        self.black_list_of_phrase_grounding = self._create_black_list_of_phrase_grounding()
         self.quantize_bins = (1000, 1000)
-
-    def _create_default_config(self) -> dict[str, Any]:
-        return {
-            "PARSE_TASKS": [
-                {
-                    "TASK_NAME": "ocr",
-                    "PATTERN": r"(.+?)<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>",
-                    "AREA_THRESHOLD": 0.00,
-                },
-                {"TASK_NAME": "phrase_grounding", "FILTER_BY_BLACK_LIST": True},
-                {"TASK_NAME": "pure_text"},
-                {"TASK_NAME": "description_with_bboxes"},
-                {"TASK_NAME": "description_with_polygons"},
-                {"TASK_NAME": "polygons"},
-                {"TASK_NAME": "bboxes"},
-                {"TASK_NAME": "description_with_bboxes_or_polygons"},
-            ],
-        }
-
-    def _create_black_list_of_phrase_grounding(self) -> set[str]:
-        black_list = {
-            "it",
-            "I",
-            "me",
-            "mine",
-            "you",
-            "your",
-            "yours",
-            "he",
-            "him",
-            "his",
-            "she",
-            "her",
-            "hers",
-            "they",
-            "them",
-            "their",
-            "theirs",
-            "one",
-            "oneself",
-            "we",
-            "us",
-            "our",
-            "ours",
-            "you",
-            "your",
-            "yours",
-            "they",
-            "them",
-            "their",
-            "theirs",
-            "mine",
-            "yours",
-            "his",
-            "hers",
-            "its",
-            "ours",
-            "yours",
-            "theirs",
-            "myself",
-            "yourself",
-            "himself",
-            "herself",
-            "itself",
-            "ourselves",
-            "yourselves",
-            "themselves",
-            "this",
-            "that",
-            "these",
-            "those",
-            "who",
-            "whom",
-            "whose",
-            "which",
-            "what",
-            "who",
-            "whom",
-            "whose",
-            "which",
-            "that",
-            "all",
-            "another",
-            "any",
-            "anybody",
-            "anyone",
-            "anything",
-            "each",
-            "everybody",
-            "everyone",
-            "everything",
-            "few",
-            "many",
-            "nobody",
-            "none",
-            "one",
-            "several",
-            "some",
-            "somebody",
-            "someone",
-            "something",
-            "each other",
-            "one another",
-            "myself",
-            "yourself",
-            "himself",
-            "herself",
-            "itself",
-            "ourselves",
-            "yourselves",
-            "themselves",
-            "the image",
-            "image",
-            "images",
-            "the",
-            "a",
-            "an",
-            "a group",
-            "other objects",
-            "lots",
-            "a set",
-        }
-        return black_list
 
     def quantize(self, locations: "torch.Tensor", size: tuple[int, int]) -> "torch.Tensor":
         """
@@ -690,7 +570,7 @@ class Florence2PostProcessor:
             if not match:
                 continue
             phrase = match.group().strip()
-            if phrase in self.black_list_of_phrase_grounding:
+            if phrase in self.banned_grounding_tokens:
                 continue
             boxes_matches = list(re.finditer(box_pattern, phrase_text))
             if not boxes_matches:
@@ -863,7 +743,7 @@ class Florence2PostProcessor:
         if parse_tasks is not None:
             parse_tasks = [parse_tasks] if isinstance(parse_tasks, str) else parse_tasks
             for task in parse_tasks:
-                if task not in self.parse_tasks:
+                if task not in self.parse_task_config.keys():
                     raise ValueError(f"Unsupported parse task: {task}")
 
         if (text is None and sequence is None) or (text is not None and sequence is not None):
@@ -877,9 +757,9 @@ class Florence2PostProcessor:
 
         parsed_dict = {"text": text}
 
-        tasks_to_parse = parse_tasks or self.parse_tasks
+        tasks_to_parse = parse_tasks or self.parse_task_config.keys()
         for task in tasks_to_parse:
-            config = self.parse_task_configs[task]
+            config = self.parse_task_config[task]
             pattern = config.get("PATTERN")
 
             if task == "ocr":
