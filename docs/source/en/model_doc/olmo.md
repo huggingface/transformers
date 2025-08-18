@@ -37,7 +37,7 @@ You can find all the original OLMo checkpoints under the [OLMo](https://huggingf
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 import torch
