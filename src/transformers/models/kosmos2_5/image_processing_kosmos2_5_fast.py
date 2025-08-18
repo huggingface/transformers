@@ -220,10 +220,11 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        do_normalize: Optional[bool] = None,
-        max_patches: Optional[int] = None,
-        patch_size: Optional[dict[str, int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_normalize: bool,
+        max_patches: int,
+        patch_size: dict[str, int],
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Q: should we have this?
@@ -236,7 +237,7 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for batched resizing
         processed_image_patches_grouped = {}
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         for shape, stacked_images in grouped_images.items():
             # TODO: if it's possible to do in batch mode
             if do_normalize:
