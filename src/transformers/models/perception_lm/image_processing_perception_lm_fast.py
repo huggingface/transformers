@@ -283,7 +283,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                if self.vision_input_type == "thumb+tile":
+                if kwargs["vision_input_type"] == "thumb+tile":
                     thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
                     images_for_tiling, (tiles_w, tiles_h) = self.resize(
                         stacked_images, tile_size, max_num_tiles=max_num_tiles
