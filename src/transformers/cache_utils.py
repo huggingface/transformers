@@ -1464,31 +1464,32 @@ class EncoderDecoderCache(Cache):
     ```
     """
 
-    # Override @property from Cache -> this will be set in __init__ on the instances
-    is_compileable = False
-
     def __init__(self, *caches) -> None:
-        # If only one argument is passed, it should be a legacy cache ie. an iterable of tuples of tensors
+        # If only one argument is passed, it should be an iterable of tuples of tensors
         # This is not only for legacy reason, but also to be compatible with nn.DataParallel
         if len(caches) == 1:
-            self_attention_cache, cross_attention_cache = self.create_dynamic_caches_from_legacy_cache(caches[0])
+            self.self_attention_cache = DynamicCache()
+            self.cross_attention_cache = DynamicCache()
+            # Populate cache from the iterable
+            for layer_idx, key_value_states in enumerate(caches[0]):
+                key_states, value_states = key_value_states[:2]
+                self.self_attention_cache.update(key_states, value_states, layer_idx)
+                if len(key_value_states) > 2:
+                    key_states, value_states = key_value_states[2:]
+                    self.cross_attention_cache.update(key_states, value_states, layer_idx)
         # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
         elif len(caches) == 2:
             assert isinstance(caches[0], Cache), f"{type(caches[0]) = } is not a Cache"
             assert isinstance(caches[1], Cache), f"{type(caches[1]) = } is not a Cache"
-            self_attention_cache = caches[0]
-            cross_attention_cache = caches[1]
+            self.self_attention_cache = caches[0]
+            self.cross_attention_cache = caches[1]
         # Error case
         else:
             raise ValueError(f"Expected 1 or 2 arguments, got {len(caches)}")
 
-        # Initialize caches
-        self.self_attention_cache = self_attention_cache
-        self.cross_attention_cache = cross_attention_cache
-
         self.is_updated = {}
-        for layer_idx in range(len(cross_attention_cache)):
-            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+        for layer_idx in range(len(self.cross_attention_cache)):
+            self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
 
     def __repr__(self) -> str:
         return (
