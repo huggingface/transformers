@@ -372,6 +372,8 @@ class Gemma3Attention(nn.Module):
             cos, sin = position_embeddings
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        if self.layer_idx == 1:
+            print(cos)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -391,7 +393,7 @@ class Gemma3Attention(nn.Module):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            position_ids=position_ids,
+            # position_ids=position_ids,
             **kwargs,
         )
 
@@ -583,12 +585,6 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        # normalized
-        # Gemma3Text downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
-        # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
-        hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
