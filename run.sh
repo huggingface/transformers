@@ -55,9 +55,29 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
      CPU=$(ps -p $PYTEST_PID -o %cpu --no-headers 2>/dev/null)
      echo "CPU: ${CPU:-N/A}%"
 
-     if [ -d "/proc/$PYTEST_PID/fd" ]; then
-       echo "FDs: $(ls /proc/$PYTEST_PID/fd/ 2>/dev/null | wc -l)"
-     fi
+    if [ -d "/proc/$PYTEST_PID/fd" ]; then
+      FD_COUNT=$(ls /proc/$PYTEST_PID/fd/ 2>/dev/null | wc -l)
+      echo "FDs: $FD_COUNT"
+
+      # List file descriptors with details
+      echo "File descriptors:"
+      ls -la /proc/$PYTEST_PID/fd/ 2>/dev/null | head -20
+      echo "FD types summary:"
+      ls -l /proc/$PYTEST_PID/fd/ 2>/dev/null | awk '{print $NF}' | sort | uniq -c
+    fi
+
+    # List all threads
+    echo "Thread details:"
+    if [ -d "/proc/$PYTEST_PID/task" ]; then
+      for tid in /proc/$PYTEST_PID/task/*; do
+        if [ -d "$tid" ]; then
+          TID_NUM=$(basename "$tid")
+          THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
+          THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
+          echo "  TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE)"
+        fi
+      done
+    fi
 
      # Try to get kernel stack if permissions allow
      if [ -r "/proc/$PYTEST_PID/stack" ]; then
