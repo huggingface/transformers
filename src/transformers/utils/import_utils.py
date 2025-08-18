@@ -2769,7 +2769,7 @@ def spread_import_structure(nested_import_structure):
 
                     else:
                         # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
-                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # are frozensets, whereas some are not -> frozenset keys are at an unknown depth-level of the
                         # dictionary.
                         #
                         # We recursively propagate the frozenset for this specific dictionary so that the frozensets

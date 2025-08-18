@@ -94,6 +94,7 @@ PRIVATE_MODELS = [
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "Ovis2VisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -411,6 +412,8 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("dinov3_convnext", "dinov3"),
+        ("dinov3_vit", "dinov3"),
     ]
 )
 
