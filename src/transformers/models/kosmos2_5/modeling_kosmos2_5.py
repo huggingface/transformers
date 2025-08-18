@@ -934,7 +934,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # TODO (ydshieh): Remove this (to match what Llama's code)
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
