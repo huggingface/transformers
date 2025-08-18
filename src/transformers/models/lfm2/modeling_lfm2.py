@@ -33,6 +33,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available
 from .configuration_lfm2 import Lfm2Config
@@ -66,6 +67,8 @@ class Lfm2RMSNorm(nn.Module):
 
 
 class Lfm2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: Lfm2Config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -357,15 +360,16 @@ class Lfm2Attention(nn.Module):
         self.q_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2RMSNorm(self.head_dim, eps=config.norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -376,9 +380,9 @@ class Lfm2Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -437,10 +441,11 @@ class Lfm2ShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -451,19 +456,19 @@ class Lfm2ShortConv(nn.Module):
         Bx = B * x
 
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_value is not None and cache_position[0] > 0:
+        if past_key_values is not None and cache_position[0] > 0:
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
-                past_key_value.conv_cache[self.layer_idx],
+                past_key_values.conv_cache[self.layer_idx],
                 conv_weights,
                 self.conv.bias,
                 None,
             )
             conv_out = conv_out.unsqueeze(-1)
         else:
-            if past_key_value is not None:
+            if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
 
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
 
@@ -471,10 +476,11 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y.transpose(-1, -2).contiguous())
         return y
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -486,21 +492,21 @@ class Lfm2ShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_value is not None and cache_position[0] > 0:
-            conv_state = past_key_value.conv_cache[self.layer_idx]
+        if past_key_values is not None and cache_position[0] > 0:
+            conv_state = past_key_values.conv_cache[self.layer_idx]
             cache_position = cache_position.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
             conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
-            past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+            past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
 
             conv_out = conv_out.unsqueeze(-1)
         else:
-            if past_key_value is not None:
+            if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_value.conv_cache[self.layer_idx].copy_(conv_state)
+                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -509,16 +515,17 @@ class Lfm2ShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_value: Optional[Lfm2HybridConvCache] = None,
+        past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_value, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, past_key_value, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
+        return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
@@ -534,13 +541,14 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[tuple[torch.Tensor]] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -551,14 +559,14 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
             )
@@ -657,7 +665,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
