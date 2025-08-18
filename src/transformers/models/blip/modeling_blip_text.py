@@ -446,9 +446,7 @@ class BlipTextEncoder(nn.Module):
             elif isinstance(past_key_values, DynamicCache):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(
-                    self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
-                )
+                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
