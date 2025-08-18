@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -482,7 +483,7 @@ class VideoPrismEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
+            layer_head_mask = head_mask if head_mask is not None else None
 
             layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
@@ -675,8 +676,6 @@ class PerDimScale(nn.Module):
         self.per_dim_scale = nn.Parameter(torch.zeros(dim))
 
     def forward(self, inputs):
-        print(f"{inputs.shape=} -----------------------------------------------")
-        print(f"{self.per_dim_scale.shape=} -----------------------------------------------")
         dim = inputs.shape[-1]  # ? dim is 256 for large lvt as inputs is (B, 1, N, H) = (1, 1, 16, 64)
 
         # ? original comments
@@ -685,13 +684,10 @@ class PerDimScale(nn.Module):
 
         r_softplus_0 = 1.442695041
 
-        scale = torch.tensor(r_softplus_0 / (dim ** 0.5), dtype=inputs.dtype)
-        params = nn.Softplus()(self.per_dim_scale)
-        scale = scale * params.unsqueeze(0).unsqueeze(0).unsqueeze(-1)  # ? (1, 1, 1, 256) 
-        print("all good here")
-        ret = inputs * scale
-        print(f"{ret.shape=} -----------------------------------------------")
-        return ret
+        scale = torch.tensor(r_softplus_0 / (dim**0.5), dtype=inputs.dtype)
+        softplus = nn.Softplus()(self.per_dim_scale).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+        scale = scale * softplus
+        return inputs * scale
 
 
 class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
@@ -704,7 +700,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         self.dropout_prob = config.attention_probs_dropout_prob
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
-
+        self.per_dim_scale = PerDimScale(self.config)
         self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.query = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
@@ -719,6 +715,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         output_attentions=False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, hidden_size = hidden_states.shape
+        print(f"{hidden_states.shape=}")
         query = self.pooling_attention_query.expand(batch_size, -1, -1)  # Expand to (B, 1, D)
         query_layer = (
             self.query(query)  # Transform query to (B, 1, D')
@@ -726,21 +723,21 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             .transpose(1, 2)
         )
 
-        query_layer = PerDimScale(self.config)(query_layer)
+        query_layer = self.per_dim_scale(query_layer)
 
         key_layer = (
-            self.value(hidden_states)
+            self.key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
 
         value_layer = (
-            self.query(hidden_states)
+            self.value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
+
         attention_interface: Callable = eager_attention_forward
-        # attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -752,6 +749,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
         )
+
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
@@ -760,8 +758,34 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         outputs = self.projection(context_layer)
 
         outputs = self.layernorm(outputs)
-
+        print(outputs.shape, "{{{{{{{{{{{{{{{}}}}}}}}}}}}}}}")
         return outputs  # ? (B, 1, 768)
+
+
+class PositionalEmbedding(nn.Module):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.min_timescale = 1
+        self.max_timescale = 10000
+
+    def forward(self, seq_length):
+        position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)  # ? (1, seq_length)
+        num_timescales = self.hidden_size // 2
+        log_timescale_increment = math.log(
+            float(self.max_timescale) / float(self.min_timescale)  # ? 10000/1 = 10000
+        ) / torch.maximum(torch.tensor(num_timescales, dtype=torch.float32) - 1, torch.tensor(1))
+
+        inv_timescales = self.min_timescale * torch.exp(
+            torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
+        )
+
+        scaled_time = position.unsqueeze(-1) * inv_timescales.unsqueeze(0).unsqueeze(0)
+
+        embs = torch.cat((torch.sin(scaled_time), torch.cos(scaled_time)), dim=-1)
+        # Force usage of `np` to compute static values at trace time.
+        # embs = F.pad(embs, [[0, 0], [0, 0], [0, torch.remainder(torch.tensor(self.hidden_size), torch.tensor(2)).item()]])
+        return embs
 
 
 class VideoPrismTextEncoder(nn.Module):
@@ -772,23 +796,37 @@ class VideoPrismTextEncoder(nn.Module):
         if self.config.enable_causal_atten:
             self.config.is_causal = True
         self.unimodal_encoder = VideoPrismEncoder(config, mode="unimodal")
-        self.pos_embeddings = nn.Parameter(torch.zeros(config.hidden_size))
+        self.pos_embeddings = PositionalEmbedding(config)  # ? nn.Parameter(torch.zeros(config.hidden_size))
         self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self, text_token_ids, padding, head_mask, output_attentions=False, output_hidden_states=False, return_dict=True
+        self, text_token_ids, attention_mask, output_attentions=False, output_hidden_states=False, return_dict=True
     ):
-        input_embeds = self.token_embeddings(text_token_ids)  # ? text_token_ids = (B, 64)
+        batch_size, seq_length = text_token_ids.shape
+        hidden_states = self.token_embeddings(text_token_ids)  # ? text_token_ids = (B, 64)
+        cls_padding = torch.ones(batch_size, 1)
+        text_token_ids = torch.cat((text_token_ids, cls_padding), dim=1)  # ? add CLS token, text_token_ids shape is (B, 65)
+        attention_mask = torch.cat((attention_mask, cls_padding), dim=1) if attention_mask is not None else None
+        # print(text_token_ids)
+        causal_attention_mask = _create_4d_causal_attention_mask(
+            text_token_ids.shape, hidden_states.dtype, device=hidden_states.device
+        )
+        
+        if attention_mask is not None:
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) + causal_attention_mask
+
         # ? the shape of input_embeds is (B, 64, 768)
-        features = input_embeds + self.pos_embeddings  # ? add positional embeddings
+        features = hidden_states + self.pos_embeddings(seq_length)  # ? add positional embeddings
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(features.shape[0], -1, -1)  # ? expand to (B, 1, 768)
         features = torch.cat((features, cls_emb), dim=1)  # ? features shape (B, 65, 768)
+
         features = self.unimodal_encoder(
             features,
-            head_mask=head_mask,
+            head_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -826,7 +864,7 @@ class VideoPrismClip(nn.Module):
         self.l2norm = _l2_normalize
         self.normalize = True  #! need to store in config
 
-    def forward(self, pixel_values: torch.FloatTensor, text_token_ids, text_padding):
+    def forward(self, pixel_values: torch.FloatTensor, text_token_ids, attention_mask, **kwargs):
         video_features = self.backbone(pixel_values=pixel_values)
 
         vision_features = self.auxiliary_encoder(
@@ -840,8 +878,7 @@ class VideoPrismClip(nn.Module):
 
         text_features = self.text_encoder(
             text_token_ids,
-            padding=text_padding,
-            head_mask=None,
+            attention_mask=attention_mask,
             output_attentions=False,
             output_hidden_states=False,
             return_dict=True,
