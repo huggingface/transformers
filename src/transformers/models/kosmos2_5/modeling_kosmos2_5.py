@@ -934,7 +934,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-    # TODO (ydshieh): Remove this (to match what Llama's code)
+    # TODO (ydshieh): Remove this (to match Llama's code)
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1004,7 +1004,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+    # TODO (ydshieh): Remove this (to match Llama's code)
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
