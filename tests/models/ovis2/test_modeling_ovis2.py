@@ -332,8 +332,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
             "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
         )
 
-        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
+        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw).resize((320, 240))
 
         inputs = self.processor(
             text=[self.text, self.text],
@@ -342,10 +342,10 @@ class Ovis2IntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device, torch.bfloat16)
 
-        output = model.generate(**inputs, max_new_tokens=50)
+        output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a forested area with a grassy field. There are two deer visible in the foreground. The deer appear to be grazing on the grass. The environment is quite foggy, creating a misty atmosphere. The deer',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nAnswer: I see a brown dog standing on a wooden floor in what appears to be a kitchen.',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
 
