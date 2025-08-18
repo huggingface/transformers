@@ -99,32 +99,21 @@ if [ -d "/proc/$PYTEST_PID/fd" ]; then
       echo ""
       echo "FD$FD_NUM -> $SOCKET_LINK"
 
-      # Get detailed socket info
-      SOCKET_INFO=$(ss -anp | grep "$SOCKET_INODE" | head -1)
-      if [ -n "$SOCKET_INFO" ]; then
-        echo "  Connection: $SOCKET_INFO"
-      else
-        echo "  Connection info not found"
-      fi
+      # Try multiple approaches to find socket info
+      echo "  Searching for inode $SOCKET_INODE..."
 
-      # Also show netstat info for comparison
-      NETSTAT_INFO=$(netstat -anp | grep "$SOCKET_INODE" | head -1)
-      if [ -n "$NETSTAT_INFO" ]; then
-        echo "  Netstat: $NETSTAT_INFO"
-      fi
-    fi
-  done
-fi
+      # Method 1: Direct ss search
+      ss -anp | grep "$SOCKET_INODE" | head -1 | sed 's/^/    ss: /'
 
-echo ""
-echo "Thread summary (sockets are shared across all threads):"
-if [ -d "/proc/$PYTEST_PID/task" ]; then
-  for tid in /proc/$PYTEST_PID/task/*; do
-    if [ -d "$tid" ]; then
-      TID_NUM=$(basename "$tid")
-      THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
-      THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
-      echo "  TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE)"
+      # Method 2: Direct netstat search
+      netstat -anp | grep "$SOCKET_INODE" | head -1 | sed 's/^/    netstat: /'
+
+      # Method 3: Check /proc/net directly
+      grep "$SOCKET_INODE" /proc/net/tcp* 2>/dev/null | head -1 | sed 's/^/    proc: /'
+
+      # Method 4: Show any connection with this PID and FD
+      ss -anp | grep "pid=$PYTEST_PID,fd=$FD_NUM" | head -1 | sed 's/^/    ss-pid: /'
+      netstat -anp | grep "$PYTEST_PID/python3" | head -1 | sed 's/^/    netstat-pid: /'
     fi
   done
 fi
