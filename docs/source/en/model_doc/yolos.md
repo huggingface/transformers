@@ -63,14 +63,16 @@ detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 import torch
 from PIL import Image
 import requests
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from transformers import AutoImageProcessor, AutoModelForObjectDetection, infer_device
+
+device = infer_device()
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_dtype=torch.float16, attn_implementation="sdpa").to("cuda")
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", torch_dtype=torch.float16, attn_implementation="sdpa").to(device)
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-inputs = processor(images=image, return_tensors="pt").to("cuda")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

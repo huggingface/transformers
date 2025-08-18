@@ -104,7 +104,7 @@ class Trie:
 
     def split(self, text: str) -> list[str]:
         """
-        Will look for the words added to the trie within `text`. Output is the original string splitted along the
+        Will look for the words added to the trie within `text`. Output is the original string split along the
         boundaries of the words found.
 
         This trie will match the longest possible word first !

@@ -46,16 +46,18 @@ The example below demonstrates how to reconstruct the missing pixels with the [`
 import torch
 import requests
 from PIL import Image
-from transformers import ViTImageProcessor, ViTMAEForPreTraining
+from transformers import infer_device, ViTImageProcessor, ViTMAEForPreTraining
+
+device = infer_device()
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 inputs = processor(image, return_tensors="pt")
-inputs = {k: v.to("cuda") for k, v in inputs.items()}
+inputs = {k: v.to(device) for k, v in inputs.items()}
 
-model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa").to("cuda")
+model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 
