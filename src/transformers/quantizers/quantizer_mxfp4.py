@@ -203,7 +203,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                                 param_value, (0, right_pad, 0, bottom_pad, 0, 0), mode="constant", value=0
                             )
                         triton_weight_tensor, weight_scale = downcast_to_mxfp(param_value.to(torch.bfloat16), torch.uint8, axis=1)
-                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.storage.data.reshape(32,-1, 90, 16), requires_grad=False)
+                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.reshape(32,-1, 90, 16), requires_grad=False)
                         module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data.reshape(32,-1, 90), requires_grad=False)
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
