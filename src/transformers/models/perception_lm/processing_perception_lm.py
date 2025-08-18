@@ -15,7 +15,8 @@
 Processor class for PerceptionLM.
 """
 
-from typing import Iterable, Union
+from collections.abc import Iterable
+from typing import Union
 
 import numpy as np
 
