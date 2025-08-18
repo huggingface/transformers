@@ -30,7 +30,6 @@ from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -62,13 +61,12 @@ ReformerEncoderOutput = namedtuple(
 )
 
 
-class ReformerDynamicCache(DynamicCache):
+class ReformerDynamicCache:
     """
     A dynamic cache that stores past buckets instead of key/values.
     """
 
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
-        super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.buckets_cache: list[torch.Tensor] = []
         self.states_cache: list[torch.Tensor] = []
@@ -1827,7 +1825,9 @@ class ReformerEncoder(nn.Module):
         all_attentions = []
 
         # init cached hidden states if necessary
-        if use_cache or not isinstance(past_buckets_states, ReformerDynamicCache):
+        if use_cache and past_buckets_states is None:
+            past_buckets_states = ReformerDynamicCache()
+        elif use_cache and isinstance(past_buckets_states, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
@@ -2356,15 +2356,15 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []
-        for layer_past in past_key_values:
+        for buckets, hidden_states in past_key_values:
             # buckets
-            if layer_past[0] is not None:
-                reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
+            if buckets is not None and buckets.numel() > 0:
+                reord_buckets = buckets.index_select(0, beam_idx.to(buckets.device))
             else:
                 reord_buckets = None
 
             # hidden states
-            reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
+            reord_hidden_states = hidden_states.index_select(0, beam_idx.to(hidden_states.device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
 
         if isinstance(past_key_values, ReformerDynamicCache):
