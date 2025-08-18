@@ -748,7 +748,7 @@ def pad(
         elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], int):
             values = (values, values)
         elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], tuple):
-            values = values
+            pass
         else:
             raise ValueError(f"Unsupported format: {values}")
 
