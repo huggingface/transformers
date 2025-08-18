@@ -6,19 +6,36 @@ from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 
 
-IS_TIED = True
-SAVE_DIR = "TODO"
+TIED_MAPPING = {
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT": True,
+    "baidu/ERNIE-4.5-VL-28B-A3B-Base-PT": True,
+    "baidu/ERNIE-4.5-VL-424B-A47B-PT": False,
+    "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT": False,
+}
+SAFETENSOR_INDEX_NAME = "model.safetensors.index.json"
 
 
-def convert_file(state_dict):
+def load_json(save_dir, filename):
+    with open(os.path.join(save_dir, filename), "r") as f:
+        return json.load(f)
+
+
+def write_json(json_object, save_dir, filename):
+    with open(os.path.join(save_dir, filename), "w") as f:
+        json.dump(json_object, f)
+
+
+def convert_state_dict_to_hf(state_dict, is_tied=True):
     converted_state_dict = {}
     for key, tensor in state_dict.items():
-        if "lm_head" in key and IS_TIED:
+        if "lm_head" in key and is_tied:  # skip tied weights
             pass
+        # Moe is split into their modalities (text, vision)
         elif "mlp" in key:
             if "moe_statics" in key:
                 suffix = "moe_statics.e_score_correction_bias"
                 converted_key = key.removesuffix(suffix)
+                # splitting param (2, ...) to 2 * (1, ...)
                 converted_state_dict[converted_key + "text_moe." + suffix] = tensor[0][None, :].contiguous()
                 converted_state_dict[converted_key + "vision_moe." + suffix] = tensor[1][None, :].contiguous()
             elif "gate.weight" in key:
@@ -28,13 +45,16 @@ def convert_file(state_dict):
                 suffix = "gate.weight"
                 converted_key = key.removesuffix("_1")  # vision
                 converted_key = converted_key.removesuffix("gate.weight")
+                # previously a `nn.Parameter` which is why we need a transpose for `nn.Linear`
                 converted_state_dict[converted_key + f"{moe_type}." + suffix] = tensor.T.contiguous()
             elif ".experts" in key:
                 moe_type = "text_moe"
                 expert_number = int(re.findall(r'\d+', key)[-1])
+                # 128 experts split into 64 each (text, vision)
                 if expert_number >= 64:
                     moe_type = "vision_moe"
                     expert_number -= 64
+                # avoid subbing the layer idx + experts twice
                 prefix = re.findall(r'model.layers.\d+.mlp.experts.', key)[0]
                 converted_key = re.sub(r"\d+", f"{moe_type}.experts.{expert_number}", key.removeprefix(prefix))
                 converted_state_dict[re.sub(".experts", "", prefix) + converted_key] = tensor.contiguous()
@@ -45,26 +65,38 @@ def convert_file(state_dict):
     return converted_state_dict
 
 
-model_path = 'baidu/ERNIE-4.5-VL-28B-A3B-PT'
-index_dict = {"weight_map": {}, "metadata": {"total_size": 0}}
-checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*.safetensors*"])
-for filename in sorted(os.listdir(checkpoint_path)):
-    if filename == "model.safetensors.index.json":
-        with open(os.path.join(checkpoint_path, filename), "r") as f:
-            original_index = json.load(f)
-        index_dict["metadata"] = original_index["metadata"]
-    if filename.endswith('.safetensors'):
-        input_file = os.path.join(checkpoint_path, filename)
-        output_file = os.path.join(SAVE_DIR, filename)
+def convert_weights(model_path, save_dir):
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
 
-        state_dict = load_file(input_file)
-        converted_state_dict = convert_file(state_dict)
-        save_file(converted_state_dict, output_file)
+    # indexing base dict
+    index_dict = {"weight_map": {}, "metadata": {"total_size": 0}}
 
-        for k, v in converted_state_dict.items():
-            index_dict["weight_map"][k] = filename
+    is_tied = TIED_MAPPING[model_path]
+    checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*.safetensors*"])
+    for filename in sorted(os.listdir(checkpoint_path)):
+        # metadata doesn't change
+        if filename == SAFETENSOR_INDEX_NAME:
+            original_index = load_json(checkpoint_path, filename)
+            index_dict["metadata"] = original_index["metadata"]
+        # sharded files are converted 1 by 1
+        if filename.endswith('.safetensors'):
+            input_file = os.path.join(checkpoint_path, filename)
+            output_file = os.path.join(save_dir, filename)
+
+            state_dict = load_file(input_file)
+            converted_state_dict = convert_state_dict_to_hf(state_dict, is_tied=is_tied)
+            save_file(converted_state_dict, output_file)
+
+            # remap namings in index
+            for k in converted_state_dict.keys():
+                index_dict["weight_map"][k] = filename
+
+    # save index
+    write_json(index_dict, save_dir, SAFETENSOR_INDEX_NAME)
 
 
-index_file_path = os.path.join(SAVE_DIR, "model.safetensors.index.json")
-with open(index_file_path, "w") as f:
-    json.dump(index_dict, f)
+convert_weights(
+    model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
+    save_dir='AntonV/ErnieVL',
+)
