@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 Multimodal chat models are similar to normal chat models, but they can also accept non-text inputs like images, audio or video.
 
 Chatting with multimodal models is very similar to chatting with text-only models, with the key difference being the `content` key of the messages. Instead of a single string,
-as it is for text-only models, `content` can be a list containing multiple items of different types.
+as it is for text-only models, `content` should be a list containing multiple items of different types.
 
 In the same way that the [Tokenizer](./tokenizer_summary.md) class handles chat templates and tokenization for text-only models, 
 the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Methods like [`ProcessorMixin.apply_chat_template`] are almost identical.
