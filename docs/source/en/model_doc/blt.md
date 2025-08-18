@@ -90,13 +90,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] BLTForTokenClassification
     - forward
-
-## FlaxBLTModel
-
-[[autodoc]] FlaxBLTModel
-    - __call__
-
-## FlaxBLTForCausalLM
-
-[[autodoc]] FlaxBLTForCausalLM
-    - __call__

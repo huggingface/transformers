@@ -393,6 +393,12 @@ class BltConfig(PretrainedConfig):
         elif isinstance(global_config, BltGlobalTransformerConfig):
             self.global_config = global_config
 
+        # Determine if token embedding projection is needed based on dimension mismatch (7b)
+        encoder_cross_output_size = self.encoder_config.hidden_size * self.cross_attn_k
+        self.global_config.encoder_cross_output_size = (
+            encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
+        )
+
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 

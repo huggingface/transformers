@@ -30,14 +30,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_blt import (
     BltConfig,
@@ -46,12 +45,6 @@ from .configuration_blt import (
     BltLocalEncoderConfig,
     BltPatcherConfig,
 )
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 class BltMLP(nn.Module):
@@ -95,16 +88,16 @@ class BltRotaryEmbedding(nn.Module):
     def __init__(self, config: BltConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
-        self.rope_type = (
-            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            if config.rope_scaling is not None
-            else "default"
-        )
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
@@ -112,14 +105,13 @@ class BltRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # Copied from Cohere2RotaryEmbedding.forward
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Use Cohere2 pattern for compatibility
+            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
@@ -238,11 +230,10 @@ def eager_attention_forward(
 
 
 def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -425,9 +416,10 @@ class BltCrossAttention(nn.Module):
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
+    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -465,6 +457,7 @@ class BltLocalEncoder(BltPreTrainedModel):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+
         self.post_init()
 
     def forward(
@@ -579,6 +572,7 @@ class BltLocalDecoder(BltPreTrainedModel):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+
         self.post_init()
 
     @check_model_inputs
@@ -645,6 +639,15 @@ class BltGlobalTransformer(BltPreTrainedModel):
         for layer_idx in range(config.num_hidden_layers):
             self.layers.append(BltTransformerLayer(config, layer_idx))
         self.rotary_emb = BltRotaryEmbedding(config=config)
+
+        # Create token embedding projection (use nn.Identity() when no projection needed)
+        if getattr(config, "encoder_cross_output_size", None) is not None:
+            self.token_embedding_projection = nn.Linear(
+                config.encoder_cross_output_size, config.hidden_size, bias=False
+            )
+        else:
+            self.token_embedding_projection = nn.Identity()
+
         self.post_init()
 
     def forward(
@@ -657,7 +660,7 @@ class BltGlobalTransformer(BltPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = input_embeds.shape
-        hidden_states = input_embeds
+        hidden_states = self.token_embedding_projection(input_embeds)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
@@ -1184,7 +1187,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
-    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
 
     def __init__(self, config: BltConfig):
         super().__init__(config.get_text_config())
@@ -1208,6 +1210,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
         cross_attention_mask: Optional[torch.LongTensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
@@ -1219,6 +1222,9 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, CausalLMOutputWithPast]:
         r"""
+        cross_attention_states (`torch.FloatTensor`, *optional*):
+            Output of the vision model, used for cross-attention. This tensor contains the processed image features that
+            the language model will attend to.
         cross_attention_mask (`torch.Tensor` of shape `(batch_size, seq_length, max_num_images, max_num_tiles)`, *optional*):
             Cross-attention mask to control the interaction between text tokens and image tiles.
             This 4D tensor defines which image tiles each text token should attend to.
@@ -1259,7 +1265,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         I love the idea of snowflakes gently falling, each one
         ```
         """
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # Call parent forward but exclude cross_attention_states from model call
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

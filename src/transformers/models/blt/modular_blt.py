@@ -14,7 +14,7 @@
 # limitations under the License.
 """Blt modular model, inheriting from Mllama where appropriate."""
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import torch
 import torch.distributions
@@ -23,35 +23,30 @@ import torch.nn.functional as F
 
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
-from .configuration_blt import (
-    BltConfig,
-    BltGlobalTransformerConfig,
-    BltLocalDecoderConfig,
-    BltLocalEncoderConfig,
-    BltPatcherConfig,
+from ..cohere2.modeling_cohere2 import (
+    Cohere2RotaryEmbedding,
 )
-
-
-if is_torch_flex_attn_available():
-    pass
-
-
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
     MllamaPreTrainedModel,
-    MllamaRotaryEmbedding,
     MllamaSelfAttentionDecoderLayer,
     MllamaTextCrossAttention,
     MllamaTextMLP,
     MllamaTextRMSNorm,
     MllamaTextSelfAttention,
     eager_attention_forward,
+)
+from .configuration_blt import (
+    BltConfig,
+    BltGlobalTransformerConfig,
+    BltLocalDecoderConfig,
+    BltLocalEncoderConfig,
+    BltPatcherConfig,
 )
 
 
@@ -248,31 +243,8 @@ class BltRMSNorm(MllamaTextRMSNorm):
     pass
 
 
-class BltRotaryEmbedding(MllamaRotaryEmbedding):
-    def __init__(self, config: BltConfig, device=None):
-        super().__init__(config=config, device=device)
-        # BC: "rope_type" was originally "type"
-        self.rope_type = (
-            config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            if config.rope_scaling is not None
-            else "default"
-        )
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        # Copied from Cohere2RotaryEmbedding.forward
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # Use Cohere2 pattern for compatibility
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class BltRotaryEmbedding(Cohere2RotaryEmbedding):
+    pass
 
 
 class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):
@@ -376,9 +348,34 @@ class BltCrossAttention(MllamaTextCrossAttention):
         return attn_output, attn_weights
 
 
-class BltLocalEncoder(nn.Module):
+@auto_docstring
+class BltPreTrainedModel(MllamaPreTrainedModel):
+    config: BltConfig
+    _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
+        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
+        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
+        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
+    }
+
+    def _init_weights(self, module):
+        raise AttributeError("No need to inherit it!")
+
+    def _update_causal_mask(self, module):
+        raise AttributeError("No need to inherit it!")
+
+    def _prepare_4d_causal_attention_mask_with_cache_position(self, module):
+        raise AttributeError("No need to inherit it!")
+
+
+class BltLocalEncoder(BltPreTrainedModel):
+    config_class = BltLocalEncoderConfig
+    base_model_prefix = "local_encoder"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltLocalEncoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
         self.layers = nn.ModuleList(
@@ -397,6 +394,8 @@ class BltLocalEncoder(nn.Module):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+
+        self.post_init()
 
     def forward(
         self,
@@ -442,8 +441,6 @@ class BltLocalEncoder(nn.Module):
                     batch_size, patch_embeds.shape[1] * self.config.cross_attn_k, self.config.hidden_size
                 )
                 layer_idx = idx if self.config.cross_attn_all_layers else 0
-                # Remove cross_attention_states from kwargs if present to avoid multiple values error
-                kwargs.pop("cross_attention_states", None)
                 cross_attention_output, _ = self.cross_attn_layers[layer_idx](
                     hidden_states=patch_embeds,
                     cross_attention_states=hidden_states,
@@ -486,9 +483,13 @@ class BltLocalEncoder(nn.Module):
         return reduced_embeddings
 
 
-class BltLocalDecoder(nn.Module):
+class BltLocalDecoder(BltPreTrainedModel):
+    config_class = BltLocalDecoderConfig
+    base_model_prefix = "local_decoder"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltLocalDecoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.gradient_checkpointing = False
         self.config = config
         self.cross_attn_decoder = True
@@ -508,6 +509,8 @@ class BltLocalDecoder(nn.Module):
             self.cross_attn_layers.append(
                 BltCrossAttention(config=config, layer_idx=layer_idx, hidden_size=config.hidden_size)
             )
+
+        self.post_init()
 
     @check_model_inputs
     def forward(
@@ -542,8 +545,6 @@ class BltLocalDecoder(nn.Module):
 
         for i, layer in enumerate(self.layers):
             if i == 0 or self.config.cross_attn_all_layers:
-                # Remove cross_attention_states from kwargs if present to avoid multiple values error
-                kwargs.pop("cross_attention_states", None)
                 cross_attention_output, _ = self.cross_attn_layers[i](
                     hidden_states=hidden_states,
                     cross_attention_states=patch_embeds,
@@ -563,14 +564,28 @@ class BltLocalDecoder(nn.Module):
         return logits
 
 
-class BltGlobalTransformer(nn.Module):
+class BltGlobalTransformer(BltPreTrainedModel):
+    config_class = BltGlobalTransformerConfig
+    base_model_prefix = "global_transformer"
+    _no_split_modules = ["BltTransformerLayer"]
+
     def __init__(self, config: BltGlobalTransformerConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.layers = nn.ModuleList()
         for layer_idx in range(config.num_hidden_layers):
             self.layers.append(BltTransformerLayer(config, layer_idx))
         self.rotary_emb = BltRotaryEmbedding(config=config)
+
+        # Create token embedding projection (use nn.Identity() when no projection needed)
+        if getattr(config, "encoder_cross_output_size", None) is not None:
+            self.token_embedding_projection = nn.Linear(
+                config.encoder_cross_output_size, config.hidden_size, bias=False
+            )
+        else:
+            self.token_embedding_projection = nn.Identity()
+
+        self.post_init()
 
     def forward(
         self,
@@ -582,7 +597,7 @@ class BltGlobalTransformer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = input_embeds.shape
-        hidden_states = input_embeds
+        hidden_states = self.token_embedding_projection(input_embeds)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
@@ -601,28 +616,10 @@ class BltGlobalTransformer(nn.Module):
         return hidden_states
 
 
-@auto_docstring
-class BltPreTrainedModel(MllamaPreTrainedModel):
-    config: BltConfig
-    _can_record_outputs = {
-        "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
-        "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
-        "encoder_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_encoder"),
-        "global_attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="global_transformer"),
-    }
-
-    def _init_weights(self, module):
-        raise AttributeError("No need to inherit it!")
-
-
 class BltModel(BltPreTrainedModel):
     def __init__(self, config: BltConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
-        config.patcher_config._attn_implementation = config._attn_implementation
-        config.encoder_config._attn_implementation = config._attn_implementation
-        config.decoder_config._attn_implementation = config._attn_implementation
-        config.global_config._attn_implementation = config._attn_implementation
 
         self.config = config
         self.local_encoder = BltLocalEncoder(config.encoder_config)
@@ -948,6 +945,52 @@ class BltForCausalLM(MllamaForCausalLM):
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
+        cross_attention_mask: Optional[torch.LongTensor] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, CausalLMOutputWithPast]:
+        # Call parent forward but exclude cross_attention_states from model call
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cross_attention_mask=cross_attention_mask,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = [
