@@ -1347,26 +1347,6 @@ class Florence2VisionWindowAttention(nn.Module):
         self.proj = nn.Linear(self.dim, self.dim)
         self.is_causal = False
 
-    def window_partition(self, hidden_states: torch.Tensor):
-        """Split input tensor into non-overlapping windows"""
-        window_size = self.window_size
-        batch_size, height, width, embed_dim = hidden_states.shape
-        hidden_states = hidden_states.view(
-            batch_size, height // window_size, window_size, width // window_size, window_size, embed_dim
-        )
-        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, embed_dim)
-        return windows
-
-    def window_reverse(self, windows: torch.Tensor, height: int, width: int):
-        """Merge windows back into original spatial layout"""
-        window_size = self.window_size
-        embed_dim = windows.shape[-1]
-        hidden_states = windows.view(
-            -1, height // window_size, width // window_size, window_size, window_size, embed_dim
-        )
-        hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, embed_dim)
-        return hidden_states
-
     def forward(self, hidden_states: torch.Tensor):
         batch_size, height, width, embed_dim = hidden_states.shape
 
@@ -1378,7 +1358,15 @@ class Florence2VisionWindowAttention(nn.Module):
         _, padded_height, padded_width, _ = hidden_states.shape
 
         # Partition input into non-overlapping windows (for local spatial attention in DaViT)
-        windowed_hidden_states = self.window_partition(hidden_states)
+        hidden_states = hidden_states.view(
+            batch_size,
+            padded_height // self.window_size,
+            self.window_size,
+            padded_width // self.window_size,
+            self.window_size,
+            embed_dim,
+        )
+        windowed_hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous()
         windowed_hidden_states = windowed_hidden_states.view(-1, self.window_size * self.window_size, embed_dim)
 
         # Generate Q, K, V for each window
@@ -1406,8 +1394,16 @@ class Florence2VisionWindowAttention(nn.Module):
 
         # Merge windows back to original spatial layout
         windowed_hidden_states = windowed_hidden_states.view(-1, self.window_size, self.window_size, embed_dim)
-        hidden_states = self.window_reverse(windowed_hidden_states, padded_height, padded_width)
-
+        hidden_states = windowed_hidden_states.view(
+            -1,
+            padded_height // self.window_size,
+            padded_width // self.window_size,
+            self.window_size,
+            self.window_size,
+            embed_dim,
+        )
+        hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous()
+        hidden_states = hidden_states.view(-1, padded_height, padded_width, embed_dim)
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
         hidden_states = hidden_states.view(batch_size, height * width, embed_dim)
 
