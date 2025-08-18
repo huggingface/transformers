@@ -1,91 +1,78 @@
 #!/bin/bash
 
-
-# cd project
-# git fetch origin
-# git pull origin debug_too_long_no_output
-
-
-export CONTAINER_ID=$(docker run --memory=16g --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
-cat CONTAINER_ID.txt
-echo "" > gdb_output.txt
-
-docker cp pytest_prepare.sh $(cat CONTAINER_ID.txt):/pytest_prepare.sh
-docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh
-docker cp gdb_commands.txt $(cat CONTAINER_ID.txt):/gdb_commands.txt
-docker exec $(cat CONTAINER_ID.txt) ls -la /pytest_prepare.sh
-docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh
-docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest_prepare.sh
-docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh
-
-docker exec $(cat CONTAINER_ID.txt) /pytest_prepare.sh
+export PYTHONDONTWRITEBYTECODE=1 && export PYTHONUNBUFFERED=1 && export OMP_NUM_THREADS=1 && export TRANSFORMERS_IS_CI=true && export PYTEST_TIMEOUT=120 && export RUN_PIPELINE_TESTS=false && export RUN_FLAKY=true
+python3 utils/fetch_hub_objects_for_ci.py
 
 echo $(date "+%Y-%m-%d %H:%M:%S")
-timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh & PYTEST_PID=$!; echo $PYTEST_PID; echo $PYTEST_PID > PYTEST_PID.txt; cat PYTEST_PID.txt
+timeout 600  pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
 sleep 240
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
-# if no more timeout command --> kill fail --> error --> null --> won't enter
-# if still has timeout command process --> kill success
-if kill -0 $PYTEST_PID 2>/dev/null; then
-  echo "Process seems hung, launching GDB debugger..."
+if kill -0 $TIMEOUT_PID 2>/dev/null; then
+  echo "Process seems hung ..."
 
-  # Install gdb in the container if needed
-  # docker exec $(cat CONTAINER_ID.txt) bash -c "apt-get update && apt-get install -y gdb && apt-get remove --purge needrestart -y && echo 'deb http://deb.debian.org/debian bullseye main' >> /etc/apt/sources.list && apt-get update && apt-get install -y python3.9-dbg && sed -i '/bullseye/d' /etc/apt/sources.list"
+ # Find the pytest process ID
+ PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 8")
 
-  # Find the pytest process ID inside container
-  PYTEST_IN_CONTAINER_PID=$(docker exec $(cat CONTAINER_ID.txt) pgrep -f "python3 -m pytest -m not generate -n 8")
-  echo "PYTEST_IN_CONTAINER_PID 1"
-  echo $PYTEST_IN_CONTAINER_PID
-  echo $PYTEST_IN_CONTAINER_PID > PYTEST_IN_CONTAINER_PID.txt
-  echo "PYTEST_IN_CONTAINER_PID 2"
-  cat PYTEST_IN_CONTAINER_PID.txt
-  echo "PYTEST_IN_CONTAINER_PID 3"
-  echo $(cat PYTEST_IN_CONTAINER_PID.txt)
+ echo "PYTEST_PID 1"
+ echo $PYTEST_PID
+ echo $PYTEST_PID > PYTEST_PID.txt
+ echo "PYTEST_PID 2"
+ cat PYTEST_PID.txt
+ echo "PYTEST_PID 3"
+ echo $(cat PYTEST_PID.txt)
 
-  docker cp PYTEST_IN_CONTAINER_PID.txt $(cat CONTAINER_ID.txt):/PYTEST_IN_CONTAINER_PID.txt
-  echo "PYTEST_IN_CONTAINER_PID 4"
-  docker exec --privileged $(cat CONTAINER_ID.txt) cat PYTEST_IN_CONTAINER_PID.txt
+ # Monitor with timeout
+ MONITOR_START=$(date +%s)
+ MONITOR_TIMEOUT=600  # 10 minutes max
 
-  # Attach GDB to the hung process
-  docker exec --privileged -it $(cat CONTAINER_ID.txt) gdb -batch -x gdb_commands.txt -p $(cat PYTEST_IN_CONTAINER_PID.txt) > gdb_output.txt 2>&1
+ while true; do
+   # Check monitoring timeout
+   CURRENT_TIME=$(date +%s)
+   if [ $((CURRENT_TIME - MONITOR_START)) -gt $MONITOR_TIMEOUT ]; then
+     echo "Monitoring timeout reached, exiting"
+     break
+   fi
 
-  exit 1
+   # Find the pytest process ID
+   PYTEST_PID=$(pgrep -f "python3 -m pytest -m not generate -n 8")
 
-#  # Kill the timeout process
-#  echo "Killing timeout process PID: $PYTEST_PID"
-#  kill $PYTEST_PID
-#  echo "Timeout process killed"
-#
-#  sleep 3
-#
-#  # Optional: Verify it's gone
-#  if kill -0 $PYTEST_PID 2>/dev/null; then
-#    echo "Process still running, force killing..."
-#    kill -9 $PYTEST_PID
-#  else
-#    echo "Process successfully terminated"
-#  fi
-#
-#  sleep 3
-#
-#  # Optional: Verify it's gone
-#  if kill -0 $PYTEST_PID 2>/dev/null; then
-#    echo "Process still running, force killing..."
-#    kill -9 $PYTEST_PID
-#  else
-#    echo "Process successfully terminated"
-#  fi
+   if [ -n "$PYTEST_PID" ]; then
+     echo "=== $(date) ==="
+     echo "PID: $PYTEST_PID"
 
-  # source /usr/share/gdb/auto-load/usr/bin/python3.9-gdb.py
+     # Add error handling for each command
+     if [ -f "/proc/$PYTEST_PID/status" ]; then
+       cat /proc/$PYTEST_PID/status | grep -E "State|VmRSS|Threads|voluntary|nonvoluntary"
+     else
+       echo "Process $PYTEST_PID no longer exists"
+       break
+     fi
+
+     CPU=$(ps -p $PYTEST_PID -o %cpu --no-headers 2>/dev/null)
+     echo "CPU: ${CPU:-N/A}%"
+
+     if [ -d "/proc/$PYTEST_PID/fd" ]; then
+       echo "FDs: $(ls /proc/$PYTEST_PID/fd/ 2>/dev/null | wc -l)"
+     fi
+
+     # Try to get kernel stack if permissions allow
+     if [ -r "/proc/$PYTEST_PID/stack" ]; then
+       echo "Kernel stack:"
+       cat /proc/$PYTEST_PID/stack
+     fi
+   else
+     echo "No pytest process found"
+     break
+   fi
+   sleep 30
+ done
+
+ # Clean up
+ echo "Killing timeout process..."
+ kill $TIMEOUT_PID 2>/dev/null || true
+ exit 1
 fi
-
-
-# docker exec -it $(cat CONTAINER_ID.txt) bash
-# pgrep -f "python3 -m pytest -m not generate -n 8"
-# ps aux --sort pmem
-
-

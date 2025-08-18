@@ -24,9 +24,6 @@ import yaml
 
 
 COMMON_ENV_VARIABLES = {
-    "UV_PYTHON": "/opt/circleci/.pyenv/versions/3.13.0/bin/python3",
-    "NEEDRESTART_SUSPEND": "1",
-    "PYTHONDONTWRITEBYTECODE": "1",
     "PYTHONUNBUFFERED": 1,
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
@@ -115,7 +112,8 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
-        # self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
+        self.install_steps.append("apt-get install -y gdb python3-dbg")
+        self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
 
         if self.pytest_options is None:
             self.pytest_options = {}
@@ -140,9 +138,7 @@ class CircleCIJob:
         env.update(self.additional_env)
 
         job = {
-            "machine": {
-                "image": "ubuntu-2204:current"
-            },
+            "docker": self.docker_image,
             "environment": env,
         }
         if self.resource_class is not None:
@@ -163,28 +159,51 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
-            {"run": {"name": "", "command": "curl -fsSL https://get.docker.com -o get-docker.sh"}},
-            {"run": {"name": "", "command": "sudo sh ./get-docker.sh --dry-run"}},
-            {"run": {"name": "", "command": "docker image pull huggingface/transformers-torch-light:dev"}},
-
-
-            # {"run": {"name": "", "command": "export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt"}},
-            # {"run": {"name": "", "command": "cat CONTAINER_ID.txt"}},
-            # {"run": {"name": "", "command": "docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh"}},
-            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh"}},
-            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) cat /pytest.sh"}},
-            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh"}},
-            # {"run": {"name": "", "command": "docker exec $(cat CONTAINER_ID.txt) /pytest.sh"}},
-            # {"run": {"name": "", "command": "docker stop $(cat CONTAINER_ID.txt)"}},
-
-            {"run": {"name": "", "command": "chmod +x run.sh"}},
-            {"run": {"name": "", "command": "./run.sh"}},
-
+            {"run": "apt-get update && apt-get install -y curl"},
+            {"run": " && ".join(self.install_steps)},
+            {"run": {"name": "Download NLTK files", "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """} if "example" in self.name else "echo Skipping"},
+            {"run": {
+                    "name": "Show installed libraries and their size",
+                    "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}
+            },
+            {"run": {
+                "name": "Show installed libraries and their versions",
+                "command": """pip list --format=freeze | tee installed.txt || true"""}
+            },
+            {"run": {
+                "name": "Show biggest libraries",
+                "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
+            },
+            {"run": "./run.sh"},
+            # {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
+            # {"run": {"name": "Get files to test", "command":f'curl -L -o {self.job_name}_test_list.txt <<pipeline.parameters.{self.job_name}_test_list>> --header "Circle-Token: $CIRCLE_TOKEN"' if self.name != "pr_documentation_tests" else 'echo "Skipped"'}},
+            #             {"run": {"name": "Split tests across parallel nodes: show current parallel tests",
+            #         "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
+            #         }
+            # },
+            # {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
+            # {"run": {
+            #     "name": "Run tests",
+            #     "command": f"python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {' '.join(pytest_flags)} tests/models/imagegpt/test_modeling_imagegpt.py tests/models/maskformer/test_modeling_maskformer.py tests/models/unispeech/test_modeling_unispeech.py tests/models/rt_detr_v2/test_modeling_rt_detr_v2.py tests/models/mask2former/test_modeling_mask2former.py tests/models/aimv2/test_modeling_aimv2.py tests/models/mm_grounding_dino/test_modeling_mm_grounding_dino.py tests/models/encodec/test_modeling_encodec.py tests/models/blip_2/test_modeling_blip_2.py tests/models/segformer/test_modeling_segformer.py tests/models/longt5/test_modeling_longt5.py tests/models/fnet/test_modeling_fnet.py tests/models/pix2struct/test_modeling_pix2struct.py tests/models/dpt/test_modeling_dpt_hybrid.py tests/models/mobilevitv2/test_modeling_mobilevitv2.py tests/models/bridgetower/test_modeling_bridgetower.py tests/models/funnel/test_modeling_funnel.py tests/models/esm/test_modeling_esmfold.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/vits/test_modeling_vits.py tests/models/vitpose/test_modeling_vitpose.py tests/models/mixtral/test_modeling_mixtral.py tests/models/autoformer/test_modeling_autoformer.py tests/models/hgnet_v2/test_modeling_hgnet_v2.py tests/models/llava_next_video/test_modeling_llava_next_video.py tests/models/chameleon/test_modeling_chameleon.py tests/models/vit_mae/test_modeling_vit_mae.py tests/models/bit/test_modeling_bit.py tests/models/altclip/test_modeling_altclip.py tests/models/dac/test_modeling_dac.py tests/models/llava_next/test_modeling_llava_next.py tests/models/textnet/test_modeling_textnet.py tests/models/bros/test_modeling_bros.py tests/models/mllama/test_modeling_mllama.py tests/models/qwen2_5_omni/test_modeling_qwen2_5_omni.py tests/models/univnet/test_modeling_univnet.py tests/models/layoutlm/test_modeling_layoutlm.py tests/models/vivit/test_modeling_vivit.py tests/models/emu3/test_modeling_emu3.py tests/models/xglm/test_modeling_xglm.py tests/models/dpt/test_modeling_dpt_auto_backbone.py tests/models/fuyu/test_modeling_fuyu.py tests/models/ctrl/test_modeling_ctrl.py tests/models/gemma2/test_modeling_gemma2.py tests/models/gemma/test_modeling_gemma.py tests/models/phi3/test_modeling_phi3.py tests/models/falcon/test_modeling_falcon.py tests/models/jetmoe/test_modeling_jetmoe.py tests/models/phimoe/test_modeling_phimoe.py"}
+            #     # "command": f"(python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt)) 2>&1 | tee tests_output.txt"}
+            #     # "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/vit | tee tests_output.txt)"}
+            # },
+            # {"run": {"name": "mkdir mem_info", "command": "mkdir mem_info"}},
+            # {"run": {"name": "ps aux --sort pmem 1", "command": "ps aux --sort pmem > mem_info/mem_info_1.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 2", "command": "ps aux --sort pmem > mem_info/mem_info_2.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 3", "command": "ps aux --sort pmem > mem_info/mem_info_3.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 4", "command": "ps aux --sort pmem > mem_info/mem_info_4.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 5", "command": "ps aux --sort pmem > mem_info/mem_info_5.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 6", "command": "ps aux --sort pmem > mem_info/mem_info_6.txt && sleep 10"}},
+            # {"run": {"name": "ps aux --sort pmem 7", "command": "ps aux --sort pmem > mem_info/mem_info_7.txt && sleep 10"}},
+            # {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
+            # {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
+            # {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
             # {"store_artifacts": {"path": "mem_info"}},
-            {"store_artifacts": {"path": "gdb_output.txt"}},
+            {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "tests_output.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
@@ -348,12 +367,12 @@ def create_circleci_config(folder=None):
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
-    # else:
-    #     print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
-    #     # Add a job waiting all the test jobs and aggregate their test summary files at the end
-    #     collection_job = EmptyJob()
-    #     collection_job.job_name = "collection_job"
-    #     jobs = [collection_job] + jobs
+    else:
+        print("Full list of job name inputs", {j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs})
+        # Add a job waiting all the test jobs and aggregate their test summary files at the end
+        collection_job = EmptyJob()
+        collection_job.job_name = "collection_job"
+        jobs = [collection_job] + jobs
 
     config = {
         "version": "2.1",
@@ -389,33 +408,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     create_circleci_config(args.fetcher_folder)
-
-
-"""
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh ./get-docker.sh --dry-run
-docker image pull huggingface/transformers-torch-light:dev
-
-cd project
-git fetch origin
-git pull origin debug_too_long_no_output
-
-# docker run --privileged -it huggingface/transformers-torch-light:dev bash
-
-export CONTAINER_ID=$(docker run --privileged -d huggingface/transformers-torch-light:dev sleep 3600) && echo $CONTAINER_ID > CONTAINER_ID.txt
-cat CONTAINER_ID.txt
-docker cp pytest.sh $(cat CONTAINER_ID.txt):/pytest.sh
-docker exec $(cat CONTAINER_ID.txt) ls -la /pytest.sh
-docker exec $(cat CONTAINER_ID.txt) cat /pytest.sh
-docker exec $(cat CONTAINER_ID.txt) chmod +x /pytest.sh
-docker exec $(cat CONTAINER_ID.txt) /pytest.sh
-docker stop $(cat CONTAINER_ID.txt)
-
-
-#### 
-
-timeout 600 docker exec $(cat CONTAINER_ID.txt) /pytest.sh &
-PYTEST_PID=$!
-echo $PYTEST_PID
-
-"""
