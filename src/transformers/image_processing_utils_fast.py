@@ -211,10 +211,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     valid_kwargs = DefaultFastImageProcessorKwargs
     unused_kwargs = None
 
-    def __init__(
-        self,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
         super().__init__(**kwargs)
         kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)
@@ -678,7 +675,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
-        To be overriden by subclasses when image-like inputs other than images should be processed.
+        To be overridden by subclasses when image-like inputs other than images should be processed.
         It can be used for segmentation maps, depth maps, etc.
         """
         # Prepare input images

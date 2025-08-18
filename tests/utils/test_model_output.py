@@ -17,6 +17,8 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+import pytest
+
 from transformers import AlbertForMaskedLM
 from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput, is_torch_available
@@ -160,6 +162,7 @@ class ModelOutputTester(unittest.TestCase):
     # TODO: @ydshieh
     @unittest.skip(reason="CPU OOM")
     @require_torch
+    @pytest.mark.torch_export_test
     def test_export_serialization(self):
         if not is_torch_greater_or_equal_than_2_2:
             self.skipTest(reason="Export serialization requires torch >= 2.2.0")
