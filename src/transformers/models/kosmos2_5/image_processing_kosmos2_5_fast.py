@@ -15,7 +15,7 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -62,7 +62,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
 
 
 class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    patch_size: Optional[Dict[str, int]]
+    patch_size: Optional[dict[str, int]]
     max_patches: Optional[int]
 
 
@@ -233,15 +233,15 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
         # Q: should we have this?
-        if kwargs.get("data_format", None) is not None:
+        if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
         width, height, rows, cols, attention_masks = [], [], [], [], []

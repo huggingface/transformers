@@ -15,7 +15,7 @@
 """Image processor class for Kosmos2_5."""
 
 import math
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -97,7 +97,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Dict[str, int] = None,
+        patch_size: dict[str, int] = None,
         max_patches: int = 4096,
         **kwargs,
     ) -> None:
@@ -244,7 +244,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -293,7 +293,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         patch_size = patch_size if patch_size is not None else self.patch_size
         max_patches = max_patches if max_patches is not None else self.max_patches
 
-        if kwargs.get("data_format", None) is not None:
+        if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
         images = make_list_of_images(images)

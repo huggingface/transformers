@@ -16,7 +16,7 @@
 Processor class for Kosmos2_5.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -80,7 +80,7 @@ class Kosmos2_5Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, List[TextInput]] = None,
+        text: Union[TextInput, list[TextInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
