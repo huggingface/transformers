@@ -68,6 +68,8 @@ class MinistralConfig(PretrainedConfig):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     ```python
     >>> from transformers import MinistralModel, MinistralConfig
