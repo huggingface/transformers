@@ -331,19 +331,16 @@ class Ernie4_5_MoeMLP(nn.Module):
         return down_proj
 
 
-# TODO: conversion to split these weights into two separate moes - then reuse the ernie 4.5 moe definition
-class Ernie4_5_MoEStatics(nn.Module):
+# Copy ernie 4.5 moe
+class Ernie4_5_VLMoeStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
         - Bias for the gating
         - Additionally, usage per expert in the original codebase
     """
 
-    def __init__(self, config):
+    def __init__(self, num_experts_groups, num_experts):
         super().__init__()
-
-        num_experts_groups = 1
-        num_experts = config.moe_num_experts[0]  # only diff
 
         self.e_score_correction_bias = nn.Parameter(
             torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
@@ -359,18 +356,21 @@ class Ernie4_5_MoEStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
+# Copy ernie 4.5 moe (except forward + del shared experts)
 class Ernie4_5_VLSparseMoeBlock(nn.Module):
-    def __init__(self, config, intermediate_size):
+    def __init__(self, config, num_experts, intermediate_size):
         super().__init__()
-        self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
+        self.num_experts = num_experts
         self.top_k = config.moe_k
 
         # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoEStatics(config)
+        self.moe_statics = Ernie4_5_VLMoeStatics(num_experts_groups=1, num_experts=self.num_experts)
 
         # gating
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
-        self.experts = nn.ModuleList([Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList(
+            [Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
+        )
         #self.norm_min = config.moe_norm_min
         self.norm_min = 1e-12
 
@@ -423,7 +423,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
         # moe results are changed to a flattened shape to ease the modality isolated assigning of results
-        return final_hidden_states.flatten(), router_logits.flatten()  # only diff
+        return final_hidden_states.flatten(), router_logits.flatten()
 
 
 class Ernie4_5_VLMoeBlock(nn.Module):
@@ -439,10 +439,17 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
 
-        self.text_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
-        self.vision_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
+        self.text_moe = Ernie4_5_VLSparseMoeBlock(
+            config,
+            num_experts=config.moe_num_experts[0],
+            intermediate_size=config.moe_intermediate_size[0]
+        )
+        self.vision_moe = Ernie4_5_VLSparseMoeBlock(
+            config,
+            num_experts=config.moe_num_experts[1],
+            intermediate_size=config.moe_intermediate_size[1]
+        )
 
-        # (optional) shared experts for all forwards
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
             self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
@@ -470,11 +477,11 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             token_type_ids_router = token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
             token_type_ids_states = token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
-            # extract and separate tokens into their modalities
+            # Extract and separate tokens into their modalities
             text_hidden_states = hidden_states[~token_type_ids_states].reshape(batch_size, -1, hidden_dim)
             vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
 
-            # run moe on each modality and assign their results to the original token positions
+            # Run moe on each modality and assign their results to the original token positions
             final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(text_hidden_states)
             final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(vision_hidden_states)
         else:
@@ -1537,7 +1544,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
         if self.config.use_flash_attention:
             attention_mask = None
         else:
-            attention_mask = kwargs.get("attention_mask", None)
+            attention_mask = kwargs.get("attention_mask")
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
