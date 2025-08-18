@@ -2202,7 +2202,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
             past_key_values = (
-                EncoderDecoderCache(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
+                EncoderDecoderCache(DynamicCache(), DynamicCache())
                 if encoder_hidden_states is not None
                 else DynamicCache()
             )

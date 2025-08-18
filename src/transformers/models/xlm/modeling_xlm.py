@@ -828,7 +828,7 @@ class XLMModel(XLMPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if cache is None:
-            cache = EncoderDecoderCache(self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache())
+            cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         if isinstance(cache, tuple):
             cache = EncoderDecoderCache.from_legacy_cache(cache)

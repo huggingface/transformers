@@ -469,9 +469,7 @@ class ErnieEncoder(nn.Module):
                 use_cache = False
 
         if use_cache and self.config.is_decoder and past_key_values is None:
-            past_key_values = EncoderDecoderCache(
-                self_attention_cache=DynamicCache(), cross_attention_cache=DynamicCache()
-            )
+            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         if use_cache and self.config.is_decoder and isinstance(past_key_values, tuple):
             logger.warning_once(
