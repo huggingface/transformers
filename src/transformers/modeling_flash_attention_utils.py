@@ -389,7 +389,8 @@ def _flash_attention_forward(
         flash_kwargs["deterministic"] = det
     if softcap is not None:
         flash_kwargs["softcap"] = softcap
-
+    if "s_aux" in kwargs:
+        flash_kwargs["s_aux"] = kwargs.get("s_aux")
     query_states, key_states, value_states = fa_peft_integration_check(
         query_states, key_states, value_states, target_dtype
     )
