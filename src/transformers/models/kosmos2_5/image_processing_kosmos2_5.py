@@ -97,7 +97,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: dict[str, int] = None,
+        patch_size: Optional[dict[str, int]] = None,
         max_patches: int = 4096,
         **kwargs,
     ) -> None:
@@ -241,7 +241,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
         patch_size: Optional[dict[str, int]] = None,
