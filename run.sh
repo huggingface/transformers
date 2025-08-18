@@ -8,7 +8,7 @@ echo $(date "+%Y-%m-%d %H:%M:%S")
 timeout 600  ./pytest.sh & TIMEOUT_PID=$!; echo $TIMEOUT_PID; echo $TIMEOUT_PID > TIMEOUT_PID.txt; cat TIMEOUT_PID.txt
 echo $(date "+%Y-%m-%d %H:%M:%S")
 echo "sleep start"
-sleep 80
+sleep 5
 echo "sleep done"
 echo $(date "+%Y-%m-%d %H:%M:%S")
 
