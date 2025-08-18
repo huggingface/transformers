@@ -584,7 +584,7 @@ def main(*args):
     tokenizer = GemmaTokenizerFast(
         _TOKENIZER_PATH.value,
         add_bos_token=True,
-        add_eos_token=True if variant == _VARIANT_EMBEDDINGGEMMA else False,
+        add_eos_token=variant == _VARIANT_EMBEDDINGGEMMA,
         padding_side="right" if variant == _VARIANT_EMBEDDINGGEMMA else "left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_144
