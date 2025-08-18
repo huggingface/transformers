@@ -365,7 +365,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """
-    PrecisionConfig, FlexCtx, InFlexData= (
+    PrecisionConfig, FlexCtx, InFlexData = (
         triton_kernels_hub.matmul_ogs.PrecisionConfig,
         triton_kernels_hub.matmul_ogs.FlexCtx,
         triton_kernels_hub.matmul_ogs.InFlexData,

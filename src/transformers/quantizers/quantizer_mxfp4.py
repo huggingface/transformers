@@ -182,13 +182,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             from kernels import get_kernel
 
             triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-
-            PrecisionConfig, FlexCtx, InFlexData, downcast_to_mxfp = (
-                triton_kernels_hub.matmul_ogs.PrecisionConfig,
-                triton_kernels_hub.matmul_ogs.FlexCtx,
-                triton_kernels_hub.matmul_ogs.InFlexData,
-                triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp,
-            )
+            downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
 
             module, _ = get_module_from_name(model, param_name)
             with torch.device(target_device):
