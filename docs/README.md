@@ -24,7 +24,7 @@ pip install -e ".[dev]"
 ```
 
 > [!NOTE]
-> This command might fail for some OS due to missing dependencies for those OS. In that case, check `CONTRIBUTING.md` for workarounds.
+> This command might fail for some OS that are missing dependencies. Check step 4 in [Create a Pull Request](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request) to workaround it.
 
 Then you need to install our special tool that builds the documentation:
 
