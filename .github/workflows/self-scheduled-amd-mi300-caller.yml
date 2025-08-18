@@ -5,10 +5,10 @@ name: Self-hosted runner scale set (AMD mi300 scheduled CI caller)
 #              2gpu scale set: amd-mi300-ci-2gpu
 
 on:
-  workflow_run:
-    workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
-    branches: ["main"]
-    types: [completed]
+  #workflow_run:
+  #  workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
+  #  branches: ["main"]
+  #  types: [completed]
   push:
     branches:
       - run_amd_scheduled_ci_caller*
