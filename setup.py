@@ -74,6 +74,7 @@ from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
+
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
@@ -214,10 +215,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {
-    b: a
-    for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)
-}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -249,11 +247,7 @@ class DepsTableUpdateCommand(Command):
     description = "build runtime dependency table"
     user_options = [
         # format: (long option, short option, description).
-        (
-            "dep-table-update",
-            None,
-            "updates src/transformers/dependency_versions_table.py",
-        ),
+        ("dep-table-update", None, "updates src/transformers/dependency_versions_table.py"),
     ]
 
     def initialize_options(self):
@@ -281,20 +275,10 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list(
-    "fugashi",
-    "ipadic",
-    "unidic_lite",
-    "unidic",
-    "sudachipy",
-    "sudachidict_core",
-    "rhoknp",
-)
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list(
-    "tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp"
-)
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 extras["tf-cpu"] = deps_list(
     "keras",
     "tensorflow-cpu",
@@ -329,13 +313,9 @@ extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = (
-    extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
-)
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
 
-extras["serving"] = (
-    deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
-)
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
@@ -357,6 +337,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
+extras["chat_template"] = deps_list("jinja2")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -390,13 +371,9 @@ extras["testing"] = (
     + extras["mistral-common"]
 )
 
-extras["deepspeed-testing"] = (
-    extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-)
+extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["ruff"] = deps_list("ruff")
-extras["quality"] = deps_list(
-    "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas"
-)
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "pandas")
 
 extras["all"] = (
     extras["tf"]
@@ -414,6 +391,7 @@ extras["all"] = (
     + extras["video"]
     + extras["num2words"]
     + extras["mistral-common"]
+    + extras["chat_template"]
 )
 
 
@@ -448,12 +426,7 @@ extras["dev-tensorflow"] = (
     + extras["tf-speech"]
 )
 extras["dev"] = (
-    extras["all"]
-    + extras["testing"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
+    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
@@ -474,9 +447,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list(
-    "opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk"
-)
+extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -506,9 +477,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     include_package_data=True,
-    package_data={
-        "": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]
-    },
+    package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={
