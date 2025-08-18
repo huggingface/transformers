@@ -1266,7 +1266,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             assistant_model=None,
             batch_size=batch_size,
             max_cache_length=max_cache_length,
-            device=input_ids_length.device,
         )
 
         # 7. Prepare `input_ids` which will be used for auto-regressive generation
