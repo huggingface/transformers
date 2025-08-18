@@ -1516,7 +1516,7 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation.
+    Florence-2 is a vision model for captioning, detection, and segmentation.
     """
 )
 class Florence2Model(LlavaModel):
@@ -1640,7 +1640,7 @@ class Florence2Model(LlavaModel):
 
 @auto_docstring(
     custom_intro="""
-    Florence-2 is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation.
+    Florence-2 is a vision model for captioning, detection, and segmentation.
     """
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
