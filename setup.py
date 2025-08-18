@@ -337,6 +337,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
+extras["chat_template"] = deps_list("jinja2")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -390,6 +391,7 @@ extras["all"] = (
     + extras["video"]
     + extras["num2words"]
     + extras["mistral-common"]
+    + extras["chat_template"]
 )
 
 
