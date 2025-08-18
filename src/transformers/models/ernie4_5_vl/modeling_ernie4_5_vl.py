@@ -342,49 +342,91 @@ class Ernie4_5_MoEStatics(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        num_experts_groups = 2  # text and vision
-        num_experts = config.moe_num_experts[0]  # both have the same number
+        num_experts_groups = 1
+        num_experts = config.moe_num_experts[0]  # only diff
 
         self.e_score_correction_bias = nn.Parameter(
-            torch.zeros(size=(num_experts_groups, num_experts,), dtype=torch.float32),
+            torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
             requires_grad=False,
         )
 
-    def forward(self, hidden_states, is_multimodal=False):
+    def forward(self, hidden_states):
         # NOTE: This is a workaround to enable TP with a module that only has parameters
         #
         # Otherwise, it stays as `DTensor` when called in the "super" forward
         #   1. All other tensors are local (`torch.Tensor`)
         #   2. Isolate does not work on `nn.Module` which only has parameters
-        return hidden_states + self.e_score_correction_bias[int(is_multimodal)]
+        return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_VLGate(nn.Module):
-    def __init__(self, hidden_size, num_experts):
+class Ernie4_5_VLSparseMoeBlock(nn.Module):
+    def __init__(self, config, intermediate_size):
         super().__init__()
-        # moe text gate weights
-        self.weight = nn.Parameter(torch.ones(size=(hidden_size, num_experts,), dtype=torch.float32))
-        # moe vision gate weights
-        self.weight_1 = nn.Parameter(torch.ones(size=(hidden_size, num_experts,), dtype=torch.float32))
+        self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
+        self.top_k = config.moe_k
+
+        # correction bias (yes it seems to be a typo with statics <> statistics)
+        self.moe_statics = Ernie4_5_MoEStatics(config)
+
+        # gating
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
+        self.experts = nn.ModuleList([Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)])
+        #self.norm_min = config.moe_norm_min
+        self.norm_min = 1e-12
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        is_multimodal=True,
-    ) -> torch.Tensor:
-        device = hidden_states.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            weights = self.weight if not is_multimodal else self.weight_1
+            # router_logits: (batch * sequence_length, n_experts)
+            router_logits = self.gate(hidden_states.float())
 
-            logits = F.linear(
-                hidden_states.float(),
-                weights.T.to(device).float(),
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        return logits
+            routing_weights = routing_weights.to(hidden_states.dtype)
+
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+
+        # Loop over all available experts in the model and perform the computation on each expert
+        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hitted:
+            expert_layer = self.experts[expert_idx]
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+
+        # moe results are changed to a flattened shape to ease the modality isolated assigning of results
+        return final_hidden_states.flatten(), router_logits.flatten()  # only diff
 
 
-class Ernie4_5_MoESparseMoeBlock(nn.Module):
+class Ernie4_5_VLMoeBlock(nn.Module):
     """
     Similar to `Ernie4_5_Moe` where we have modality isolated experts:
         - A set of text experts that are only run on text tokens
@@ -396,20 +438,9 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
-        self.top_k = config.moe_k
 
-        # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoEStatics(config)
-
-        # gating
-        self.gate = Ernie4_5_VLGate(hidden_size=config.hidden_size, num_experts=config.moe_num_experts[0])
-        self.experts = nn.ModuleList(
-            # first half are text experts, second half are vision experts
-            [Ernie4_5_MoeMLP(config, config.moe_intermediate_size[int(i >= config.moe_num_experts[0])]) for i in range(sum(config.moe_num_experts))]
-        )
-        # TODO: set into config
-        #self.norm_min = config.moe_norm_min
-        self.norm_min = 1e-12
+        self.text_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
+        self.vision_moe = Ernie4_5_VLSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
 
         # (optional) shared experts for all forwards
         self.shared_experts = None
@@ -444,19 +475,10 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             vision_hidden_states = hidden_states[token_type_ids_states].reshape(batch_size, -1, hidden_dim)
 
             # run moe on each modality and assign their results to the original token positions
-            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.forward_moe(
-                hidden_states=text_hidden_states,
-                is_multimodal=False,
-            )
-            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.forward_moe(
-                hidden_states=vision_hidden_states,
-                is_multimodal=True,
-            )
+            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(text_hidden_states)
+            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(vision_hidden_states)
         else:
-            final_hidden_states, router_logits = self.forward_moe(
-                hidden_states=hidden_states,
-                is_multimodal=False,
-            )
+            final_hidden_states, router_logits = self.text_moe(hidden_states)
             final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
             router_logits = router_logits.reshape(-1, self.num_experts)
 
@@ -465,59 +487,6 @@ class Ernie4_5_MoESparseMoeBlock(nn.Module):
             final_hidden_states = final_hidden_states + shared_output
 
         return final_hidden_states, None, 1, router_logits
-
-    def forward_moe(
-        self,
-        hidden_states: torch.Tensor,
-        is_multimodal: bool = False,  # key difference to other moe approaches
-    ):
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            # router_logits: (batch * sequence_length, n_experts)
-            router_logits = self.gate(hidden_states.float(), is_multimodal=is_multimodal)
-
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights, is_multimodal=is_multimodal), self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
-            routing_weights = routing_weights / torch.clamp(
-                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-            )
-            routing_weights = routing_weights.to(hidden_states.dtype)
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        experts = self.experts[ : self.num_experts] if not is_multimodal else self.experts[self.num_experts : ]
-        for expert_idx in expert_hit:
-            expert_layer = experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-
-        # moe results are changed to a flattened shape to ease the modality isolated assigning of results
-        return final_hidden_states.flatten(), router_logits.flatten()
 
 
 class Ernie4_5_DecoderLayer(nn.Module):
@@ -534,7 +503,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
             and layer_idx >= moe_layer_start_index
             and layer_idx <= moe_layer_end_index
         ):
-            self.mlp = Ernie4_5_MoESparseMoeBlock(config)
+            self.mlp = Ernie4_5_VLMoeBlock(config)
         else:
             self.mlp = Ernie4_5_MoeMLP(config)
 
@@ -595,7 +564,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        if isinstance(self.mlp, Ernie4_5_MoESparseMoeBlock):
+        if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
             hidden_states, _, router_loss, gate_logits = self.mlp(
                 hidden_states, token_type_ids
             )
