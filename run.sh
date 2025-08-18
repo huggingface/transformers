@@ -89,32 +89,81 @@ if kill -0 $TIMEOUT_PID 2>/dev/null; then
 
   # Your existing thread details section, but enhanced:
 echo "Socket details by file descriptor:"
-if [ -d "/proc/$PYTEST_PID/fd" ]; then
-  for fd in /proc/$PYTEST_PID/fd/*; do
-    if [ -L "$fd" ] && readlink "$fd" | grep -q socket; then
-      FD_NUM=$(basename "$fd")
-      SOCKET_LINK=$(readlink "$fd")
-      SOCKET_INODE=$(echo "$SOCKET_LINK" | sed 's/socket:\[\([0-9]*\)\]/\1/')
+echo "Socket and Thread Analysis:"
+echo ""
 
-      echo ""
-      echo "FD$FD_NUM -> $SOCKET_LINK"
+# Get all CLOSE_WAIT connections for this PID
+ss -anp | grep "$PYTEST_PID" | grep CLOSE-WAIT | while read line; do
+  # Extract connection details
+  LOCAL_PORT=$(echo "$line" | awk '{print $4}' | cut -d: -f2)
+  REMOTE_PORT=$(echo "$line" | awk '{print $5}' | cut -d: -f2)
+  FD_NUM=$(echo "$line" | grep -o 'fd=[0-9]*' | cut -d= -f2)
 
-      # Try multiple approaches to find socket info
-      echo "  Searching for inode $SOCKET_INODE..."
+  # Get socket ID
+  SOCKET_ID=""
+  if [ -n "$FD_NUM" ] && [ -L "/proc/$PYTEST_PID/fd/$FD_NUM" ]; then
+    SOCKET_ID=$(readlink "/proc/$PYTEST_PID/fd/$FD_NUM" 2>/dev/null | sed 's/socket:\[\([0-9]*\)\]/\1/')
+  fi
 
-      # Method 1: Direct ss search
-      ss -anp | grep "$SOCKET_INODE" | head -1 | sed 's/^/    ss: /'
+  echo "=== Connection Analysis ==="
+  echo "Local Port: $LOCAL_PORT, Remote Port: $REMOTE_PORT"
+  echo "FD: $FD_NUM, Socket ID: $SOCKET_ID"
+  echo "Full line: $line"
+  echo ""
 
-      # Method 2: Direct netstat search
-      netstat -anp | grep "$SOCKET_INODE" | head -1 | sed 's/^/    netstat: /'
+  # Try to find if remote port is still active anywhere
+  echo "Checking for remote port $REMOTE_PORT usage:"
 
-      # Method 3: Check /proc/net directly
-      grep "$SOCKET_INODE" /proc/net/tcp* 2>/dev/null | head -1 | sed 's/^/    proc: /'
+  # Check if remote port exists as a listening port
+  ss -tln | grep ":$REMOTE_PORT " 2>/dev/null | sed 's/^/  Listening: /' || echo "  No listener on port $REMOTE_PORT"
 
-      # Method 4: Show any connection with this PID and FD
-      ss -anp | grep "pid=$PYTEST_PID,fd=$FD_NUM" | head -1 | sed 's/^/    ss-pid: /'
-      netstat -anp | grep "$PYTEST_PID/python3" | head -1 | sed 's/^/    netstat-pid: /'
-    fi
+  # Check if any process is using remote port
+  ss -anp | grep ":$REMOTE_PORT" 2>/dev/null | grep -v "$line" | sed 's/^/  Other usage: /' || echo "  No other usage of port $REMOTE_PORT"
+
+  # Check if any thread is specifically associated with this port
+  lsof -i :$REMOTE_PORT 2>/dev/null | sed 's/^/  lsof: /' || echo "  lsof: No info for port $REMOTE_PORT"
+
+  echo ""
+
+  # Try to find which thread might be handling this FD
+  echo "Thread analysis for FD $FD_NUM:"
+  if [ -d "/proc/$PYTEST_PID/task" ]; then
+    for tid in /proc/$PYTEST_PID/task/*; do
+      TID_NUM=$(basename "$tid")
+      THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
+      THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
+
+      # Try to see if this thread is doing anything with this FD
+      THREAD_INFO="TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE)"
+
+      # Check if thread is blocked on socket operations
+      if [ -r "$tid/stack" ]; then
+        STACK_TOP=$(cat "$tid/stack" 2>/dev/null | head -1)
+        if echo "$STACK_TOP" | grep -q -E "(socket|tcp|net|select|poll)" 2>/dev/null; then
+          THREAD_INFO="$THREAD_INFO [Network I/O: $STACK_TOP]"
+        fi
+      fi
+
+      echo "  $THREAD_INFO"
+    done
+  fi
+
+  echo ""
+  echo "----------------------------------------"
+  echo ""
+done
+
+echo "Summary of all active connections for PID $PYTEST_PID:"
+ss -anp | grep "$PYTEST_PID" 2>/dev/null | sed 's/^/  /'
+
+echo ""
+echo "Summary of all threads:"
+if [ -d "/proc/$PYTEST_PID/task" ]; then
+  for tid in /proc/$PYTEST_PID/task/*; do
+    TID_NUM=$(basename "$tid")
+    THREAD_NAME=$(cat "$tid/comm" 2>/dev/null || echo "unknown")
+    THREAD_STATE=$(cat "$tid/stat" 2>/dev/null | awk '{print $3}' || echo "?")
+    echo "  TID $TID_NUM: $THREAD_NAME (state: $THREAD_STATE)"
   done
 fi
 
