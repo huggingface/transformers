@@ -238,9 +238,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.abs(diff).max() <= 5e-3)
 
     def test_feature_shape(self):
-        feature_extractor = self.feature_extraction_class(
-            **self.feat_extract_tester.prepare_feat_extract_dict()
-        )
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         hop_length = feature_extractor.hop_length
         test_inputs = np.random.randn(16000)
 
