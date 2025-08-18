@@ -769,7 +769,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
