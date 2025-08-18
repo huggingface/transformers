@@ -33,10 +33,10 @@ rendered properly in your Markdown viewer.
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
 # 1. load the model and the processor
-torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+torch_device = infer_device()
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
@@ -52,7 +52,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 inputs = processor(
     ds[0]["audio"]["array"],
 )
-inputs.to(torch_device)
+inputs.to(model.device)
 
 # 4. infer the model
 output_tokens = model.generate(**inputs)
@@ -66,10 +66,10 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
 # 1. load the model and the processor
-torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+torch_device = infer_device()
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
@@ -84,7 +84,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 # 3. prepare the model inputs
 audio_arrays = [ds[i]["audio"]["array"] for i in range(4)]
 inputs = processor(audio_arrays, return_tensors="pt", padding=True)
-inputs = inputs.to(torch_device)
+inputs = inputs.to(model.device)
 
 # 4. infer the model
 output_tokens = model.generate(**inputs)
