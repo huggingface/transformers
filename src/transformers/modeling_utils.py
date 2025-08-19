@@ -3912,6 +3912,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            create_pr = kwargs.pop("create_pr", False)
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
@@ -4234,6 +4235,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 files_timestamps,
                 commit_message=commit_message,
                 token=token,
+                create_pr=create_pr,
             )
 
     @wraps(PushToHubMixin.push_to_hub)
