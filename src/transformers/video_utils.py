@@ -579,7 +579,7 @@ def read_video_torchcodec(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
         seek_mode="approximate",
-        device=kwargs.get("device", None),
+        device=kwargs.get("device"),
     )
     metadata = VideoMetadata(
         total_num_frames=decoder.metadata.num_frames,
