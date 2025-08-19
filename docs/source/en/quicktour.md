@@ -169,7 +169,7 @@ Create a [`Pipeline`] object and select a task. By default, [`Pipeline`] downloa
 <hfoptions id="pipeline-tasks">
 <hfoption id="text generation">
 
-Use `infer_device` to automatically detect available hardware(e.g. CUDA GPU, Intel XPU) and use it to accelerate inference.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
