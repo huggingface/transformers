@@ -644,6 +644,8 @@ def main(*args):
             "fact_checking": "task: fact checking | query: ",
             "retrieval_document": "title: | text: ",
             "query": "task: search result | query: ",
+            "document": "title: | text: ",
+            "passage": "title: | text: ",
         }
 
         transformer = models.Transformer(output_path)
