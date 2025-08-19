@@ -20,6 +20,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -340,6 +341,7 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)
+        self.model.text_model.generation_config = GenerationConfig.from_model_config(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
