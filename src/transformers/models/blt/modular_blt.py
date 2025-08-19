@@ -30,7 +30,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..cohere2.modeling_cohere2 import (
     Cohere2RotaryEmbedding,
-    rotate_half
+    rotate_half,  # noqa: F401
 )
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
@@ -946,6 +946,12 @@ class BltForCausalLM(MllamaForCausalLM):
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
 
         self.post_init()
+
+    def tie_weights(self):
+        """Prevent double execution from from_pretrained()."""
+        if hasattr(self, '_weights_tied'):
+            return
+        self._weights_tied = True
 
     def forward(
         self,

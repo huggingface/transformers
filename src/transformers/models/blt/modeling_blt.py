@@ -1302,5 +1302,11 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
+    def tie_weights(self):
+        """Prevent double execution from from_pretrained()."""
+        if hasattr(self, "_weights_tied"):
+            return
+        self._weights_tied = True
+
 
 __all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM"]

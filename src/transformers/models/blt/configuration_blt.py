@@ -258,7 +258,10 @@ class BltConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+
+    Checkpoint: [facebook/blt](https://huggingface.co/facebook/blt)
+    """
 
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
