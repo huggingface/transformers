@@ -75,8 +75,7 @@ print(summary)
 <hfoption id="transformers-cli">
 
 ```bash
-# Using transformers-cli for quick inference
-python -m transformers.models.bert_generation --model google/roberta2roberta_L-24_discofuse --input "This is the first sentence. This is the second sentence."
+echo -e "Plants create energy through " | transformers run --task text2text-generation --model "google/roberta2roberta_L-24_discofuse" --device 0
 ```
 
 </hfoption>
