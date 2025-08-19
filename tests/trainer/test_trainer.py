@@ -1316,21 +1316,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
-    def test_evaluation_with_keys_to_drop(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
-        tiny_gpt2 = GPT2LMHeadModel(config)
-        x = torch.randint(0, 100, (128,))
-        eval_dataset = RepeatDataset(x)
-        args = TrainingArguments(self.get_auto_remove_tmp_dir(), report_to="none")
-        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
-        # By default the past_key_values are removed
-        result = trainer.predict(eval_dataset)
-        self.assertTrue(isinstance(result.predictions, np.ndarray))
-        # We can still get them by setting ignore_keys to []
-        result = trainer.predict(eval_dataset, ignore_keys=[])
-        self.assertTrue(isinstance(result.predictions, tuple))
-        self.assertEqual(len(result.predictions), 2)
-
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)

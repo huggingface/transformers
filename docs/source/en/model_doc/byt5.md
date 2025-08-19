@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-28 and added to Hugging Face Transformers on 2021-06-01.*
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -64,7 +65,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     device_map="auto"
 )
 
-input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -101,7 +102,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("google/byt5-xl")
-input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))

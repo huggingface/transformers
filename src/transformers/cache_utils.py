@@ -103,7 +103,7 @@ class DynamicLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -186,7 +186,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -308,7 +308,7 @@ class StaticLayer(CacheLayerMixin):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -384,7 +384,7 @@ class SlidingWindowLayer(StaticLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -463,7 +463,7 @@ class ChunkedSlidingLayer(SlidingWindowLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -572,7 +572,7 @@ class QuantizedLayer(DynamicLayer):
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Update the key and value caches in-place, and return the necesary kes and value states.
+        Update the key and value caches in-place, and return the necessary kes and value states.
 
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
@@ -785,7 +785,7 @@ class Cache:
             # Try to find next non-sliding, starting at `layer_idx`
             try:
                 layer_idx = layer_idx + self.is_sliding[layer_idx:].index(False)
-            # In this case, we need to circle back to the begining
+            # In this case, we need to circle back to the beginning
             except ValueError:
                 layer_idx = self.is_sliding.index(False)
         else:
@@ -1101,6 +1101,8 @@ class DynamicCache(Cache):
         backward compatibility.
         """
         cache = cls()
+        if past_key_values is None:
+            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
@@ -1481,13 +1483,37 @@ class EncoderDecoderCache(Cache):
     ```
     """
 
-    def __init__(self, self_attention_cache: Cache, cross_attention_cache: Cache):
-        self.self_attention_cache = self_attention_cache
-        self.cross_attention_cache = cross_attention_cache
+    def __init__(self, *caches) -> None:
+        # For dp and ddp support, if only one argument is passed, it should be an iterable of tuples of tensors
+        if len(caches) == 1:
+            self.self_attention_cache = DynamicCache()
+            self.cross_attention_cache = DynamicCache()
+            # Populate cache from the iterable
+            for layer_idx, key_value_states in enumerate(caches[0]):
+                key_states, value_states = key_value_states[:2]
+                self.self_attention_cache.update(key_states, value_states, layer_idx)
+                if len(key_value_states) > 2:
+                    key_states, value_states = key_value_states[2:]
+                    self.cross_attention_cache.update(key_states, value_states, layer_idx)
+        # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
+        elif len(caches) == 2:
+            if not isinstance(caches[0], Cache) or not isinstance(caches[1], Cache):
+                raise TypeError(f"One of the two arguments is not a Cache: {type(caches[0]) = }, {type(caches[1]) = }")
+            self.self_attention_cache = caches[0]
+            self.cross_attention_cache = caches[1]
+        # Error case
+        else:
+            raise ValueError(f"Expected 1 or 2 arguments, got {len(caches)}")
 
         self.is_updated = {}
-        for layer_idx in range(len(cross_attention_cache)):
-            self.is_updated[layer_idx] = bool(cross_attention_cache.get_seq_length(layer_idx) > 0)
+        for layer_idx in range(len(self.cross_attention_cache)):
+            self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(self_attention_cache={self.self_attention_cache}, cross_attention_cache="
+            f"{self.cross_attention_cache})"
+        )
 
     def __iter__(self):
         """
@@ -1538,19 +1564,18 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls, past_key_values: tuple[tuple[torch.FloatTensor, torch.FloatTensor], ...]
+        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]]
     ) -> "EncoderDecoderCache":
         """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
-        cache = cls(
-            self_attention_cache=DynamicCache(),
-            cross_attention_cache=DynamicCache(),
-        )
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx][:2]
+        cache = cls(DynamicCache(), DynamicCache())
+        if past_key_values is None:
+            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
+        else:
+            for layer_idx, key_value_states in enumerate(past_key_values):
+                key_states, value_states = key_value_states[:2]
                 cache.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(past_key_values[layer_idx]) > 2:
-                    key_states, value_states = past_key_values[layer_idx][2:]
+                if len(key_value_states) > 2:
+                    key_states, value_states = key_value_states[2:]
                     cache.cross_attention_cache.update(key_states, value_states, layer_idx)
                     cache.is_updated[layer_idx] = True
         return cache
