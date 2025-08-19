@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     is_torch_fp16_available_on_device,
+    require_pyctcdecode,
     slow,
     torch_device,
 )
@@ -413,6 +414,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
+    @require_pyctcdecode
     def test_run_speech_recognition_ctc(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -443,6 +445,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["eval_loss"], result["train_loss"])
 
+    @require_pyctcdecode
     def test_run_speech_recognition_ctc_adapter(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
