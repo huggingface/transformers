@@ -62,6 +62,9 @@ class Dictionary:
     def __eq__(self, other):
         return self.indices == other.indices
 
+    def __hash__(self):
+        return hash(self.indices)
+
     def __getitem__(self, idx):
         if idx < len(self.symbols):
             return self.symbols[idx]

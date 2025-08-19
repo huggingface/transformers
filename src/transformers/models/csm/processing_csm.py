@@ -152,7 +152,6 @@ class CsmProcessor(ProcessorMixin):
                 padding_left = padding_total
                 padding_right = extra_padding
             else:
-                padding_left = padding_left
                 padding_right = padding_right + extra_padding
 
             cur_length = cur_length + padding_left + padding_right

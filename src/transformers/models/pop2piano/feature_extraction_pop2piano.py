@@ -240,7 +240,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         for i, each_feature in enumerate(features):
             # To pad "input_features".
             if len(each_feature.shape) == 3:
-                features_pad_value = max([*zip(*features_shapes)][1]) - features_shapes[i][1]
+                features_pad_value = max([*zip(*features_shapes)][1]) - features_shapes[i][1]  # noqa :PLE0643
                 attention_mask = np.ones(features_shapes[i][:2], dtype=np.int64)
                 feature_padding = ((0, 0), (0, features_pad_value), (0, 0))
                 attention_mask_padding = (feature_padding[0], feature_padding[1])
@@ -259,7 +259,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
             if add_zero_line:
                 # if it is batched then we separate each examples using zero array
-                zero_array_len = max([*zip(*features_shapes)][1])
+                zero_array_len = max([*zip(*features_shapes)][1])  # noqa :PLE0643
 
                 # we concatenate the zero array line here
                 each_padded_feature = np.concatenate(

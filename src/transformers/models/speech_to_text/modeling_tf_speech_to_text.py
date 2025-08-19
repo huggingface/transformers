@@ -1091,7 +1091,7 @@ class TFSpeech2TextDecoder(keras.layers.Layer):
             check_embeddings_within_bounds(input_ids, self.embed_tokens.vocab_size)
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         else:
-            inputs_embeds = inputs_embeds
+            pass
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         if input_shape[-1] > 1:
