@@ -52,7 +52,7 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 ```python
 >>> from transformers import pipeline
 
->>> generator = pipeline("mask-generation", model="yonigozlan/sam2.1_hiera_large_hf", device=0)
+>>> generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> outputs = generator(image_url, points_per_batch=64)
 
@@ -74,8 +74,8 @@ You can segment objects by providing a single point click on the object you want
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
->>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
+>>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
@@ -162,8 +162,8 @@ Process multiple images simultaneously for improved efficiency:
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
->>> model = Sam2Model.from_pretrained("yonigozlan/sam2.1_hiera_large_hf").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/sam2.1_hiera_large_hf")
+>>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
+>>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
 
 >>> # Load multiple images
 >>> image_urls = [
