@@ -99,7 +99,7 @@ Use [`~PreTrainedModel.from_pretrained`] to load the weights and configuration f
 
 When you load a model, configure the following parameters to ensure the model is optimally loaded.
 
-- `device_map="auto"` automatically allocates the model weights to your fastest device first, which is typically the CUDA GPU or Intel XPU.
+- `device_map="auto"` automatically allocates the model weights to your fastest device first.
 - `torch_dtype="auto"` directly initializes the model weights in the data type they're stored in, which can help avoid loading the weights twice (PyTorch loads weights in `torch.float32` by default).
 
 ```py
