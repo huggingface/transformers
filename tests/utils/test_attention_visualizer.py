@@ -27,7 +27,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
     def test_paligemma_multimodal_visualization(self):
         """Test AttentionMaskVisualizer with PaliGemma multimodal model"""
-        model_name = "google/paligemma2-3b-mix-224"
+        model_name = "google/paligemma-3b-pt-224"
         input_text = "<img> What is in this image?"
 
         # capture the output, can be messy
@@ -43,7 +43,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         expected_output = """
 ##########################################################################################################################################################################################################################################
-##                                                                         Attention visualization for \033[1mpaligemma:google/paligemma2-3b-mix-224\033[0m PaliGemmaModel                                                                            ##
+##                                                                          Attention visualization for \033[1mpaligemma:google/paligemma-3b-pt-224\033[0m PaliGemmaModel                                                                             ##
 ##########################################################################################################################################################################################################################################
  \033[92m■\033[0m: i == j (diagonal)   \033[93m■\033[0m: token_type_ids
               Attention Matrix  
@@ -70,7 +70,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
     def test_llama_text_only_visualization(self):
         """Test AttentionMaskVisualizer with Llama text-only model"""
-        model_name = "meta-llama/Llama-3.2-1B-Instruct"
+        model_name = "meta-llama/Llama-2-7b-hf"
         input_text = "Plants create energy through a process known as"
 
         captured_output = io.StringIO()
@@ -85,20 +85,20 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         expected_output = """
 ##########################################################################################################################################################################################################
-##                                                           Attention visualization for \033[1mllama:meta-llama/Llama-3.2-1B-Instruct\033[0m LlamaModel                                                              ##
+##                                                               Attention visualization for \033[1mllama:meta-llama/Llama-2-7b-hf\033[0m LlamaModel                                                                  ##
 ##########################################################################################################################################################################################################
  \033[92m■\033[0m: i == j (diagonal)   \033[93m■\033[0m: token_type_ids
                Attention Matrix
 
-'Pl'      :  0 \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚    |    
+'▁Pl'     :  0 \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚    |    
 'ants'    :  1 ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚ ⬚ ⬚    |    
-'Ġcreate' :  2 ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚ ⬚    |    
-'Ġenergy' :  3 ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚    |    
-'Ġthrough':  4 ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚    |    
-'Ġa'      :  5 ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚    |    
-'Ġprocess':  6 ■ ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚    |    
-'Ġknown'  :  7 ■ ■ ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚    |    
-'Ġas'     :  8 ■ ■ ■ ■ ■ ■ ■ ■ \033[92m■\033[0m    |    
+'▁create' :  2 ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚ ⬚    |    
+'▁energy' :  3 ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚ ⬚    |    
+'▁through':  4 ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚ ⬚    |    
+'▁a'      :  5 ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚ ⬚    |    
+'▁process':  6 ■ ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚ ⬚    |    
+'▁known'  :  7 ■ ■ ■ ■ ■ ■ ■ \033[92m■\033[0m ⬚    |    
+'▁as'     :  8 ■ ■ ■ ■ ■ ■ ■ ■ \033[92m■\033[0m    |    
 ##########################################################################################################################################################################################################
 """  # noqa
 
