@@ -109,6 +109,32 @@ print(tokenizer.decode(outputs[0]))
 ## Notes
 
 - [`BertGenerationEncoder`] and [`BertGenerationDecoder`] should be used in combination with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
+
+   ```python
+   from transformers import BertGenerationEncoder, BertGenerationDecoder, BertTokenizer, EncoderDecoderModel
+   
+   # leverage checkpoints for Bert2Bert model
+   # use BERT's cls token as BOS token and sep token as EOS token
+   encoder = BertGenerationEncoder.from_pretrained("google-bert/bert-large-uncased", bos_token_id=101, eos_token_id=102)
+   # add cross attention layers and use BERT's cls token as BOS token and sep token as EOS token
+   decoder = BertGenerationDecoder.from_pretrained(
+       "google-bert/bert-large-uncased", add_cross_attention=True, is_decoder=True, bos_token_id=101, eos_token_id=102
+   )
+   bert2bert = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+   # create tokenizer
+   tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
+
+   input_ids = tokenizer(
+       "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
+   ).input_ids
+   labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
+
+   # train
+   loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss
+   loss.backward()
+   ```
+
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input.
 - No EOS token should be added to the end of the input for most generation tasks.
 
