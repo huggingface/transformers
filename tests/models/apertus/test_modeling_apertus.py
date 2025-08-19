@@ -20,17 +20,12 @@
 
 import unittest
 
-from packaging import version
-
 from transformers import AutoTokenizer, StaticCache, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    run_test_using_subprocess,
     slow,
     torch_device,
 )
