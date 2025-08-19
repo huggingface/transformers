@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GptOss model."""
 
+import difflib
 import inspect
 import json
 import os
@@ -249,7 +250,18 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
                     actual_truncated = actual_stripped[:min_length]
                     expected_truncated = expected_stripped[:min_length]
                     
-                    assert actual_truncated == expected_truncated, f"Output mismatch at index {i} for {key}. Actual: '{actual_stripped}', Expected: '{expected_stripped}'"
+                    if actual_truncated != expected_truncated:
+                        diff = '\n'.join(difflib.unified_diff(
+                            expected_truncated.splitlines(keepends=True),
+                            actual_truncated.splitlines(keepends=True),
+                            fromfile=f'expected[{i}]',
+                            tofile=f'actual[{i}]',
+                            lineterm=''
+                        ))
+                        raise AssertionError(f"Output mismatch at index {i} for {key}:\n"
+                                           f"Expected: '{expected_stripped}'\n"
+                                           f"Actual:   '{actual_stripped}'\n"
+                                           f"Diff (truncated to min length {min_length}):\n{diff}")
                     
                 print(f"✓ Outputs match expected results for {key}")
             else:
@@ -415,8 +427,18 @@ if __name__ == "__main__":
                     actual_truncated = actual_stripped[:min_length]
                     expected_truncated = expected_stripped[:min_length]
                     
-                    self.assertEqual(actual_truncated, expected_truncated, 
-                                   f"Output mismatch at index {i} for {key}. Actual: '{actual_stripped}', Expected: '{expected_stripped}'")
+                    if actual_truncated != expected_truncated:
+                        diff = '\n'.join(difflib.unified_diff(
+                            expected_truncated.splitlines(keepends=True),
+                            actual_truncated.splitlines(keepends=True),
+                            fromfile=f'expected[{i}]',
+                            tofile=f'actual[{i}]',
+                            lineterm=''
+                        ))
+                        self.fail(f"Output mismatch at index {i} for {key}:\n"
+                                 f"Expected: '{expected_stripped}'\n"
+                                 f"Actual:   '{actual_stripped}'\n"
+                                 f"Diff (truncated to min length {min_length}):\n{diff}")
             else:
                 # If no expected results exist, this is a new configuration
                 # We could optionally add it to the results file here
