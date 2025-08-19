@@ -14,7 +14,6 @@
 
 """Ernie VL model"""
 import math
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional
 
@@ -30,9 +29,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
 from .configuration_ernie4_5_vl import (
-    DFNRopeVisionTransformerConfig,
-    Ernie4_5_MoEConfig,
-    Ernie4_5_VLMoEConfig,
+    Ernie4_5_VLConfig,
+    Ernie4_5_VLTextConfig,
+    Ernie4_5_VLVisionConfig,
 )
 
 
@@ -45,28 +44,6 @@ class TokenType:
     text = 0
     image = 1
     video = 2
-
-
-class UniqueNameGuard:
-    """name guard"""
-
-    def __init__(self, prefix=""):
-        self.prefix = prefix
-        self.counter = {}
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def get_unique_name(self, name):
-        """get unique name"""
-        if name not in self.counter:
-            self.counter[name] = 0
-        else:
-            self.counter[name] += 1
-        return f"{self.prefix}{name}_{self.counter[name]}"
 
 
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
@@ -231,10 +208,10 @@ class Ernie4_5_VLTextAttention(nn.Module):
         )
 
         # TODO: rope to be moved outside
-        self.freq_allocation = getattr(config, "freq_allocation", 0)
+        #self.freq_allocation = getattr(config, "freq_allocation", 0)
         self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(
             config=config,
-            freq_allocation=self.freq_allocation,
+            freq_allocation=config.freq_allocation,
         )
 
     def forward(
@@ -293,7 +270,7 @@ class Ernie4_5_VLTextAttention(nn.Module):
 
 
 # Copy LlamaRMSNorm
-class Ernie4_5_MoERMSNorm(nn.Module):
+class Ernie4_5_VLRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
         Ernie4_5_MoERMSNorm is equivalent to T5LayerNorm
@@ -314,7 +291,7 @@ class Ernie4_5_MoERMSNorm(nn.Module):
 
 
 # Copy Ernie4_5_MoE
-class Ernie4_5_MoeMLP(nn.Module):
+class Ernie4_5_VLMoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -369,7 +346,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
-            [Ernie4_5_MoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
+            [Ernie4_5_VLMoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
         )
         #self.norm_min = config.moe_norm_min
         self.norm_min = 1e-12
@@ -437,22 +414,22 @@ class Ernie4_5_VLMoeBlock(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts[0]  # always the same for text and vision
+        self.num_experts = config.moe_num_experts
 
         self.text_moe = Ernie4_5_VLSparseMoeBlock(
             config,
-            num_experts=config.moe_num_experts[0],
+            num_experts=self.num_experts,
             intermediate_size=config.moe_intermediate_size[0]
         )
         self.vision_moe = Ernie4_5_VLSparseMoeBlock(
             config,
-            num_experts=config.moe_num_experts[1],
+            num_experts=self.num_experts,
             intermediate_size=config.moe_intermediate_size[1]
         )
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
+            self.shared_experts = Ernie4_5_VLMoeMLP(config, config.moe_intermediate_size[0] * config.moe_num_shared_experts)
 
     def forward(
         self,
@@ -502,8 +479,8 @@ class Ernie4_5_DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
-        moe_layer_start_index = min(config.moe_layer_start_index)
-        moe_layer_end_index = max(config.moe_layer_end_index)
+        moe_layer_start_index = config.moe_layer_start_index
+        moe_layer_end_index = config.moe_layer_end_index
 
         if (
             ((layer_idx + 1) % config.moe_layer_interval == 0)
@@ -512,10 +489,10 @@ class Ernie4_5_DecoderLayer(nn.Module):
         ):
             self.mlp = Ernie4_5_VLMoeBlock(config)
         else:
-            self.mlp = Ernie4_5_MoeMLP(config)
+            self.mlp = Ernie4_5_VLMoeMLP(config)
 
-        self.input_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoERMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_VLRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_VLRMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -607,7 +584,7 @@ class Ernie4_5_DecoderLayer(nn.Module):
 class Ernie4_5_PretrainedModel(PreTrainedModel):
     """Base class for ERNIE pretrained models."""
 
-    config_class = Ernie4_5_MoEConfig
+    config_class = Ernie4_5_VLTextConfig
     base_model_prefix = "ernie"
     _no_split_modules = ["Ernie4_5_DecoderLayer"]
 
@@ -617,17 +594,17 @@ class Ernie4_5_PretrainedModel(PreTrainedModel):
 class Ernie4_5_Model(Ernie4_5_PretrainedModel):
     """The core ERNIE transformer model with MoE (Mixture of Experts) support."""
 
-    def __init__(self, config: Ernie4_5_MoEConfig):
+    def __init__(self, config: Ernie4_5_VLTextConfig):
         """Initialize the ERNIE model architecture.
 
         Args:
             config (Ernie4_5_MoEConfig): Model configuration.
         """
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.config = config
+
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.config = config
 
         self.embed_tokens = nn.Embedding(
             self.vocab_size,
@@ -637,8 +614,7 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         self.layers = nn.ModuleList(
             [Ernie4_5_DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
         )
-        Norm = Ernie4_5_MoERMSNorm
-        self.norm = Norm(config.hidden_size, config.rms_norm_eps)
+        self.norm = Ernie4_5_VLRMSNorm(config.hidden_size, config.rms_norm_eps)
 
         self.gradient_checkpointing = False
 
@@ -763,9 +739,9 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-            if self.config.use_moe:
-                layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
-                all_gate_logits = all_gate_logits + (gate_logits,)
+
+            layer_outputs, gate_logits = layer_outputs[:-1], layer_outputs[-1]
+            all_gate_logits = all_gate_logits + (gate_logits,)
 
             if past_key_value is not None:
                 hidden_states = hidden_states[:, -1:, :]
@@ -825,7 +801,6 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
             f"change initializer-range from {config.initializer_range} to {new_initializer_range}"
         )
         config.initializer_range = new_initializer_range
-        self.config = config
         self.model = Ernie4_5_Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
 
@@ -873,23 +848,17 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
                 dim=-1,
             )
 
-        # update role_ids
-        if "role_ids" in model_kwargs and model_kwargs["role_ids"] is not None:
-            role_ids = model_kwargs["role_ids"]
-            model_kwargs["role_ids"] = torch.cat([role_ids, role_ids[:, -1:]], dim=-1)
 
-        if self.config.get('rope_3d', False):
-            assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
-            position_ids = model_kwargs["position_ids"]
-            bsz = position_ids.shape[0]
+        assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
+        position_ids = model_kwargs["position_ids"]
 
-            max_position = position_ids.max(dim=1, keepdim=True)[0]  # [batch_size, 1, hidden_dim]
-            new_positions = max_position + 1
+        max_position = position_ids.max(dim=1, keepdim=True)[0]  # [batch_size, 1, hidden_dim]
+        new_positions = max_position + 1
 
-            model_kwargs["position_ids"] = torch.cat(
-                [position_ids, new_positions],
-                dim=1
-            )
+        model_kwargs["position_ids"] = torch.cat(
+            [position_ids, new_positions],
+            dim=1
+        )
 
         return model_kwargs
 
@@ -1075,17 +1044,17 @@ class DFNRopeVisionBlock(nn.Module):
             attn_implementation (str, optional): attention implementation. Defaults to "sdpa".
         """
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-6)
-        mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
+        self.config = config
 
-        self.attn = VisionAttention(config.embed_dim, num_heads=config.num_heads)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-6)
+
+        self.attn = VisionAttention(config.hidden_size, num_heads=config.num_heads)
         self.mlp = VisionMlp(
-            dim=config.embed_dim,
-            hidden_dim=mlp_hidden_dim,
+            dim=config.hidden_size,
+            hidden_dim=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.config = config
 
     def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
         """
@@ -1109,7 +1078,7 @@ class DFNRopeVisionBlock(nn.Module):
 class DFNRopeVisionTransformerPreTrainedModel(PreTrainedModel):
     """DFNRopeVisionTransformerPreTrainedModel"""
 
-    config_class = DFNRopeVisionTransformerConfig
+    config_class = Ernie4_5_VLVisionConfig
     _tp_plan = {}
 
     def __init__(self, config) -> None:
@@ -1123,19 +1092,16 @@ class DFNRopeVisionTransformerPreTrainedModel(PreTrainedModel):
         self.patch_embed = PatchEmbed(
             patch_size=config.patch_size,
             in_channels=config.in_channels,
-            embed_dim=config.embed_dim,
+            embed_dim=config.hidden_size,
         )
 
-        head_dim = config.embed_dim // config.num_heads
+        head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList(
             [DFNRopeVisionBlock(config) for _ in range(config.depth)]
         )
 
-        assert (
-            config.hidden_size == config.embed_dim
-        ), "in DFNRope, vit's config.hidden must be equal to config.embed_dim"
         self.ln = nn.LayerNorm(config.hidden_size, eps=1e-6)
 
     def rot_pos_emb(self, grid_thw, num_pad=0):
@@ -1229,14 +1195,14 @@ class VariableResolutionResamplerModel(nn.Module):
     VariableResolutionResamplerModel, support variable resolution
     """
 
-    def __init__(self, in_dim, out_dim, spatial_conv_size, temporal_conv_size, config):
+    def __init__(self, config):
         super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
         self.config = config
-        self.spatial_conv_size = spatial_conv_size
-        self.temporal_conv_size = temporal_conv_size
-        self.use_temporal_conv = config.use_temporal_conv
+
+        self.in_dim = config.hidden_size
+        self.out_dim = config.text_hidden_size
+        self.spatial_conv_size = config.spatial_conv_size
+        self.temporal_conv_size = config.temporal_conv_size
 
         # compress 2d conv(picture) to 1d
         self.spatial_dim = self.in_dim * self.spatial_conv_size * self.spatial_conv_size
@@ -1248,29 +1214,23 @@ class VariableResolutionResamplerModel(nn.Module):
             * self.temporal_conv_size
         )
 
-        # using unique name space start with "mm_resampler_"
-        with UniqueNameGuard("mm_resampler_") as guard:
+        self.spatial_linear = nn.Sequential(
+            nn.Linear(self.spatial_dim, self.spatial_dim),
+            nn.GELU(),
+            nn.Linear(self.spatial_dim, self.spatial_dim),
+            nn.LayerNorm(self.spatial_dim, eps=1e-6),
+        )
 
-            self.spatial_linear = nn.Sequential(
-                nn.Linear(self.spatial_dim, self.spatial_dim),
-                nn.GELU(),
-                nn.Linear(self.spatial_dim, self.spatial_dim),
-                nn.LayerNorm(self.spatial_dim, eps=1e-6),
-            )
+        self.temporal_linear = nn.Sequential(
+            nn.Linear(self.temporal_dim, self.spatial_dim),
+            nn.GELU(),
+            nn.Linear(self.spatial_dim, self.spatial_dim),
+            nn.LayerNorm(self.spatial_dim, eps=1e-6),
+        )
 
-            if self.use_temporal_conv:
-                self.temporal_linear = nn.Sequential(
-                    nn.Linear(self.temporal_dim, self.spatial_dim),
-                    nn.GELU(),
-                    nn.Linear(self.spatial_dim, self.spatial_dim),
-                    nn.LayerNorm(self.spatial_dim, eps=1e-6),
-                )
+        self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
 
-            self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
-
-            out_config = deepcopy(config)
-            out_config.hidden_size = out_dim
-            self.after_norm = Ernie4_5_MoERMSNorm(out_config.hidden_size, config.rms_norm_eps)
+        self.after_norm = Ernie4_5_VLRMSNorm(self.out_dim, config.rms_norm_eps)
 
     def spatial_conv_reshape(self, x, spatial_conv_size):
         """
@@ -1372,9 +1332,8 @@ class VariableResolutionResamplerModel(nn.Module):
             return x
 
         x = fwd_spatial(x)
-        if self.use_temporal_conv:
-            x = fwd_placeholder(x, grid_thw)
-            x = fwd_temporal(x)
+        x = fwd_placeholder(x, grid_thw)
+        x = fwd_temporal(x)
         x = fwd_mlp(x)
         return x
 
@@ -1382,13 +1341,13 @@ class VariableResolutionResamplerModel(nn.Module):
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
     """Ernie4_5_VLMoeForConditionalGeneration"""
 
-    config_class = Ernie4_5_VLMoEConfig
+    config_class = Ernie4_5_VLConfig
     main_input_name = "pixel_values"
     _keep_in_fp16_modules = ["vision_model"]
     _tp_plan = {}
 
     def __init__(
-        self, config: Ernie4_5_VLMoEConfig, vision_model=None, resampler_model=None
+        self, config: Ernie4_5_VLConfig, vision_model=None, resampler_model=None
     ):
         """
         initialize Ernie4_5_VLMoeForConditionalGeneration
@@ -1398,22 +1357,21 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
             vision_model(nn.Module): vision model
             resampler_model(nn.Module): resampler model
         """
-        super().__init__(config)
+        super().__init__(config.text_config)
+
+        self.config = config
 
         self.vision_model = DFNRopeVisionTransformerPreTrainedModel(
             config.vision_config
         )
 
+        # TODO: move to vision
         self.model.resampler_model = VariableResolutionResamplerModel(
-            config.pixel_hidden_size,
-            config.hidden_size,
-            config.spatial_conv_size,
-            config.temporal_conv_size,
-            config=config,
+            config.vision_config
         )
 
         self.image_preprocess = None
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
 
@@ -1487,7 +1445,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
         grid_thw,
     ):
         """vision_mapping_forward"""
-        image_mask = input_ids == self.config.im_patch_id
+        image_mask = input_ids == self.config.image_token_id
         image_features = self.model.resampler_model(
             image_features,
             image_mask,
@@ -1499,7 +1457,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
         if image_features.dim == 2:
             B, N, C = image_features.shape
             image_features = image_features.reshape([B * N, C]).to(inputs_embeds.dtype)
-        # Will overwrite the part of `ids==im_patch_id` in `mm_ids_features`
+        # Will overwrite the part of `ids==image_token_id` in `mm_ids_features`
         inputs_embeds[image_mask.to(inputs_embeds.device)] = image_features.to(
             inputs_embeds.device
         )
@@ -1541,10 +1499,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
                 image_type_ids[:, -1:] if image_type_ids is not None else None
             )
 
-        if self.config.use_flash_attention:
-            attention_mask = None
-        else:
-            attention_mask = kwargs.get("attention_mask")
+        #attention_mask = kwargs.get("attention_mask")  # non-fa usage
+        attention_mask = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1573,8 +1529,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
                 "grid_thw": grid_thw,
             }
         )
-        if self.config.rope_3d:
-            model_inputs.update({"position_ids": kwargs["position_ids"]})
+        model_inputs.update({"position_ids": kwargs["position_ids"]})
 
         return model_inputs
 
@@ -1636,7 +1591,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        image_mask = input_ids == self.config.im_patch_id
+        image_mask = input_ids == self.config.image_token_id
 
         image_rate = image_mask.to(torch.float32).mean()
 
@@ -1645,7 +1600,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
                 assert (image_mask).any().item(), (
                     image_mask.detach().cpu().numpy().tolist(),
                     input_ids.detach().cpu().numpy().tolist(),
-                    self.config.im_patch_id,
+                    self.config.image_token_id,
                     images.shape,
                 )
                 image_features = self.vision_forward(
