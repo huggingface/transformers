@@ -164,32 +164,19 @@ class BltPatcherConfig(PretrainedConfig):
     Configuration class for the Blt Patcher/Entropy model component.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size for the entropy model used in patching.
-        hidden_size (`int`, *optional*, defaults to 512):
-            Hidden dimension for the entropy model.
-        num_hidden_layers (`int`, *optional*, defaults to 8):
-            Number of layers in the entropy model.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads in the entropy model.
-        head_dim (`int`, *optional*):
-            Dimension of each attention head in the entropy model.
-        num_key_value_heads (`int`, *optional*):
-            Number of key-value heads in the entropy model.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
-            Maximum sequence length for the entropy model.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
-            Layer normalization epsilon for the entropy model.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the entropy model.
-        ffn_dim_multiplier (`float`, *optional*):
-            Feedforward dimension multiplier for the entropy model.
-        multiple_of (`int`, *optional*, defaults to 256):
-            Make feedforward dimension multiple of this for the entropy model.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            RoPE theta parameter for the entropy model.
-        attn_bias_type (`str`, *optional*, defaults to "causal"):
-            Attention bias type for the entropy model.
+            vocab_size (`<fill_type>`, *optional*, defaults to 260): <fill_docstring>
+            hidden_size (`<fill_type>`, *optional*, defaults to 768): <fill_docstring>
+            num_hidden_layers (`<fill_type>`, *optional*, defaults to 14): <fill_docstring>
+            num_attention_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+            num_key_value_heads (`<fill_type>`, *optional*): <fill_docstring>
+            max_position_embeddings (`<fill_type>`, *optional*, defaults to 8192): <fill_docstring>
+            rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
+            dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            rope_theta (`<fill_type>`, *optional*, defaults to 10000.0): <fill_docstring>
+            attn_bias_type (`<fill_type>`, *optional*, defaults to `"local_block_causal"`): <fill_docstring>
+            intermediate_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
     """
 
     model_type = "blt_patcher"
@@ -239,47 +226,26 @@ class BltConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the Blt model. Defines the number of different tokens (bytes) that can be represented.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model can handle.
-        # Patching configuration
-        patch_in_forward (`bool`, *optional*, defaults to False):
-            Whether to perform patching during forward pass.
-        patch_size (`float`, *optional*):
-            Size of patches for static patching.
-        patching_mode (`str`, *optional*):
-            Mode for patching ("entropy", "static", etc.).
-        patching_threshold (`float`, *optional*):
-            Threshold for entropy-based patching.
-        patching_batch_size (`int`, *optional*, defaults to 1):
-            Batch size for patching operations.
-        patching_device (`str`, *optional*, defaults to "cuda"):
-            Device to use for patching operations.
-        max_patch_length (`int`, *optional*):
-            Maximum length of patches.
-
-        # Cross attention configurations
-        cross_attn_k (`int`, *optional*):
-            Number of cross attention components.
-
-        # Encoder configurations
-        encoder_hash_byte_group_size (`Any`, *optional*):
-            Hash byte group size for encoder.
-        encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 30000):
-            Vocabulary size for hash byte groups.
-        encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 3):
-            Number of hash functions for byte groups.
-
-        # Component configurations
-        patcher_config (`Union[BltPatcherConfig, dict]`, *optional*):
-            Configuration for the Blt patcher/entropy model component.
-        encoder_config (`Union[BltLocalEncoderConfig, dict]`, *optional*):
-            Configuration for the Blt local encoder component.
-        decoder_config (`Union[BltLocalDecoderConfig, dict]`, *optional*):
-            Configuration for the Blt local decoder component.
-        global_config (`Union[BltGlobalTransformerConfig, dict]`, *optional*):
-            Configuration for the Blt global transformer component.
+            vocab_size (`<fill_type>`, *optional*, defaults to 260): <fill_docstring>
+            max_position_embeddings (`<fill_type>`, *optional*, defaults to 4096): <fill_docstring>
+            patch_in_forward (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            patch_size (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            patching_mode (`<fill_type>`, *optional*, defaults to `"entropy"`): <fill_docstring>
+            patching_threshold (`<fill_type>`, *optional*, defaults to 1.34): <fill_docstring>
+            patching_batch_size (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+            max_patch_length (`<fill_type>`, *optional*): <fill_docstring>
+            cross_attn_k (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+            encoder_hash_byte_group_size (`<fill_type>`, *optional*): <fill_docstring>
+            encoder_hash_byte_group_vocab (`<fill_type>`, *optional*, defaults to 500002): <fill_docstring>
+            encoder_hash_byte_group_nb_functions (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+            patcher_config (`<fill_type>`, *optional*): <fill_docstring>
+            encoder_config (`<fill_type>`, *optional*): <fill_docstring>
+            decoder_config (`<fill_type>`, *optional*): <fill_docstring>
+            global_config (`<fill_type>`, *optional*): <fill_docstring>
+            tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+            rope_theta (`<fill_type>`, *optional*, defaults to 500000.0): <fill_docstring>
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
     >>> from transformers import BltModel, BltConfig

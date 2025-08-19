@@ -44,24 +44,15 @@ class BltTokenizer(PreTrainedTokenizer):
     beginning of example (BOE), and padding (PAD).
 
     Args:
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
-            The padding token.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            The unknown token. Not used in Blt but kept for compatibility.
-        boe_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<boe>"`):
-            The beginning of example token, specific to Blt.
-        add_bos_token (`bool`, *optional*, defaults to `True`):
-            Whether or not to add a `bos_token` at the start of sequences.
-        add_eos_token (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an `eos_token` at the end of sequences.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding.
-        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not to add spaces between special tokens.
+            bos_token (`<fill_type>`, *optional*, defaults to `"<s>"`): <fill_docstring>
+            eos_token (`<fill_type>`, *optional*, defaults to `"</s>"`): <fill_docstring>
+            pad_token (`<fill_type>`, *optional*, defaults to `"<pad>"`): <fill_docstring>
+            unk_token (`<fill_type>`, *optional*, defaults to `"<unk>"`): <fill_docstring>
+            boe_token (`<fill_type>`, *optional*, defaults to `"<boe>"`): <fill_docstring>
+            add_bos_token (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+            add_eos_token (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            clean_up_tokenization_spaces (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            spaces_between_special_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
