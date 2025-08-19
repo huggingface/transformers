@@ -344,6 +344,25 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_tied_weights_keys(self):
         pass
 
+    @unittest.skip("CSM output recording incompatible with torch.compile")
+    @pytest.mark.torch_compile_test
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("CSM output recording incompatible with torch.compile")
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("CSM output recording incompatible with torch.compile")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("CSM output recording incompatible with torch.compile")
+    @pytest.mark.torch_compile_test
+    def test_generate_with_static_cache(self):
+        pass
+
     def _get_custom_4d_mask_test_data(self):
         """
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.
