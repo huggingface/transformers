@@ -1958,13 +1958,6 @@ class GenerationMixin(ContinuousMixin):
         )
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in STATIC_CACHE_CLASSES_MAPPING:
-                # Here, we use the union of `_supports_attention_backend` and `_can_compile_fullgraph` as a proxy to know
-                # if the model can use a static cache (i.e. if it can correctly create the attention mask for static shapes)
-                if not self._supports_attention_backend and not self._can_compile_fullgraph:
-                    raise ValueError(
-                        "This model does not support static cache implementations. You can open an issue on GitHub"
-                        "if you would like it to support it."
-                    )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
                     batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
