@@ -71,9 +71,8 @@ from .candidate_generator import (
     _prepare_token_type_ids,
 )
 from .configuration_utils import (
-    NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
-    CompileConfig,
+    STATIC_CACHE_CLASSES_MAPPING,
     GenerationConfig,
     GenerationMode,
 )
@@ -1826,7 +1825,7 @@ class GenerationMixin(ContinuousMixin):
         if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
             cache_implementation = "hybrid_chunked"
 
-        cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        cache_cls: Cache = STATIC_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
@@ -1958,12 +1957,7 @@ class GenerationMixin(ContinuousMixin):
             else {}
         )
         if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-                if generation_config.cache_implementation == "static" and not self._can_compile_fullgraph:
-                    raise ValueError(
-                        "This model does not support `cache_implementation='static'`. Please check the following "
-                        "issue: https://github.com/huggingface/transformers/issues/28981"
-                    )
+            if generation_config.cache_implementation in STATIC_CACHE_CLASSES_MAPPING:
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
                     batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
@@ -2115,8 +2109,7 @@ class GenerationMixin(ContinuousMixin):
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
-        # TODO @raushan `self._can_compile_fullgraph` can be removed and inferred from model arch (e.g. MoE doesn't support compile)
-        can_compile = valid_hardware and using_compilable_cache and self._can_compile_fullgraph
+        can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -3475,13 +3468,9 @@ class GenerationMixin(ContinuousMixin):
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2" and getattr(
-                model_kwargs.get("past_key_values"), "is_compileable", False
-            ):
-                if generation_config.compile_config is None:
-                    generation_config.compile_config = CompileConfig(fullgraph=False)
-                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
-                elif generation_config.compile_config.fullgraph:
+            if self.config._attn_implementation == "flash_attention_2":
+                # only raise warning if the user passed an explicit compile-config
+                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
                         "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
