@@ -83,7 +83,7 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
-        QuantoQuantizedCache,
+        QuantoQuantizedLayer,
         StaticCache,
     )
     from transformers.generation import (
@@ -2041,7 +2041,7 @@ class GenerationTesterMixin:
             }
 
             results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertTrue(isinstance(results.past_key_values, QuantoQuantizedCache))
+            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.past_key_values.layers))
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):

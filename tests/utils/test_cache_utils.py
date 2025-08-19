@@ -50,7 +50,6 @@ if is_torch_available():
         DynamicCache,
         Gemma2Config,
         GenerationConfig,
-        HybridChunkedCache,
         LlamaConfig,
         QuantizedCache,
         StaticCache,
@@ -1178,7 +1177,7 @@ class SyntheticCacheTest(unittest.TestCase):
 
     def test_hybrid_chunked_cache(self):
         """
-        Test HybridChunkedCache with both static and sliding layers and special cases:
+        Test hybrid chunked StaticCache with both static and sliding layers and special cases:
             1. a pre-fill longer than the sliding window
             2. a single-token decoding step (normal generation)
             3. a multi-token decoding step after the window is already full
@@ -1200,8 +1199,9 @@ class SyntheticCacheTest(unittest.TestCase):
         config.num_hidden_layers = 2
         config.layer_types = ["full_attention", "chunked_attention"]
         config.attention_chunk_size = 2
+        config.sliding_window = None
         max_cache_len = 4
-        chunked_cache = HybridChunkedCache(config=config, max_cache_len=max_cache_len)
+        chunked_cache = StaticCache(config=config, max_cache_len=max_cache_len)
 
         # 1) PREFILL (3 tokens > sliding_window)
         prefill_static = torch.tensor([1.0, 2.0, 3.0])[None, None, :, None]
@@ -1279,8 +1279,9 @@ class SyntheticCacheTest(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config.num_hidden_layers = 1
         config.layer_types = ["chunked_attention"]
-        config.sliding_window = 3
-        cache = HybridChunkedCache(config=config, max_cache_len=3)
+        config.sliding_window = None
+        config.attention_chunk_size = 3
+        cache = StaticCache(config=config, max_cache_len=3)
 
         # Step 0 : multi-token prefill
         first_chunk = torch.tensor([10.0, 20.0])[None, None, :, None]  # L = 2
