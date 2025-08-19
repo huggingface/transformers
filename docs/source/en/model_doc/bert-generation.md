@@ -107,7 +107,9 @@ tokenizer = BertTokenizer.from_pretrained("google-bert/bert-large-uncased")
 
 ## Notes
 
-- BertGenerationEncoder and BertGenerationDecoder should be used in combination with EncoderDecoderModel for sequence-to-sequence tasks.
+- [`BertGenerationEncoder`] and [`BertGenerationDecoder`] should be used in combination with [`EncoderDecoderModel`] for sequence-to-sequence tasks.
+   
+   <add code example here from https://huggingface.co/docs/transformers/model_doc/bert-generation#usage-examples-and-tips>
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input.
 - No EOS token should be added to the end of the input for most generation tasks.
 
