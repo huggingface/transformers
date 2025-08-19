@@ -1011,6 +1011,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
     "NerPipeline",
+    "OwlViTFeatureExtractor",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
@@ -1020,8 +1021,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "TFAutoModelWithLMHead",
-    "TFBartPretrainedModel",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
     "Wav2Vec2ForMaskedLM",
@@ -1031,13 +1030,12 @@ DEPRECATED_OBJECTS = [
     "glue_output_modes",
     "glue_processors",
     "glue_tasks_num_labels",
+    "shape_list",
     "squad_convert_examples_to_features",
     "xnli_compute_metrics",
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainingArguments",
-    "OwlViTFeatureExtractor",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -1138,7 +1136,13 @@ def check_all_objects_are_documented():
     """Check all models are properly documented."""
     documented_objs, documented_methods_map = find_all_documented_objects()
     modules = transformers._modules
-    objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
+    # the documents with the following prefixes are not requires to be in the docs
+    ignore_prefixes = [
+        "_",  # internal objects
+        "TF",  # TF objects, support is deprecated
+        "Flax",  # Flax objects, support is deprecated
+    ]
+    objects = [c for c in dir(transformers) if c not in modules and not any(c.startswith(p) for p in ignore_prefixes)]
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
