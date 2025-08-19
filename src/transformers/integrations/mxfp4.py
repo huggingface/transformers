@@ -48,20 +48,13 @@ FP4_VALUES = [
 
 
 # Copied from GPT_OSS repo and vllm
-def quantize_to_mxfp4(w):
-    from kernels import get_kernel
-
-    global triton_kernels_hub
-    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-
-    downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
-
-    w, w_scale = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
-    w, w_scale = swizzle_mxfp4(w, w_scale)
+def quantize_to_mxfp4(w, triton_kernels_hub):
+    downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
+    w, w_scale = downcast_to_mxfp_torch(w.to(torch.bfloat16), torch.uint8, axis=1)
     return w, w_scale
 
 
-def swizzle_mxfp4(w, w_scale):
+def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
     """TODO this needs to be documented
     But is seems to only inform torch of what's inside, not actually changing the values inside
     """
@@ -75,18 +68,6 @@ def swizzle_mxfp4(w, w_scale):
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    # TODO : add that when we are actually sure that it works on B200
-    # if torch.cuda.get_device_capability()[0] == 10:
-    #     constraints = {
-    #         "is_persistent": True,
-    #         "epilogue_subtile": 1,
-    #     }
-    #     opt_flags.update_opt_flags_constraints(constraints)
-    # # transpose the tensor so that the quantization axis is on dim1
-
-    # TODO: there is still an issue with the scales on hopper
-    # scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
-    # w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
     return w, w_scale
 
@@ -98,8 +79,12 @@ def convert_moe_packed_tensors(
     scales,
     *,
     dtype: torch.dtype = torch.bfloat16,
-    rows_per_chunk: int = 32768 * 1024,
+    rows_per_chunk: int = 32768 * 1024, # TODO these values are not here by mistake ;) 
 ) -> torch.Tensor:
+    """
+    Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
+    pass of GPT_OSS.
+    """
     import math
 
     # Check if blocks and scales are on CPU, and move to GPU if so
@@ -107,9 +92,9 @@ def convert_moe_packed_tensors(
         blocks = blocks.cuda()
         scales = scales.cuda()
 
-    scales = scales.to(torch.int32) - 127
+    scales = scales.to(torch.int32) - 127 # TODO that's because 128=2**7
 
-    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
+    assert blocks.shape[:-1] == scales.shape, f"{blocks.shape[:-1]=} does not match {scales.shape=}"
 
     lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
@@ -139,17 +124,9 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-
-    # TODO: Delete after making sure this is not necessary! since we go back to cpu in the end in create_quantized_param using .to(target_device)
-    # Move back to CPU if needed
-    # if need_to_move_back:
-    #     out = out.cpu()
-    # b,s = downcast_to_mxfp(w.to(torch.bfloat16), torch.uint8, axis=1)
-    # b,s = quantize_to_mxfp4a(out)
-    # torch.testing.assert_close(b, blocks)
-    # torch.testing.assert_close(s, scales)
+    # assert downcast_to_mxfp(out.reshape(32,2880 * 2, -1).transpose(-2, -1), torch.uint8, axis=1)[0].transpose(-2, -1).reshape(rows_total, B)
     del blocks, scales, lut
-    return out
+    return out.transpose(1, 2).contiguous()
 
 
 class Mxfp4GptOssExperts(nn.Module):
@@ -353,16 +330,14 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                dequantized = dequantized.transpose(1, 2).contiguous().to(target_device)
-                # TODO: this is perhaps necessary since if target_device is cpu, and the param was on gpu
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                setattr(module, proj, torch.nn.Parameter(dequantized))
+                setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
 
-def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwargs):
+def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """
@@ -395,7 +370,8 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     scales = getattr(module, scales_attr)
     # Check if both blocks and scales both not on meta device
     if blocks.device.type != "meta" and scales.device.type != "meta":
-        # need it for ep
+        # need it for efficient memory usage
+        assert triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch(blocks.data, scales.data, torch.bfloat16)
         local_experts = blocks.size(0)
         if proj == "gate_up_proj":
             blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
@@ -409,7 +385,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
         scales = scales.to(target_device)
         with torch.cuda.device(target_device):
             triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                blocks.transpose(-2, -1), scales.transpose(-2, -1)
+                blocks, scales, triton_kernels_hub
             )
 
         # need to overwrite the shapes for the kernels
@@ -422,7 +398,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
                 [local_experts, module.intermediate_size, module.hidden_size]
             )
 
-        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+        # triton_weight_tensor is what jjjneeds to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
         setattr(module, proj, triton_weight_tensor)
         setattr(
             module,
@@ -433,7 +409,6 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
         # delete blocks and scales
         delattr(module, scales_attr)
         delattr(module, blocks_attr)
-        # setattr(module, blocks_attr, torch.nn.Parameter(triton_weight_tensor.storage.data, requires_grad=False))
         del blocks
 
 

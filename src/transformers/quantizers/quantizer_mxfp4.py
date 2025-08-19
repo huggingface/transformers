@@ -36,6 +36,8 @@ logger = logging.get_logger(__name__)
 triton_kernels_hub = None
 
 
+
+
 class Mxfp4HfQuantizer(HfQuantizer):
     """
     FP4 quantization using fbgemm kernels
@@ -182,40 +184,28 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4
+        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4, convert_moe_packed_tensors
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
+        # this is either when loading bfloa16 into quantized model
+        # or when saving bfloat16 to quantized format (say after training)
         if not self.pre_quantized:
-            # this is either when loading bfloa16 into quantized model
-            # or when saving bfloat16 to quantized format (say after training)
             triton_kernels_hub = self._lazy_import_kernels()
-            downcast_to_mxfp = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp
-
             module, _ = get_module_from_name(model, param_name)
             with torch.device(target_device): 
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
+                    assert triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch(triton_weight_tensor.data, weight_scale.data, torch.bfloat16,1) == param_value
                     if "gate_up_proj" in param_name and "bias" not in param_name:
-                        triton_weight_tensor, weight_scale = downcast_to_mxfp(
-                            param_value.to(torch.bfloat16), torch.uint8, axis=1
-                        )
-                        module.gate_up_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False
-                        )
-                        module.gate_up_proj_scales = torch.nn.Parameter(
-                            weight_scale.data.reshape(32, -1, 90), requires_grad=False
-                        )
+                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data,requires_grad=False)
+                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
                     elif "down_proj" in param_name and "bias" not in param_name:
-                        triton_weight_tensor, weight_scale = downcast_to_mxfp(
-                            param_value.to(torch.bfloat16), torch.uint8, axis=1
-                        )
-                        module.down_proj_scales = torch.nn.Parameter(
-                            weight_scale.data.reshape(32, -1, 90), requires_grad=False
-                        )
+                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data, requires_grad=False)
+                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
                         if hasattr(module, "down_proj"):
-                            delattr(module, "down_proj")
-                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.reshape(32, -1, 90, 16), requires_grad=False)
+                            delattr(module, "down_proj") 
                     logger.debug(f"Created quantized weights for {param_name}")
         # we take this path if already quantized but not in a compatible waddy
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
@@ -255,6 +245,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         param_name,
                         param_value,
                         target_device,
+                        self._lazy_import_kernels(),
                         **shard_kwargs,
                     )
 
