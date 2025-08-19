@@ -269,6 +269,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mvp", "MvpConfig"),
         ("nat", "NatConfig"),
         ("nemotron", "NemotronConfig"),
+        ("ngen3", "NGen3Config"),
         ("nezha", "NezhaConfig"),
         ("nllb-moe", "NllbMoeConfig"),
         ("nougat", "VisionEncoderDecoderConfig"),
