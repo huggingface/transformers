@@ -4,11 +4,7 @@ from typing import Any, Optional
 
 import torch
 
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
-
 from .configuration_utils import PretrainedConfig
-from .integrations import is_fsdp_enabled
-from .integrations import is_fsdp_enabled
 from .utils import (
     is_hqq_available,
     is_quanto_greater,
@@ -995,8 +991,6 @@ class DynamicCache(Cache):
     ```
     """
 
-    _export_registered = False
-
     def __init__(
         self,
         ddp_cache_data: Optional[Iterable[tuple[torch.Tensor, torch.Tensor]]] = None,
@@ -1050,40 +1044,6 @@ class DynamicCache(Cache):
         else:
             super().__init__(layers=layers)
 
-        self._register_export_support()
-
-    @classmethod
-    def _register_export_support(cls):
-        """
-        Utilities for `DynamicCache` <> torch.export support
-        """
-        if cls._export_registered:
-            return
-
-        # Pytree registration causes memory leak for FSDP runs, see here: https://github.com/huggingface/transformers/issues/39795
-        if is_torch_greater_or_equal("2.3") and not is_fsdp_enabled():
-            try:
-                torch.utils._pytree.register_pytree_node(
-                    DynamicCache,
-                    lambda dynamic_cache: torch.utils._pytree._dict_flatten(cls._get_cache_dict(dynamic_cache)),
-                    cls._unflatten_dynamic_cache,
-                    serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-                    flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                        cls._get_cache_dict(dynamic_cache)
-                    ),
-                )
-                # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
-                torch.fx._pytree.register_pytree_flatten_spec(
-                    DynamicCache,
-                    lambda cache, spec: torch.fx._pytree._dict_flatten_spec(cls._get_cache_dict(cache), spec),
-                )
-
-                cls._export_registered = True
-            # Catching this in case there are multiple runs for some test runs
-            except ValueError as e:
-                if "already registered as pytree node" not in str(e):
-                    raise
-
     def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
@@ -1107,35 +1067,6 @@ class DynamicCache(Cache):
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
-        return cache
-
-    @staticmethod
-    def _get_cache_dict(cache):
-        """Convert cache to dictionary format for pytree operations."""
-        if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
-            raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-        if not is_torch_greater_or_equal_than_2_6:
-            logger.warning_once(
-                "DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
-            )
-
-        return {
-            "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
-            "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
-        }
-
-    @classmethod
-    def _unflatten_dynamic_cache(cls, values, context: torch.utils._pytree.Context):
-        dictionary = torch.utils._pytree._dict_unflatten(values, context)
-        cache = cls()
-        # Reconstruct layers from keys and values lists
-        key_list = dictionary.get("key_cache", [])
-        value_list = dictionary.get("value_cache", [])
-        for idx in range(max(len(key_list), len(value_list))):
-            key = key_list[idx] if idx < len(key_list) else None
-            value = value_list[idx] if idx < len(value_list) else None
-            cache.update(key, value, idx)
         return cache
 
 
