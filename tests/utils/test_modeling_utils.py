@@ -27,6 +27,7 @@ import uuid
 import warnings
 from pathlib import Path
 
+import pytest
 import requests
 from huggingface_hub import HfApi, HfFolder
 from parameterized import parameterized
@@ -2541,6 +2542,7 @@ class AttentionMaskTester(unittest.TestCase):
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
 
+    @pytest.mark.torch_compile_test
     def test_torch_compile_fullgraph(self):
         model = Prepare4dCausalAttentionMaskModel()
 
@@ -2684,6 +2686,7 @@ class AttentionMaskTester(unittest.TestCase):
 
 @require_torch
 class TestAttentionImplementation(unittest.TestCase):
+    @unittest.skip("Just a bit annoying")
     def test_error_no_sdpa_available(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="sdpa")

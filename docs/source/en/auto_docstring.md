@@ -290,7 +290,7 @@ The `@auto_docstring` decorator automatically generates docstrings by:
 
 7. Adding return values to the docstring. For methods like `forward`, the decorator automatically generates the `Returns` field in the docstring based on the method's return type annotation.
 
-    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specifiy a custom `Returns` field in a functions docstring.
+    For example, if a method returns a [`~transformers.utils.ModelOutput`] subclass, `@auto_docstring` extracts the field descriptions from the class' docstring to create a comprehensive return value description. You can also manually specify a custom `Returns` field in a functions docstring.
 
 8. Unrolling kwargs typed with the unpack operator. For specific methods (defined in `UNROLL_KWARGS_METHODS`) or classes (defined in `UNROLL_KWARGS_CLASSES`), the decorator processes `**kwargs` parameters that are typed with `Unpack[KwargsTypedDict]`. It extracts the documentations from the `TypedDict` and adds each parameter to the function's docstring.
 

@@ -65,7 +65,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.56.0.dev0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -316,7 +316,7 @@ def main():
         raw_datasets = load_dataset(extension, data_files=data_files)
     # Trim a number of training examples
     if args.debug:
-        for split in raw_datasets.keys():
+        for split in raw_datasets:
             raw_datasets[split] = raw_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.

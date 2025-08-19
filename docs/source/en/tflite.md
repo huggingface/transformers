@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [LiteRT](https://ai.google.dev/edge/litert) (previously known as TensorFlow Lite) is a high-performance runtime designed for on-device machine learning.
 
-The [Optimum](https://huggingface.co/docs/optimum/index) library exports a model to LiteRT for [many architectures]((https://huggingface.co/docs/optimum/exporters/onnx/overview)).
+The [Optimum](https://huggingface.co/docs/optimum/index) library exports a model to LiteRT for [many architectures](https://huggingface.co/docs/optimum/exporters/onnx/overview).
 
 The benefits of exporting to LiteRT include the following.
 

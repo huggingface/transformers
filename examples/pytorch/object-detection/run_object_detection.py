@@ -59,7 +59,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.56.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
@@ -403,7 +403,7 @@ def main():
     )
 
     # If we don't have a validation split, split off a percentage of train as validation
-    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in dataset else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(data_args.train_val_split, seed=training_args.seed)
         dataset["train"] = split["train"]

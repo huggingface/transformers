@@ -63,7 +63,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.55.0.dev0")
+check_min_version("4.56.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -465,7 +465,7 @@ def main():
     dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
+    args.train_val_split = None if "validation" in dataset else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(args.train_val_split, seed=args.seed)
         dataset["train"] = split["train"]

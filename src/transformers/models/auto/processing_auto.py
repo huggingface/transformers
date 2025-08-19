@@ -60,6 +60,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
+        ("cohere2_vision", "Cohere2VisionProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
@@ -73,6 +74,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
         ("glm4v", "Glm4vProcessor"),
+        ("glm4v_moe", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -99,8 +101,10 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mgp-str", "MgpstrProcessor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
+        ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
+        ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
@@ -114,6 +118,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
         ("sam", "SamProcessor"),
+        ("sam2", "Sam2Processor"),
         ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
@@ -261,7 +266,7 @@ class AutoProcessor:
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
-            if kwargs.get("token", None) is not None:
+            if kwargs.get("token") is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
@@ -276,9 +281,7 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {
-            key: kwargs[key] for key in inspect.signature(cached_file).parameters.keys() if key in kwargs
-        }
+        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {

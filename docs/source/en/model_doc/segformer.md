@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-31 and added to Hugging Face Transformers on 2021-10-28.*
 
 # SegFormer
 
@@ -125,6 +126,12 @@ If you're interested in submitting a resource to be included here, please feel f
 ## SegformerImageProcessor
 
 [[autodoc]] SegformerImageProcessor
+    - preprocess
+    - post_process_semantic_segmentation
+
+## SegformerImageProcessorFast
+
+[[autodoc]] SegformerImageProcessorFast
     - preprocess
     - post_process_semantic_segmentation
 

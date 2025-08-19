@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-04-09 and added to Hugging Face Transformers on 2023-07-17.*
 
 # Bark
 
@@ -19,7 +20,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
+[Bark](https://huggingface.co/suno/bark) is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
 
 Bark is made of 4 main models:
 
@@ -42,10 +43,10 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
-from transformers import BarkModel
+from transformers import BarkModel, infer_device
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
 ```
 
@@ -53,7 +54,7 @@ model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).
 
 As mentioned above, Bark is made up of 4 sub-models, which are called up sequentially during audio generation. In other words, while one sub-model is in use, the other sub-models are idle.
 
-If you're using a CUDA device, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from GPU to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
+If you're using a CUDA GPU or Intel XPU, a simple solution to benefit from an 80% reduction in memory footprint is to offload the submodels from device to CPU when they're idle. This operation is called *CPU offloading*. You can use it with one line of code as follows:
 
 ```python
 model.enable_cpu_offload()

@@ -51,7 +51,7 @@ def sdpa_attention_forward(
     is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
+    if kwargs.get("output_attentions", False) or kwargs.get("head_mask") is not None:
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True` or `head_mask`."
             " Please set your attention to `eager` if you want any of these features."
