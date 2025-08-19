@@ -5,11 +5,8 @@
 #                          modular_apertus.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 EleutherAI, the HuggingFace Inc. team, and the Swiss AI Initiative. All rights reserved.
+# Copyright 2025 the HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
-# This code is based on HuggingFace's LLaMA implementation in this library.
-# It has been modified from its original forms to accommodate the architectural
-# differences made by the Swiss AI Initiative that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_apertus import ApertusConfig
 
@@ -85,6 +83,8 @@ class ApertusRMSNorm(nn.Module):
 
 
 class ApertusRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: ApertusConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -222,12 +222,13 @@ class ApertusAttention(nn.Module):
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -243,9 +244,9 @@ class ApertusAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -280,12 +281,13 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
 
         self.post_norm = config.post_norm
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
@@ -298,7 +300,7 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -326,8 +328,7 @@ class ApertusPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ApertusDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_flash_attn_3 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -337,6 +338,85 @@ class ApertusPreTrainedModel(PreTrainedModel):
         "hidden_states": ApertusDecoderLayer,
         "attentions": ApertusAttention,
     }
+
+
+@auto_docstring
+class ApertusModel(ApertusPreTrainedModel):
+    def __init__(self, config: ApertusConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [ApertusDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = ApertusRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 @auto_docstring
@@ -430,83 +510,4 @@ class ApertusForTokenClassification(GenericForTokenClassification, ApertusPreTra
     pass
 
 
-@auto_docstring
-class ApertusModel(ApertusPreTrainedModel):
-    def __init__(self, config: ApertusConfig):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [ApertusDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = ApertusRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
-
-
-__all__ = ["ApertusForCausalLM", "ApertusForTokenClassification", "ApertusModel", "ApertusPreTrainedModel"]
+__all__ = ["ApertusModel", "ApertusForCausalLM", "ApertusForTokenClassification", "ApertusPreTrainedModel"]
