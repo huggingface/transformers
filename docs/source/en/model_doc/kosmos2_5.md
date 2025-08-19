@@ -55,7 +55,7 @@ model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=devic
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/blob/main/receipt_00008.png"
+url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
@@ -94,7 +94,7 @@ model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=devic
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/blob/main/receipt_00008.png"
+url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
