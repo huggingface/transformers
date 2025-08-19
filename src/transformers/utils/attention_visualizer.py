@@ -16,13 +16,13 @@
 import requests
 from PIL import Image
 
+from ..masking_utils import create_causal_mask
 from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
 from .import_utils import is_torch_available
-from ..masking_utils import create_causal_mask
 
 
 if is_torch_available():
@@ -208,11 +208,11 @@ class AttentionMaskVisualizer:
 
         model.config._attn_implementation = "eager"
         model.train()
-        
+
         batch_size, seq_length = attention_mask.shape
         input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
         cache_position = torch.arange(seq_length)
-        
+
         causal_mask = create_causal_mask(
             config=model.config,
             input_embeds=input_embeds,
@@ -220,7 +220,7 @@ class AttentionMaskVisualizer:
             cache_position=cache_position,
             past_key_values=None,
         )
-        
+
         if causal_mask is not None:
             attention_mask = ~causal_mask.bool()
         else:
