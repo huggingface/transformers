@@ -468,19 +468,18 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         return final_hidden_states, None, 1, router_logits
 
 
+# Copy Ernie 4.5 Moe
 class Ernie4_5_DecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
-        moe_layer_start_index = config.moe_layer_start_index
-        moe_layer_end_index = config.moe_layer_end_index
+        self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
         if (
             ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= moe_layer_start_index
-            and layer_idx <= moe_layer_end_index
+            and layer_idx >= config.moe_layer_start_index
+            and layer_idx <= config.moe_layer_end_index
         ):
             self.mlp = Ernie4_5_VLMoeBlock(config)
         else:
@@ -773,88 +772,6 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
             router_loss=all_router_loss,
             gate_logits=all_gate_logits,
         )
-
-
-class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
-    """ERNIE Mixture of Experts (MoE) model for causal language modeling."""
-
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-
-    def __init__(self, config):
-        """
-        Initializes the ERNIE MoE model for causal language modeling.
-
-        Args:
-            config (dict): Model configuration.
-        """
-        super().__init__(config)
-
-        # initialize-trick for big model,
-        # see https://github.com/bigscience-workshop/bigscience/blob/master/train/tr11-176B-ml/README.md#std-init
-        new_initializer_range = math.sqrt(0.3333 / config.hidden_size)
-        logger.info(
-            f"change initializer-range from {config.initializer_range} to {new_initializer_range}"
-        )
-        config.initializer_range = new_initializer_range
-        self.model = Ernie4_5_Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)
-
-        self.post_init()  # maybe weight share
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
-    # @staticmethod
-    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
-        """
-        Updates model kwargs for generation.
-
-        Args:
-            outputs (Any): Model outputs.
-            model_kwargs (dict): Current model kwargs.
-            is_encoder_decoder (bool): Whether using encoder-decoder architecture.
-
-        Returns:
-            dict: Updated model kwargs.
-        """
-        # update cache
-        if isinstance(outputs, tuple) and len(outputs) > 1 and not isinstance(outputs[1], torch.Tensor):
-            model_kwargs["past_key_values"] = outputs[1]
-
-        if isinstance(outputs, CausalLMOutputWithCrossAttentions) and "past_key_values" in outputs:
-            model_kwargs["past_key_values"] = outputs.past_key_values
-
-        # update token_type_ids with last value
-        if "token_type_ids" in model_kwargs and model_kwargs["token_type_ids"] is not None:
-            token_type_ids = model_kwargs["token_type_ids"]
-            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1:]], dim=-1)
-
-        if not is_encoder_decoder and model_kwargs.get("attention_mask", None) is not None:
-            # update attention mask
-            attention_mask = model_kwargs["attention_mask"]
-            model_kwargs["attention_mask"] = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones((attention_mask.shape[0], 1), dtype=torch.int64, device=attention_mask.device),
-                ],
-                dim=-1,
-            )
-
-        assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
-        position_ids = model_kwargs["position_ids"]
-
-        max_position = position_ids.max(dim=1, keepdim=True)[0]  # [batch_size, 1, hidden_dim]
-        new_positions = max_position + 1
-
-        model_kwargs["position_ids"] = torch.cat(
-            [position_ids, new_positions],
-            dim=1
-        )
-
-        return model_kwargs
 
 
 class VisionMlp(nn.Module):
@@ -1332,12 +1249,13 @@ class VariableResolutionResamplerModel(nn.Module):
         return x
 
 
-class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
+class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMixin):
     """Ernie4_5_VLMoeForConditionalGeneration"""
 
     config_class = Ernie4_5_VLConfig
     main_input_name = "pixel_values"
     _keep_in_fp16_modules = ["vision_model"]
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tp_plan = {}
 
     def __init__(
@@ -1351,9 +1269,9 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
             vision_model(nn.Module): vision model
             resampler_model(nn.Module): resampler model
         """
-        super().__init__(config.text_config)
+        super().__init__(config)
 
-        self.config = config
+        self.model = Ernie4_5_Model(config.text_config)
 
         self.vision_model = DFNRopeVisionTransformerPreTrainedModel(
             config.vision_config
@@ -1456,6 +1374,54 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
             inputs_embeds.device
         )
         return inputs_embeds
+
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
+        """
+        Updates model kwargs for generation.
+
+        Args:
+            outputs (Any): Model outputs.
+            model_kwargs (dict): Current model kwargs.
+            is_encoder_decoder (bool): Whether using encoder-decoder architecture.
+
+        Returns:
+            dict: Updated model kwargs.
+        """
+        # update cache
+        if isinstance(outputs, tuple) and len(outputs) > 1 and not isinstance(outputs[1], torch.Tensor):
+            model_kwargs["past_key_values"] = outputs[1]
+
+        if isinstance(outputs, CausalLMOutputWithCrossAttentions) and "past_key_values" in outputs:
+            model_kwargs["past_key_values"] = outputs.past_key_values
+
+        # update token_type_ids with last value
+        if "token_type_ids" in model_kwargs and model_kwargs["token_type_ids"] is not None:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1:]], dim=-1)
+
+        if not is_encoder_decoder and model_kwargs.get("attention_mask", None) is not None:
+            # update attention mask
+            attention_mask = model_kwargs["attention_mask"]
+            model_kwargs["attention_mask"] = torch.cat(
+                [
+                    attention_mask,
+                    torch.ones((attention_mask.shape[0], 1), dtype=torch.int64, device=attention_mask.device),
+                ],
+                dim=-1,
+            )
+
+        assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
+        position_ids = model_kwargs["position_ids"]
+
+        max_position = position_ids.max(dim=1, keepdim=True)[0]  # [batch_size, 1, hidden_dim]
+        new_positions = max_position + 1
+
+        model_kwargs["position_ids"] = torch.cat(
+            [position_ids, new_positions],
+            dim=1
+        )
+
+        return model_kwargs
 
     def prepare_inputs_for_generation(
         self,
