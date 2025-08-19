@@ -155,3 +155,55 @@ def test_empty_modules_list_no_check(monkeypatch):
 
     # Should NOT raise ImportError even though autoawq is "old"
     q.validate_environment(device_map=None)
+
+
+def test_read_only_config_handles_gracefully(monkeypatch):
+    """
+    Test that when quantization_config doesn't allow setting version attribute,
+    the code handles it gracefully and provides a helpful error message.
+    """
+    import transformers.quantizers.quantizer_awq as _qa
+
+    monkeypatch.setattr(_qa, "is_auto_awq_available", lambda: True)
+    monkeypatch.setattr(_qa, "is_accelerate_available", lambda: True)
+
+    # Force no GPU/XPU available to trigger version switch logic
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+    monkeypatch.setattr("torch.xpu.is_available", lambda: False)
+
+    from unittest.mock import MagicMock
+    import sys as _sys
+
+    # Mock autoawq to be available
+    mock_autoawq = MagicMock()
+    mock_autoawq.__version__ = "0.2.6"
+    mock_autoawq.version = "0.2.6"
+    monkeypatch.setitem(_sys.modules, "autoawq", mock_autoawq)
+
+    from transformers.utils.quantization_config import AWQLinearVersion
+
+    # Create a read-only config that raises AttributeError when trying to set version
+    class _ReadOnlyQCfg:
+        def __init__(self):
+            self.quant_method = "awq"
+            self._version = AWQLinearVersion.GEMM
+            self.modules_to_not_convert = None
+            self.do_fuse = False
+
+        @property
+        def version(self):
+            return self._version
+
+        @version.setter
+        def version(self, value):
+            raise AttributeError("can't set attribute")
+
+    from transformers.quantizers.quantizer_awq import AwqQuantizer
+
+    q = AwqQuantizer(_ReadOnlyQCfg())
+
+    # Should raise RuntimeError with helpful message, not AttributeError
+    with pytest.raises(RuntimeError) as exc:
+        q.validate_environment(device_map=None)
+
+    assert "read-only" in str(exc.value)

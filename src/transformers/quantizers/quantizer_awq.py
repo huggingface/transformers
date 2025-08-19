@@ -101,7 +101,15 @@ class AwqQuantizer(HfQuantizer):
             and not xpu_available
         ):
             logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
-            self.quantization_config.version = AWQLinearVersion.IPEX
+            # Safely set version attribute, handling cases where it might not exist or be read-only
+            try:
+                self.quantization_config.version = AWQLinearVersion.IPEX
+            except AttributeError:
+                # If the config object doesn't support setting version, raise a more informative error
+                raise RuntimeError(
+                    "GPU is required to run AWQ quantized model. Could not automatically switch to IPEX version "
+                    "because the quantization config is read-only. Please use a mutable config object or run on a GPU device."
+                )
 
         if getattr(self.quantization_config, "version", None) == AWQLinearVersion.IPEX:
             if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
