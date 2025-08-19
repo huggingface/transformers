@@ -171,8 +171,8 @@ def test_read_only_config_handles_gracefully(monkeypatch):
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
     monkeypatch.setattr("torch.xpu.is_available", lambda: False)
 
-    from unittest.mock import MagicMock
     import sys as _sys
+    from unittest.mock import MagicMock
 
     # Mock autoawq to be available
     mock_autoawq = MagicMock()
