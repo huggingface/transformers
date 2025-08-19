@@ -1950,7 +1950,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
-                    logger.waring_once(
+                    logger.warning_once(
                         f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
                         f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
                     )
