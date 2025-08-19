@@ -21,10 +21,10 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
 
 @require_torch
-@require_read_token
 class AttentionMaskVisualizerTester(unittest.TestCase):
     """Test suite for AttentionMaskVisualizer"""
 
+    @require_read_token
     def test_paligemma_multimodal_visualization(self):
         """Test AttentionMaskVisualizer with PaliGemma multimodal model"""
         model_name = "google/paligemma-3b-pt-224"
@@ -68,6 +68,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         self.assertEqual(output.strip(), expected_output.strip())
 
+    @require_read_token
     def test_llama_text_only_visualization(self):
         """Test AttentionMaskVisualizer with Llama text-only model"""
         model_name = "meta-llama/Llama-2-7b-hf"
