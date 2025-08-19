@@ -41,7 +41,7 @@ You can find all the original GPT-NeoX-Japanese checkpoints under the [ABEJA](ht
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 import torch
