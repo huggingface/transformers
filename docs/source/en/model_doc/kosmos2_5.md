@@ -48,14 +48,14 @@ import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
-repo = "microsoft/kosmos-2.5"
+repo = "ydshieh/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/microsoft/kosmos-2.5/blob/main/receipt_00008.png"
+url = "https://huggingface.co/ydshieh/kosmos-2.5/blob/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
@@ -87,14 +87,14 @@ import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
-repo = "microsoft/kosmos-2.5"
+repo = "ydshieh/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/microsoft/kosmos-2.5/blob/main/receipt_00008.png"
+url = "https://huggingface.co/ydshieh/kosmos-2.5/blob/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
@@ -161,9 +161,9 @@ image.save("output.png")
 
 
 ## Example
-**Markdown Task:** For usage instructions, please refer to [md.py](https://huggingface.co/microsoft/kosmos-2.5/blob/main/md.py).
+**Markdown Task:** For usage instructions, please refer to [md.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/md.py).
 
-**OCR Task:** For usage instructions, please refer to [ocr.py](https://huggingface.co/microsoft/kosmos-2.5/blob/main/ocr.py).
+**OCR Task:** For usage instructions, please refer to [ocr.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/ocr.py).
 
 
 
