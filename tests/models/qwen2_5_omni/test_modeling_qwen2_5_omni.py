@@ -447,7 +447,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
     @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @unittest.skip("Cannot handle 4D attention mask")
