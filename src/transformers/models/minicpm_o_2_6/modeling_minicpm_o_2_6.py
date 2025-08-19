@@ -556,7 +556,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
-        self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
         self.force_no_stop = False
 
         # for stream api
@@ -1094,8 +1093,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Qwen2ForCausalLM
 
-        >>> model = Qwen2ForCausalLM.from_pretrained("meta-qwen2/Qwen2-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-qwen2/Qwen2-2-7b-hf")
+        >>> model = Qwen2ForCausalLM.from_pretrained("openbmb/MiniCPM-o-2_6")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM-o-2_6")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1217,7 +1216,16 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                 # if stream return TextIteratorStreamer and output is empty
                 outputs = {}
             else:
-                outputs = self._decode(model_inputs["inputs_embeds"], tokenizer, attention_mask, **kwargs)
+                terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
+                outputs = super().generate(
+                    inputs_embeds=model_inputs["inputs_embeds"],
+                    pad_token_id=0,
+                    eos_token_id=terminators,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True,
+                    return_dict_in_generate=True,
+                    **kwargs,
+                )
                 result = self.processor.decode_text(outputs.sequences, tokenizer, self.terminators)
 
         return result, outputs
@@ -1355,7 +1363,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     copy_msgs,
                     tokenize=False,
                     add_generation_prompt=True,
-                    chat_template=self.default_tts_chat_template if use_tts_template else None,
+                    chat_template=self.processor.default_tts_chat_template if use_tts_template else None,
                 )
             )
             if images:
@@ -1513,7 +1521,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
             self.session_id = session_id
 
             prompt = tokenizer.apply_chat_template(
-                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=self.default_tts_chat_template
+                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=self.processor.default_tts_chat_template
             )
             add_special_tokens = True  # add bos
         else:
