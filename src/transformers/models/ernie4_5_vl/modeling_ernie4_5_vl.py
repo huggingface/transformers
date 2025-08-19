@@ -47,7 +47,7 @@ class TokenType:
 
 
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None, freq_allocation=0):
+    def __init__(self, config, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
@@ -208,11 +208,7 @@ class Ernie4_5_VLTextAttention(nn.Module):
         )
 
         # TODO: rope to be moved outside
-        #self.freq_allocation = getattr(config, "freq_allocation", 0)
-        self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(
-            config=config,
-            freq_allocation=config.freq_allocation,
-        )
+        self.rotary_emb = Ernie4_5_VLTextRotaryEmbedding(config=config)
 
     def forward(
         self,

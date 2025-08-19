@@ -113,6 +113,7 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.freq_allocation = freq_allocation
+        self.rope_scaling = rope_scaling
         if rope_scaling is None:
             self.rope_scaling = {"rope_type": "ernie_3d", "freq_allocation": freq_allocation}
         rope_config_validation(self)
