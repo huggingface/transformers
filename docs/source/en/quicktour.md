@@ -189,7 +189,7 @@ pipeline("The secret to baking a good cake is ", max_length=50)
 </hfoption>
 <hfoption id="image segmentation">
 
-Use `infer_device` to automatically detect available hardware(e.g. CUDA GPU, Intel XPU) and use it to accelerate inference.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
