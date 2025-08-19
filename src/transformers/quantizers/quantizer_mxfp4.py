@@ -36,8 +36,6 @@ logger = logging.get_logger(__name__)
 triton_kernels_hub = None
 
 
-
-
 class Mxfp4HfQuantizer(HfQuantizer):
     """
     FP4 quantization using fbgemm kernels
@@ -59,6 +57,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if self.triton_kernels_hub is None:
             try:
                 from kernels import get_kernel
+
                 self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
             except ImportError:
                 raise ImportError("kernels package is required for MXFP4 quantization")
@@ -184,7 +183,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4, convert_moe_packed_tensors
+        from ..integrations import (
+            Mxfp4GptOssExperts,
+            dequantize,
+            load_and_swizzle_mxfp4,
+            quantize_to_mxfp4,
+        )
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         # this is either when loading bfloa16 into quantized model
@@ -192,20 +196,28 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if not self.pre_quantized:
             triton_kernels_hub = self._lazy_import_kernels()
             module, _ = get_module_from_name(model, param_name)
-            with torch.device(target_device): 
+            with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
                     # these wheights are not swizzled yet, because on load we swizzle them
                     if "gate_up_proj" in param_name and "bias" not in param_name:
-                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.transpose(-1,-2).reshape(32, -1, 90, 16),requires_grad=False)
-                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data.transpose(-1,-2), requires_grad=False)
+                        module.gate_up_proj_blocks = torch.nn.Parameter(
+                            triton_weight_tensor.data.transpose(-1, -2).reshape(32, -1, 90, 16), requires_grad=False
+                        )
+                        module.gate_up_proj_scales = torch.nn.Parameter(
+                            weight_scale.data.transpose(-1, -2), requires_grad=False
+                        )
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
                     elif "down_proj" in param_name and "bias" not in param_name:
-                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.transpose(-1,-2).reshape(32, 2880, 90, -1), requires_grad=False)
-                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data.transpose(-1,-2), requires_grad=False)
+                        module.down_proj_blocks = torch.nn.Parameter(
+                            triton_weight_tensor.data.transpose(-1, -2).reshape(32, 2880, 90, -1), requires_grad=False
+                        )
+                        module.down_proj_scales = torch.nn.Parameter(
+                            weight_scale.data.transpose(-1, -2), requires_grad=False
+                        )
                         if hasattr(module, "down_proj"):
-                            delattr(module, "down_proj") 
+                            delattr(module, "down_proj")
                     logger.debug(f"Created quantized weights for {param_name}")
         # we take this path if already quantized but not in a compatible waddy
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
@@ -248,7 +260,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         self._lazy_import_kernels(),
                         **shard_kwargs,
                     )
-
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         # we are not really dequantizing, we are just removing everthing related to quantization here

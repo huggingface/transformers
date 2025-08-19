@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -491,12 +492,9 @@ class Mxfp4ModelTest(unittest.TestCase):
             device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        # with tempfile.TemporaryDirectory() as tmp:
-        from contextlib import nullcontext
-
-        with nullcontext():
+        with tempfile.TemporaryDirectory() as tmp:
             # Save the model in mxfp4 format
-            model.save_pretrained("/fsx/arthur/mxfp4", quantization_config=quantization_config)
+            model.save_pretrained(tmp, quantization_config=quantization_config)
             torch.cuda.empty_cache()
             gc.collect()
             quantization_config.dequantize = False

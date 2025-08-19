@@ -79,7 +79,7 @@ def convert_moe_packed_tensors(
     scales,
     *,
     dtype: torch.dtype = torch.bfloat16,
-    rows_per_chunk: int = 32768 * 1024, # TODO these values are not here by mistake ;) 
+    rows_per_chunk: int = 32768 * 1024,  # TODO these values are not here by mistake ;)
 ) -> torch.Tensor:
     """
     Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
@@ -92,7 +92,7 @@ def convert_moe_packed_tensors(
         blocks = blocks.cuda()
         scales = scales.cuda()
 
-    scales = scales.to(torch.int32) - 127 # TODO that's because 128=2**7
+    scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
     assert blocks.shape[:-1] == scales.shape, f"{blocks.shape[:-1]=} does not match {scales.shape=}"
 
@@ -381,18 +381,14 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         scales = scales.to(target_device).contiguous()
         with torch.cuda.device(target_device):
             triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                blocks.transpose(-2,-1), scales.transpose(-2,-1), triton_kernels_hub
+                blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
             )
 
         # need to overwrite the shapes for the kernels
         if proj == "gate_up_proj":
-            triton_weight_tensor.shape = torch.Size(
-                [local_experts, module.hidden_size, module.intermediate_size * 2]
-            )
+            triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
         else:
-            triton_weight_tensor.shape = torch.Size(
-                [local_experts, module.intermediate_size, module.hidden_size]
-            )
+            triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
 
         # triton_weight_tensor is what jjjneeds to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
         setattr(module, proj, triton_weight_tensor)
