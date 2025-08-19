@@ -619,7 +619,7 @@ class ProcessorMixin(PushToHubMixin):
             output["audio_tokenizer"] = audio_tokenizer_dict
 
         # Some attributes have different names but containing objects that are not simple strings
-        output = {k: v for k, v in output.items() if not v.__class__.__name__ == "BeamSearchDecoderCTC"}
+        output = {k: v for k, v in output.items() if v.__class__.__name__ != "BeamSearchDecoderCTC"}
         if not legacy_serialization:
             output = {k: v for k, v in output.items() if not isinstance(v, PushToHubMixin)}
 
