@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -33,13 +33,13 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_soundfile,
     require_torch,
     require_torch_large_accelerator,
+    require_torchcodec,
     slow,
     torch_device,
 )
-from transformers.utils import is_soundfile_available
+from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -54,8 +54,8 @@ if is_vision_available():
     from PIL import Image
 
 
-if is_soundfile_available():
-    import soundfile
+if is_torchcodec_available():
+    import torchcodec
 
 
 class Phi4MultimodalModelTester:
@@ -254,6 +254,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
+    @pytest.mark.torch_compile_test
     def test_generate_compile_model_forward(self):
         pass
 
@@ -296,11 +297,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav") as tmp:
-            tmp.write(requests.get(self.audio_url, stream=True).raw.data)
-            tmp.flush()
-            tmp.seek(0)
-            self.audio, self.sampling_rate = soundfile.read(tmp.name)
+        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
+        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
+        self.audio, self.sampling_rate = samples.data, samples.sample_rate
 
         cleanup(torch_device, gc_collect=True)
 
@@ -378,7 +377,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
-    @require_soundfile
+    @require_torchcodec
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device

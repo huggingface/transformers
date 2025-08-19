@@ -19,10 +19,13 @@ line-length = 119
 
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
-ignore = ["C901", "E501", "E741", "F402", "F823" ]
+# SIM300: Yoda condition detected
+# SIM212: Checks for if expressions that check against a negated condition.
+# SIM905: Consider using a list literal instead of `str.split`
+ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905"]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013", "UP006"]
+select = ["C", "E", "F", "I", "W", "RUF013", "UP006", "PERF102", "PLC1802", "PLC0208","SIM"]
 extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.

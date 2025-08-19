@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2024-03-05.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -28,6 +29,7 @@ You can find all the original Mamba checkpoints under the [State Space Models](h
 
 
 > [!TIP]
+> This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -114,6 +116,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
   )
   trainer.train()
    ```
+
+## MambaCache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## MambaConfig
 

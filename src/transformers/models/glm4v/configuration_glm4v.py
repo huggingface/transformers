@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
@@ -95,7 +94,7 @@ class Glm4vVisionConfig(PretrainedConfig):
         patch_size=14,
         rms_norm_eps=1e-05,
         spatial_merge_size=2,
-        temporal_patch_size=1,
+        temporal_patch_size=2,
         out_hidden_size=4096,
         intermediate_size=13696,
         initializer_range=0.02,

@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
@@ -235,9 +234,7 @@ class IdeficsProcessor(ProcessorMixin):
         )
 
         self.tokenizer_was_trained_with_end_of_utterance_token = (
-            True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
-            else False
+            "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
@@ -340,8 +337,6 @@ class IdeficsProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You need to specify either `text` or `images` and `text`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         if images is None:
             # assuming the user wants to use the old behavior with prompts as the only argument
@@ -405,7 +400,7 @@ class IdeficsProcessor(ProcessorMixin):
             last_was_text = False
             for i, item in enumerate(sample):
                 if i > 0:
-                    last_was_text = True if not last_was_image else False
+                    last_was_text = bool(not last_was_image)
 
                 if isinstance(item, str):
                     item = item.strip(" ")

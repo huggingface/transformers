@@ -318,6 +318,15 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         pass
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
     @is_flaky
     def test_generate_compile_model_forward(self):
         super().test_generate_compile_model_forward()
+
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass

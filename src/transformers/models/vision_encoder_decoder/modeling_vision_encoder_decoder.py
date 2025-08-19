@@ -63,12 +63,12 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
-    config_class = VisionEncoderDecoderConfig
+    config: VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
@@ -113,6 +113,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         self.encoder = encoder
         self.decoder = decoder
+        self._can_compile_fullgraph = decoder._can_compile_fullgraph
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
@@ -257,7 +258,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 del tf_model
                 gc.collect()
 
-                attn_implementation = kwargs.get("attn_implementation", None)
+                attn_implementation = kwargs.get("attn_implementation")
                 kwargs_encoder_decoder = {}
                 if attn_implementation:
                     kwargs_encoder_decoder = {
@@ -360,9 +361,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargs_encoder:
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargs_decoder:
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
@@ -449,6 +450,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
@@ -561,6 +563,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
+            cache_position=cache_position,
             **kwargs_decoder,
         )
 
@@ -596,10 +599,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
 
 
 __all__ = ["VisionEncoderDecoderModel"]

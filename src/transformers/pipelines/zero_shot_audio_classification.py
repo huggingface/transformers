@@ -49,7 +49,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     >>> dataset = load_dataset("ashraq/esc50")
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
     >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion/clap-htsat-unfused")
-    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
+    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vacuum cleaner"])
     [{'score': 0.9996, 'label': 'Sound of a dog'}, {'score': 0.0004, 'label': 'Sound of vaccum cleaner'}]
     ```
 
@@ -59,6 +59,11 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     `"zero-shot-audio-classification"`. See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-audio-classification).
     """
+
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = True
+    _load_tokenizer = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

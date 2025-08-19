@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-20 and added to Hugging Face Transformers on 2021-02-02.*
 
 # Wav2Vec2
 
@@ -172,9 +173,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
 
->>> def map_to_array(batch):
-...     batch["speech"] = batch["audio"]["array"]
-...     return batch
+>>> def map_to_array(example):
+...     example["speech"] = example["audio"]["array"]
+...     return example
 
 
 >>> # prepare speech data for batch inference

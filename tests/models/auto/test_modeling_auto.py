@@ -125,7 +125,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertIsInstance(model, BertForPreTraining)
         # Only one value should not be initialized and in the missing keys.
-        for key, value in loading_info.items():
+        for value in loading_info.values():
             self.assertEqual(len(value), 0)
 
     @slow
