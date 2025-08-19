@@ -28,10 +28,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
-from ..cohere2.modeling_cohere2 import (
-    Cohere2RotaryEmbedding,
-    rotate_half
-)
+from ..cohere2.modeling_cohere2 import Cohere2RotaryEmbedding
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
     MllamaPreTrainedModel,
@@ -269,7 +266,7 @@ class BltSelfAttention(MllamaTextSelfAttention):
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
         use_cache: bool = False,
-        past_key_value=None,
+        past_key_values=None,
         cache_position=None,
         **kwargs,
     ):
@@ -280,7 +277,7 @@ class BltSelfAttention(MllamaTextSelfAttention):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             use_cache=use_cache,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -299,7 +296,7 @@ class BltCrossAttention(MllamaTextCrossAttention):
         self,
         hidden_states: torch.Tensor,
         cross_attention_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -315,14 +312,14 @@ class BltCrossAttention(MllamaTextCrossAttention):
             value_states = self.v_proj(cross_attention_states)
             key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
             value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            if past_key_value is not None:
-                key_states, value_states = past_key_value.update(
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
         elif cache_position[0] != 0:
             key_states, value_states = (
-                past_key_value.layers[self.layer_idx].keys,
-                past_key_value.layers[self.layer_idx].values,
+                past_key_values.layers[self.layer_idx].keys,
+                past_key_values.layers[self.layer_idx].values,
             )
         else:
             raise ValueError(
@@ -431,7 +428,7 @@ class BltLocalEncoder(BltPreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -557,7 +554,7 @@ class BltLocalDecoder(BltPreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )

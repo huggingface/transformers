@@ -310,7 +310,7 @@ class BltConfig(PretrainedConfig):
         self.max_patch_length = max_patch_length
         self.patching_device = kwargs.get("patching_device", "cuda")
         self.realtime_patching = kwargs.get("realtime_patching", True)
-        self.patching_threshold_add = kwargs.get("patching_threshold_add", None)
+        self.patching_threshold_add = kwargs.get("patching_threshold_add")
         self.monotonicity = kwargs.get("monotonicity", False)
         self.pm_size = kwargs.get("pm_size", 0)
 
