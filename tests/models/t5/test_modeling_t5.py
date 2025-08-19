@@ -25,6 +25,7 @@ from transformers import T5Config, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_accelerate,
     require_sentencepiece,
@@ -1200,7 +1201,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = Expectations(
+            {
+                (None, None): -19.0845,
+                ("rocm", (9, 4)): -19.0846,
+            }
+        ).get_expectation()
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow

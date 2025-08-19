@@ -112,7 +112,6 @@ def _lazy_define_process_function(flash_function):
     NOTE: While all supported kwargs are marked as `True`, everything else is marked as `False`.
           This might be confusing for kwargs that we use in any case, e.g. `is_causal`.
     """
-    global _process_flash_kwargs_fn, _hf_api_to_flash_mapping
 
     flash_parameters = inspect.signature(flash_function).parameters
     process_parameters = inspect.signature(_process_flash_attention_kwargs).parameters
