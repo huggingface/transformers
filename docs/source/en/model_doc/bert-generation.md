@@ -83,7 +83,7 @@ echo -e "Plants create energy through " | transformers run --task text2text-gene
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [BitsAndBytesConfig](../main_classes/quantization#transformers.BitsAndBytesConfig) to quantize the weights to 4-bit.
+The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quantize the weights to 4-bit.
 
 ```python
 from transformers import BertGenerationEncoder, BertTokenizer, BitsAndBytesConfig
