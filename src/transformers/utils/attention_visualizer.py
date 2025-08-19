@@ -22,6 +22,7 @@ from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAP
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
 from .import_utils import is_torch_available
+from ..masking_utils import create_causal_mask
 
 
 if is_torch_available():
@@ -207,13 +208,23 @@ class AttentionMaskVisualizer:
 
         model.config._attn_implementation = "eager"
         model.train()
-        attention_mask = ~model._update_causal_mask(
+        
+        batch_size, seq_length = attention_mask.shape
+        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        cache_position = torch.arange(seq_length)
+        
+        causal_mask = create_causal_mask(
+            config=model.config,
+            input_embeds=input_embeds,
             attention_mask=attention_mask,
-            input_tensor=attention_mask.to(self.model.dtype),
-            cache_position=torch.arange(attention_mask.shape[1]),
+            cache_position=cache_position,
             past_key_values=None,
-            **kwargs,
-        ).bool()
+        )
+        
+        if causal_mask is not None:
+            attention_mask = ~causal_mask.bool()
+        else:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length
