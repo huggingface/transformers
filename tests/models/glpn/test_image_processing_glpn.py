@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ if is_vision_available():
     from transformers import GLPNImageProcessor
 
 
-class GLPNImageProcessingTester(unittest.TestCase):
+class GLPNImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -46,7 +45,6 @@ class GLPNImageProcessingTester(unittest.TestCase):
         size_divisor=32,
         do_rescale=True,
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

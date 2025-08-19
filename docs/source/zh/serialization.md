@@ -128,11 +128,11 @@ optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_s
 
 <Tip warning={true}>
 
-`tranformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
+`transformers.onnx` 不再进行维护，请如上所述，使用 🤗 Optimum 导出模型。这部分内容将在未来版本中删除。
 
 </Tip>
 
-要使用 `tranformers.onnx` 将 🤗 Transformers 模型导出为 ONNX，请安装额外的依赖项：
+要使用 `transformers.onnx` 将 🤗 Transformers 模型导出为 ONNX，请安装额外的依赖项：
 
 ```bash
 pip install transformers[onnx]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +42,7 @@ class ConstraintTest(unittest.TestCase):
             DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
 
     def test_check_illegal_input(self):
-        # We can't have constraints that are complete subsets of another. This leads to a preverse
+        # We can't have constraints that are complete subsets of another. This leads to a perverse
         # interpretation of "constraint fulfillment": does generating [1,2,3] fulfill the constraint?
         # It would mean that it generated [1,2] which fulfills it, but it's in the middle of potentially
         # fulfilling [1,2,3,4]. If we believe that [1,2,3] does fulfill the constraint, then the algorithm

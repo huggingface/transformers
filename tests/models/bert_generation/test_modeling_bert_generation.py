@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -243,7 +242,6 @@ class BertGenerationEncoderTester:
 @require_torch
 class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BertGenerationEncoder, BertGenerationDecoder) if is_torch_available() else ()
-    all_generative_model_classes = (BertGenerationDecoder,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BertGenerationEncoder, "text-generation": BertGenerationDecoder}
         if is_torch_available()
@@ -275,7 +273,6 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -319,7 +316,7 @@ class BertGenerationEncoderIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[0.1775, 0.0083, -0.0321], [1.6002, 0.1287, 0.3912], [2.1473, 0.5791, 0.6066]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_torch
@@ -335,4 +332,4 @@ class BertGenerationDecoderIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-0.5788, -2.5994, -3.7054], [0.0438, 4.7997, 1.8795], [1.5862, 6.6409, 4.4638]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import List, Union
+from typing import Any, Optional, Union, overload
 
 import requests
 
@@ -51,6 +51,11 @@ class VideoClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "av")
@@ -77,12 +82,18 @@ class VideoClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = "softmax"
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`):
+            inputs (`str`, `list[str]`):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video
@@ -106,9 +117,9 @@ class VideoClassificationPipeline(Pipeline):
                 post-processing.
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single video, will return a
-            dictionary, if the input is a list of several videos, will return a list of dictionaries corresponding to
-            the videos.
+            A list of dictionaries or a list of list of dictionaries containing result. If the input is a single video,
+            will return a list of `top_k` dictionaries, if the input is a list of several videos, will return a list of list of
+            `top_k` dictionaries corresponding to the videos.
 
             The dictionaries contain the following keys:
 

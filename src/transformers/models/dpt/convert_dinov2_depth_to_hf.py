@@ -123,7 +123,7 @@ def create_rename_keys_backbone(config):
     rename_keys.append(("patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
 
-    # Transfomer encoder
+    # Transformer encoder
     for i in range(config.backbone_config.num_hidden_layers):
         # layernorms
         rename_keys.append((f"blocks.{i}.norm1.weight", f"backbone.encoder.layer.{i}.norm1.weight"))

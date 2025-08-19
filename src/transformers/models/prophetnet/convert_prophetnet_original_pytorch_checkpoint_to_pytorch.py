@@ -118,9 +118,9 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
                 is_key_init = True
                 break
             elif attribute == "position_embeddings":
-                assert (
-                    model.position_embeddings.weight.shape[-1] == old_model.embed_positions.weight.shape[-1]
-                ), "Hidden size has to match"
+                assert model.position_embeddings.weight.shape[-1] == old_model.embed_positions.weight.shape[-1], (
+                    "Hidden size has to match"
+                )
                 assert model.position_embeddings.weight.shape[0] == 512, "We want 512 position_embeddings."
                 model.position_embeddings.weight = nn.Parameter(old_model.embed_positions.weight[:512, :])
                 is_key_init = True

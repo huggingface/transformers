@@ -171,7 +171,7 @@ class Idefics3Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("text_config is None, using default text config")
@@ -185,3 +185,6 @@ class Idefics3Config(PretrainedConfig):
         self.scale_factor = scale_factor
 
         super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+
+
+__all__ = ["Idefics3Config", "Idefics3VisionConfig"]

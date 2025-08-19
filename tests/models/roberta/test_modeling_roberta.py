@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,8 @@
 
 
 import unittest
+
+import pytest
 
 from transformers import AutoTokenizer, RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
@@ -380,7 +381,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RobertaModel,
@@ -419,7 +419,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -541,7 +540,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -559,7 +558,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.extract_features(input_ids)[:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_classification_head(self):
@@ -576,8 +575,9 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+        torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:

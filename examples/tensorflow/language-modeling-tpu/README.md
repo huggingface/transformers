@@ -8,7 +8,7 @@ This example will demonstrate pre-training language models at the 100M-1B parame
 
 We've tried to ensure that all the practices we show you here are scalable, though - with relatively few changes, the code could be scaled up to much larger models. 
 
-Google's gargantuan [PaLM model](https://arxiv.org/abs/2204.02311), with
+Google's gargantuan [PaLM model](https://huggingface.co/papers/2204.02311), with
 over 500B parameters, is a good example of how far you can go with pure TPU training, though gathering the dataset and the budget to train at that scale is not an easy task!
 
 ### Table of contents 
@@ -35,7 +35,7 @@ python train_unigram.py --batch_size 1000 --vocab_size 25000 --export_to_hub
 
 The script will automatically load the `train` split of the WikiText dataset and train a [Unigram tokenizer](https://huggingface.co/course/chapter6/7?fw=pt) on it.
 
-> 💡 **Note**: In order for `export_to_hub` to work, you must authenticate yourself with the `huggingface-cli`. Run `huggingface-cli login` and follow the on-screen instructions.
+> 💡 **Note**: In order for `export_to_hub` to work, you must authenticate yourself with the `hf`. Run `hf auth login` and follow the on-screen instructions.
 
 ## Preparing the dataset
 

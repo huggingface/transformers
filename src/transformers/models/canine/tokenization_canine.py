@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for CANINE."""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -36,7 +36,7 @@ MASK = 0xE003
 RESERVED = 0xE004
 
 # Maps special codepoints to human-readable names.
-SPECIAL_CODEPOINTS: Dict[int, str] = {
+SPECIAL_CODEPOINTS: dict[int, str] = {
     # Special symbols are represented using codepoints values that are valid,
     # but designated as "Private Use", meaning that they will never be assigned
     # characters by the Unicode Consortium, and are thus safe for use here.
@@ -52,7 +52,7 @@ SPECIAL_CODEPOINTS: Dict[int, str] = {
 }
 
 # Maps special codepoint human-readable names to their codepoint values.
-SPECIAL_CODEPOINTS_BY_NAME: Dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
+SPECIAL_CODEPOINTS_BY_NAME: dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
 
 
 class CanineTokenizer(PreTrainedTokenizer):
@@ -91,12 +91,12 @@ class CanineTokenizer(PreTrainedTokenizer):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         # Creates a mapping for looking up the IDs of special symbols.
-        self._special_codepoints: Dict[str, int] = {}
+        self._special_codepoints: dict[str, int] = {}
         for codepoint, name in SPECIAL_CODEPOINTS.items():
             self._special_codepoints[name] = codepoint
 
         # Creates a mapping for looking up the string forms of special symbol IDs.
-        self._special_codepoint_strings: Dict[int, str] = {
+        self._special_codepoint_strings: dict[int, str] = {
             codepoint: name for name, codepoint in self._special_codepoints.items()
         }
 
@@ -124,7 +124,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Tokenize a string (i.e. perform character splitting)."""
         return list(text)
 
@@ -151,8 +151,8 @@ class CanineTokenizer(PreTrainedTokenizer):
         return "".join(tokens)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CANINE sequence has the following format:
@@ -178,8 +178,8 @@ class CanineTokenizer(PreTrainedTokenizer):
         return result
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -203,37 +203,6 @@ class CanineTokenizer(PreTrainedTokenizer):
         result = [1] + ([0] * len(token_ids_0)) + [1]
         if token_ids_1 is not None:
             result += ([0] * len(token_ids_1)) + [1]
-        return result
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CANINE
-        sequence pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        result = len(cls + token_ids_0 + sep) * [0]
-        if token_ids_1 is not None:
-            result += len(token_ids_1 + sep) * [1]
         return result
 
     # CanineTokenizer has no vocab file

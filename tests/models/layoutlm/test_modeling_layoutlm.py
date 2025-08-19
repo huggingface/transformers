@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,7 +243,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
 
     def setUp(self):
         self.model_tester = LayoutLMModelTester(self)
@@ -280,19 +279,19 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -329,12 +328,12 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
         # test the pooled output on [1, :3]
         expected_slice = torch.tensor([-0.6580, -0.0214, 0.8552], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.pooler_output[1, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.pooler_output[1, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_forward_pass_sequence_classification(self):

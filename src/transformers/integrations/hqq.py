@@ -28,7 +28,7 @@ def autoname_modules(model):
         module.name = name
 
 
-# Get the linear_tag from a modul name. For example: model.layers.31.self_attn.k_proj -> self_attn.k_proj
+# Get the linear_tag from a module name. For example: model.layers.31.self_attn.k_proj -> self_attn.k_proj
 def name_to_linear_tag(name):
     return ".".join([n for n in name.split(".") if ((n not in ["model", "layers"]) and (not n.isnumeric()))])
 
@@ -86,9 +86,9 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     """
     Prepares nn.Linear layers for HQQ quantization.
     Since each layer type can have separate quantization parameters, we need to do the following:
-    1- tag each module with its neme via autoname_modules()
+    1- tag each module with its name via autoname_modules()
     2- Extract linear_tags (e.g. ['self_attn.q_proj', ...])
-    3- Map quantization parameters as a dictionary linear_tag -> quant_params as HQQLinear exepects it, this is referred to as patch_params
+    3- Map quantization parameters as a dictionary linear_tag -> quant_params as HQQLinear expects it, this is referred to as patch_params
     """
 
     modules_to_not_convert = [] if modules_to_not_convert is None else modules_to_not_convert
@@ -104,13 +104,13 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     quant_config = quantization_config.quant_config
     linear_tags = list(set(linear_tags) - set(skip_modules) - set(modules_to_not_convert))
 
-    if any(key in linear_tags for key in quant_config.keys()):
+    if any(key in linear_tags for key in quant_config):
         # If the user doesn't specify a key from get_linear_tags, the layer is not quantized via (key, None)
-        patch_params = {key: None for key in linear_tags}
+        patch_params = dict.fromkeys(linear_tags)
         patch_params.update(quant_config)
     else:
         # Same quant_config for all layers
-        patch_params = {k: quant_config for k in linear_tags}
+        patch_params = dict.fromkeys(linear_tags, quant_config)
 
     model, has_been_replaced = _prepare_for_hqq_linear(
         model, patch_params=patch_params, has_been_replaced=has_been_replaced

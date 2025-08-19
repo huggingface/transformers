@@ -16,31 +16,31 @@ rendered properly in your Markdown viewer.
 
 # Custom Layers and Utilities
 
-This page lists all the custom layers used by the library, as well as the utility functions it provides for modeling.
+This page lists all the custom layers used by the library, as well as the utility functions and classes it provides for modeling.
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## Layers
+
+[[autodoc]] GradientCheckpointingLayer
+
+## Attention Functions
+
+[[autodoc]] AttentionInterface
+    - register
+
+## Attention Mask Functions
+
+[[autodoc]] AttentionMaskInterface
+    - register
+
+## Rotary Position Embedding Functions
+
+[[autodoc]] dynamic_rope_update
 
 ## Pytorch custom modules
 
 [[autodoc]] pytorch_utils.Conv1D
-
-[[autodoc]] modeling_utils.PoolerStartLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerEndLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerAnswerClass
-    - forward
-
-[[autodoc]] modeling_utils.SquadHeadOutput
-
-[[autodoc]] modeling_utils.SQuADHead
-    - forward
-
-[[autodoc]] modeling_utils.SequenceSummary
-    - forward
 
 ## PyTorch Helper Functions
 

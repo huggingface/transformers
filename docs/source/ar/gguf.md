@@ -77,7 +77,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 
 الآن لديك إمكانية الوصول إلى النسخة الكامل غير المكممة للنموذج في بيئة PyTorch، حيث يمكنك دمجه مع مجموعة كبيرة من الأدوات الأخرى.
 
-لإعادة التحويل إلى ملف `gguf`، نوصي باستخدام ملف [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) من llama.cpp.
+لإعادة التحويل إلى ملف `gguf`، نوصي باستخدام ملف [`convert-hf-to-gguf.py`](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py) من llama.cpp.
 
 فيما يلي كيفية إكمال البرنامج النصي أعلاه لحفظ النموذج وإعادة تصديره مرة أخرى إلى `gguf`:
 

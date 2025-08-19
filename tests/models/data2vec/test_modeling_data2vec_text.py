@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -373,7 +372,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Data2VecTextModel,
@@ -411,7 +409,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -527,7 +524,7 @@ class Data2VecTextModelIntegrationTest(TestCasePlus):
         # compare the actual values for a slice.
         expected_slice = torch.tensor([[[0.2328, 0.0000, 1.1710], [2.2525, 0.0000, 1.9937], [2.1280, 0.0000, 1.8691]]])
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -541,4 +538,4 @@ class Data2VecTextModelIntegrationTest(TestCasePlus):
             [[[0.1998, -0.0379, 0.0024], [-0.0971, -0.2214, -0.1798], [-0.0789, -0.2400, -0.1898]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

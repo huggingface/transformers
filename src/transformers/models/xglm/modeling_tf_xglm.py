@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
@@ -57,7 +57,7 @@ _CONFIG_FOR_DOC = "XGLMConfig"
 LARGE_NEGATIVE = -1e8
 
 
-def create_sinusoidal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
+def create_sinusoidal_positions(num_positions: int, embedding_dim: int, padding_idx: int | None) -> tf.Tensor:
     half_dim = embedding_dim // 2
     emb = math.log(10000) / (half_dim - 1)
     emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
@@ -81,7 +81,7 @@ def create_sinusoidal_positions(num_positions: int, embedding_dim: int, padding_
 
 
 def _create_position_ids_from_input_ids(
-    input_ids: tf.Tensor, past_key_values_length: int, padding_idx: Optional[int]
+    input_ids: tf.Tensor, past_key_values_length: int, padding_idx: int | None
 ) -> tf.Tensor:
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -94,7 +94,7 @@ def _create_position_ids_from_input_ids(
 
 
 def _create_position_ids_from_inputs_embeds(
-    inputs_embeds: tf.Tensor, past_key_values_length: int, padding_idx: Optional[int]
+    inputs_embeds: tf.Tensor, past_key_values_length: int, padding_idx: int | None
 ) -> tf.Tensor:
     """
     Args:
@@ -129,7 +129,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -181,11 +181,11 @@ class TFXGLMAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+        training: bool | None = False,
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -355,9 +355,9 @@ class TFXGLMDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[tf.Tensor] | None = None,
-        training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+        past_key_value: tuple[tf.Tensor] | None = None,
+        training: bool | None = False,
+    ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
@@ -459,7 +459,7 @@ class TFXGLMMainLayer(keras.layers.Layer):
     config_class = XGLMConfig
 
     def __init__(
-        self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs, **kwargs: Any
+        self, config: XGLMConfig, embed_tokens: TFSharedEmbeddings | None = None, *inputs, **kwargs: Any
     ) -> None:
         super().__init__(*inputs, **kwargs)
 
@@ -525,15 +525,15 @@ class TFXGLMMainLayer(keras.layers.Layer):
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
         **kwargs: Any,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPastAndCrossAttentions | tuple[tf.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -597,7 +597,7 @@ class TFXGLMMainLayer(keras.layers.Layer):
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -753,7 +753,7 @@ XGLM_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.num_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.num_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -796,7 +796,7 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
     """
 
     def __init__(
-        self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
+        self, config: XGLMConfig, embed_tokens: TFSharedEmbeddings | None = None, *inputs: Any, **kwargs: Any
     ) -> None:
         super().__init__(config, *inputs, **kwargs)
 
@@ -818,15 +818,15 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
         **kwargs: Any,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> TFBaseModelOutputWithPastAndCrossAttentions | tuple[tf.Tensor]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -872,7 +872,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     ]
 
     def __init__(
-        self, config: XGLMConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, *inputs: Any, **kwargs: Any
+        self, config: XGLMConfig, embed_tokens: TFSharedEmbeddings | None = None, *inputs: Any, **kwargs: Any
     ) -> None:
         super().__init__(config, *inputs, **kwargs)
 
@@ -885,19 +885,13 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         )
         self.config = config
 
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
     def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        position_ids = kwargs.get("position_ids", None)
-        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids")
+        attention_mask = kwargs.get("attention_mask")
 
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
@@ -929,16 +923,16 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
         **kwargs: Any,
-    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> TFCausalLMOutputWithCrossAttentions | tuple[tf.Tensor]:
         r"""
         labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -969,7 +963,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         if labels is not None:
             # shift labels to the left and cut last logit token
             labels = tf.concat(
-                [labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(self.config.pad_token_id, labels.dtype))],
+                [labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(-100, labels.dtype))],
                 axis=-1,
             )
             loss = self.hf_compute_loss(labels, lm_logits)
@@ -1003,3 +997,6 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             return tf_weight, "model.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+
+__all__ = ["TFXGLMForCausalLM", "TFXGLMModel", "TFXGLMPreTrainedModel"]

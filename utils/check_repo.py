@@ -38,11 +38,11 @@ import types
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
+from importlib.machinery import ModuleSpec
 from pathlib import Path
-from typing import List, Tuple
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
-from transformers.models.auto import get_values
+from transformers.models.auto.auto_factory import get_values
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
@@ -70,6 +70,7 @@ PRIVATE_MODELS = [
     "Pop2PianoStack",
     "Qwen2AudioEncoder",
     "Qwen2VisionTransformerPretrainedModel",
+    "Qwen2_5_VisionTransformerPretrainedModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -85,8 +86,18 @@ PRIVATE_MODELS = [
     "Idefics2PerceiverResampler",
     "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
+    "Kosmos2_5TextModel",
+    "Kosmos2_5TextForCausalLM",
+    "Kosmos2_5VisionModel",
+    "SmolVLMVisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
+    "Phi4MultimodalAudioModel",
+    "Phi4MultimodalVisionModel",
+    "Glm4vVisionModel",
+    "Glm4vMoeVisionModel",
+    "EvollaSaProtPreTrainedModel",
+    "Ovis2VisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -132,13 +143,37 @@ IGNORE_NON_TESTED = (
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+        "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam2VideoModel",  # inherit from Sam2Model (tested).
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+        "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
+        "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Emu3VQVAE",  # Building part of bigger (tested) model
+        "Emu3TextModel",  # Building part of bigger (tested) model
+        "Glm4vTextModel",  # Building part of bigger (tested) model
+        "Glm4vMoeTextModel",  # Building part of bigger (tested) model
+        "Qwen2VLTextModel",  # Building part of bigger (tested) model
+        "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "InternVLVisionModel",  # Building part of bigger (tested) model
+        "JanusVisionModel",  # Building part of bigger (tested) model
+        "TimesFmModel",  # Building part of bigger (tested) model
+        "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
     ]
 )
 
@@ -162,12 +197,16 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
+    "models/shieldgemma2/test_modeling_shieldgemma2.py",
+    "models/llama4/test_modeling_llama4.py",
+    "models/sam2_video/test_modeling_sam2_video.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "Aimv2TextModel",
     "AlignTextModel",
     "AlignVisionModel",
     "ClapTextModel",
@@ -176,7 +215,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapAudioModelWithProjection",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
-    "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",
@@ -214,6 +252,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "Sam2Model",
+    "Sam2VideoModel",
+    "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -329,9 +370,27 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "Siglip2VisionModel",
+    "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
+    "VitPoseForPoseEstimation",
     "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
+    "Emu3VQVAE",  # no autoclass for VQ-VAE models
+    "Emu3TextModel",  # Building part of bigger (tested) model
+    "JanusVQVAE",  # no autoclass for VQ-VAE models
+    "JanusVisionModel",  # Building part of bigger (tested) model
+    "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
+    "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen2_5OmniThinkerTextModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavDiTModel",  # Building part of a bigger model
+    "CsmBackboneModel",  # Building part of a bigger model
+    "CsmDepthDecoderModel",  # Building part of a bigger model
+    "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
+    "CsmForConditionalGeneration",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!
@@ -356,6 +415,9 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("kosmos-2.5", "kosmos2_5"),
+        ("dinov3_convnext", "dinov3"),
+        ("dinov3_vit", "dinov3"),
     ]
 )
 
@@ -397,6 +459,8 @@ def check_model_list():
     Checks the model listed as subfolders of `models` match the models available in `transformers.models`.
     """
     # Get the models from the directory structure of `src/transformers/models/`
+    import transformers as tfrs
+
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
@@ -404,10 +468,15 @@ def check_model_list():
             continue
         model_dir = os.path.join(models_dir, model)
         if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
+            # If the init is empty, and there are only two files, it's likely that there's just a conversion
+            # script. Those should not be in the init.
+            if (Path(model_dir) / "__init__.py").read_text().strip() == "":
+                continue
+
             _models.append(model)
 
     # Get the models in the submodule `transformers.models`
-    models = [model for model in dir(transformers.models) if not model.startswith("__")]
+    models = [model for model in dir(tfrs.models) if not model.startswith("__")]
 
     missing_models = sorted(set(_models).difference(models))
     if missing_models:
@@ -418,7 +487,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
-def get_model_modules() -> List[str]:
+def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
         "modeling_auto",
@@ -439,7 +508,7 @@ def get_model_modules() -> List[str]:
     modules = []
     for model in dir(transformers.models):
         # There are some magic dunder attributes in the dir, we ignore them
-        if model == "deprecated" or model.startswith("__"):
+        if "deprecated" in model or model.startswith("__"):
             continue
 
         model_module = getattr(transformers.models, model)
@@ -450,7 +519,7 @@ def get_model_modules() -> List[str]:
     return modules
 
 
-def get_models(module: types.ModuleType, include_pretrained: bool = False) -> List[Tuple[str, type]]:
+def get_models(module: types.ModuleType, include_pretrained: bool = False) -> list[tuple[str, type]]:
     """
     Get the objects in a module that are models.
 
@@ -512,7 +581,7 @@ def check_models_are_in_init():
 
 # If some test_modeling files should be ignored when checking models are all tested, they should be added in the
 # nested list _ignore_files of this function.
-def get_model_test_files() -> List[str]:
+def get_model_test_files() -> list[str]:
     """
     Get the model test files.
 
@@ -553,7 +622,7 @@ def get_model_test_files() -> List[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> List[str]:
+def find_tested_models(test_file: str) -> list[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -588,7 +657,7 @@ def should_be_tested(model_name: str) -> bool:
     return not is_building_block(model_name)
 
 
-def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[str]:
+def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[str]:
     """Check models defined in a module are all tested in a given file.
 
     Args:
@@ -630,7 +699,9 @@ def check_all_models_are_tested():
         # Matches a module to its test file.
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
-            failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
+            # We do not test TF or Flax models anymore because they're deprecated.
+            if not ("modeling_tf" in module.__name__ or "modeling_flax" in module.__name__):
+                failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
@@ -642,7 +713,7 @@ def check_all_models_are_tested():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
-def get_all_auto_configured_models() -> List[str]:
+def get_all_auto_configured_models() -> list[str]:
     """Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
@@ -671,7 +742,7 @@ def ignore_unautoclassed(model_name: str) -> bool:
     return False
 
 
-def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: List[str]) -> List[str]:
+def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: list[str]) -> list[str]:
     """
     Check models defined in module are each in an auto class.
 
@@ -734,7 +805,7 @@ def check_all_auto_object_names_being_defined():
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
     for name, mapping in mappings_to_check.items():
-        for _, class_names in mapping.items():
+        for class_names in mapping.values():
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
                 for class_name in class_names:
@@ -821,6 +892,8 @@ def check_objects_being_equally_in_main_init():
     failures = []
     for attr in attrs:
         obj = getattr(transformers, attr)
+        if hasattr(obj, "__module__") and isinstance(obj.__module__, ModuleSpec):
+            continue
         if not hasattr(obj, "__module__") or "models.deprecated" in obj.__module__:
             continue
 
@@ -860,7 +933,7 @@ def check_objects_being_equally_in_main_init():
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
-def check_decorator_order(filename: str) -> List[int]:
+def check_decorator_order(filename: str) -> list[int]:
     """
     Check that in a given test file, the slow decorator is always last.
 
@@ -902,7 +975,7 @@ def check_all_decorator_order():
         )
 
 
-def find_all_documented_objects() -> List[str]:
+def find_all_documented_objects() -> list[str]:
     """
     Parse the content of all doc files to detect which classes and functions it documents.
 
@@ -941,7 +1014,6 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
-    "LogitsWarper",
     "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
@@ -969,6 +1041,7 @@ DEPRECATED_OBJECTS = [
     "xnli_processors",
     "xnli_tasks_num_labels",
     "TFTrainingArguments",
+    "OwlViTFeatureExtractor",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -993,15 +1066,14 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "VitPoseBackbone",  # Internal module
+    "VitPoseBackboneConfig",  # Internal module
+    "get_values",  # Internal object
+    "SinkCache",  # Moved to a custom_generate repository, to be deleted from transformers in v4.59.0
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
 SHOULD_HAVE_THEIR_OWN_PAGE = [
-    # Benchmarks
-    "PyTorchBenchmark",
-    "PyTorchBenchmarkArguments",
-    "TensorFlowBenchmark",
-    "TensorFlowBenchmarkArguments",
     "AutoBackbone",
     "BeitBackbone",
     "BitBackbone",
@@ -1009,6 +1081,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextV2Backbone",
     "DinatBackbone",
     "Dinov2Backbone",
+    "Dinov2WithRegistersBackbone",
     "FocalNetBackbone",
     "HieraBackbone",
     "MaskFormerSwinBackbone",
@@ -1019,6 +1092,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",
+    "TextNetBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
@@ -1039,6 +1113,7 @@ def ignore_undocumented(name: str) -> bool:
         or name.endswith("Layer")
         or name.endswith("Embeddings")
         or name.endswith("Attention")
+        or name.endswith("OnnxConfig")
     ):
         return True
     # Submodules are not documented.
@@ -1071,8 +1146,7 @@ def check_all_objects_are_documented():
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
-            "The following objects are in the public init so should be documented:\n - "
-            + "\n - ".join(undocumented_objs)
+            "The following objects are in the public init, but not in the docs:\n - " + "\n - ".join(undocumented_objs)
         )
     check_model_type_doc_match()
     check_public_method_exists(documented_methods_map)
@@ -1106,7 +1180,7 @@ def check_public_method_exists(documented_methods_map):
         try:
             obj_class = getattr(submodule, class_name)
         except AttributeError:
-            failures.append(f"Could not parse {submodule_name}. Are the required dependencies installed?")
+            failures.append(f"Could not parse {class_name}. Are the required dependencies installed?")
             continue
 
         # Checks that all explicitly documented methods are defined in the class
@@ -1133,7 +1207,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
-    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING.get(m, m) for m in model_types]
 
     errors = []
     for m in model_docs:

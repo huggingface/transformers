@@ -14,9 +14,8 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-import json
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
     if is_tf_available():
         import tensorflow as tf
 
-from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -129,21 +127,13 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         if kwargs.pop("add_bos_token", False):
             model_id = kwargs.pop("name_or_path", "")
             raise ValueError(
-                "Currenty GPT2's fast tokenizer does NOT support adding a BOS token. "
+                "Currently GPT2's fast tokenizer does NOT support adding a BOS token. "
                 "Instead you should use GPT2's slow tokenizer class `CodeGenTokenizer` as follows: \n"
                 f"`CodeGenTokenizer.from_pretrained('{model_id}')`\nor\n"
                 f"`AutoTokenizer.from_pretrained('{model_id}', use_fast=False)`\n"
                 "This issue will be fixed soon, see: https://github.com/huggingface/tokenizers/pull/1005."
                 " so that the fast tokenizer works correctly."
             )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
@@ -164,46 +154,16 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
-    # Copied from transformers.models.codegen.tokenization_codegen.CodeGenTokenizer.create_token_type_ids_from_sequences
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A sequence
-        pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id] if self.sep_token_id is not None else []
-        cls = [self.cls_token_id] if self.sep_token_id is not None else []
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
-        truncate_before_pattern: Optional[List[str]] = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        truncate_before_pattern: Optional[list[str]] = None,
         **kwargs,
     ) -> str:
         """
@@ -270,3 +230,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             return completion[: min(terminals_pos)]
         else:
             return completion
+
+
+__all__ = ["CodeGenTokenizerFast"]

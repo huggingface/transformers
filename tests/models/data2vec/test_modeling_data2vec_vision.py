@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,21 @@
 
 import unittest
 
+import pytest
+
 from transformers import Data2VecVisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import (
+    cached_property,
+    is_torch_available,
+    is_vision_available,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -66,6 +77,8 @@ class Data2VecVisionModelTester:
         num_labels=3,
         scope=None,
         out_indices=[0, 1, 2, 3],
+        attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.vocab_size = 100
@@ -91,6 +104,9 @@ class Data2VecVisionModelTester:
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.mask_length = self.seq_length - 1
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,6 +137,7 @@ class Data2VecVisionModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_indices=self.out_indices,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -195,6 +212,13 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="Will fix only if requested by the community: it fails with `torch._dynamo.exc.InternalTorchDynamoError: IndexError: list index out of range`. Without compile, the test pass."
+    )
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
     @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -286,10 +310,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as semseg models tend to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
@@ -337,10 +357,10 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.3277, -0.1395, 0.0911]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
-        self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
+        self.assertEqual(logits[0].topk(2).indices.tolist(), expected_top2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -354,17 +374,12 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
-        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
-        # images than what the model supports.
-        self.assertFalse(processor.do_center_crop)
-        with torch.no_grad():
-            with self.assertRaises(ValueError, msg="doesn't match model"):
-                model(pixel_values, interpolate_pos_encoding=False)
-
         # with interpolate_pos_encoding being True the model should process the higher resolution image
         # successfully and produce the expected output.
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)

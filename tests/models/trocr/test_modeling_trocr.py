@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -161,7 +160,6 @@ class TrOCRStandaloneDecoderModelTester:
 @require_torch
 class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
@@ -172,14 +170,6 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
 
     @unittest.skip(reason="Not yet implemented")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="trocr has no base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_config(self):

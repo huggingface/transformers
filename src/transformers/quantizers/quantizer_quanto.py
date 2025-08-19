@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from packaging import version
 
@@ -87,7 +87,7 @@ class QuantoHfQuantizer(HfQuantizer):
             torch_dtype = torch.float32
         return torch_dtype
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
@@ -108,7 +108,7 @@ class QuantoHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         """
@@ -117,8 +117,8 @@ class QuantoHfQuantizer(HfQuantizer):
         if is_optimum_quanto_available():
             from optimum.quanto import QModuleMixin
 
-        device_map = kwargs.get("device_map", None)
-        param_device = kwargs.get("param_device", None)
+        device_map = kwargs.get("device_map")
+        param_device = kwargs.get("param_device")
         # we don't quantize the model if the module is going to be offloaded to the cpu
         if device_map is not None and param_device is not None:
             device_map_values = set(device_map.values())
@@ -134,7 +134,7 @@ class QuantoHfQuantizer(HfQuantizer):
         else:
             return False
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
@@ -177,20 +177,13 @@ class QuantoHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: List[str] = [], **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_quanto_layers
+        from ..integrations import replace_with_quanto_layers
 
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.modules_to_not_convert is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.modules_to_not_convert
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model, _ = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
@@ -201,7 +194,7 @@ class QuantoHfQuantizer(HfQuantizer):
         return model
 
     @property
-    def is_trainable(self, model: Optional["PreTrainedModel"] = None):
+    def is_trainable(self) -> bool:
         return True
 
     def is_serializable(self, safe_serialization=None):

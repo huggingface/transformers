@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Team Authors, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -194,7 +193,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for TVP
+    # override as the `logit_scale` parameter initialization is different for TVP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -219,7 +218,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.to(torch_device)
                 model.eval()
 
-                # Confirm out_indices propogated to backbone
+                # Confirm out_indices propagated to backbone
                 if model.__class__.__name__ == "TvpModel":
                     self.assertEqual(len(model.vision_model.backbone.out_indices), 2)
                 elif model.__class__.__name__ == "TvpForVideoGrounding":
@@ -277,7 +276,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.4902, -0.4121, -1.7872], [-0.2184, 2.1211, -0.9371], [0.1180, 0.5003, -0.1727]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_with_head(self):
         model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
@@ -296,7 +295,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 2))
         assert outputs.logits.shape == expected_shape
         expected_slice = torch.tensor([[0.5061, 0.4988]]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits, expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits, expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_interpolate_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)

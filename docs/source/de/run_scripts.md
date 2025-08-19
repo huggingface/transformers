@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Neben den 🤗 Transformers [notebooks](./notebooks) gibt es auch Beispielskripte, die zeigen, wie man ein Modell für eine Aufgabe mit [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow) oder [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax) trainiert.
 
-Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https://github.com/huggingface/transformers/tree/main/examples/research_projects) und [Legacy-Beispielen](https://github.com/huggingface/transformers/tree/main/examples/legacy) verwendet haben und die größtenteils von der Community stammen. Diese Skripte werden nicht aktiv gepflegt und erfordern eine bestimmte Version von 🤗 Transformers, die höchstwahrscheinlich nicht mit der neuesten Version der Bibliothek kompatibel ist.
+Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https://github.com/huggingface/transformers-research-projects/) und [Legacy-Beispielen](https://github.com/huggingface/transformers/tree/main/examples/legacy) verwendet haben und die größtenteils von der Community stammen. Diese Skripte werden nicht aktiv gepflegt und erfordern eine bestimmte Version von 🤗 Transformers, die höchstwahrscheinlich nicht mit der neuesten Version der Bibliothek kompatibel ist.
 
 Es wird nicht erwartet, dass die Beispielskripte bei jedem Problem sofort funktionieren. Möglicherweise müssen Sie das Skript an das Problem anpassen, das Sie zu lösen versuchen. Um Ihnen dabei zu helfen, legen die meisten Skripte vollständig offen, wie die Daten vorverarbeitet werden, so dass Sie sie nach Bedarf für Ihren Anwendungsfall bearbeiten können.
 
@@ -324,7 +324,7 @@ python examples/pytorch/summarization/run_summarization.py
 Alle Skripte können Ihr endgültiges Modell in den [Model Hub](https://huggingface.co/models) hochladen. Stellen Sie sicher, dass Sie bei Hugging Face angemeldet sind, bevor Sie beginnen:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Dann fügen Sie dem Skript das Argument `push_to_hub` hinzu. Mit diesem Argument wird ein Repository mit Ihrem Hugging Face-Benutzernamen und dem in `output_dir` angegebenen Ordnernamen erstellt.

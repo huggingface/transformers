@@ -239,7 +239,7 @@ def create_rename_keys(state_dict, config):
     ########################################## DECODER - END
 
     ########################################## Additional - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict:
         #### TEXT BACKBONE
         if "bert" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("bert", "model.text_backbone")))
@@ -402,7 +402,7 @@ def convert_grounding_dino_checkpoint(args):
         "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swint_ogc.pth",
         "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swinb_cogcoor.pth",
     }
-    # Define default GroundingDino configuation
+    # Define default GroundingDino configuration
     config = get_grounding_dino_config(model_name)
 
     # Load original checkpoint

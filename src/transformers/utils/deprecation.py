@@ -19,7 +19,12 @@ from typing import Optional
 import packaging.version
 
 from .. import __version__
-from . import ExplicitEnum
+from . import ExplicitEnum, is_torch_available, is_torchdynamo_compiling
+
+
+# This is needed in case we deprecate a kwarg of a function/method being compiled
+if is_torch_available():
+    import torch  # noqa: F401
 
 
 class Action(ExplicitEnum):
@@ -40,6 +45,7 @@ def deprecate_kwarg(
 ):
     """
     Function or method decorator to notify users about deprecated keyword arguments, replacing them with a new name if specified.
+    Note that is decorator is `torch.compile`-safe, i.e. it will not cause graph breaks (but no warning will be displayed if compiling).
 
     This decorator allows you to:
     - Notify users when a keyword argument is deprecated.
@@ -158,7 +164,8 @@ def deprecate_kwarg(
             # raise error or notify user
             if minimum_action == Action.RAISE:
                 raise ValueError(message)
-            elif minimum_action in (Action.NOTIFY, Action.NOTIFY_ALWAYS):
+            # If we are compiling, we do not raise the warning as it would break compilation
+            elif minimum_action in (Action.NOTIFY, Action.NOTIFY_ALWAYS) and not is_torchdynamo_compiling():
                 # DeprecationWarning is ignored by default, so we use FutureWarning instead
                 warnings.warn(message, FutureWarning, stacklevel=2)
 

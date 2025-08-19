@@ -16,9 +16,7 @@ from transformers.models.clip.modeling_clip import (
     CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
-    CLIPFlashAttention2,
     CLIPPreTrainedModel,
-    CLIPSdpaAttention,
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
@@ -29,23 +27,6 @@ class Multimodal2VisionAttention(CLIPAttention):
     pass
 
 
-# Check that adding the second base class correctly set the parent, even though in clip it does not have the "Vision" part
-class Multimodal2VisionSdpaAttention(CLIPSdpaAttention, Multimodal2VisionAttention):
-    pass
-
-
-# Check that adding the second base class correctly set the parent, even though in clip it does not have the "Vision" part
-class Multimodal2VisionFlashAttention2(CLIPFlashAttention2, Multimodal2VisionAttention):
-    pass
-
-
-MULTIMODAL2_VISION_ATTENTION_CLASSES = {
-    "eager": Multimodal2VisionAttention,
-    "sdpa": Multimodal2VisionSdpaAttention,
-    "flash_attention_2": Multimodal2VisionFlashAttention2,
-}
-
-
 class Multimodal2VisionMLP(CLIPMLP):
     pass
 
@@ -53,7 +34,6 @@ class Multimodal2VisionMLP(CLIPMLP):
 class Multimodal2VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config):
         super().__init__()
-        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = Multimodal2VisionMLP(config)
 
 

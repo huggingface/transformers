@@ -13,12 +13,19 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2023-12-13.*
 
 # VipLlava
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The VipLlava model was proposed in [Making Large Multimodal Models Understand Arbitrary Visual Prompts](https://arxiv.org/abs/2312.00784) by Mu Cai, Haotian Liu, Siva Karthik Mustikovela, Gregory P. Meyer, Yuning Chai, Dennis Park, Yong Jae Lee.
+The VipLlava model was proposed in [Making Large Multimodal Models Understand Arbitrary Visual Prompts](https://huggingface.co/papers/2312.00784) by Mu Cai, Haotian Liu, Siva Karthik Mustikovela, Gregory P. Meyer, Yuning Chai, Dennis Park, Yong Jae Lee.
 
 VipLlava enhances the training protocol of Llava by marking images and interact with the model using natural cues like a "red bounding box" or "pointed arrow" during training.
 
@@ -94,6 +101,10 @@ A chat between a curious human and an artificial intelligence assistant. The ass
 ## VipLlavaConfig
 
 [[autodoc]] VipLlavaConfig
+
+## VipLlavaModel
+
+[[autodoc]] VipLlavaModel
 
 ## VipLlavaForConditionalGeneration
 

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -93,10 +92,10 @@ class TFLongformerBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -140,11 +139,11 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
-    pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor | None = None
+    pooler_output: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -187,10 +186,10 @@ class TFLongformerMaskedLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -235,11 +234,11 @@ class TFLongformerQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    start_logits: tf.Tensor = None
-    end_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    start_logits: tf.Tensor | None = None
+    end_logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -282,10 +281,10 @@ class TFLongformerSequenceClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -330,10 +329,10 @@ class TFLongformerMultipleChoiceModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -376,10 +375,10 @@ class TFLongformerTokenClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=True):
@@ -746,12 +745,12 @@ class TFLongformerSelfAttention(keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -1707,9 +1706,7 @@ class TFLongformerEncoder(keras.layers.Layer):
         hidden_states = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
         if output_attentions:
             all_attentions = (
-                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
-                if padding_len > 0
-                else all_attentions
+                tuple(state[:, :, :-padding_len, :] for state in all_attentions) if padding_len > 0 else all_attentions
             )
 
         if not return_dict:
@@ -2061,7 +2058,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -2110,7 +2107,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
 
     This class copies code from [`TFRobertaModel`] and overwrites standard self-attention with longformer
     self-attention to provide the ability to process long sequences following the self-attention approach described in
-    [Longformer: the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, and
+    [Longformer: the Long-Document Transformer](https://huggingface.co/papers/2004.05150) by Iz Beltagy, Matthew E. Peters, and
     Arman Cohan. Longformer self-attention combines a local (sliding window) and global attention to extend to long
     documents without the O(n^2) increase in memory and compute.
 
@@ -2138,11 +2135,11 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool | None = False,
+    ) -> TFLongformerBaseModelOutputWithPooling | tuple[tf.Tensor]:
         outputs = self.longformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2208,12 +2205,12 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerMaskedLMOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFLongformerMaskedLMOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -2304,13 +2301,13 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         token_type_ids: np.ndarray | tf.Tensor | None = None,
         position_ids: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFLongformerQuestionAnsweringModelOutput | tuple[tf.Tensor]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -2477,12 +2474,12 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         position_ids: np.ndarray | tf.Tensor | None = None,
         global_attention_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFLongformerSequenceClassifierOutput | tuple[tf.Tensor]:
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
         elif input_ids is not None:
@@ -2603,12 +2600,12 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         position_ids: np.ndarray | tf.Tensor | None = None,
         global_attention_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+        training: bool | None = False,
+    ) -> TFLongformerMultipleChoiceModelOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -2721,12 +2718,12 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         position_ids: np.ndarray | tf.Tensor | None = None,
         global_attention_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.array, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFLongformerTokenClassifierOutput, Tuple[tf.Tensor]]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: np.array | tf.Tensor | None = None,
+        training: bool | None = False,
+    ) -> TFLongformerTokenClassifierOutput | tuple[tf.Tensor]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -2772,3 +2769,15 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFLongformerForMaskedLM",
+    "TFLongformerForMultipleChoice",
+    "TFLongformerForQuestionAnswering",
+    "TFLongformerForSequenceClassification",
+    "TFLongformerForTokenClassification",
+    "TFLongformerModel",
+    "TFLongformerPreTrainedModel",
+    "TFLongformerSelfAttention",
+]

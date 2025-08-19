@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc..
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +86,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")
@@ -391,7 +390,6 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path google/vit-base-patch16-224-in21k
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -425,7 +423,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -456,7 +453,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -489,7 +485,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_config_name clean
             --train_split_name validation
             --eval_split_name validation
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -517,7 +512,6 @@ class ExamplesTests(TestCasePlus):
             --output_dir {tmp_dir}
             --model_name_or_path hf-internal-testing/tiny-random-wav2vec2
             --dataset_name anton-l/superb_demo
-            --trust_remote_code
             --dataset_config_name ks
             --train_split_name test
             --eval_split_name test
@@ -552,7 +546,6 @@ class ExamplesTests(TestCasePlus):
             --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_names clean
             --dataset_split_names validation
-            --trust_remote_code
             --learning_rate 1e-4
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
@@ -573,7 +566,6 @@ class ExamplesTests(TestCasePlus):
             run_mae.py
             --output_dir {tmp_dir}
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --do_train
             --do_eval
             --learning_rate 1e-4
@@ -667,7 +659,7 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
             --do_eval
-            --evaluation_strategy epoch
+            --eval_strategy epoch
             --seed 32
         """.split()
 

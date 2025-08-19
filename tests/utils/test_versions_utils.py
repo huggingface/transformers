@@ -86,7 +86,7 @@ class DependencyVersionCheckTest(TestCasePlus):
 
     def test_python(self):
         # matching requirement
-        require_version("python>=3.6.0")
+        require_version("python>=3.9.0")
 
         # not matching requirements
         for req in ["python>9.9.9", "python<3.0.0"]:

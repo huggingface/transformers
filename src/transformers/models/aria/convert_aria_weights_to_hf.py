@@ -37,7 +37,7 @@ Example for creating the old state dict file with Python:
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = AriaTextForCausalLM.from_pretrained("rhymes-ai/Aria", low_cpu_mem_usage=True, **kwargs)
+    model = AriaTextForCausalLM.from_pretrained("rhymes-ai/Aria", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
@@ -106,7 +106,7 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     config.vision_config.hidden_size = 1152
     config.vision_config.attention_heads = 16
     config.pad_token_id = 2
-    config.image_token_index = 9
+    config.image_token_id = 9
     config.intermediate_size = config.moe_intermediate_size
     config.auto_map = {
         "AutoConfig": "modeling_aria.AriaConfig",

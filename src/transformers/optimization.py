@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +16,15 @@
 import math
 import warnings
 from functools import partial
-from typing import Callable, Iterable, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
 from .trainer_pt_utils import LayerWiseDummyOptimizer, LayerWiseDummyScheduler
 from .trainer_utils import SchedulerType
 from .utils import logging
-from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -286,7 +283,7 @@ def get_polynomial_decay_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps: int, timescale: int = None):
+def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps: int, timescale: Optional[int] = None):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
     shift = timescale - num_warmup_steps
@@ -295,7 +292,7 @@ def _get_inverse_sqrt_schedule_lr_lambda(current_step: int, *, num_warmup_steps:
 
 
 def get_inverse_sqrt_schedule(
-    optimizer: Optimizer, num_warmup_steps: int, timescale: int = None, last_epoch: int = -1
+    optimizer: Optimizer, num_warmup_steps: int, timescale: Optional[int] = None, last_epoch: int = -1
 ):
     """
     Create a schedule with an inverse square-root learning rate, from the initial lr set in the optimizer, after a
@@ -341,8 +338,8 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     num_training_steps: int,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
-    min_lr: float = None,
-    min_lr_rate: float = None,
+    min_lr: Optional[float] = None,
+    min_lr_rate: Optional[float] = None,
 ):
     """
     Create a schedule with a learning rate that decreases following the values of the cosine function between the
@@ -387,51 +384,158 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def _get_wsd_scheduler_lambda(
+def _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda(
     current_step: int,
     *,
     num_warmup_steps: int,
-    num_stable_steps: int,
-    num_decay_steps: int,
+    num_training_steps: int,
     num_cycles: float,
-    min_lr_ratio: float,
+    min_lr_rate: float = 0.0,
+    warmup_lr_rate: Optional[float] = None,
 ):
+    current_step = float(current_step)
+    num_warmup_steps = float(num_warmup_steps)
+    num_training_steps = float(num_training_steps)
+
     if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step < num_warmup_steps + num_stable_steps:
-        return 1.0
-    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
-        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
-        value = max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
-        return (1.0 - min_lr_ratio) * value + min_lr_ratio
-    return min_lr_ratio
+        if warmup_lr_rate is None:
+            return (current_step + 1.0) / max(1.0, num_warmup_steps)
+        else:
+            warmup_lr_rate = float(warmup_lr_rate)
+            return warmup_lr_rate + (1.0 - warmup_lr_rate) * (current_step) / (max(1, num_warmup_steps - 1))
+    progress = (current_step - num_warmup_steps + 1.0) / (max(1.0, num_training_steps - num_warmup_steps))
+    factor = 0.5 * (1.0 + math.cos(math.pi * num_cycles * 2.0 * progress))
+    factor = factor * (1 - min_lr_rate) + min_lr_rate
+    return max(0, factor)
 
 
-def get_wsd_schedule(
+def get_cosine_with_min_lr_schedule_with_warmup_lr_rate(
     optimizer: Optimizer,
     num_warmup_steps: int,
-    num_stable_steps: int,
-    num_decay_steps: int,
-    min_lr_ratio: float = 0,
+    num_training_steps: int,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
+    min_lr: Optional[float] = None,
+    min_lr_rate: Optional[float] = None,
+    warmup_lr_rate: Optional[float] = None,
 ):
     """
-    Create a schedule with a learning rate that has three stages:
-    1. linear increase from 0 to initial lr.
-    2. constant lr (equal to initial lr).
-    3. decrease following the values of the cosine function between the initial lr set in the optimizer to
-       a fraction of initial lr.
+    Create a schedule with a learning rate that decreases following the values of the cosine function between the
+    initial lr set in the optimizer to min_lr, after a warmup period during which it increases linearly between 0 and the
+    initial lr set in the optimizer.
 
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
         num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_stable_steps (`int`):
-            The number of steps for the stable phase.
+        num_training_steps (`int`):
+            The total number of training steps.
+        num_cycles (`float`, *optional*, defaults to 0.5):
+            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
+            following a half-cosine).
+        last_epoch (`int`, *optional*, defaults to -1):
+            The index of the last epoch when resuming training.
+        min_lr (`float`, *optional*):
+            The minimum learning rate to reach after the cosine schedule.
+        min_lr_rate (`float`, *optional*):
+            The minimum learning rate as a ratio of the initial learning rate. If set, `min_lr` should not be set.
+        warmup_lr_rate (`float`, *optional*):
+            The minimum learning rate as a ratio of the start learning rate. If not set, `warmup_lr_rate` will be treated as float(1/num_warmup_steps).
+
+    Return:
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """
+
+    if min_lr is not None and min_lr_rate is not None:
+        raise ValueError("Only one of min_lr or min_lr_rate should be set")
+    elif min_lr is not None:
+        min_lr_rate = min_lr / optimizer.defaults["lr"]
+    elif min_lr_rate is None:
+        raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
+
+    lr_lambda = partial(
+        _get_cosine_with_min_lr_schedule_with_warmup_lr_rate_lambda,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+        num_cycles=num_cycles,
+        min_lr_rate=min_lr_rate,
+        warmup_lr_rate=warmup_lr_rate,
+    )
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+
+def _get_wsd_scheduler_lambda(
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_stable_steps: int,
+    num_decay_steps: int,
+    warmup_type: str,
+    decay_type: str,
+    min_lr_ratio: float,
+    num_cycles: float,
+):
+    if current_step < num_warmup_steps:
+        progress = float(current_step) / float(max(1, num_warmup_steps))
+        if warmup_type == "linear":
+            factor = progress
+        elif warmup_type == "cosine":
+            factor = 0.5 * (1.0 - math.cos(math.pi * progress))
+        elif warmup_type == "1-sqrt":
+            factor = 1.0 - math.sqrt(1.0 - progress)
+        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+        return max(0.0, factor)
+
+    if current_step < num_warmup_steps + num_stable_steps:
+        return 1.0
+
+    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
+        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+        if decay_type == "linear":
+            factor = 1.0 - progress
+        elif decay_type == "cosine":
+            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        elif decay_type == "1-sqrt":
+            factor = 1.0 - math.sqrt(progress)
+        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+        return max(0.0, factor)
+    return min_lr_ratio
+
+
+def get_wsd_schedule(
+    optimizer: Optimizer,
+    num_warmup_steps: int,
+    num_decay_steps: int,
+    num_training_steps: Optional[int] = None,
+    num_stable_steps: Optional[int] = None,
+    warmup_type: str = "linear",
+    decay_type: str = "cosine",
+    min_lr_ratio: float = 0,
+    num_cycles: float = 0.5,
+    last_epoch: int = -1,
+):
+    """
+    Create a schedule with a learning rate that has three stages:
+    1. warmup: increase from min_lr_ratio times the initial learning rate to the initial learning rate following a warmup_type.
+    2. stable: constant learning rate.
+    3. decay: decrease from the initial learning rate to min_lr_ratio times the initial learning rate following a decay_type.
+
+    Args:
+        optimizer ([`~torch.optim.Optimizer`]):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (`int`):
+            The number of steps for the warmup phase.
         num_decay_steps (`int`):
-            The number of steps for the cosine annealing phase.
+            The number of steps for the decay phase.
+        num_training_steps (`int`, *optional*):
+            The total number of training steps. This is the sum of the warmup, stable and decay steps. If `num_stable_steps` is not provided, the stable phase will be `num_training_steps - num_warmup_steps - num_decay_steps`.
+        num_stable_steps (`int`, *optional*):
+            The number of steps for the stable phase. Please ensure that `num_warmup_steps + num_stable_steps + num_decay_steps` equals `num_training_steps`, otherwise the other steps will default to the minimum learning rate.
+        warmup_type (`str`, *optional*, defaults to "linear"):
+            The type of warmup to use. Can be 'linear', 'cosine' or '1-sqrt'.
+        decay_type (`str`, *optional*, defaults to "cosine"):
+            The type of decay to use. Can be 'linear', 'cosine' or '1-sqrt'.
         min_lr_ratio (`float`, *optional*, defaults to 0):
             The minimum learning rate as a ratio of the initial learning rate.
         num_cycles (`float`, *optional*, defaults to 0.5):
@@ -443,11 +547,29 @@ def get_wsd_schedule(
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+
+    if num_training_steps is None and num_stable_steps is None:
+        raise ValueError("Either num_training_steps or num_stable_steps must be specified.")
+
+    if num_training_steps is not None and num_stable_steps is not None:
+        warnings.warn("Both num_training_steps and num_stable_steps are specified. num_stable_steps will be used.")
+
+    if warmup_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
+
+    if decay_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
+
+    if num_stable_steps is None:
+        num_stable_steps = num_training_steps - num_warmup_steps - num_decay_steps
+
     lr_lambda = partial(
         _get_wsd_scheduler_lambda,
         num_warmup_steps=num_warmup_steps,
         num_stable_steps=num_stable_steps,
         num_decay_steps=num_decay_steps,
+        warmup_type=warmup_type,
+        decay_type=decay_type,
         min_lr_ratio=min_lr_ratio,
         num_cycles=num_cycles,
     )
@@ -464,6 +586,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
+    SchedulerType.COSINE_WARMUP_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
 }
 
@@ -502,12 +625,13 @@ def get_scheduler(
         optimizer_dict = optimizer.optimizer_dict
         scheduler_dict = {}
 
-        for param in optimizer_dict.keys():
+        for param in optimizer_dict:
             scheduler_dict[param] = get_scheduler(
                 name,
                 optimizer=optimizer_dict[param],
                 num_warmup_steps=num_warmup_steps,
                 num_training_steps=num_training_steps,
+                scheduler_specific_kwargs=scheduler_specific_kwargs,
             )
 
         def scheduler_hook(param):
@@ -515,7 +639,7 @@ def get_scheduler(
             # attach the scheduler hook, the gradients have been zeroed here
             scheduler_dict[param].step()
 
-        for param in optimizer_dict.keys():
+        for param in optimizer_dict:
             if param.requires_grad:
                 param.register_post_accumulate_grad_hook(scheduler_hook)
 
@@ -540,8 +664,14 @@ def get_scheduler(
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
+    # wsd scheduler requires either num_training_steps or num_stable_steps
     if name == SchedulerType.WARMUP_STABLE_DECAY:
-        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
+        return schedule_func(
+            optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps,
+            **scheduler_specific_kwargs,
+        )
 
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:
@@ -555,126 +685,12 @@ def get_scheduler(
     )
 
 
-class AdamW(Optimizer):
-    """
-    Implements Adam algorithm with weight decay fix as introduced in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101).
-
-    Parameters:
-        params (`Iterable[nn.parameter.Parameter]`):
-            Iterable of parameters to optimize or dictionaries defining parameter groups.
-        lr (`float`, *optional*, defaults to 0.001):
-            The learning rate to use.
-        betas (`Tuple[float,float]`, *optional*, defaults to `(0.9, 0.999)`):
-            Adam's betas parameters (b1, b2).
-        eps (`float`, *optional*, defaults to 1e-06):
-            Adam's epsilon for numerical stability.
-        weight_decay (`float`, *optional*, defaults to 0.0):
-            Decoupled weight decay to apply.
-        correct_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not to correct bias in Adam (for instance, in Bert TF repository they use `False`).
-        no_deprecation_warning (`bool`, *optional*, defaults to `False`):
-            A flag used to disable the deprecation warning (set to `True` to disable the warning).
-    """
-
-    def __init__(
-        self,
-        params: Iterable[nn.parameter.Parameter],
-        lr: float = 1e-3,
-        betas: Tuple[float, float] = (0.9, 0.999),
-        eps: float = 1e-6,
-        weight_decay: float = 0.0,
-        correct_bias: bool = True,
-        no_deprecation_warning: bool = False,
-    ):
-        if not no_deprecation_warning:
-            warnings.warn(
-                "This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch"
-                " implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this"
-                " warning",
-                FutureWarning,
-            )
-        require_version("torch>=1.5.0")  # add_ with alpha
-        if lr < 0.0:
-            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
-        if not 0.0 <= betas[0] < 1.0:
-            raise ValueError(f"Invalid beta parameter: {betas[0]} - should be in [0.0, 1.0)")
-        if not 0.0 <= betas[1] < 1.0:
-            raise ValueError(f"Invalid beta parameter: {betas[1]} - should be in [0.0, 1.0)")
-        if not 0.0 <= eps:
-            raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
-        defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
-        super().__init__(params, defaults)
-
-    @torch.no_grad()
-    def step(self, closure: Callable = None):
-        """
-        Performs a single optimization step.
-
-        Arguments:
-            closure (`Callable`, *optional*): A closure that reevaluates the model and returns the loss.
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        for group in self.param_groups:
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
-                grad = p.grad
-                if grad.is_sparse:
-                    raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
-
-                state = self.state[p]
-
-                # State initialization
-                if len(state) == 0:
-                    state["step"] = 0
-                    # Exponential moving average of gradient values
-                    state["exp_avg"] = torch.zeros_like(p)
-                    # Exponential moving average of squared gradient values
-                    state["exp_avg_sq"] = torch.zeros_like(p)
-
-                exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
-                beta1, beta2 = group["betas"]
-
-                state["step"] += 1
-
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
-                exp_avg.mul_(beta1).add_(grad, alpha=(1.0 - beta1))
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
-                denom = exp_avg_sq.sqrt().add_(group["eps"])
-
-                step_size = group["lr"]
-                if group["correct_bias"]:  # No bias correction for Bert
-                    bias_correction1 = 1.0 - beta1 ** state["step"]
-                    bias_correction2 = 1.0 - beta2 ** state["step"]
-                    step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
-
-                p.addcdiv_(exp_avg, denom, value=-step_size)
-
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
-                # Add weight decay at the end (fixed version)
-                if group["weight_decay"] > 0.0:
-                    p.add_(p, alpha=(-group["lr"] * group["weight_decay"]))
-
-        return loss
-
-
 class Adafactor(Optimizer):
     """
     AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
     https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
 
-    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://arxiv.org/abs/1804.04235 Note that
+    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://huggingface.co/papers/1804.04235 Note that
     this optimizer internally adjusts the learning rate depending on the `scale_parameter`, `relative_step` and
     `warmup_init` options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
     `relative_step=False`.
@@ -684,7 +700,7 @@ class Adafactor(Optimizer):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (`float`, *optional*):
             The external learning rate.
-        eps (`Tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
+        eps (`tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
             Regularization constants for square gradient and parameter scale respectively
         clip_threshold (`float`, *optional*, defaults to 1.0):
             Threshold of root mean square of final gradient update
@@ -708,7 +724,7 @@ class Adafactor(Optimizer):
         - Training without LR warmup or clip_threshold is not recommended.
 
            - use scheduled LR warm-up to fixed LR
-           - use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+           - use clip_threshold=1.0 (https://huggingface.co/papers/1804.04235)
         - Disable relative updates
         - Use scale_parameter=False
         - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
@@ -767,7 +783,6 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
-        require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:

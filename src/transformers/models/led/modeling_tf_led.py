@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -100,7 +99,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+def _expand_mask(mask: tf.Tensor, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -182,12 +181,12 @@ class TFLEDEncoderSelfAttention(keras.layers.Layer):
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
 
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -1071,11 +1070,11 @@ class TFLEDDecoderAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1322,9 +1321,9 @@ class TFLEDDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         encoder_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[tf.Tensor] | None = None,
+        past_key_value: tuple[tf.Tensor] | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
@@ -1470,10 +1469,10 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
-    global_attentions: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
+    global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1488,7 +1487,7 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -1533,15 +1532,15 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor = None
-    past_key_values: List[tf.Tensor] | None = None
-    decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    decoder_attentions: Tuple[tf.Tensor, ...] | None = None
-    cross_attentions: Tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor | None = None
+    past_key_values: list[tf.Tensor] | None = None
+    decoder_hidden_states: tuple[tf.Tensor, ...] | None = None
+    decoder_attentions: tuple[tf.Tensor, ...] | None = None
+    cross_attentions: tuple[tf.Tensor, ...] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    encoder_attentions: Tuple[tf.Tensor, ...] | None = None
-    encoder_global_attentions: Tuple[tf.Tensor, ...] | None = None
+    encoder_hidden_states: tuple[tf.Tensor, ...] | None = None
+    encoder_attentions: tuple[tf.Tensor, ...] | None = None
+    encoder_global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1554,7 +1553,7 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
             Language modeling loss.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -1600,15 +1599,15 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
-    past_key_values: List[tf.Tensor] | None = None
-    decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    decoder_attentions: Tuple[tf.Tensor, ...] | None = None
-    cross_attentions: Tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor | None = None
+    past_key_values: list[tf.Tensor] | None = None
+    decoder_hidden_states: tuple[tf.Tensor, ...] | None = None
+    decoder_attentions: tuple[tf.Tensor, ...] | None = None
+    cross_attentions: tuple[tf.Tensor, ...] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
-    encoder_attentions: Tuple[tf.Tensor, ...] | None = None
-    encoder_global_attentions: Tuple[tf.Tensor, ...] | None = None
+    encoder_hidden_states: tuple[tf.Tensor, ...] | None = None
+    encoder_attentions: tuple[tf.Tensor, ...] | None = None
+    encoder_global_attentions: tuple[tf.Tensor, ...] | None = None
 
 
 LED_START_DOCSTRING = r"""
@@ -1695,7 +1694,7 @@ LED_INPUTS_DOCSTRING = r"""
         encoder_outputs (`tf.Tensor`, *optional*):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1731,7 +1730,7 @@ class TFLEDEncoder(keras.layers.Layer):
         config: LEDConfig
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = keras.layers.Dropout(config.dropout)
@@ -1878,7 +1877,7 @@ class TFLEDEncoder(keras.layers.Layer):
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
@@ -1908,9 +1907,7 @@ class TFLEDEncoder(keras.layers.Layer):
         # undo padding
         if output_attentions:
             all_attentions = (
-                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
-                if padding_len > 0
-                else all_attentions
+                tuple(state[:, :, :-padding_len, :] for state in all_attentions) if padding_len > 0 else all_attentions
             )
 
         if output_hidden_states:
@@ -2001,7 +1998,7 @@ class TFLEDDecoder(keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: keras.layers.Embedding | None = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -2074,7 +2071,7 @@ class TFLEDDecoder(keras.layers.Layer):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding. If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
@@ -2149,7 +2146,7 @@ class TFLEDDecoder(keras.layers.Layer):
             )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
@@ -2253,7 +2250,7 @@ class TFLEDMainLayer(keras.layers.Layer):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFLEDEncoderBaseModelOutput]] = None,
+        encoder_outputs: tuple | TFLEDEncoderBaseModelOutput | None = None,
         global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
@@ -2372,7 +2369,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         decoder_head_mask: tf.Tensor | None = None,
         encoder_outputs: tf.Tensor | None = None,
         global_attention_mask: tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: bool | None = None,
@@ -2381,7 +2378,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ) -> Tuple[tf.Tensor] | TFLEDSeq2SeqModelOutput:
+    ) -> tuple[tf.Tensor] | TFLEDSeq2SeqModelOutput:
         outputs = self.led(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2509,7 +2506,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: TFLEDEncoderBaseModelOutput | None = None,
         global_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        past_key_values: tuple[tuple[np.ndarray | tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: bool | None = None,
@@ -2518,7 +2515,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor] | TFLEDSeq2SeqLMOutput:
+    ) -> tuple[tf.Tensor] | TFLEDSeq2SeqLMOutput:
         """
         Returns:
 
@@ -2661,3 +2658,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+
+__all__ = ["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"]

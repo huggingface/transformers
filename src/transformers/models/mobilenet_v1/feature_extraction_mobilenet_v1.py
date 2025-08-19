@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import requires
 from .image_processing_mobilenet_v1 import MobileNetV1ImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class MobileNetV1FeatureExtractor(MobileNetV1ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,6 @@ class MobileNetV1FeatureExtractor(MobileNetV1ImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+
+__all__ = ["MobileNetV1FeatureExtractor"]

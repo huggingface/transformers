@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +26,7 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
@@ -41,7 +41,11 @@ from transformers import (
 )
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
-from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, is_tokenizers_available
+from transformers.utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    is_tokenizers_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -107,7 +111,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     json.dump(config_dict, fp)
 
             # drop `processor_class` in tokenizer config
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -130,7 +134,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
                 # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                     config_dict = json.load(f)
                     config_dict.pop("processor_class")
 
@@ -138,7 +142,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     f.write(json.dumps(config_dict))
 
             # drop `processor_class` in tokenizer
-            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -161,7 +165,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
                 # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "r") as f:
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                     config_dict = json.load(f)
                     config_dict.pop("processor_class")
 
@@ -169,7 +173,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                     f.write(json.dumps(config_dict))
 
             # drop `processor_class` in feature extractor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "r") as f:
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
 
@@ -186,7 +190,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             model_config.save_pretrained(tmpdirname)
             # copy relevant files
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
-            # create emtpy sample processor
+            # create empty sample processor
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 f.write("{}")
 
@@ -262,6 +266,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -314,6 +320,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -353,6 +361,44 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
+
+    def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
+        class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
+            pass
+
+        class NewTokenizer(BertTokenizer):
+            pass
+
+        class NewProcessor(ProcessorMixin):
+            feature_extractor_class = "NewFeatureExtractor"
+            tokenizer_class = "NewTokenizer"
+
+            def __init__(self, feature_extractor, tokenizer):
+                super().__init__(feature_extractor, tokenizer)
+
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoFeatureExtractor.register(CustomConfig, NewFeatureExtractor)
+            AutoTokenizer.register(CustomConfig, slow_tokenizer_class=NewTokenizer)
+            AutoProcessor.register(CustomConfig, NewProcessor)
+            # If remote code is not set, the default is to use local classes.
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor",
+            )
+            self.assertEqual(processor.__class__.__name__, "NewProcessor")
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
+                del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in TOKENIZER_MAPPING._extra_content:
+                del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in PROCESSOR_MAPPING._extra_content:
+                del PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
+                del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -361,6 +407,13 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
+
+    def test_auto_processor_save_load(self):
+        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+            second_processor = AutoProcessor.from_pretrained(tmp_dir)
+            self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
 
 
 @is_staging_test

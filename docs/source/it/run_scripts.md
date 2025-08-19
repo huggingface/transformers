@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Insieme ai [notebooks](./notebooks) 🤗 Transformers, ci sono anche esempi di script che dimostrano come addestrare un modello per un task con [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), o [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
-Troverai anche script che abbiamo usato nei nostri [progetti di ricerca](https://github.com/huggingface/transformers/tree/main/examples/research_projects) e [precedenti esempi](https://github.com/huggingface/transformers/tree/main/examples/legacy) a cui contribuisce per lo più la comunità. Questi script non sono attivamente mantenuti e richiedono una specifica versione di 🤗 Transformers che sarà molto probabilmente incompatibile con l'ultima versione della libreria.
+Troverai anche script che abbiamo usato nei nostri [progetti di ricerca](https://github.com/huggingface/transformers-research-projects/) e [precedenti esempi](https://github.com/huggingface/transformers/tree/main/examples/legacy) a cui contribuisce per lo più la comunità. Questi script non sono attivamente mantenuti e richiedono una specifica versione di 🤗 Transformers che sarà molto probabilmente incompatibile con l'ultima versione della libreria.
 
 Non è dato per scontato che gli script di esempio funzionino senza apportare modifiche per ogni problema, bensì potrebbe essere necessario adattare lo script al tuo caso specifico. Per aiutarti in ciò, la maggioranza degli script espone le modalità di pre-processamento dei dati, consentendoti di modificare lo script come preferisci.
 
@@ -324,7 +324,7 @@ python examples/pytorch/summarization/run_summarization.py
 Tutti gli script possono caricare il tuo modello finale al [Model Hub](https://huggingface.co/models). Prima di iniziare, assicurati di aver effettuato l'accesso su Hugging Face:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Poi, aggiungi l'argomento `push_to_hub` allo script. Questo argomento consentirà di creare un repository con il tuo username Hugging Face e la cartella specificata in `output_dir`.
