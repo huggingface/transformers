@@ -1023,6 +1023,7 @@ DEPRECATED_OBJECTS = [
     "SquadV2Processor",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
+    "TFTrainingArguments",
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
@@ -1139,8 +1140,8 @@ def check_all_objects_are_documented():
     # the documents with the following prefixes are not requires to be in the docs
     ignore_prefixes = [
         "_",  # internal objects
-        "TF",  # TF objects, support is deprecated
-        "Flax",  # Flax objects, support is deprecated
+        "TF",  # TF objects, support deprecated
+        "Flax",  # Flax objects, support deprecated
     ]
     objects = [c for c in dir(transformers) if c not in modules and not any(c.startswith(p) for p in ignore_prefixes)]
     undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
