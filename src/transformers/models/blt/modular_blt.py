@@ -30,6 +30,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..cohere2.modeling_cohere2 import (
     Cohere2RotaryEmbedding,
+    rotate_half
 )
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
