@@ -43,12 +43,6 @@ class XcodecConfig(PretrainedConfig):
             The range of different bandwidths (in kbps) the model can encode audio with.
         sample_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
-        input_channels (`int`, *optional*):
-            Number of channels of the input to the first convolution in the semantic encoder.
-            Defaults to the hidden size of the semantic model.
-        encoder_channels (`int`, *optional*):
-            Number of hidden channels in each semantic encoder block.
-            Defaults to the hidden size of the semantic model.
         kernel_size (`int`, *optional*, defaults to 3):
             Kernel size for the initial semantic convolution.
         channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
@@ -59,12 +53,6 @@ class XcodecConfig(PretrainedConfig):
             Dilation factors for the residual units in semantic blocks.
         unit_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size inside each ResidualUnit in semantic blocks.
-        decoder_channels (`int`, *optional*):
-            Number of hidden channels in each semantic decoder block.
-            Defaults to the hidden size of the semantic model.
-        output_channels (`int`, *optional*):
-            Number of output channels in the semantic decoder.
-            Defaults to the hidden size of the semantic model.
         codebook_size (`int`, *optional*, defaults to 1024):
             Number of entries in each residual quantizer's codebook.
         codebook_dim (`int`, *optional*):
@@ -102,15 +90,11 @@ class XcodecConfig(PretrainedConfig):
         self,
         target_bandwidths: Optional[list[float]] = None,
         sample_rate: int = 16000,
-        input_channels: Optional[int] = None,
-        encoder_channels: Optional[int] = None,
         kernel_size: int = 3,
         channel_ratios: list[float] = [1, 1],
         strides: list[int] = [1, 1],
         block_dilations: list[int] = [1, 1],
         unit_kernel_size: int = 3,
-        decoder_channels: Optional[int] = None,
-        output_channels: Optional[int] = None,
         codebook_size: int = 1024,
         codebook_dim: Optional[int] = None,
         initializer_range: float = 0.02,
@@ -142,18 +126,9 @@ class XcodecConfig(PretrainedConfig):
         if semantic_model_config is None:
             self.semantic_model_config = HubertConfig()
         elif isinstance(semantic_model_config, dict):
-            # could be WavLM or Hubert
-            arch = semantic_model_config.get("architectures", None)
-            if arch and arch[0] == "WavLMModel":
-                self.semantic_model_config = WavLMConfig(**semantic_model_config)
-            elif arch and arch[0] == "HubertModel":
-                self.semantic_model_config = HubertConfig(**semantic_model_config)
-            else:
-                # print warning that defaulting to HubertConfig
-                logger.warning(
-                    f"Could not determine semantic model type from config architectures. Got {arch}. Defaulting to HubertConfig."
-                )
-                self.semantic_model_config = HubertConfig(**semantic_model_config)
+            self.semantic_model_config = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path=semantic_model_config["_name_or_path"]
+            )
         elif isinstance(semantic_model_config, WavLMConfig) or isinstance(semantic_model_config, HubertConfig):
             self.semantic_model_config = semantic_model_config
         else:
@@ -176,22 +151,14 @@ class XcodecConfig(PretrainedConfig):
         if codebook_dim is None:
             codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
         self.codebook_dim = codebook_dim
-        if input_channels is None:
-            input_channels = self.semantic_model_config.hidden_size
-        self.input_channels = input_channels
-        if encoder_channels is None:
-            encoder_channels = self.semantic_model_config.hidden_size
-        self.encoder_channels = encoder_channels
-        if decoder_channels is None:
-            decoder_channels = self.semantic_model_config.hidden_size
-        self.decoder_channels = decoder_channels
-        if output_channels is None:
-            output_channels = self.semantic_model_config.hidden_size
-        self.output_channels = output_channels
 
     @property
     def frame_rate(self) -> int:
         return math.ceil(self.sample_rate / self.hop_length)
+
+    @property
+    def semantic_hidden_size(self) -> int:
+        return self.semantic_model_config.hidden_size
 
     @property
     def hop_length(self) -> int:

@@ -116,13 +116,18 @@ class SemanticEncoder(nn.Module):
         if len(config.strides) != len(config.channel_ratios):
             raise ValueError("Number of strides must match the number of channel_ratios.")
         self.conv = nn.Conv1d(
-            config.input_channels, config.encoder_channels, config.kernel_size, 1, config.kernel_size // 2, bias=False
+            config.semantic_hidden_size,
+            config.semantic_hidden_size,
+            config.kernel_size,
+            1,
+            config.kernel_size // 2,
+            bias=False,
         )
 
-        in_channels = config.encoder_channels
+        in_channels = config.semantic_hidden_size
         conv_blocks = []
         for i, stride in enumerate(config.strides):
-            out_channels = int(config.encoder_channels * config.channel_ratios[i])
+            out_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
             conv_blocks += [SemanticEncoderBlock(config, in_channels, out_channels, stride)]
             in_channels = out_channels
 
@@ -170,8 +175,8 @@ class SemanticDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv1 = nn.Conv1d(
-            in_channels=config.decoder_channels,
-            out_channels=int(config.decoder_channels * config.channel_ratios[0]),
+            in_channels=config.semantic_hidden_size,
+            out_channels=int(config.semantic_hidden_size * config.channel_ratios[0]),
             kernel_size=config.kernel_size,
             stride=1,
             padding=config.kernel_size // 2,
@@ -179,19 +184,19 @@ class SemanticDecoder(nn.Module):
         )
         conv_blocks = []
         for i, stride in enumerate(config.strides):
-            in_channels = int(config.decoder_channels * config.channel_ratios[i])
+            in_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
 
             if i < (len(config.channel_ratios) - 1):
-                out_channels = int(config.decoder_channels * config.channel_ratios[i + 1])
+                out_channels = int(config.semantic_hidden_size * config.channel_ratios[i + 1])
             else:
-                out_channels = config.decoder_channels
+                out_channels = config.semantic_hidden_size
 
             conv_blocks += [SemanticDecoderBlock(config, in_channels, out_channels, stride)]
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
         self.conv2 = nn.Conv1d(
-            config.decoder_channels,
-            config.output_channels,
+            config.semantic_hidden_size,
+            config.semantic_hidden_size,
             config.kernel_size,
             stride=1,
             padding=config.kernel_size // 2,
