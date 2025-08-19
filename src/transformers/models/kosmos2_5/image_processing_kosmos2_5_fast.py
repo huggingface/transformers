@@ -60,6 +60,14 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
 
 
 class Kosmos2_5FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.
+    max_patches (`int`, *optional*, defaults to 4096):
+        The maximum number of patches to extract from the image as per the
+        [KOSMOS 2.5 paper](https://arxiv.org/pdf/2309.11419).
+    """
+
     patch_size: Optional[dict[str, int]]
     max_patches: Optional[int]
 
