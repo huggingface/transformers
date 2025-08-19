@@ -1137,7 +1137,7 @@ def check_all_objects_are_documented():
     """Check all models are properly documented."""
     documented_objs, documented_methods_map = find_all_documented_objects()
     modules = transformers._modules
-    # the documents with the following prefixes are not requires to be in the docs
+    # the objects with the following prefixes are not requires to be in the docs
     ignore_prefixes = [
         "_",  # internal objects
         "TF",  # TF objects, support deprecated
