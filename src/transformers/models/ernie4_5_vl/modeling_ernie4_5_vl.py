@@ -848,7 +848,6 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_PretrainedModel, GenerationMixin):
                 dim=-1,
             )
 
-
         assert "position_ids" in model_kwargs, "position_ids must be provided if rope_3d is on"
         position_ids = model_kwargs["position_ids"]
 
@@ -1593,8 +1592,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
 
         image_mask = input_ids == self.config.image_token_id
 
-        image_rate = image_mask.to(torch.float32).mean()
-
         if past_key_values is None:
             if images is not None:
                 assert (image_mask).any().item(), (
@@ -1669,8 +1666,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
         else:
             logits = self.lm_head(outputs.last_hidden_state[:, -1:, :])
 
-        router_loss = outputs.router_loss
-
         # aka Generate Decoding
         loss = None
         return CausalLMOutputWithCrossAttentions(
@@ -1681,32 +1676,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_MoeForCausalLM):
             attentions=outputs.attentions,
             router_loss=outputs.router_loss,
         )
-
-    @staticmethod
-    def _resolve_prefix_keys(state_keys_base, state_keys_real, ignore_error=False):
-        """_resolve_prefix_keys"""
-        # state_keys_map base to real
-        state_keys_map = {}
-
-        state_keys_base = set(state_keys_base)
-        state_keys_real = set(state_keys_real)
-
-        for key in state_keys_base:
-            for x in state_keys_real:
-                if "mm_embed_tokens" in x:
-                    if "mm_embed_tokens" in key:
-                        state_keys_map[key] = x
-                        break
-                elif x.endswith(key):
-                    state_keys_map[key] = x
-                    break
-            if key not in state_keys_map:
-                if not ignore_error:
-                    logger.error(f"could not find name {key} in loaded state dict!")
-            else:
-                state_keys_real.remove(state_keys_map[key])
-
-        return state_keys_map
 
 
 @dataclass
