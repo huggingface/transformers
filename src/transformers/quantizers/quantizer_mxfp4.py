@@ -195,15 +195,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
             with torch.device(target_device): 
                 if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
-                    assert triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch(triton_weight_tensor.data, weight_scale.data, torch.bfloat16,1) == param_value
+                    # these wheights are not swizzled yet, because on load we swizzle them
                     if "gate_up_proj" in param_name and "bias" not in param_name:
-                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data,requires_grad=False)
-                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
+                        module.gate_up_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.transpose(-1,-2).reshape(32, -1, 90, 16),requires_grad=False)
+                        module.gate_up_proj_scales = torch.nn.Parameter(weight_scale.data.transpose(-1,-2), requires_grad=False)
                         if hasattr(module, "gate_up_proj"):
                             delattr(module, "gate_up_proj")
                     elif "down_proj" in param_name and "bias" not in param_name:
-                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data, requires_grad=False)
-                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data, requires_grad=False)
+                        module.down_proj_blocks = torch.nn.Parameter(triton_weight_tensor.data.transpose(-1,-2).reshape(32, 2880, 90, -1), requires_grad=False)
+                        module.down_proj_scales = torch.nn.Parameter(weight_scale.data.transpose(-1,-2), requires_grad=False)
                         if hasattr(module, "down_proj"):
                             delattr(module, "down_proj") 
                     logger.debug(f"Created quantized weights for {param_name}")
@@ -342,7 +342,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return param_name
 
     def is_serializable(self, safe_serialization=None):
-        logger.warning_once("MXFP4 quantization is not serializable using safetensors for now")
         return True
 
     @property

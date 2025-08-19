@@ -124,7 +124,6 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # assert downcast_to_mxfp(out.reshape(32,2880 * 2, -1).transpose(-2, -1), torch.uint8, axis=1)[0].transpose(-2, -1).reshape(rows_total, B)
     del blocks, scales, lut
     return out.transpose(1, 2).contiguous()
 
@@ -371,18 +370,16 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
     # Check if both blocks and scales both not on meta device
     if blocks.device.type != "meta" and scales.device.type != "meta":
         # need it for efficient memory usage
-        assert triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch(blocks.data, scales.data, torch.bfloat16)
+        # gate_uyp_proj =  triton_kernels_hub.numerics_details.mxfp.upcast_from_mxfp_torch(blocks.data, scales.data, torch.bfloat16,1)
         local_experts = blocks.size(0)
-        if proj == "gate_up_proj":
-            blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
-        else:
-            blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-        # TODO: we need to have the weights on cuda, refactor later
+        # if proj == "gate_up_proj":
+        #     blocks = blocks.transpose(-2,-1).reshape(local_experts, module.intermediate_size * 2, -1)
+        # else:
+        #     blocks = blocks.transpose(-2,-1).reshape(local_experts, -1, module.intermediate_size // 2)
         if getattr(target_device, "type", target_device) == "cpu":
             target_device = "cuda"
-        # TODO: check why we still do move the tensors despite the context manager
-        blocks = blocks.to(target_device)
-        scales = scales.to(target_device)
+        blocks = blocks.to(target_device).contiguous()
+        scales = scales.to(target_device).contiguous()
         with torch.cuda.device(target_device):
             triton_weight_tensor, weight_scale = swizzle_mxfp4(
                 blocks, scales, triton_kernels_hub
