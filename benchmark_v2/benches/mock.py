@@ -276,32 +276,3 @@ def run_mock_benchmark(
 def run_benchmark(*args, **kwargs):
     """Alias for run_mock_benchmark to match discovery pattern."""
     return run_mock_benchmark(*args, **kwargs)
-
-
-if __name__ == "__main__":
-    # For testing purposes
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(levelname)s - %(asctime)s] %(message)s'
-    )
-    logger = logging.getLogger(__name__)
-    
-    # Run a quick test
-    logger.info("Running mock benchmark test")
-    
-    try:
-        output_file = run_mock_benchmark(
-            logger=logger,
-            skip_by_default=False,  # Enable for direct testing
-            warmup_iterations=1,
-            measurement_iterations=2,
-            num_tokens_to_generate=10
-        )
-        if output_file:
-            logger.info(f"Test completed successfully: {output_file}")
-        else:
-            logger.info("Test was skipped")
-    except Exception as e:
-        logger.error(f"Test failed: {e}")
-        import traceback
-        traceback.print_exc() 
