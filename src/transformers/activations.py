@@ -19,6 +19,7 @@ import torch
 from torch import Tensor, nn
 
 from .utils import logging
+from .utils.import_utils import is_torchdynamo_compiling
 
 
 logger = logging.get_logger(__name__)
@@ -268,7 +269,7 @@ class XIELUActivation(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         if self._xielu_cuda_obj is not None and input.is_cuda:
-            if not torch._dynamo.is_compiling():
+            if not is_torchdynamo_compiling():
                 return self._xielu_cuda_fn(input)
             else:
                 logger.warning("torch._dynamo is compiling, using Python version of xIELU.")
