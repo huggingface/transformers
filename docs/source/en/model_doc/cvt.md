@@ -69,7 +69,7 @@ model = AutoModelForImageClassification.from_pretrained(
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits
