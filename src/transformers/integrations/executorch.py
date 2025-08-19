@@ -325,14 +325,14 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 "input_ids": input_ids,
                 "cache_position": cache_position
                 if cache_position is not None
-                else torch.arange(input_ids.shape[-1], dtype=torch.long, model=model_device),
+                else torch.arange(input_ids.shape[-1], dtype=torch.long, device=model_device),
             }
         else:  # inputs_embeds
             input_kwargs = {
                 "inputs_embeds": inputs_embeds,
                 "cache_position": cache_position
                 if cache_position is not None
-                else torch.arange(inputs_embeds.shape[1], dtype=torch.long, model=model_device),
+                else torch.arange(inputs_embeds.shape[1], dtype=torch.long, device=model_device),
             }
 
         exported_program = torch.export.export(
