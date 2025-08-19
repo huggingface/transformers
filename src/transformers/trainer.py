@@ -3858,11 +3858,17 @@ class Trainer:
         # For unknown dimensions, be conservative and reject
         return False
 
-    def _prepare_cp(self, inputs: dict[str, Union[torch.Tensor, Any]]):
+    def _prepare_cp(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
         if (
             getattr(self.accelerator, "parallelism_config") is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
+            if hasattr(model, "config"):
+                if model.config._attn_implementation != "sdpa":
+                    raise ValueError(
+                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                    )
+
             if "position_ids" not in inputs:
                 logger.warning_once("Position IDs not found in the inputs, generating manually")
                 inputs["position_ids"] = torch.arange(
@@ -3967,7 +3973,7 @@ class Trainer:
         """
         # Prepare buffers for context parallelism
 
-        cp_context, inputs = self._prepare_cp(inputs)
+        cp_context, inputs = self._prepare_cp(model, inputs)
 
         # Context manager is no-op if CP isn't enabled
         with cp_context():
