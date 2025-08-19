@@ -121,7 +121,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
-        # pop arguments that are not used in the foward but used nevertheless
+        # pop arguments that are not used in the forward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
         # Check original_sizes is of length 1 or len(images)
         if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):

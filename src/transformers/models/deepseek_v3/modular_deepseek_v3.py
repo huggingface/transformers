@@ -340,6 +340,8 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer, nn.Module):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
         LlamaPreTrainedModel._init_weights(module)
         if isinstance(module, DeepseekV3TopkRouter):
