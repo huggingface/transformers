@@ -42,6 +42,44 @@ class AwqQuantizer(HfQuantizer):
 
     required_packages = ["awq", "accelerate"]
 
+    def _check_autoawq_version_for_module_skipping(self):
+        """
+        Ensure autoawq >= 0.1.8 when modules_to_not_convert is used.
+
+        Raises:
+            ImportError: If autoawq is not installed or version is insufficient.
+        """
+        from packaging import version
+
+        min_version = "0.1.8"  # define outside try so it's available in except
+        try:
+            import autoawq
+
+            min_v = version.parse(min_version)
+
+            if hasattr(autoawq, "__version__"):
+                cur_v = version.parse(autoawq.__version__)
+            elif hasattr(autoawq, "version"):
+                cur_v = version.parse(autoawq.version)
+            else:
+                raise ImportError(
+                    f"Cannot determine autoawq version. Please upgrade autoawq package to at least {min_version}."
+                )
+
+            if cur_v < min_v:
+                raise ImportError(
+                    f"Your current version of autoawq ({cur_v}) does not support "
+                    f"module quantization skipping. Please upgrade autoawq package to at least {min_version}."
+                )
+        except ImportError as e:
+            if "module quantization skipping" in str(e):
+                raise
+            else:
+                raise ImportError(
+                    f"AutoAWQ >= {min_version} is required for module quantization skipping. "
+                    f"Install with: pip install autoawq>={min_version}"
+                ) from e
+
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
@@ -52,15 +90,20 @@ class AwqQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
+        if getattr(self.quantization_config, "modules_to_not_convert", None):
+            self._check_autoawq_version_for_module_skipping()
+
+        # Safely check XPU availability even if torch.xpu does not exist
+        xpu_available = hasattr(torch, "xpu") and torch.xpu.is_available()
         if (
-            self.quantization_config.version == AWQLinearVersion.GEMM
+            getattr(self.quantization_config, "version", None) == AWQLinearVersion.GEMM
             and not torch.cuda.is_available()
-            and not torch.xpu.is_available()
+            and not xpu_available
         ):
             logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
             self.quantization_config.version = AWQLinearVersion.IPEX
 
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
+        if getattr(self.quantization_config, "version", None) == AWQLinearVersion.IPEX:
             if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
                 raise RuntimeError(
                     "To use IPEX backend, you need autoawq>0.2.6. Please install the latest version or from source."
@@ -75,7 +118,8 @@ class AwqQuantizer(HfQuantizer):
                     " This is not supported. Please make sure only cpu and xpu in the device_map."
                 )
         else:
-            if not torch.cuda.is_available() and not torch.xpu.is_available():
+            xpu_available = hasattr(torch, "xpu") and torch.xpu.is_available()
+            if not torch.cuda.is_available() and not xpu_available:
                 raise RuntimeError(
                     "GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU"
                 )
@@ -137,12 +181,12 @@ class AwqQuantizer(HfQuantizer):
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+        if getattr(self.quantization_config, "version", None) == AWQLinearVersion.EXLLAMA:
             from ..integrations import post_init_awq_exllama_modules
 
             model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
 
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
+        if getattr(self.quantization_config, "version", None) == AWQLinearVersion.IPEX:
             from ..integrations import post_init_awq_ipex_modules
 
             model = post_init_awq_ipex_modules(model)
