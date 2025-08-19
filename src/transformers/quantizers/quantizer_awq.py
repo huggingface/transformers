@@ -197,7 +197,7 @@ class AwqQuantizer(HfQuantizer):
             logger.warning("You cannot save an AWQ model that uses fused modules!")
             return False
 
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+        if getattr(self.quantization_config, "version", None) == AWQLinearVersion.EXLLAMA:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
 
@@ -207,4 +207,7 @@ class AwqQuantizer(HfQuantizer):
     def is_trainable(self):
         # AWQ supports PEFT fine-tuning from version 0.2.0
         MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
-        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
+        try:
+            return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
+        except importlib.metadata.PackageNotFoundError:
+            return False
