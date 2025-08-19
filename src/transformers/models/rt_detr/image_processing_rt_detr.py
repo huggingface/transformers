@@ -20,36 +20,21 @@ from typing import Any, Callable, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
-    PaddingMode,
-    center_to_corners_format,
     corners_to_center_format,
-    pad,
-    rescale,
     resize,
-    to_channel_dimension_format,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
-    AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_annotations,
-    validate_preprocess_arguments,
 )
 from ...utils import (
-    filter_out_non_signature_kwargs,
     is_flax_available,
     is_jax_tensor,
     is_tf_available,
@@ -57,13 +42,11 @@ from ...utils import (
     is_torch_available,
     is_torch_tensor,
     logging,
-    requires_backends,
 )
-from ...utils.generic import TensorType
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

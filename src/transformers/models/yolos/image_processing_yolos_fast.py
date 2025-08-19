@@ -7,30 +7,21 @@
 import pathlib
 from typing import Any, Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
-    SizeDict,
-    get_image_size_for_max_height_width,
-    get_max_height_width,
-    safe_squeeze,
 )
-from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
-    AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
-    validate_annotations,
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
@@ -46,11 +37,9 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.io import read_image
-    from torchvision.transforms.v2 import functional as F
 
 elif is_torchvision_available():
     from torchvision.io import read_image
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)

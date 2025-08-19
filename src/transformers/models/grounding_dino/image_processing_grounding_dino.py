@@ -22,38 +22,24 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
-    PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
-    pad,
-    rescale,
     resize,
     rgb_to_id,
-    to_channel_dimension_format,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_annotations,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     ExplicitEnum,
-    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_scipy_available,
@@ -79,7 +65,7 @@ if is_scipy_available():
     import scipy.stats
 
 if TYPE_CHECKING:
-    from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+    pass
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
