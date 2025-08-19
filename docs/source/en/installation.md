@@ -20,7 +20,13 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). It has been tested on Python 3.9+, PyTorch 2.1+, TensorFlow 2.6+, and Flax 0.4.1+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [TensorFlow 2.0](https://www.tensorflow.org/install/pip), and [Flax](https://flax.readthedocs.io/en/latest/). Transformers requires **Python 3.7 or later**. While it has been extensively tested on Python 3.9+, it also works with Python 3.7 and 3.8.
+
+It supports the following framework versions:
+- **PyTorch**: 2.1+
+- **TensorFlow**: 2.6+
+- **Flax**: 0.4.1+
+
 
 ## Virtual environment
 
