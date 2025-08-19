@@ -1956,7 +1956,6 @@ class GenerationTesterMixin:
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
         has the expected shapes
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
             # use a static cache because they don't create the causal masks correctly.
@@ -2062,7 +2061,6 @@ class GenerationTesterMixin:
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._can_compile_fullgraph:
