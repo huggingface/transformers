@@ -3192,9 +3192,7 @@ class Trainer:
             logs: dict[str, float] = {}
 
             # all_gather + mean() to get average loss over all processes
-            # tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
-
-            tr_loss_scalar = tr_loss.item()
+            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
@@ -4012,16 +4010,6 @@ class Trainer:
                     kwargs["scale_wrt_gas"] = False
 
                 self.accelerator.backward(loss, **kwargs)
-
-                loss_reduce_grp = (
-                    self.accelerator.torch_device_mesh["dp_cp"].get_group()
-                    if self.accelerator.parallelism_config.dp_cp_dim_names
-                    else None
-                )
-
-                import torch.distributed as dist
-
-                dist.all_reduce(loss, op=dist.ReduceOp.AVG, group=loss_reduce_grp)
 
             return loss.detach()
 
