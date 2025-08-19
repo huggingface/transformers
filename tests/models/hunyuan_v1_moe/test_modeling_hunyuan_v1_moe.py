@@ -91,7 +91,9 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         EXPECTED_ANSWER = "\nRegular exercise offers numerous physical, mental, and emotional benefits. It improves cardiovascular health, strengthens muscles and bones, boosts metabolism, and helps"
         prompt = "Write a short summary of the benefits of regular exercise "
-        tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "tencent/Hunyuan-A13B-Instruct", use_fast=False, trust_remote_code=True
+        )
         model = HunYuanMoEV1ForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
         messages = [
             {"role": "user", "content": prompt},
