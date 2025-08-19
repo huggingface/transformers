@@ -45,48 +45,24 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## BLTConfig
+## BltConfig
 
-[[autodoc]] BLTConfig
+[[autodoc]] BltConfig
 
-## BLTTokenizer
+## BltTokenizer
 
-[[autodoc]] BLTTokenizer
+[[autodoc]] BltTokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## BLTTokenizerFast
+## BltModel
 
-[[autodoc]] BLTTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
-
-## BLTModel
-
-[[autodoc]] BLTModel
+[[autodoc]] BltModel
     - forward
 
-## BLTForCausalLM
+## BltForCausalLM
 
-[[autodoc]] BLTForCausalLM
-    - forward
-
-## BLTForSequenceClassification
-
-[[autodoc]] BLTForSequenceClassification
-    - forward
-
-## BLTForQuestionAnswering
-
-[[autodoc]] BLTForQuestionAnswering
-    - forward
-
-## BLTForTokenClassification
-
-[[autodoc]] BLTForTokenClassification
+[[autodoc]] BltForCausalLM
     - forward
