@@ -1,9 +1,6 @@
 # coding=utf-8
-# Copyright 2025 EleutherAI, the HuggingFace Inc. team, and the Swiss AI Initiative. All rights reserved.
+# Copyright 2025 the HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
-# This code is based on HuggingFace's LLaMA implementation in this library.
-# It has been modified from its original forms to accommodate the architectural
-# differences made by the Swiss AI Initiative that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
