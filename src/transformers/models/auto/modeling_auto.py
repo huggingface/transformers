@@ -1154,6 +1154,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
         ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
