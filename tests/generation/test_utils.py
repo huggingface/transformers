@@ -1737,7 +1737,7 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. 
+            # use a static cache because they don't create the causal masks correctly.
             # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
@@ -1960,7 +1960,7 @@ class GenerationTesterMixin:
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. 
+            # use a static cache because they don't create the causal masks correctly.
             # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
@@ -2181,7 +2181,7 @@ class GenerationTesterMixin:
         """
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
-            # use a static cache because they don't create the causal masks correctly. 
+            # use a static cache because they don't create the causal masks correctly.
             # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
