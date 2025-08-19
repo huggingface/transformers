@@ -3,18 +3,6 @@
 A comprehensive benchmarking framework for transformer models that supports multiple execution modes (eager, compiled, kernelized), detailed performance metrics collection, and structured output format.
 
 
-## Installation
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. For GPU support, ensure you have CUDA-compatible PyTorch:
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu118
-```
-
 ## Quick Start
 
 ### Running All Benchmarks
@@ -62,10 +50,9 @@ config.compile_mode = "max-autotune"  # or "default", "reduce-overhead"
 ```
 
 ### Kernelized Mode
-Optimized kernel execution (experimental):
+Uses the `kernels` library if there are custom kernels available for the model:
 ```python
 config.variant = "kernelized"
-config.compile_mode = "max-autotune"
 ```
 
 ## Output Format
@@ -118,6 +105,7 @@ Results are saved as JSON files with the following structure:
     }
   ]
 }
+```
 
 ## Mock Benchmark
 
@@ -132,16 +120,7 @@ python run_benchmarks.py --include mock_benchmark --enable-mock \
     --warmup-iterations 1 --measurement-iterations 2 --num-tokens-to-generate 10
 ```
 
-The mock benchmark:
-- **No Dependencies**: Runs without torch/transformers
-- **Realistic Simulation**: Generates realistic timing data for different variants
-- **Fast Testing**: Quick way to test the framework
-- **Performance Simulation**: Shows expected performance differences between eager/compiled/kernelized
-- **Skipped by Default**: Won't run unless explicitly enabled with `--enable-mock`
-
-## Advanced Usage
-
-### Custom Hardware Monitoring
+## Hardware Monitoring
 
 ```python
 from framework import GPUMonitor
@@ -171,15 +150,6 @@ def custom_measurement():
     )
 ```
 
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA out of memory**: Reduce `batch_size` or `num_tokens_to_generate`
-2. **Import errors**: Ensure all dependencies are installed
-3. **No benchmarks found**: Check that benchmark files have proper runner functions
-4. **Compilation failures**: Some models don't support all compile modes
-
 ### Debug Mode
 
 ```bash
@@ -193,6 +163,4 @@ To add new benchmarks:
 1. Create a new file in `benches/`
 2. Implement the `ModelBenchmark` interface
 3. Add a runner function (`run_<benchmark_name>` or `run_benchmark`)
-4. Test with the framework
-
-The framework will automatically discover and run your benchmark! 
+4. run_benchmarks.py
