@@ -629,7 +629,7 @@ class Gemma3TextModel(Gemma2Model):
             sliding_mask_kwargs = mask_kwargs.copy()
 
             if self.config.use_bidirectional_attention:
-                mask_kwargs["or_mask_function"] = lambda *args, **kwargs: True
+                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
                 sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(self.config.sliding_window)
 
             # Create the masks
