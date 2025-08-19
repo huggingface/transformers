@@ -277,7 +277,6 @@ def mlp_forward(self, hidden_states):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing
-        # routing = routing
 
     batch_size = hidden_states.shape[0]
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)

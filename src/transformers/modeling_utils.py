@@ -3923,7 +3923,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 logger.debug(f"Creating quantized parameter for {name}")
                 hf_quantizer.create_quantized_param(self, tensor.to("cuda:0"), name, "cuda:0", state_dict)
         state_dict = self.state_dict()
-        # safe_save_file(self.state_dict(), os.path.join("/fsx/arthur/mxfp4", "model.safetensors"), metadata={"format": "pt"})
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
