@@ -284,7 +284,7 @@ def routing_torch_dist(
 def mlp_forward(self, hidden_states):
     import torch.distributed as dist
 
-    if dist.is_available() and dist.is_initialized():
+    if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing
