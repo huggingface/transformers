@@ -36,7 +36,7 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
         spatial_conv_size=2,
         temporal_conv_size=2,
         rms_norm_eps=1e-5,
-        temporal_rms_norm_eps=1e-6,
+        vision_rms_norm_eps=1e-6,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -57,7 +57,7 @@ class Ernie4_5_VLVisionConfig(PretrainedConfig):
         self.spatial_conv_size = spatial_conv_size
         self.temporal_conv_size = temporal_conv_size
         self.rms_norm_eps = rms_norm_eps
-        self.temporal_rms_norm_eps = temporal_rms_norm_eps
+        self.vision_rms_norm_eps = vision_rms_norm_eps
 
         self.initializer_range = initializer_range
 
@@ -77,6 +77,7 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         moe_layer_end_index=29,
         moe_layer_interval=1,
         moe_layer_start_index=1,
+        moe_norm_min=1e-12,
         moe_num_experts=64,
         moe_num_shared_experts=2,
         num_attention_heads=20,
@@ -102,6 +103,7 @@ class Ernie4_5_VLTextConfig(PretrainedConfig):
         self.moe_layer_end_index = moe_layer_end_index
         self.moe_layer_interval = moe_layer_interval
         self.moe_layer_start_index = moe_layer_start_index
+        self.moe_norm_min = moe_norm_min
         self.moe_num_experts = moe_num_experts
         self.moe_num_shared_experts = moe_num_shared_experts
         self.num_attention_heads = num_attention_heads

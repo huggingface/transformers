@@ -344,8 +344,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
         self.experts = nn.ModuleList(
             [Ernie4_5_VLMoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
         )
-        #self.norm_min = config.moe_norm_min
-        self.norm_min = 1e-12
+        self.norm_min = config.moe_norm_min
 
     def forward(
         self,
@@ -1041,8 +1040,8 @@ class DFNRopeVisionBlock(nn.Module):
         super().__init__()
         self.config = config
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
 
         self.attn = VisionAttention(config.hidden_size, num_heads=config.num_heads)
         self.mlp = VisionMlp(
@@ -1097,7 +1096,7 @@ class DFNRopeVisionTransformerPreTrainedModel(PreTrainedModel):
             [DFNRopeVisionBlock(config) for _ in range(config.depth)]
         )
 
-        self.ln = nn.LayerNorm(config.hidden_size, eps=1e-6)
+        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
 
     def rot_pos_emb(self, grid_thw, num_pad=0):
         """rot_pos_emb
@@ -1213,14 +1212,14 @@ class VariableResolutionResamplerModel(nn.Module):
             nn.Linear(self.spatial_dim, self.spatial_dim),
             nn.GELU(),
             nn.Linear(self.spatial_dim, self.spatial_dim),
-            nn.LayerNorm(self.spatial_dim, eps=1e-6),
+            nn.LayerNorm(self.spatial_dim, eps=config.vision_rms_norm_eps),
         )
 
         self.temporal_linear = nn.Sequential(
             nn.Linear(self.temporal_dim, self.spatial_dim),
             nn.GELU(),
             nn.Linear(self.spatial_dim, self.spatial_dim),
-            nn.LayerNorm(self.spatial_dim, eps=1e-6),
+            nn.LayerNorm(self.spatial_dim, eps=config.vision_rms_norm_eps),
         )
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)

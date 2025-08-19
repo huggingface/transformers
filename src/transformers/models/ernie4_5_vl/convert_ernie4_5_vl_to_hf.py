@@ -31,7 +31,7 @@ TEXT_TO_VISION_CONFIG_KEYS = [
     "temporal_conv_size",
     "rms_norm_eps",
 ]
-ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "temporal_rms_norm_eps"]
+ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
 VALID_TEXT_CONFIG_KEYS = [
     "hidden_size",
     "intermediate_size",
@@ -144,7 +144,7 @@ def convert_vision_config_to_hf(vision_config, original_config, original_vision_
     for key in TEXT_TO_VISION_CONFIG_KEYS:
         vision_config[key] = original_config[key]
     vision_config["text_hidden_size"] = original_config["hidden_size"]
-    vision_config["temporal_rms_norm_eps"] = 1e-6
+    vision_config["vision_rms_norm_eps"] = 1e-6
 
     # delete everything else
     for key in list(vision_config.keys()):
