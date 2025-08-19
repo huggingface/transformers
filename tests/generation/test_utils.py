@@ -2163,7 +2163,11 @@ class GenerationTesterMixin:
             finally:
                 torch._logging.set_logs()
 
-            if "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out):
+            # Compilation of slidind layers necesarily has recompiles with `dynamic=False` - however this test
+            # still checks that `fullgraph=True` is supported, as compilation with `dynamic=None` is the default
+            # and does not actually lead to too many recompiles
+            has_sliding_layers = any(decoder_cache.is_sliding)
+            if not has_sliding_layers and "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out):
                 raise RuntimeError(
                     f"`torch.compile` recompiled part of the forward pass in {model.__class__.__name__}. "
                     "See the test logs for more details."
