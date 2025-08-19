@@ -216,7 +216,7 @@ segments[1]["label"]
 </hfoption>
 <hfoption id="automatic speech recognition">
 
-Use `infer_device` to automatically detect available hardware(e.g. CUDA GPU, Intel XPU) and use it to accelerate inference.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
 from transformers import pipeline, infer_device
