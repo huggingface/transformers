@@ -1282,16 +1282,6 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    context_parallel_size: int = field(
-        default=1,
-        metadata={
-            "help": (
-                "Context Parallelism size for splitting long sequences across devices. "
-                "Requires FSDP v2 and accelerate >= 1.10.0. Default is 1 (disabled). "
-                "When enabled, sequences are split across multiple GPUs to handle longer contexts."
-            )
-        },
-    )
 
     default_optim = "adamw_torch"
     if is_torch_available():
@@ -2079,58 +2069,6 @@ class TrainingArguments:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
-
-        # Initialize parallelism_config and fsdp_plugin for context parallelism
-        self.parallelism_config = None
-        self.fsdp_plugin = None
-
-        # Handle context parallelism setup
-        if self.context_parallel_size > 1:
-            from accelerate import __version__ as accelerate_version
-            from packaging import version
-
-            if version.parse(accelerate_version) < version.parse("1.10.0"):
-                raise ValueError(f"Context parallelism requires accelerate >= 1.10.0, but found {accelerate_version}")
-
-            from accelerate.parallelism_config import ParallelismConfig
-
-            # Create ParallelismConfig
-            self.parallelism_config = ParallelismConfig(cp_size=self.context_parallel_size)
-
-            # Context parallelism requires FSDP v2
-            # Only create if not already using FSDP
-            if not self.fsdp:
-                logger.warning(
-                    f"Context parallelism (context_parallel_size={self.context_parallel_size}) requires FSDP v2. "
-                    f"Automatically enabling FSDP v2 with transformer_based_wrap policy. "
-                    f"To configure FSDP manually, set fsdp=['full_shard'] and fsdp_config appropriately."
-                )
-                from accelerate.utils import FullyShardedDataParallelPlugin
-
-                self.fsdp_plugin = FullyShardedDataParallelPlugin(
-                    fsdp_version=2,
-                    auto_wrap_policy="transformer_based_wrap",
-                    state_dict_type="FULL_STATE_DICT",
-                )
-            else:
-                # Ensure FSDP v2 is used when context parallelism is enabled
-                if self.fsdp_config.get("version", 1) != 2:
-                    raise ValueError(
-                        f"Context parallelism (context_parallel_size={self.context_parallel_size}) requires FSDP v2, "
-                        f"but you have configured FSDP v{self.fsdp_config.get('version', 1)}. "
-                        f"FSDP v1 and v2 have different configuration options and behavior. "
-                        f"Please update your fsdp_config to use version 2: fsdp_config={{'version': 2, ...}} "
-                        f"or remove fsdp configuration to let context parallelism auto-configure FSDP v2."
-                    )
-
-            # Validation for context parallelism
-            if self.per_device_train_batch_size != 1:
-                logger.warning(
-                    f"Context parallelism typically requires batch_size=1, "
-                    f"but got {self.per_device_train_batch_size}. "
-                    f"Setting per_device_train_batch_size=1."
-                )
-                self.per_device_train_batch_size = 1
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
