@@ -26,7 +26,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
@@ -176,9 +180,14 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    # Set the default fps to 2.0 for BC, otherwise `timestamps` can't be inferred
                     metadata = video_metadata[i]
-                    metadata.fps = 2.0 if metadata.fps is None else metadata.fps
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
                     timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []

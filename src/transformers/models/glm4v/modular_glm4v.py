@@ -1624,9 +1624,14 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    # Set the default fps to 2.0 for BC, otherwise `timestamps` can't be inferred
                     metadata = video_metadata[i]
-                    metadata.fps = 2.0 if metadata.fps is None else metadata.fps
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
                     timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []

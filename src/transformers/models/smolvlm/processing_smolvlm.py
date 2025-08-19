@@ -217,6 +217,11 @@ class SmolVLMProcessor(ProcessorMixin):
             while self.video_token in sample:
                 metadata = next(video_metadata)
                 if metadata.fps is None:
+                    logger.warning_once(
+                        "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                        "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                        "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                    )
                     metadata.fps = 24  # Set the default fps to 24 for BC, otherwise `timestamps` can't be inferred
                 timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
                 duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])

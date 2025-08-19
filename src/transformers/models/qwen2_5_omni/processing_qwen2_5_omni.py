@@ -64,7 +64,6 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "use_audio_in_video": False,
             "min_pixels": 128 * 28 * 28,
             "max_pixels": 768 * 28 * 28,
-            "return_metadata": True,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -180,17 +179,14 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            # If user has not requested video metadata, pop it
-            if "return_metadata" not in kwargs:
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
-            fps_list = [metadata.fps if metadata.fps is not None else 2.0 for metadata in video_metadata]
-            videos_inputs["video_second_per_grid"] = [
-                self.video_processor.temporal_patch_size / fps for fps in fps_list
-            ]
-            video_grid_thw = iter(videos_inputs["video_grid_thw"])
-            video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
+
+            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            video_grid_thw = videos_inputs["video_grid_thw"]
+            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
+            videos_inputs["video_second_per_grid"] = second_per_grid_ts
+
+            video_grid_thw = iter(video_grid_thw)
+            video_second_per_grid = iter(second_per_grid_ts)
         else:
             videos_inputs = {}
             video_grid_thw = iter([])
