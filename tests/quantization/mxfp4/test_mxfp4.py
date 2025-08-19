@@ -498,7 +498,15 @@ class Mxfp4ModelTest(unittest.TestCase):
             torch.cuda.empty_cache()
             gc.collect()
             quantization_config.dequantize = False
-            quantization_config.dequantize = False
+            # Load the model back from the saved directory
+            loaded_model = GptOssForCausalLM.from_pretrained(
+                "/fsx/arthur/mxfp4",
+                quantization_config=quantization_config,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+            )
+            self.check_inference_correctness_quantized(loaded_model, tokenizer)
+            quantization_config.dequantize = True
             # Load the model back from the saved directory
             loaded_model = GptOssForCausalLM.from_pretrained(
                 "/fsx/arthur/mxfp4",
