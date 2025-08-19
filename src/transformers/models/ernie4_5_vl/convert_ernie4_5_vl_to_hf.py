@@ -5,6 +5,8 @@ import re
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file, save_file
 
+from transformers import Ernie4_5_VLConfig
+
 
 TIED_MAPPING = {
     "baidu/ERNIE-4.5-VL-28B-A3B-PT": True,
@@ -13,6 +15,42 @@ TIED_MAPPING = {
     "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT": False,
 }
 SAFETENSOR_INDEX_NAME = "model.safetensors.index.json"
+
+CONFIG_NAME = "config.json"
+VALID_VISION_CONFIG_KEYS = [
+    "depth",
+    "hidden_size",
+    "hidden_act",
+    "num_heads",
+    "in_channels",
+    "patch_size",
+    "spatial_merge_size",
+]
+TEXT_TO_VISION_CONFIG_KEYS = [
+    "spatial_conv_size",
+    "temporal_conv_size",
+    "rms_norm_eps",
+]
+ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "temporal_rms_norm_eps"]
+VALID_TEXT_CONFIG_KEYS = [
+    "hidden_size",
+    "intermediate_size",
+    "max_position_embeddings",
+    "moe_intermediate_size",
+    "moe_k",
+    "moe_layer_interval",
+    "moe_num_shared_experts",
+    "num_attention_heads",
+    "num_hidden_layers",
+    "num_key_value_heads",
+    "rms_norm_eps",
+    "rope_theta",
+    "vocab_size",
+    "tie_word_embeddings",
+    "use_cache",
+    "use_bias",
+]
+ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + ["hidden_act", "moe_layer_end_index", "moe_layer_start_index", "moe_num_experts", "freq_allocation"]
 
 
 def load_json(save_dir, filename):
@@ -96,7 +134,87 @@ def convert_weights(model_path, save_dir):
     write_json(index_dict, save_dir, SAFETENSOR_INDEX_NAME)
 
 
+def convert_vision_config_to_hf(vision_config, original_config, original_vision_config):
+    # convert vision related stuff
+    for key in VALID_VISION_CONFIG_KEYS:
+        vision_config[key] = original_vision_config[key]
+    vision_config["intermediate_size"] = original_vision_config["hidden_size"] * original_vision_config["mlp_ratio"]
+
+    # convert originally text attributes to vision
+    for key in TEXT_TO_VISION_CONFIG_KEYS:
+        vision_config[key] = original_config[key]
+    vision_config["text_hidden_size"] = original_config["hidden_size"]
+    vision_config["temporal_rms_norm_eps"] = 1e-6
+
+    # delete everything else
+    for key in list(vision_config.keys()):
+        if key not in ALL_VISION_CONFIG_KEYS:
+            del vision_config[key]
+
+    return vision_config
+
+
+def convert_text_config_to_hf(text_config, original_config):
+    # carry directly over
+    for key in VALID_TEXT_CONFIG_KEYS:
+        text_config[key] = original_config[key]
+
+    # special cases
+    text_config["hidden_act"] = "silu"  # default value which is not explicit in their json
+    text_config["moe_layer_end_index"] = max(original_config["moe_layer_end_index"])
+    text_config["moe_layer_start_index"] = min(original_config["moe_layer_start_index"])
+    text_config["moe_num_experts"] = original_config["moe_num_experts"][0]  # the same for both modalities
+    text_config["freq_allocation"] = 20  # can also be extracted from mrope
+
+    # delete everything else
+    for key in list(text_config.keys()):
+        if key not in ALL_TEXT_CONFIG_KEYS:
+            del text_config[key]
+
+    return text_config
+
+
+def convert_config(model_path, save_dir):
+    checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*.config"])
+    for filename in sorted(os.listdir(checkpoint_path)):
+        if filename == CONFIG_NAME:
+            hf_config = Ernie4_5_VLConfig()
+            original_config = load_json(checkpoint_path, filename)
+
+            # general config
+            image_token_id = original_config["im_patch_id"]
+
+            # vision config
+            vision_config = hf_config.vision_config.to_dict()
+            original_vision_config = original_config["vision_config"]
+            vision_config = convert_vision_config_to_hf(
+                vision_config,
+                original_config,
+                original_vision_config
+            )
+
+            # text config
+            text_config = hf_config.text_config.to_dict()
+            text_config = convert_text_config_to_hf(text_config, original_config)
+
+            # total config
+            final_config = Ernie4_5_VLConfig(
+                text_config=text_config,
+                vision_config=vision_config,
+                image_token_id=image_token_id,
+            )
+
+            final_config.save_pretrained(save_dir)
+            break
+
+"""
 convert_weights(
+    model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
+    save_dir='AntonV/ErnieVL',
+)
+"""
+
+convert_config(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
