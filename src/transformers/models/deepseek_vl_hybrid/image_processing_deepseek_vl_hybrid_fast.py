@@ -93,14 +93,14 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     high_res_resample = PILImageResampling.BICUBIC
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridFastImageProcessorKwargs]):
-        if kwargs.get("image_mean", None) is None:
+        if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
             background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
-        if kwargs.get("high_res_image_mean", None) is None:
+        if kwargs.get("high_res_image_mean") is None:
             high_res_background_color = (127, 127, 127)
         else:
-            high_res_background_color = tuple([int(x * 255) for x in kwargs.get("high_res_image_mean")])
+            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         super().__init__(**kwargs)
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)

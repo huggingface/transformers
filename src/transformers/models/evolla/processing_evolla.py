@@ -226,7 +226,7 @@ class EvollaProcessor(ProcessorMixin):
 
         return outputs
 
-    # overwirte to load the protein tokenizer from a separate folder
+    # overwrite to load the protein tokenizer from a separate folder
     # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

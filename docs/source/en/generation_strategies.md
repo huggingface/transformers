@@ -315,37 +315,37 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
 
-## Custom decoding methods
+## Custom generation methods
 
-Custom decoding methods enable specialized generation behavior such as the following:
+Custom generation methods enable specialized behavior such as:
 - have the model continue thinking if it is uncertain;
 - roll back generation if the model gets stuck;
 - handle special tokens with custom logic;
-- enhanced input preparation for advanced models;
+- use specialized KV caches;
 
-We enable custom decoding methods through model repositories, assuming a specific model tag and file structure (see subsection below). This feature is an extension of [custom modeling code](./models.md#custom-models) and, like such, requires setting `trust_remote_code=True`.
+We enable custom generation methods through model repositories, assuming a specific model tag and file structure (see subsection below). This feature is an extension of [custom modeling code](./models.md#custom-models) and, like such, requires setting `trust_remote_code=True`.
 
-If a model repository holds a custom decoding method, the easiest way to try it out is to load the model and generate with it:
+If a model repository holds a custom generation method, the easiest way to try it out is to load the model and generate with it:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # `transformers-community/custom_generate_example` holds a copy of `Qwen/Qwen2.5-0.5B-Instruct`, but
-# with custom generation code -> calling `generate` uses the custom decoding method!
+# with custom generation code -> calling `generate` uses the custom generation method!
 tokenizer = AutoTokenizer.from_pretrained("transformers-community/custom_generate_example")
 model = AutoModelForCausalLM.from_pretrained(
     "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
 )
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
-# The custom decoding method is a minimal greedy decoding implementation. It also prints a custom message at run time.
+# The custom generation method is a minimal greedy decoding implementation. It also prints a custom message at run time.
 gen_out = model.generate(**inputs)
 # you should now see its custom message, "✨ using a custom generation method ✨"
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True))
 'The quick brown fox jumps over a lazy dog, and the dog is a type of animal. Is'
 ```
 
-Model repositories with custom decoding methods have a special property: their decoding method can be loaded from **any** model through [`~GenerationMixin.generate`]'s `custom_generate` argument. This means anyone can create and share their custom generation method to potentially work with any Transformers model, without requiring users to install additional Python packages.
+Model repositories with custom generation methods have a special property: their generation method can be loaded from **any** model through [`~GenerationMixin.generate`]'s `custom_generate` argument. This means anyone can create and share their custom generation method to potentially work with any Transformers model, without requiring users to install additional Python packages.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -354,7 +354,7 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct", device_map="auto")
 
 inputs = tokenizer(["The quick brown"], return_tensors="pt").to(model.device)
-# `custom_generate` replaces the original `generate` by the custom decoding method defined in
+# `custom_generate` replaces the original `generate` by the custom generation method defined in
 # `transformers-community/custom_generate_example`
 gen_out = model.generate(**inputs, custom_generate="transformers-community/custom_generate_example", trust_remote_code=True)
 print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
@@ -364,7 +364,7 @@ print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
 You should read the `README.md` file of the repository containing the custom generation strategy to see what the new arguments and output type differences are, if they exist. Otherwise, you can assume it works like the base [`~GenerationMixin.generate`] method.
 
 > [!TIP]
-> You can find all custom decoding methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`
+> You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`.
 
 Consider the Hub repository [transformers-community/custom_generate_example](https://huggingface.co/transformers-community/custom_generate_example) as an example. The `README.md` states that it has an additional input argument, `left_padding`, which adds a number of padding tokens before the prompt.
 
@@ -387,11 +387,11 @@ torch>=99.0 (installed: 2.6.0)
 
 Updating your Python requirements accordingly will remove this error message.
 
-### Creating a custom decoding method
+### Creating a custom generation method
 
-To create a new decoding method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
-1. The model you've designed your decoding method with.
-2. `custom_generate/generate.py`, which contains all the logic for your custom decoding method.
+To create a new generation method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
+1. The model you've designed your generation method with.
+2. `custom_generate/generate.py`, which contains all the logic for your custom generation method.
 3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
 4. `README.md`, where you should add the `custom_generate` tag and document any new arguments or output type differences of your custom method here.
 
@@ -409,7 +409,7 @@ your_repo/
 
 #### Adding the base model
 
-The starting point for your custom decoding method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair. When the model in this repository is loaded, your custom decoding method will override `generate`. Don't worry -- your decoding method can still be loaded with any other Transformers model, as explained in the section above.
+The starting point for your custom generation method is a model repository just like any other. The model to add to this repository should be the model you've designed your method with, and it is meant to be part of a working self-contained model-generate pair. When the model in this repository is loaded, your custom generation method will override `generate`. Don't worry -- your generation method can still be loaded with any other Transformers model, as explained in the section above.
 
 If you simply want to copy an existing model, you can do
 
@@ -418,13 +418,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("source/model_repo")
 model = AutoModelForCausalLM.from_pretrained("source/model_repo")
-tokenizer.save_pretrained("your/decoding_method", push_to_hub=True)
-model.save_pretrained("your/decoding_method", push_to_hub=True)
+tokenizer.save_pretrained("your/generation_method", push_to_hub=True)
+model.save_pretrained("your/generation_method", push_to_hub=True)
 ```
 
 #### generate.py
 
-This is the core of your decoding method. It *must* contain a method named `generate`, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in [`GenerationMixin`] (like the base `generate` method).
+This is the core of your generation method. It *must* contain a method named `generate`, and this method *must* contain a `model` argument as its first argument. `model` is the model instance, which means you have access to all attributes and methods in the model, including the ones defined in [`GenerationMixin`] (like the base `generate` method).
 
 > [!WARNING]
 > `generate.py` must be placed in a folder named `custom_generate`, and not at the root level of the repository. The file paths for this feature are hardcoded.
@@ -465,7 +465,7 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
     return input_ids
 ```
 
-Follow the recommended practices below to ensure your custom decoding method works as expected.
+Follow the recommended practices below to ensure your custom generation method works as expected.
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
@@ -476,7 +476,7 @@ Your custom `generate` method can relative import code from the `custom_generate
 from .utils import some_function
 ```
 
-Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom decoding method.
+Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom generation method.
 
 
 #### requirements.txt
@@ -485,7 +485,7 @@ You can optionally specify additional Python requirements in a `requirements.txt
 
 #### README.md
 
-The root level `README.md` in the model repository usually describes the model therein. However, since the focus of the repository is the custom decoding method, we highly recommend to shift its focus towards describing the custom decoding method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
+The root level `README.md` in the model repository usually describes the model therein. However, since the focus of the repository is the custom generation method, we highly recommend to shift its focus towards describing the custom generation method. In addition to a description of the method, we recommend documenting any input and/or output differences to the original [`~GenerationMixin.generate`]. This way, users can focus on what's new, and rely on Transformers docs for generic implementation details.
 
 For discoverability, we highly recommend you to add the `custom_generate` tag to your repository. To do so, the top of your `README.md` file should look like the example below. After you push the file, you should see the tag in your repository!
 
@@ -504,6 +504,36 @@ Recommended practices:
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
+### Reusing `generate`’s input preparation
+
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
+
+```py
+def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+    next_tokens = input_ids
+    while input_ids.shape[1] < stopping_criteria[0].max_length:
+        logits = model(next_tokens, attention_mask=attention_mask, **model_kwargs).logits
+        next_token_logits = logits_processor(input_ids, logits[:, -1, :])
+        next_tokens = torch.argmax(next_token_logits, dim=-1)[:, None]
+        input_ids = torch.cat((input_ids, next_tokens), dim=-1)
+        attention_mask = torch.cat((attention_mask, torch.ones_like(next_tokens)), dim=-1)
+    return input_ids
+
+output = model.generate(
+    **inputs,
+    custom_generate=custom_loop,
+    max_new_tokens=10,
+)
+```
+
+> [!TIP]
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
+
+### Finding custom generation methods
+
+You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:
+- [Custom generation methods - Community](https://huggingface.co/collections/transformers-community/custom-generation-methods-community-6888fb1da0efbc592d3a8ab6) -- a collection of powerful methods contributed by the community;
+- [Custom generation methods - Tutorials](https://huggingface.co/collections/transformers-community/custom-generation-methods-tutorials-6823589657a94940ea02cfec) -- a collection of reference implementations for methods that previously were part of `transformers`, as well as tutorials for `custom_generate`.
 
 ## Resources
 

@@ -21,6 +21,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
+import pytest
 import requests
 
 from transformers import (
@@ -281,6 +282,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
         pass
 
     @unittest.skip(reason="Compile not yet supported because in QwenOmniThinker models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -444,7 +446,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
     # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @unittest.skip("Cannot handle 4D attention mask")
