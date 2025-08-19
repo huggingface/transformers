@@ -16,11 +16,12 @@ import io
 import sys
 import unittest
 
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_read_token, require_torch
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
 
 @require_torch
+@require_read_token
 class AttentionMaskVisualizerTester(unittest.TestCase):
     """Test suite for AttentionMaskVisualizer"""
 
