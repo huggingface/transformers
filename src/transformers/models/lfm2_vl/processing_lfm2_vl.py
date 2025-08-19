@@ -522,6 +522,15 @@ class Lfm2VlProcessor(ProcessorMixin):
         tile_size = tile_size if tile_size is not None else self.tile_size
         max_pixels_tolerance = max_pixels_tolerance if max_pixels_tolerance is not None else self.max_pixels_tolerance
 
+        max_thumbnail_image_patches = max_image_tokens * downsample_factor**2
+        tile_size_patches = (tile_size // encoder_patch_size) ** 2 if do_image_splitting else 0
+        max_num_patches = max(
+            max_thumbnail_image_patches,
+            tile_size_patches,
+        )
+
+        self.image_processor.max_num_patches = max_num_patches
+
         if text is None and images is None:
             raise ValueError("You must provide one of `text` or `images`.")
 
