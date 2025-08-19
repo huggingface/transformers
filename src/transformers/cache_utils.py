@@ -1137,7 +1137,7 @@ class StaticCache(Cache):
                 layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
 
         layers = []
-        for layer_type in config.layer_types:
+        for layer_type in layer_types:
             if layer_type == "sliding_attention":
                 layer = SlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
             elif layer_type == "chunked_attention":
