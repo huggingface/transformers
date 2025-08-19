@@ -774,9 +774,8 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         )
 
 
-class VisionMlp(nn.Module):
-    """VisionMLP"""
-
+# copy qwen2 vl
+class Ernie4_5VLVisionMlp(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
         self.fc1 = nn.Linear(dim, hidden_dim)
@@ -784,31 +783,17 @@ class VisionMlp(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
-        """
-        Args:
-            x (torch.Tensor): input tensor
-
-        Returns:
-            torch.Tensor: VisionMLP output tensor
-        """
         return self.fc2(self.act(self.fc1(x)))
 
 
-class PatchEmbed(nn.Module):
-    """PatchEmbed"""
-
+# copy qwen2 vl (without temporal and different forward)?
+class Ernie4_5VLPatchEmbed(nn.Module):
     def __init__(
         self,
         patch_size: int = 14,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
-        """
-        Args:
-            patch_size (int, optional): patch size. Defaults to 14.
-            in_channels (int, optional): number of channels. Defaults to 3.
-            embed_dim (int, optional): embedding dimension. Defaults to 1152.
-        """
         super().__init__()
         self.patch_size = patch_size
         self.in_channels = in_channels
@@ -818,54 +803,34 @@ class PatchEmbed(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (torch.Tensor): hidden states
-
-        Returns:
-            torch.Tensor: output tensor
-        """
         target_dtype = self.proj.weight.dtype
-
-        hidden_states = self.proj(hidden_states.to(target_dtype))
-
-        return hidden_states
+        return self.proj(hidden_states.to(target_dtype))
 
 
+# copy qwen 2.5 vl
 class VisionRotaryEmbedding(nn.Module):
-    """VisionRotaryEmbedding"""
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        """
-        Args:
-            dim (int): the dimension of each token.
-            theta (float, optional): the frequency factor. Defaults to 10000.0.
-        """
         super().__init__()
-        self.inv_freq = 1.0 / theta ** (
-            torch.arange(start=0, end=dim, step=2, dtype=torch.float32) / dim
-        )
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        """
-        Args:
-            seqlen (int): length of sequence.
-
-        Returns:
-            torch.Tensor: rotary position embedding
-        """
-        seq = torch.arange(seqlen).to(self.inv_freq.dtype)
-        freqs = torch.outer(input=seq, vec2=self.inv_freq)
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
 
+# copy qwen 2.5 vl
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)  # shape is the same as x
+    return torch.cat((-x2, x1), dim=-1)
 
 
+# TODO: calculate properly outside
 def apply_rotary_pos_emb_vision(
     tensor: torch.Tensor, freqs: torch.Tensor
 ) -> torch.Tensor:
@@ -889,94 +854,110 @@ def apply_rotary_pos_emb_vision(
     return output
 
 
-class VisionAttention(nn.Module):
-    """VisionAttention"""
-
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
+# copy qwen 2.5 vl (fix rope)
+class Ernie4_5VLVisionAttention(nn.Module):
+    def __init__(self, config) -> None:
         super().__init__()
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
-        self.head_dim = dim // num_heads  # must added
+        self.dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
+        self.scaling = self.head_dim**-0.5
+        self.config = config
+        self.attention_dropout = 0.0
+        self.is_causal = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
-        """forward function for vision attention"""
         seq_length = hidden_states.shape[0]
-        qkv = (
-            self.qkv(hidden_states)
-            .reshape([seq_length, 3, self.num_heads, -1])
-            .permute(1, 0, 2, 3)
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
-        q, k, v = qkv.unbind(axis=0)
 
-        q = apply_rotary_pos_emb_vision(q.unsqueeze(dim=0), rotary_pos_emb).squeeze(
+        # TODO: fix rope
+        query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(dim=0), rotary_pos_emb).squeeze(
             dim=0
         )
-        k = apply_rotary_pos_emb_vision(k.unsqueeze(dim=0), rotary_pos_emb).squeeze(
+        key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(dim=0), rotary_pos_emb).squeeze(
             dim=0
         )
 
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-        splits = [
-            torch.split(tensor, lengths.tolist(), dim=1) for tensor in (q, k, v)
-        ]
+        """attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]"""
+        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]  # forcing sdpa for now
 
-        attn_output = []
-        for q, k, v in zip(*splits):
-            attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(self.head_dim)
-            attn_weights = nn.functional.softmax(
-                attn_weights, dim=-1, dtype=torch.float32
-            ).to(q.dtype)
-            attn_output_splited = torch.matmul(attn_weights, v)
-            attn_output_splited = attn_output_splited.transpose(0, 1)
-            attn_output.append(attn_output_splited)
-        attn_output = torch.cat(attn_output, dim=0)
+        if self.config._attn_implementation == "flash_attention_2":
+            # Flash Attention 2: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
         return attn_output
 
 
-class DFNRopeVisionBlock(nn.Module):
-    """DFNRopeVisionBlock"""
-
+# copy qwen 2.5 vl (change init + fix rope)
+class Ernie4_5VLVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
-        """
-        Args:
-            config (dict): model configuration.
-            attn_implementation (str, optional): attention implementation. Defaults to "sdpa".
-        """
         super().__init__()
-        self.config = config
-
         self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
-
-        self.attn = VisionAttention(config.hidden_size, num_heads=config.num_heads)
-        self.mlp = VisionMlp(
+        self.attn = Ernie4_5VLVisionAttention(config)
+        self.mlp = Ernie4_5VLVisionMlp(
             dim=config.hidden_size,
             hidden_dim=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
 
     def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
-        """
-        Args:
-            hidden_states(torch.Tensor): hidden states
-            cu_seqlens (torch.Tensor): cumulative sequence lengths
-            rotary_pos_emb: rotary position embedding
-
-        Returns:
-            torch.Tensor: output tensor
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -986,21 +967,19 @@ class DFNRopeVisionBlock(nn.Module):
         return hidden_states
 
 
-class DFNRopeVisionTransformerPreTrainedModel(PreTrainedModel):
-    """DFNRopeVisionTransformerPreTrainedModel"""
-
+# TODO: check if we can use qwen 2.5 vl (at least the rope)
+class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
     config_class = Ernie4_5_VLVisionConfig
-    _tp_plan = {}
+    _no_split_modules = ["Ernie4_5VLVisionBlock"]
 
-    def __init__(self, config) -> None:
-        """
-        Args:
-            config (dict): model configuration
-        """
-        super().__init__(config)
+    def __init__(self, config, *inputs, **kwargs) -> None:
+        super().__init__(config, *inputs, **kwargs)
+
         self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = config.patch_size
+        self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
-        self.patch_embed = PatchEmbed(
+        self.patch_embed = Ernie4_5VLPatchEmbed(
             patch_size=config.patch_size,
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
@@ -1010,7 +989,7 @@ class DFNRopeVisionTransformerPreTrainedModel(PreTrainedModel):
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList(
-            [DFNRopeVisionBlock(config) for _ in range(config.depth)]
+            [Ernie4_5VLVisionBlock(config) for _ in range(config.depth)]
         )
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
@@ -1273,7 +1252,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
 
         self.model = Ernie4_5_Model(config.text_config)
 
-        self.vision_model = DFNRopeVisionTransformerPreTrainedModel(
+        self.vision_model = Ernie4_5VLVisionTransformerPreTrainedModel(
             config.vision_config
         )
 
@@ -1698,6 +1677,6 @@ class CausalLMOutputWithCrossAttentions(ModelOutput):
 
 __all__ = [
     "Ernie4_5_VLMoeForConditionalGeneration",
-    "DFNRopeVisionTransformerPreTrainedModel",
+    "Ernie4_5VLVisionTransformerPreTrainedModel",
     "VariableResolutionResamplerModel",
 ]
