@@ -99,6 +99,8 @@ if TYPE_CHECKING:
     from .dinat import *
     from .dinov2 import *
     from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
     from .distilbert import *
     from .dit import *
     from .donut import *
@@ -140,6 +142,7 @@ if TYPE_CHECKING:
     from .gpt_neo import *
     from .gpt_neox import *
     from .gpt_neox_japanese import *
+    from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
     from .granite import *
@@ -237,6 +240,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .opt import *
+    from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
@@ -283,6 +287,8 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam2 import *
+    from .sam2_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
@@ -352,6 +358,7 @@ if TYPE_CHECKING:
     from .wavlm import *
     from .whisper import *
     from .x_clip import *
+    from .xcodec import *
     from .xglm import *
     from .xlm import *
     from .xlm_roberta import *

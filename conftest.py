@@ -83,6 +83,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
+    config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
 
 
 def pytest_collection_modifyitems(items):
@@ -130,6 +132,7 @@ doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
     import torch
+
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     torch.backends.cudnn.allow_tf32 = False

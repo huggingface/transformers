@@ -17,7 +17,7 @@
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -28,6 +28,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -480,6 +481,10 @@ class DetrAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
+                )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
                 )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
@@ -1238,10 +1243,17 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = (~mask).to(x.dtype)
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        not_mask = (~mask).to(dtype)
         y_embed = not_mask.cumsum(1)
         x_embed = not_mask.cumsum(2)
         if self.normalize:
@@ -1249,7 +1261,7 @@ class MaskFormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1388,7 +1400,7 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        object_queries = self.position_embedder(image_features)
+        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)

@@ -1569,7 +1569,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             assistant_model=None,
             batch_size=input_ids.shape[0],
             max_cache_length=generation_config.max_length - 1,
-            device=input_ids.device,
         )
 
         if generation_config.num_beams == 1:

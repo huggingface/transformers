@@ -20,6 +20,8 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
+*This model was released on 2022-07-27 and added to Hugging Face Transformers on 2022-09-14.*
+
 # GPT-NeoX-Japanese
 
 GPT-NeoX-Japanese, a Japanese language model based on [GPT-NeoX](./gpt_neox).

@@ -182,27 +182,31 @@ class PagedAttentionCache:
                     f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
                 )
             # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            self.num_key_value_heads //= tp_size
+            # self.num_key_value_heads //= tp_size
 
         self.head_dim = (
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            config.head_dim
+            if hasattr(config, "head_dim") and config.head_dim is not None
+            else config.hidden_size // config.num_attention_heads
         )
         self.num_hidden_layers = config.num_hidden_layers
 
         # Calculate optimal block size and number if not provided
-        num_blocks = getattr(generation_config, "num_blocks", None)
+        num_blocks = getattr(generation_config, "num_blocks", 1024)
         block_size = getattr(generation_config, "block_size", 32)
         max_memory_percent = getattr(generation_config, "max_memory", 0.9)
-        num_blocks, max_batch_tokens = compute_optimal_blocks(
-            generation_config.max_new_tokens,
-            block_size=block_size,
-            head_dim=self.head_dim,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_key_value_heads,
-            max_memory_percent=max_memory_percent,
-            dtype=dtype,
-            num_blocks=num_blocks,
-        )
+        max_batch_tokens = getattr(generation_config, "max_batch_tokens", 256)
+        if num_blocks is None or max_batch_tokens is None:
+            num_blocks, max_batch_tokens = compute_optimal_blocks(
+                generation_config.max_new_tokens,
+                block_size=block_size,
+                head_dim=self.head_dim,
+                num_layers=self.num_hidden_layers,
+                num_heads=self.num_key_value_heads,
+                max_memory_percent=max_memory_percent,
+                dtype=dtype,
+                num_blocks=num_blocks,
+            )
         logger.warning(
             f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max concurrent requests {max_batch_tokens}"
         )
@@ -960,7 +964,14 @@ class ContinuousBatchProcessor:
 
     @traced
     def _sync(self):
-        return self.output_ids.tolist()[0]  # should be the only synch we do
+        if self.output_ids is not None:
+            try:
+                out = self.output_ids.tolist()[0]  # should be the only synch we do
+            except Exception:
+                out = [0, 1]
+        else:
+            out = [0, 0]
+        return out
 
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
@@ -1250,7 +1261,7 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 num_requests=len(self.input_queue.queue),
-                tp_size=getattr(self.model, "tp_size"),
+                tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
             )
 
             scheduler = None

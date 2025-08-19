@@ -76,6 +76,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                     package_version = importlib.metadata.version("amd-quark")
                 except Exception:
                     package_exists = False
+            elif pkg_name == "triton":
+                try:
+                    # import triton works for both linux and windows
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
+                except Exception:
+                    try:
+                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
+                    except Exception:
+                        package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -111,6 +121,7 @@ HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
+TRITON_MIN_VERSION = "1.0.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -226,12 +237,12 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-_triton_available = _is_package_available("triton")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
 _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
+_triton_available, _triton_version = _is_package_available("triton", return_version=True)
 
 _torch_version = "N/A"
 _torch_available = False
@@ -412,6 +423,10 @@ def is_torch_deterministic():
     return False
 
 
+def is_triton_available(min_version: str = TRITON_MIN_VERSION):
+    return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
+
+
 def is_hadamard_available():
     return _hadamard_available
 
@@ -436,9 +451,7 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # NOTE: MLU is OK with non-contiguous inputs.
@@ -452,9 +465,7 @@ def is_torch_sdpa_available():
 
 
 def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -1073,7 +1084,7 @@ def is_ninja_available():
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
@@ -1266,6 +1277,24 @@ def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool =
         ) >= version.parse(library_version)
     else:
         return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
+
+
+@lru_cache
+def is_quanto_greater(library_version: str, accept_dev: bool = False):
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not _is_package_available("optimum.quanto"):
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
+            library_version
+        )
+    else:
+        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1588,10 +1617,6 @@ def is_liger_kernel_available():
         return False
 
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
-
-
-def is_triton_available():
-    return _triton_available
 
 
 def is_rich_available():
@@ -2744,7 +2769,7 @@ def spread_import_structure(nested_import_structure):
 
                     else:
                         # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
-                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # are frozensets, whereas some are not -> frozenset keys are at an unknown depth-level of the
                         # dictionary.
                         #
                         # We recursively propagate the frozenset for this specific dictionary so that the frozensets

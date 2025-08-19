@@ -13,16 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-25.*
 
 
 # xLSTM
 
 ## Overview
 
-The xLSTM model was proposed in [xLSTM: Extended Long Short-Term Memory](https://openreview.net/forum?id=ARAxPPIAhq) by Maximilian Beck*, Korbinian Pöppel*, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Günter Klambauer, Johannes Brandstetter and Sepp Hochreiter.
+The xLSTM model was proposed in [xLSTM: Extended Long Short-Term Memory](https://huggingface.co/papers/2405.04517) by Maximilian Beck*, Korbinian Pöppel*, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Günter Klambauer, Johannes Brandstetter and Sepp Hochreiter.
 xLSTM updates the original LSTM architecture to be competitive with Transformer models by introducing exponential gating, matrix memory expansion, and parallelizable training and ingestion.
 
-The [7B model](https://hf.co/NX-AI/xLSTM-7b) variant was trained by the xLSTM team Maximilian Beck, Korbinian Pöppel, Phillip Lippe, Richard Kurle, Patrick Blies, Sebastian Böck and Sepp Hochreiter at NXAI.
+The [7B model](https://huggingface.co/NX-AI/xLSTM-7b) variant was trained by the xLSTM team Maximilian Beck, Korbinian Pöppel, Phillip Lippe, Richard Kurle, Patrick Blies, Sebastian Böck and Sepp Hochreiter at NXAI.
 
 The abstract from the paper is the following:
 

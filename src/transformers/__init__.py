@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.55.0.dev0"
+__version__ = "4.56.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -277,6 +277,7 @@ _import_structure = {
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
+        "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
         "FPQuantConfig",
@@ -376,24 +377,17 @@ else:
         "StaticLayer",
         "SlidingWindowLayer",
         "ChunkedSlidingLayer",
-        "CacheProcessor",
-        "OffloadedCacheProcessor",
-        "QuantizedCacheProcessor",
-        "QuantoQuantizedCacheProcessor",
-        "HQQQuantizedCacheProcessor",
+        "QuantoQuantizedLayer",
+        "HQQQuantizedLayer",
         "Cache",
-        "CacheConfig",
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
-        "HQQQuantizedCacheProcessor",
         "HybridCache",
         "HybridChunkedCache",
         "OffloadedCache",
         "OffloadedStaticCache",
         "QuantizedCache",
-        "QuantoQuantizedCacheProcessor",
-        "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
         "SlidingWindowCache",
@@ -494,6 +488,7 @@ else:
         "Conv1D",
         "apply_chunking_to_forward",
         "prune_layer",
+        "infer_device",
     ]
     _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
@@ -584,20 +579,24 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .cache_utils import Cache as Cache
-    from .cache_utils import CacheConfig as CacheConfig
+    from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
+    from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import HybridCache as HybridCache
     from .cache_utils import MambaCache as MambaCache
     from .cache_utils import OffloadedCache as OffloadedCache
     from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantizedCacheConfig as QuantizedCacheConfig
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
+    from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
+    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticLayer as StaticLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
