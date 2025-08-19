@@ -1286,7 +1286,7 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False):
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("optimum-quanto"):
+    if not _is_package_available("optimum.quanto"):
         return False
 
     if accept_dev:
@@ -2769,7 +2769,7 @@ def spread_import_structure(nested_import_structure):
 
                     else:
                         # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
-                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # are frozensets, whereas some are not -> frozenset keys are at an unknown depth-level of the
                         # dictionary.
                         #
                         # We recursively propagate the frozenset for this specific dictionary so that the frozensets

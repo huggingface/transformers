@@ -13,6 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-01-30 and added to Hugging Face Transformers on 2025-03-18.*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&amp;logo=pytorch&amp;logoColor=white">
@@ -65,9 +67,9 @@ outputs[0]["generated_text"]
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText 
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device 
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
@@ -105,10 +107,10 @@ decoded_output
 
 - Mistral 3 supports text-only generation. 
 ```py 
-from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
@@ -142,10 +144,10 @@ print(decoded_output)
 
 - Mistral 3 accepts batched image and text inputs. 
 ```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
@@ -184,11 +186,11 @@ messages = [
 
 - Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes. 
 
-```py 
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+```py
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)

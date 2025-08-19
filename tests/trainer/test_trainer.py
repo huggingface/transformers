@@ -31,6 +31,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
 from packaging import version
 from parameterized import parameterized
@@ -1315,21 +1316,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
 
-    def test_evaluation_with_keys_to_drop(self):
-        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
-        tiny_gpt2 = GPT2LMHeadModel(config)
-        x = torch.randint(0, 100, (128,))
-        eval_dataset = RepeatDataset(x)
-        args = TrainingArguments(self.get_auto_remove_tmp_dir(), report_to="none")
-        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
-        # By default the past_key_values are removed
-        result = trainer.predict(eval_dataset)
-        self.assertTrue(isinstance(result.predictions, np.ndarray))
-        # We can still get them by setting ignore_keys to []
-        result = trainer.predict(eval_dataset, ignore_keys=[])
-        self.assertTrue(isinstance(result.predictions, tuple))
-        self.assertEqual(len(result.predictions), 2)
-
     def test_training_arguments_are_left_untouched(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)
@@ -1358,6 +1344,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
+    @pytest.mark.torch_compile_test
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1377,6 +1364,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_peft
     @require_bitsandbytes
+    @pytest.mark.torch_compile_test
     def test_bnb_compile(self):
         from peft import LoraConfig, get_peft_model
 

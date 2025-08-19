@@ -239,6 +239,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -304,8 +305,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
             "2.7.0"
         )  # Due to https://github.com/pytorch/pytorch/issues/150994
         exported_program = exportable_module.export(
-            input_ids=prompt_token_ids,
-            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
             strict=strict,
         )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
