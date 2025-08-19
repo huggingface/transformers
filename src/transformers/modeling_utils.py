@@ -54,7 +54,7 @@ from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -124,7 +124,6 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    strtobool,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -180,15 +179,6 @@ _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
 
 
 def is_local_dist_rank_0():
