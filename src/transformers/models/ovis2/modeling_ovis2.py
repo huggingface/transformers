@@ -626,7 +626,11 @@ class Ovis2Model(Ovis2PreTrainedModel):
         return image_features, visual_indicator_features
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
+        placeholder_token_id: int,
     ):
         """
         Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -634,20 +638,23 @@ class Ovis2Model(Ovis2PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.tensor(placeholder_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.image_token_id
+            special_image_mask = input_ids == placeholder_token_id
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
-        return special_image_mask
+
+        if placeholder_token_id == self.config.image_token_id:
+            n_image_features = image_features.shape[0] * image_features.shape[1]
+            if inputs_embeds[special_image_mask].numel() != image_features.numel():
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+
+        return special_image_mask, n_image_tokens
 
     @can_return_tuple
     @auto_docstring
@@ -682,28 +689,25 @@ class Ovis2Model(Ovis2PreTrainedModel):
         if pixel_values is not None:
             image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
 
-            special_image_mask = self.get_placeholder_mask(
+            special_image_mask, _ = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
                 image_features=image_features,
+                placeholder_token_id=self.config.image_token_id,
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
-                if input_ids is None:
-                    mask = inputs_embeds == self.get_input_embeddings()(
-                        torch.tensor(visual_indicator_id, dtype=torch.long, device=inputs_embeds.device)
-                    )
-                    mask = mask.all(-1)
-                else:
-                    mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
-
-                if mask.any():
-                    inputs_embeds[mask] = (
-                        visual_indicator_features[i]
-                        .expand_as(inputs_embeds[mask])
-                        .to(inputs_embeds.device, inputs_embeds.dtype)
-                    )
+                visual_indicator_mask, n_image_tokens = self.get_placeholder_mask(
+                    input_ids,
+                    inputs_embeds=inputs_embeds,
+                    image_features=None,
+                    placeholder_token_id=visual_indicator_id,
+                )
+                inputs_embeds = inputs_embeds.masked_scatter(
+                    visual_indicator_mask,
+                    visual_indicator_features[i].repeat(n_image_tokens),
+                )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
