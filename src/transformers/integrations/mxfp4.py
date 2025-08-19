@@ -172,7 +172,7 @@ class Mxfp4GptOssExperts(nn.Module):
             torch.zeros(self.num_experts, self.hidden_size, dtype=torch.float32), requires_grad=False
         )
         self.alpha = 1.702
-
+        self.limit = getattr(config, "swiglu_limit", 7.0)
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
 
@@ -185,7 +185,7 @@ class Mxfp4GptOssExperts(nn.Module):
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
         with torch.cuda.device(hidden_states.device):
-            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, None), 2)
+            act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, self.limit), 2)
 
             intermediate_cache1 = matmul_ogs(
                 hidden_states,
@@ -228,7 +228,7 @@ def routing_torch_dist(
 
     with torch.cuda.device(logits.device):
         world_size = torch.distributed.get_world_size()
-        rank = int(os.environ.get("LOCAL_RANK", 0))
+        rank = int(os.environ.get("LOCAL_RANK", "0"))
         replace_value = -1
 
         n_tokens = logits.shape[0]
@@ -314,12 +314,12 @@ def should_convert_module(current_key_name, patterns):
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
-    model = kwargs.get("model", None)
-    empty_param = kwargs.get("empty_param", None)
-    casting_dtype = kwargs.get("casting_dtype", None)
-    to_contiguous = kwargs.get("to_contiguous", None)
-    rank = kwargs.get("rank", None)
-    device_mesh = kwargs.get("device_mesh", None)
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
+    device_mesh = kwargs.get("device_mesh")
 
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
@@ -357,12 +357,12 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, **kwa
     )
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
-    model = kwargs.get("model", None)
-    empty_param = kwargs.get("empty_param", None)
-    casting_dtype = kwargs.get("casting_dtype", None)
-    to_contiguous = kwargs.get("to_contiguous", None)
-    rank = kwargs.get("rank", None)
-    device_mesh = kwargs.get("device_mesh", None)
+    model = kwargs.get("model")
+    empty_param = kwargs.get("empty_param")
+    casting_dtype = kwargs.get("casting_dtype")
+    to_contiguous = kwargs.get("to_contiguous")
+    rank = kwargs.get("rank")
+    device_mesh = kwargs.get("device_mesh")
 
     for proj in ["gate_up_proj", "down_proj"]:
         if proj in param_name:
