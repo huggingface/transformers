@@ -255,7 +255,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # we are not really dequantizing, we are just removing everthing related to quantization here
+        # we are not really dequantizing, we are just removing everything related to quantization here
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
         # clean cache due to triton ops

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-18.*
 
 # Voxtral
 
@@ -43,10 +44,10 @@ The model supports audio-text instructions, including multi-turn and multi-audio
 
 ➡️ audio + text instruction
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -79,10 +80,10 @@ print("=" * 80)
 
 ➡️ multi-audio + text instruction 
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -119,10 +120,10 @@ print("=" * 80)
 
 ➡️ multi-turn:
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -173,10 +174,10 @@ print("=" * 80)
 
 ➡️ text only:
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -208,10 +209,10 @@ print("=" * 80)
 
 ➡️ audio only:
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -243,10 +244,10 @@ print("=" * 80)
 
 ➡️ batched inference!
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -304,10 +305,10 @@ for decoded_output in decoded_outputs:
 Use the model to transcribe audio (supports English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
 
 ```python
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
 import torch
+from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)

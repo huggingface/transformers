@@ -257,7 +257,7 @@ def _compute_yarn_parameters(
         low = find_correction_dim(low_rot, dim, base, max_position_embeddings)
         high = find_correction_dim(high_rot, dim, base, max_position_embeddings)
         if truncate:
-            low = low = math.floor(low)
+            low = math.floor(low)
             high = math.ceil(high)
         return max(low, 0), min(high, dim - 1)
 
