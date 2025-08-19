@@ -607,7 +607,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         )  # fmt: skip
 
         expected_generated_text = expected_generated_strings.get_expectation()
-        
+
         print(f"Generated text: {generated_texts[0]}")
 
         self.assertEqual(generated_texts[0], expected_generated_text)
