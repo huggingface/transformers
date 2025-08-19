@@ -295,8 +295,8 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
-            input_ids=prompt_token_ids,
-            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
             strict=strict,
         )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(

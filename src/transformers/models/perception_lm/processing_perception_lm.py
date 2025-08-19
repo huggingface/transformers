@@ -213,11 +213,12 @@ class PerceptionLMProcessor(ProcessorMixin):
             images_kwargs = PerceptionLMProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
             tile_size = images_kwargs.get("tile_size", None) or self.image_processor.tile_size
+            vision_input_type = images_kwargs.get("vision_input_type", None) or self.image_processor.vision_input_type
 
             num_image_tokens = []
             num_image_patches = []
             for height, width in image_sizes:
-                if self.image_processor.vision_input_type == "thumb+tile":
+                if vision_input_type == "thumb+tile":
                     aspect_ratio = self.image_processor._fit_image_to_canvas(
                         img_width=width, img_height=height, tile_size=tile_size
                     )

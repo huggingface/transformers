@@ -318,7 +318,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         self,
         outputs: "DepthProDepthEstimatorOutput",
         target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-    ) -> dict[str, list[TensorType]]:
+    ) -> list[dict[str, TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate
         final depth predictions which is caliberated using the field of view if provided
