@@ -60,7 +60,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
             backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
             backend = backend_map.get(device_type)
-            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", 0)):
+            if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
                 backend = "ccl"
             if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
                 backend = "ccl"
@@ -677,7 +677,7 @@ class RowwiseParallel(TensorParallelLayer):
             outputs = outputs.redistribute(placements=output_layouts, async_op=True)
         outputs = outputs.to_local()  # otherwise the `+=` op will gather
         if hasattr(mod, "_bias"):
-            outputs += mod._bias
+            outputs = outputs + mod._bias
         # back to local tensor if use_local_output is True
         return outputs
 

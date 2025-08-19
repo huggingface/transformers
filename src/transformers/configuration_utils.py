@@ -370,7 +370,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @output_attentions.setter
     def output_attentions(self, value: bool):
-        # If we set `output_attentions` explictily before the attn implementation, dispatch eager
+        # If we set `output_attentions` explicitly before the attn implementation, dispatch eager
         if value and self._attn_implementation is None:
             self._attn_implementation = "eager"
         if value and self._attn_implementation != "eager":

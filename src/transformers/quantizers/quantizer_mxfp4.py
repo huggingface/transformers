@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 
 from ..utils import (
     is_accelerate_available,
+    is_kernels_available,
     is_torch_available,
     is_triton_available,
-    is_triton_kernels_availalble,
     logging,
 )
 from .quantizers_utils import get_module_from_name
@@ -56,35 +56,59 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "Using mxfp4 quantization requires torch"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
-        if not torch.cuda.is_available():
-            raise RuntimeError("Using MXFP4 quantized models requires a GPU")
-
-        if not is_accelerate_available():
-            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
 
         if self.quantization_config.dequantize:
             return
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
-
-        if not is_triton_available("3.4.0") or not is_triton_kernels_availalble():
-            if self.pre_quantized and not self.quantization_config.dequantize:
+        if not torch.cuda.is_available():
+            if self.pre_quantized:
                 logger.warning_once(
-                    "MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed, we will default to dequantizing the model to bf16"
+                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
-                # we can't quantize the model in this case so we raise an error
-                raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
+                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
 
-        if major < 9:
+        if not is_accelerate_available():
+            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
+
+        compute_capability = torch.cuda.get_device_capability()
+        gpu_is_supported = compute_capability >= (7, 5)
+        kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+
+        if self.pre_quantized:
+            # On unsupported GPUs or without kernels, we will dequantize the model to bf16
+            if not gpu_is_supported:
+                logger.warning_once(
+                    "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200). "
+                    "We will default to dequantizing the model to bf16."
+                )
+                self.quantization_config.dequantize = True
+                return
+
+            if not kernels_available:
+                logger.warning_once(
+                    "MXFP4 quantization requires triton >= 3.4.0 and kernels installed, we will default to dequantizing the model to bf16"
+                )
+                self.quantization_config.dequantize = True
+                return
+        elif not gpu_is_supported:
+            # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100, or B100)"
+                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200)"
             )
+        elif not kernels_available:
+            # we can't quantize the model in this case so we raise an error
+            raise ValueError("MXFP4 quantization requires triton >= 3.4.0 and triton_kernels installed")
 
-        device_map = kwargs.get("device_map", None)
+        if not self.pre_quantized:
+            from kernels import get_kernel
+
+            global triton_kernels_hub
+            triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded an FP4 model on CPU and have a CUDA device available, make sure to set "
@@ -149,13 +173,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[list[str]] = None,
         **kwargs,
     ):
-        if is_triton_kernels_availalble() and is_triton_available("3.4.0"):
-            from triton_kernels.matmul_ogs import FlexCtx, InFlexData, PrecisionConfig
-
         from ..integrations import Mxfp4GptOssExperts, dequantize, load_and_swizzle_mxfp4, quantize_to_mxfp4
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
         if not self.pre_quantized:
+            PrecisionConfig, FlexCtx, InFlexData = (
+                triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                triton_kernels_hub.matmul_ogs.FlexCtx,
+                triton_kernels_hub.matmul_ogs.InFlexData,
+            )
             module, _ = get_module_from_name(model, param_name)
             with torch.cuda.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
@@ -191,11 +217,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # we take this path if already quantized but not in a compatible way
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
-            empty_param = kwargs.get("empty_param", None)
-            casting_dtype = kwargs.get("casting_dtype", None)
-            to_contiguous = kwargs.get("to_contiguous", None)
-            rank = kwargs.get("rank", None)
-            device_mesh = kwargs.get("device_mesh", None)
+            empty_param = kwargs.get("empty_param")
+            casting_dtype = kwargs.get("casting_dtype")
+            to_contiguous = kwargs.get("to_contiguous")
+            rank = kwargs.get("rank")
+            device_mesh = kwargs.get("device_mesh")
             if ("blocks" in param_name or "scales" in param_name) and self.quantization_config.dequantize:
                 # blocks and scales have the same length that's this works for both
                 module, _ = get_module_from_name(model, param_name[: -len("_blocks")])
@@ -229,7 +255,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # we are not really dequantizing, we are just removing everthing related to quantization here
+        # we are not really dequantizing, we are just removing everything related to quantization here
         if self.quantization_config.dequantize:
             self.remove_quantization_config(model)
         # clean cache due to triton ops
