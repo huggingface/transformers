@@ -83,7 +83,6 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
-        HybridCache,
         QuantoQuantizedCache,
         StaticCache,
     )
@@ -2532,11 +2531,11 @@ class GenerationTesterMixin:
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -2581,7 +2580,7 @@ class GenerationTesterMixin:
 
         # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
         # new token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input
