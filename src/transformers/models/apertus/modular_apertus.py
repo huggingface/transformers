@@ -361,6 +361,10 @@ class ApertusPreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
+class ApertusModel(LlamaModel):
+    pass
+
+
 class ApertusForCausalLM(LlamaForCausalLM):
     def forward(self, **super_kwargs):
         r"""
@@ -394,14 +398,10 @@ class ApertusForTokenClassification(LlamaForTokenClassification):
     pass
 
 
-class ApertusModel(LlamaModel):
-    pass
-
-
 __all__ = [
     "ApertusConfig",
+    "ApertusModel",
     "ApertusForCausalLM",
     "ApertusForTokenClassification",
-    "ApertusModel",
     "ApertusPreTrainedModel",
 ]
