@@ -235,9 +235,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         sounds = torch.tensor(media).half()
         media = [sound for sound in sounds]
-        sound_feature_masks = torch.tensor(media_meta["sound_feature_masks"][0]).half()
+        sound_feature_masks = media_meta["sound_feature_masks"][0].detach().clone().half()
         media_meta["sound_feature_masks"] = [sound_mask for sound_mask in sound_feature_masks]
-        sound_embed_masks = torch.tensor(media_meta["sound_embed_masks"][0]).half()
+        sound_embed_masks = media_meta["sound_embed_masks"][0].detach().clone().half()
         media_meta["sound_embed_masks"] = [sound_mask for sound_mask in sound_embed_masks]
 
         return input_ids, media, media_meta

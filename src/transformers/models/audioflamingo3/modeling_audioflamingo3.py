@@ -466,103 +466,7 @@ def has_tokenizer(repo_id_or_path: str) -> bool:
         return False
 
 
-def context_length_extension(config):
-    orig_ctx_len = getattr(config, "max_position_embeddings", None)
-    model_max_length = getattr(config, "model_max_length", None)
-    if orig_ctx_len and model_max_length > orig_ctx_len:
-        print(f"Scaling RoPE from {orig_ctx_len} to {model_max_length}")
-        scaling_factor = float(math.ceil(model_max_length / orig_ctx_len))
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-    return config
-
-
-def build_llm_and_tokenizer(
-    model_name_or_path: str,
-    config: PretrainedConfig,
-    attn_implementation=None,
-    model_max_length=None,
-    *args,
-    **kwargs,
-) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-    # print(model_name_or_path)
-    llm_cfg = AutoConfig.from_pretrained(model_name_or_path)
-    llm_cfg._attn_implementation = attn_implementation
-    llm_cfg.model_max_length = model_max_length
-    if model_max_length is not None:
-        context_length_extension(llm_cfg)
-
-    # Quantization related
-    quantization_restore_from_checkpoint = False
-
-    if quantization_restore_from_checkpoint:
-        kwargs.pop("fp8_llm_cfg", None)
-
-    llm = AutoModelForCausalLM.from_pretrained(model_name_or_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs)
-
-    # Locate the tokenizer.
-    llm_path = model_name_or_path
-    if not has_tokenizer(llm_path):
-        llm_path = osp.join(llm_path, "llm")
-    if not has_tokenizer(llm_path):
-        raise ValueError(f"Cannot find tokenizer in {llm_path}.")
-
-    tokenizer = AutoTokenizer.from_pretrained(llm_path, padding_side="right", use_fast=True, legacy=False)
-    if model_max_length is not None:
-        tokenizer.model_max_length = model_max_length
-
-    # Set stop tokens for the tokenizer
-    tokenizer.stop_tokens = ["<|im_end|>"]
-    tokenizer.stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.stop_tokens)
-
-    # Add media tokens to the tokenizer
-    tokenizer.media_tokens = MEDIA_TOKENS
-    tokenizer.media_token_ids = {}
-    for name, token in MEDIA_TOKENS.items():
-        tokenizer.add_tokens([token], special_tokens=True)
-        tokenizer.media_token_ids[name] = tokenizer.convert_tokens_to_ids(token)
-
-    config.hidden_size = llm.config.hidden_size
-    return llm, tokenizer
-
-
 class LlavaMetaModel(ABC):
-    def init_vlm(self, config: PreTrainedModel = None, *args, **kwargs):
-        # TODO(ligeng): figure out how from_config and from_pretrained works in HF implementation.
-        if (
-            hasattr(self, "llm")
-            or hasattr(self, "vision_tower")
-            or hasattr(self, "speech_tower")
-            or hasattr(self, "sound_tower")
-            or hasattr(self, "mm_projector")
-            or hasattr(self, "speech_mm_projector")
-            or hasattr(self, "sound_mm_projector")
-        ):
-            # already initialized, skipped
-            return
-
-        model_dtype = getattr(config, "model_dtype", "torch.float16")
-        if not hasattr(config, "model_dtype"):
-            warnings.warn("model_dtype not found in config, defaulting to torch.float16.")
-            config.model_dtype = model_dtype
-
-        cfgs = get_model_config(config)
-        print(cfgs)
-        if len(cfgs) == 3:
-            llm_cfg, sound_tower_cfg, sound_mm_projector_cfg = cfgs
-        else:
-            raise ValueError("`llm_cfg` `sound_tower_cfg` `sound_mm_projector_cfg` not found in the config.")
-
-        self.llm, self.tokenizer = build_llm_and_tokenizer(llm_cfg, config, *args, **kwargs)
-
-        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
-        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
-        self.sound_encoder = BasicSoundEncoder(parent=self)
-
-        self.vocab_size = config.llm_cfg["vocab_size"] + NUM_EXTRA_TOKENS
-
-        self.post_config()
-        self.is_loaded = True
-
     def get_llm(self):
         llm = getattr(self, "llm", None)
         if type(llm) is list:
@@ -806,21 +710,53 @@ class LlavaMetaForCausalLM(ABC):
         return generation_config
 
 
-class LlavaLlamaConfig(LlavaConfig):
+class AudioFlamingo3Config(LlavaConfig):
     model_type = "llava_llama"
 
 
 class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
-    config_class = LlavaLlamaConfig
+    config_class = AudioFlamingo3Config
     main_input_name = "input_embeds"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     prepare_inputs_for_generation = LlamaForCausalLM.prepare_inputs_for_generation
 
-    def __init__(self, config: LlavaLlamaConfig = None, *args, **kwargs):
+    def __init__(self, config: AudioFlamingo3Config = None, *args, **kwargs):
         super().__init__(config)
         self.is_loaded = False
-        self.init_vlm(config=config, *args, **kwargs)
+        
+        llm_path, sound_tower_cfg, sound_mm_projector_cfg = get_model_config(config)
+
+        llm_cfg = AutoConfig.from_pretrained(llm_path)
+        llm = AutoModelForCausalLM.from_pretrained(llm_path, config=llm_cfg, torch_dtype=eval(config.model_dtype), *args, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(llm_path, padding_side="right", use_fast=True, legacy=False)
+
+        # Set stop tokens for the tokenizer
+        tokenizer.stop_tokens = ["<|im_end|>"]
+        tokenizer.stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.stop_tokens)
+
+        # Add media tokens to the tokenizer
+        tokenizer.media_tokens = MEDIA_TOKENS
+        tokenizer.media_token_ids = {}
+        for name, token in MEDIA_TOKENS.items():
+            tokenizer.add_tokens([token], special_tokens=True)
+            tokenizer.media_token_ids[name] = tokenizer.convert_tokens_to_ids(token)
+
+        config.hidden_size = llm.config.hidden_size
+
+        self.llm = llm
+        self.tokenizer = tokenizer
+
+        # -----------------------------------------------------------------------------------------
+
+        self.sound_tower = AudioFlamingo3SoundTower(sound_tower_cfg).to(self.llm.device)
+        self.sound_mm_projector = SoundMultimodalProjector.from_pretrained(sound_mm_projector_cfg, config, torch_dtype=eval(config.model_dtype)).to(self.llm.device)
+        self.sound_encoder = BasicSoundEncoder(parent=self)
+
+        self.vocab_size = config.llm_cfg["vocab_size"] + NUM_EXTRA_TOKENS
+
+        self.post_config()
+        self.is_loaded = True
 
     @classmethod
     def from_pretrained(
@@ -885,8 +821,8 @@ class AudioFlamingo3(LlavaMetaModel, LlavaMetaForCausalLM, PreTrainedModel):
         return model
 
 
-AutoConfig.register("llava_llama", LlavaLlamaConfig)
-AutoModel.register(LlavaLlamaConfig, AudioFlamingo3)
+AutoConfig.register("llava_llama", AudioFlamingo3Config)
+AutoModel.register(AudioFlamingo3Config, AudioFlamingo3)
 
 
 # -------------------------------------------------------------------------------------------------

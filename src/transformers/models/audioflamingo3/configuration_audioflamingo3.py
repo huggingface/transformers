@@ -17,7 +17,7 @@ NUM_EXTRA_TOKENS = 10
 
 
 class LlavaConfig(PretrainedConfig):
-    model_type = "llava"
+    model_type = "llava_llama"
 
     def __init__(
         self,
