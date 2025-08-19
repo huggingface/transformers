@@ -613,3 +613,26 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))
         self.assertEqual(arrays[2][1].shape, (8, 2))
+
+    def test_label_smoothing_multi_label_incompatibility(self):
+        """Test that LabelSmoother raises ValueError for multi-label classification"""
+        epsilon = 0.1
+        num_labels = 3
+        batch_size = 2
+
+        # Create logits for multi-label classification
+        random_logits = torch.randn(batch_size, num_labels)
+
+        # Create multi-label one-hot labels (float tensor)
+        multi_label_labels = torch.tensor([[1.0, 0.0, 1.0], [0.0, 1.0, 0.0]], dtype=torch.float)
+
+        model_output = SequenceClassifierOutput(logits=random_logits)
+        label_smoother = LabelSmoother(epsilon)
+
+        # Should raise ValueError for multi-label + label smoothing
+        with self.assertRaises(ValueError) as context:
+            label_smoother(model_output, multi_label_labels)
+
+        # Check error message contains expected text
+        self.assertIn("Label smoothing is not compatible with multi-label classification", str(context.exception))
+        self.assertIn("label_smoothing_factor=0", str(context.exception))

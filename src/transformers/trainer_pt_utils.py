@@ -555,6 +555,16 @@ class LabelSmoother:
             logits = logits[..., :-1, :].contiguous()
             labels = labels[..., 1:].contiguous()
 
+        # Check for multi-label classification incompatibility
+        if labels.dtype == torch.float and labels.dim() > 1:
+            # Multi-label classification detected (float one-hot labels)
+            raise ValueError(
+                "Label smoothing is not compatible with multi-label classification. "
+                "Multi-label classification uses one-hot encoded labels (float tensors), "
+                "but label smoothing requires integer class indices. "
+                "Please set `label_smoothing_factor=0.0` in your TrainingArguments."
+            )
+
         log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
