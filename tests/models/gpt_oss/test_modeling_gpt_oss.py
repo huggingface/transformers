@@ -194,6 +194,10 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.testing_utils import torch_device
 
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+
     input_text = [
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
@@ -204,7 +208,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     kernels = kernels.lower() == "true"
 
     # Distributed model loading
-    model_id = f"/fsx/vb/new-oai/gpt-oss-{model_size}-trfs"
+    model_id = f"openai/gpt-oss-{model_size}"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype="auto",
@@ -219,26 +223,31 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
     output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
 
-    # Only rank 0 writes results
+    # Only rank 0 writes results and validates against expected outputs
     if int(os.environ.get("RANK", "0")) == 0:
-        result_entry = {
-            "quantized": quantized,
-            "model": model_size,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
-
+        # Generate key to look up expected outputs
+        key = generate_config_key(quantized, model_size, kernels, attn_impl, mode)
+        
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
+                expected_results = json.load(f)
+            
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+                
+                # Compare actual outputs with expected outputs
+                assert len(output_texts) == len(expected_outputs), f"Output length mismatch for {key}"
+                
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    assert actual.strip() == expected.strip(), f"Output mismatch at index {i} for {key}"
+                    
+                print(f"✓ Outputs match expected results for {key}")
+            else:
+                print(f"Warning: No expected results found for configuration: {key}")
         else:
-            results = []
-        results.append(result_entry)
-
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+            print(f"Warning: Results file {RESULTS_PATH} not found")
 
 
 @slow
@@ -248,6 +257,11 @@ class GptOssIntegrationTest(unittest.TestCase):
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
     ]
+
+    @staticmethod
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -271,7 +285,7 @@ class GptOssIntegrationTest(unittest.TestCase):
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         return output_text
 
     # ------------------------
@@ -360,7 +374,7 @@ if __name__ == "__main__":
     @parameterized.expand(PARAMETERS)
     @require_read_token
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
-        model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+        model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
             attn_impl,
@@ -368,23 +382,29 @@ if __name__ == "__main__":
             use_kernels=kernels,
         )
 
-        result_entry = {
-            "quantized": quantized,
-            "model": model,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
-
+        # Generate key to look up expected outputs
+        key = self.generate_config_key(quantized, model, kernels, attn_impl, mode)
+        
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
-        else:
-            results = []
-        results.append(result_entry)
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+                expected_results = json.load(f)
+            
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+                
+                # Compare actual outputs with expected outputs
+                self.assertEqual(len(output_texts), len(expected_outputs), 
+                               f"Output length mismatch for {key}")
+                
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    self.assertEqual(actual.strip(), expected.strip(), 
+                                   f"Output mismatch at index {i} for {key}")
+            else:
+                # If no expected results exist, this is a new configuration
+                # We could optionally add it to the results file here
+                print(f"Warning: No expected results found for configuration: {key}")
 
         self.assertIsInstance(output_texts, list)
         self.assertTrue(all(isinstance(x, str) for x in output_texts))
@@ -471,7 +491,7 @@ if __name__ == "__main__":
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
+        model_id = "openai/gpt-oss-20b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -537,7 +557,7 @@ I am a language model, not a human being"""
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
+        model_id = "openai/gpt-oss-120b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
