@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 
 [BertGeneration](https://huggingface.co/papers/1907.12461) leverages pretrained BERT checkpoints for sequence-to-sequence tasks with the [`EncoderDecoderModel`] architecture. BertGeneration adapts the [`BERT`] for generative tasks.
 
-BertGeneration adapts the powerful BERT encoder for generative tasks by using it in encoder-decoder architectures for tasks like summarization, translation, and text fusion. Think of it as taking BERT's deep understanding of language and teaching it to generate new text based on input context.
 
 You can find all the original BertGeneration checkpoints under the [BERT Generation](https://huggingface.co/models?search=bert-generation) collection.
 
