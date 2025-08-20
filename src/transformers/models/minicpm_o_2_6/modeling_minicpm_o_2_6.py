@@ -527,23 +527,20 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         self.scale_emb = getattr(self.language_model.config, "scale_emb", 1.0)
 
         # init vision module
-        if self.config.init_vision:
-            self.vpm = self.init_vision_module()
-            self.vision_dim = self.vpm.embed_dim
-            self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
+        self.vpm = self.init_vision_module()
+        self.vision_dim = self.vpm.embed_dim
+        self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
 
         # init audio module
-        if self.config.init_audio:
-            self.apm = self.init_audio_module()
-            audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
-            self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
-            self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
-            self.audio_encoder_layer = -1
+        self.apm = self.init_audio_module()
+        audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
+        self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
+        self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
+        self.audio_encoder_layer = -1
 
         # init tts module
-        if self.config.init_tts:
-            assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
-            self.tts = self.init_tts_module()
+        assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
+        self.tts = self.init_tts_module()
 
         # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
 
@@ -786,6 +783,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
                     vision_embedding = self.vpm(
                         all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
                     ).last_hidden_state
+                # todo 从这里往上拆开到get_image_features
                 vision_embedding = self.resampler(vision_embedding, tgt_sizes)
 
                 start = 0
