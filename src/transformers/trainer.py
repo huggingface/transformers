@@ -4643,7 +4643,14 @@ class Trainer:
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
+        # Compute mean token accuracy if requested
+        if self.args.compute_mean_token_accuracy and all_preds is not None and all_labels is not None:
+            mean_token_accuracy = self._compute_mean_token_accuracy(all_preds, all_labels)
+            if mean_token_accuracy is not None:
+                metrics[f"{metric_key_prefix}_mean_token_accuracy"] = mean_token_accuracy
+
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
+                
 
     def _nested_gather(self, tensors, name=None):
         """
@@ -4953,6 +4960,96 @@ class Trainer:
         if self.push_in_progress is not None and not self.push_in_progress.is_done():
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
+
+
+    def _compute_mean_token_accuracy(self, logits, labels, model_type='lm', ignore_index=-100, num_virtual_tokens=0):
+        """
+        Compute token accuracy for both Language Models and Seq2seq models.
+
+        Args:
+            logits: Model logits
+            labels: Target labels
+            model_type: 'lm' for language models, 'seq2seq' for sequence-to-sequence models
+            ignore_index: Token index to ignore in accuracy calculation (configurable)
+            num_virtual_tokens: Number of virtual tokens to skip (for prompt tuning)
+
+        Example:
+            # For Language Models (GPT, LLaMA, etc.)
+            accuracy_lm = self._compute_mean_token_accuracy(
+                logits=model_outputs.logits,
+                labels=batch_inputs["labels"],
+                model_type='lm',           # Language model
+                ignore_index=-100,         # HuggingFace standard
+                num_virtual_tokens=0
+            )
+
+            # For Seq2seq Models (T5, BART, etc.)
+            accuracy_seq2seq = self._compute_mean_token_accuracy(
+                logits=model_outputs.logits,
+                labels=batch_inputs["labels"],
+                model_type='seq2seq',      # Sequence-to-sequence model
+                ignore_index=-1,           # Custom ignore index
+                num_virtual_tokens=10      # Skip 10 virtual tokens
+            )
+        """
+
+        # to handle different model types with shifting
+        if model_type == 'lm':
+            # for language models : predict next token, shift predictions and labels
+            # compare prediction at position i with actual token at position i+1
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+
+        elif model_type == 'seq2seq':
+            # for seq2seq models: direct input -> output mapping, no shifting needed because target sequence is predicted directly not the "Next token".
+            # Compare prediction at position i with target token at position i
+            shift_logits = logits.contiguous()
+            shift_labels = labels.contiguous()
+
+        else:
+            raise ValueError(f"Unsupported model_type: {model_type}.Use'lm' or seq2seq'")
+
+        # When using Prompt Tuning, skip the virtual tokens in logits before accuracy computation
+        # Virtual tokens don't correspond to actual input labels as virtual tokens are "fake tokens" that dont represent words.
+        if num_virtual_tokens > 0:
+            shift_logits = shift_logits[:, num_virtual_tokens:, :]
+            # For seq2seq, also skip virtual tokens in labels if needed
+            if model_type == 'seq2seq':
+                shift_labels = shift_labels[:, num_virtual_tokens:]
+
+        # Get model predictions (token with highest probability)
+        predictions = shift_logits.argmax(dim=-1)   
+
+        # Create mask for non-padding tokens using configurable ignore_index
+        # This allows compatibility with different datasets/frameworks
+        mask = shift_labels != ignore_index     
+
+        # Calculate accuracy only on non-padding tokens
+        correct_predictions = (predictions == shift_labels) & mask
+        total_tokens = mask.sum()
+        correct_tokens = correct_predictions.sum()
+
+        # Gather the correct_tokens and total_tokens across all processes/devices
+        # This is necessary for distributed training
+        correct_tokens = self.accelerator.gather_for_metrics(correct_tokens)
+        total_tokens = self.accelerator.gather_for_metrics(total_tokens)
+
+        # Compute the mean token accuracy and log it
+        total_sum = total_tokens.sum()
+        if total_sum > 0:
+            accuracy = (correct_tokens.sum() / total_sum).item()
+        else:
+            accuracy = 0.0
+
+
+        # Store the accuracy in metrics dictionary
+        if "mean_token_accuracy" not in metrics[mode]:
+            metrics[mode]["mean_token_accuracy"] = []
+        metrics[mode]["mean_token_accuracy"].append(accuracy)   
+
+        return accuracy 
+
+
 
     def push_to_hub(
         self,
