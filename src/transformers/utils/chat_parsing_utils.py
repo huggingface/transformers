@@ -34,7 +34,10 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
         # If no groups, use the whole match
         else:
             return node_match.group(0)
-    # First, set some vars and do basic validation
+    # If the schema has a const, we just return that value
+    if "const" in node_schema:
+        return node_schema["const"]
+    # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema["type"]
     parser = node_schema.get("x-parser", None)
     has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema
@@ -42,7 +45,6 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
         raise ValueError("Schema node has both a regex and a parser.\n"
                          f"Schema: {node_schema}")
     if parser is None and not has_regex and isinstance(node_content, str) and node_type == "array":
-        breakpoint()
         raise TypeError(f"array node got a string input, but has no parser or regex.\n"
                         f"Input: {node_content}\n",
                         f"Schema: {node_schema}")
@@ -59,19 +61,18 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
             raise ValueError(f"Node has JSON parser but could not parse its contents as JSON: {node_content}\n"
                              f"Error: {e}")
 
-    if node_schema.get("x-regex", None) is not None:
-        node_regex = node_schema["x-regex"]
+    node_regex = node_schema.get("x-regex", None)
+    node_regex_iterator = node_schema.get("x-regex-iterator", None)
+    if node_regex is not None:
         node_match = re.search(node_regex, node_content, flags=re.DOTALL)
         if not node_match:
             return None  # TODO Is this correct? Should I raise an error?
         node_content = _parse_re_match(node_match)
-    elif node_schema.get("x-regex-iterator", None) is not None:
-        node_regex_iterator = node_schema["x-regex-iterator"]
+    if node_regex_iterator is not None:
+        # Note that this can be applied after a standard node-regex search
         node_content = [_parse_re_match(node_match) for node_match in re.finditer(node_regex_iterator, node_content, flags=re.DOTALL)]
-
         if not node_content:
             return None  # TODO Is this correct? Should I raise an error?
-
 
     # Finally, handle parsed content based on schema type and recurse if required
     if node_type == "object":
@@ -83,6 +84,7 @@ def recursive_parse(node_content: str | list | dict, node_schema: dict):
             # string themselves to extract their value.
             for key, child_node in node_schema["properties"].items():
                 parsed_schema[key] = recursive_parse(node_content, node_schema["properties"][key])
+            return parsed_schema
         for key, child_node in node_schema.get("properties", {}).items():
             # TODO Error if required keys are not present
             if key in node_content:

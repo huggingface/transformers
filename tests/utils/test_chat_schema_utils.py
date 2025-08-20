@@ -114,9 +114,41 @@ cohere_schema = {
     "type": "object",
     "properties": {
         "tools": {
-            "type": "string",
-            "x-regex": "\n## Available Tools\nHere is a list of tools that you have available to you:\n\n```python\n(.*?)[\n]+```\n",
-        },  # Coming later
+            "type": "array",
+            "x-regex": "\n## Available Tools\nHere is a list of tools that you have available to you:((?:\n\n```python\n.*?[\n]+```)+)",
+            "x-regex-iterator": "```python\n(.*?)\n+```",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "x-scope-vars-dict": {
+                            # TODO This is hard because I don't have a way to extract a dict with keys derived from the regex.
+                            #      But I need that if I want to do lookups later.
+                            #      I think that means x-regex-iterator needs to work on objects if the regex returns "key" and "value" groups.
+                            #      Once we have that, we need a way to select from scope-vars-dict by key in other branches of the schema.
+                            "argument_types": {
+                                "type": "object",
+
+                            }
+                        },
+                        "properties": {
+                            "name": {"type": "string", "x-regex": r"def (\w+)\("},
+                            "description": {"type": "string", "x-regex": r"\"\"\"(.*?)(?:\"\"\"|\n+\s*Args:\n)"},
+                            "parameters": {
+                                "type": "object",
+                                "x-regex": r"\n\s*Args:\n\s*(.*?)$",
+                                "properties": {
+
+                                }
+                            },
+
+                        }
+                    }
+                }
+            }
+        },
         "messages": {
             "type": "array",
             "items": {
@@ -201,10 +233,6 @@ class ChatSchemaParserTest(unittest.TestCase):
 
             Args:
                 temperature_format: The temperature format to use (Choices: ["celsius", "fahrenheit"])
-
-
-            Returns:
-                The temperature
             """
             return -40.0
 
@@ -220,14 +248,11 @@ class ChatSchemaParserTest(unittest.TestCase):
                 y: The second input. It's a big list with a single-line description.
 
                 z: The third input. It's some kind of tuple with a default arg.
-
-            Returns:
-                The output. The return description is also a big multiline
-                description that spans multiple lines.
             """
             return -40.0
 
         # Command-R is a real workout because it converts tools to Python function defs in the template
+        # TODO Move this template to an internal-testing repo and add the schema too
         tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r-plus")
         chat = [
             {"role": "user", "content": "Hello!"},
@@ -235,5 +260,6 @@ class ChatSchemaParserTest(unittest.TestCase):
         ]
         formatted_chat = tokenizer.apply_chat_template(chat, tokenize=False, tools=[simple_tool, tool_with_everything_all_at_once], chat_template="tool_use")
         parsed_chat = recursive_parse(formatted_chat, cohere_schema)
+        breakpoint()
         self.assertEqual(parsed_chat['messages'], chat)
         self.assertEqual(parsed_chat['tools'], [get_json_schema(simple_tool), tool_with_everything_all_at_once])
