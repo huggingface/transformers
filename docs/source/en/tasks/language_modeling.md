@@ -29,7 +29,7 @@ the left. This means the model cannot see future tokens. GPT-2 is an example of 
 
 This guide will show you how to:
 
-1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
+1. Finetune [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/dany0407/eli5_category) dataset.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -54,12 +54,12 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 
 ## Load ELI5 dataset
 
-Start by loading the first 5000 examples from the [ELI5-Category](https://huggingface.co/datasets/eli5_category) dataset with the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
+Start by loading the first 5000 examples from the [ELI5-Category](https://huggingface.co/datasets/dany0407/eli5_category) dataset with the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
 
->>> eli5 = load_dataset("eli5_category", split="train[:5000]")
+>>> eli5 = load_dataset("dany0407/eli5_category", split="train[:5000]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:

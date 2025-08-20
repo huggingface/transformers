@@ -1283,10 +1283,10 @@ class LongformerEncoder(nn.Module):
         # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
         hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
         if output_hidden_states:
-            all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
+            all_hidden_states = tuple(state[:, : state.shape[1] - padding_len] for state in all_hidden_states)
 
         if output_attentions:
-            all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
+            all_attentions = tuple(state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions)
 
         if not return_dict:
             return tuple(

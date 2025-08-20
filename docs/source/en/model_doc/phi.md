@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-20 and added to Hugging Face Transformers on 2023-11-10.*
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -59,7 +60,7 @@ model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torc
 input_ids = tokenizer('''def print_prime(n):
    """
    Print all primes between 1 and n
-   """''', return_tensors="pt").to("cuda")
+   """''', return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -90,7 +91,7 @@ model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torc
 input_ids = tokenizer('''def print_prime(n):
    """
    Print all primes between 1 and n
-   """''', return_tensors="pt").to("cuda")
+   """''', return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -115,7 +116,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     input_ids = tokenizer('''def print_prime(n):
        """
        Print all primes between 1 and n
-       """''', return_tensors="pt").to("cuda")
+       """''', return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))
