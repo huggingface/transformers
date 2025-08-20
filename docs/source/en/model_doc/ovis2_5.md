@@ -18,6 +18,17 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
+The  is an updated version of the [Ovis](https://arxiv.org/abs/2405.20797) model developed by the AIDC-AI team at Alibaba International Digital Commerce Group. 
+
+[Ovis2.5](https://arxiv.org/abs/2508.11737) is a multimodal vision-language model, available in 2B and 9B parameter versions. It introduces a native-resolution vision transformer (NaViT) that processes images at their original resolutions, preserving both fine details and global layout—crucial for visually dense inputs like complex charts and documents. The model also features a novel reflective reasoning capability, including self-checking and revision, accessible via an optional thinking mode at inference time.
+
+
+<img src="https://cdn-uploads.huggingface.co/production/uploads/637aebed7ce76c3b834cea37/4kw2RRUhXDiMZdU7wGOfP.png"  width="600">
+
+<small> Ovis2.5 architecture.</small>
+
+This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
+
 
 ## Usage example
 
@@ -66,7 +77,7 @@ with torch.inference_mode():
     print(output_text)
 ```
 
-<!-- TODO:  -->
+<!-- TODO: Convert Ovis2 to Ovis2.5  -->
 
 ## Ovis2Config
 
