@@ -1189,7 +1189,7 @@ class QuantizedCache(Cache):
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 
-        config = config.get_text_config()
+        config = config.get_text_config(decoder=True)
         layers = [
             layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
             for _ in range(config.num_hidden_layers)
@@ -1409,7 +1409,7 @@ class EncoderDecoderCache(Cache):
 class OffloadedCache(DynamicCache):
     def __init__(self) -> None:
         logger.warning_once(
-            "`OffloadedCache` is deprecated and will be removed in version v4.58 "
+            "`OffloadedCache` is deprecated and will be removed in version v4.60 "
             "Use `DynamicCache(offloading=True)` instead"
         )
         super().__init__(offloading=True)
@@ -1418,7 +1418,7 @@ class OffloadedCache(DynamicCache):
 class OffloadedStaticCache(StaticCache):
     def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
-            "`OffloadedStaticCache` is deprecated and will be removed in version v4.58 "
+            "`OffloadedStaticCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(..., offloading=True)` instead"
         )
         super().__init__(config=config, max_cache_len=max_cache_len, offloading=True)
@@ -1427,8 +1427,8 @@ class OffloadedStaticCache(StaticCache):
 class SlidingWindowCache(StaticCache):
     def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
-            "`SlidingWindowCache` is deprecated and will be removed in version v4.58 "
-            "Use `StaticCache` instead which will correctly infer the type of each layer."
+            "`SlidingWindowCache` is deprecated and will be removed in version v4.59 "
+            "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
         )
         super().__init__(config=config, max_cache_len=max_cache_len)
 
@@ -1436,8 +1436,8 @@ class SlidingWindowCache(StaticCache):
 class HybridCache(StaticCache):
     def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
-            "`HybridCache` is deprecated and will be removed in version v4.58 "
-            "Use `StaticCache` instead which will correctly infer the type of each layer."
+            "`HybridCache` is deprecated and will be removed in version v4.59 "
+            "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
         )
         super().__init__(config=config, max_cache_len=max_cache_len)
 
@@ -1445,8 +1445,8 @@ class HybridCache(StaticCache):
 class HybridChunkedCache(StaticCache):
     def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
-            "`HybridChunkedCache` is deprecated and will be removed in version v4.58 "
-            "Use `StaticCache` instead which will correctly infer the type of each layer."
+            "`HybridChunkedCache` is deprecated and will be removed in version v4.59 "
+            "Use `StaticCache(...)` instead which will correctly infer the type of each layer."
         )
         super().__init__(config=config, max_cache_len=max_cache_len)
 
@@ -1454,7 +1454,7 @@ class HybridChunkedCache(StaticCache):
 class OffloadedHybridCache(StaticCache):
     def __init__(self, config: PretrainedConfig, max_cache_len: int, *args, **kwargs):
         logger.warning_once(
-            "`OffloadedHybridCache` is deprecated and will be removed in version v4.58 "
+            "`OffloadedHybridCache` is deprecated and will be removed in version v4.59 "
             "Use `StaticCache(..., offload=True)` instead which will correctly infer the type of each layer."
         )
         super().__init__(config=config, max_cache_len=max_cache_len, offloading=True)
@@ -1471,7 +1471,7 @@ class QuantoQuantizedCache(QuantizedCache):
         residual_length: int = 128,
     ):
         logger.warning_once(
-            "`QuantoQuantizedCache` is deprecated and will be removed in version v4.58 "
+            "`QuantoQuantizedCache` is deprecated and will be removed in version v4.59 "
             "Use `QuantizedCache(backend='quanto', ...)` instead."
         )
         super().__init__("quanto", config, nbits, axis_key, axis_value, q_group_size, residual_length)
@@ -1488,7 +1488,7 @@ class HQQQuantizedCache(QuantizedCache):
         residual_length: int = 128,
     ):
         logger.warning_once(
-            "`HQQQuantizedCache` is deprecated and will be removed in version v4.58 "
+            "`HQQQuantizedCache` is deprecated and will be removed in version v4.59 "
             "Use `QuantizedCache(backend='hqq', ...)` instead."
         )
         super().__init__("hqq", config, nbits, axis_key, axis_value, q_group_size, residual_length)

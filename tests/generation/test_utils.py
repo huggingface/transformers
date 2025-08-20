@@ -2161,7 +2161,7 @@ class GenerationTesterMixin:
             finally:
                 torch._logging.set_logs()
 
-            # Compilation of slidind layers necesarily has recompiles with `dynamic=False` - however this test
+            # Compilation of sliding layers necessarily has recompiles with `dynamic=False` - however this test
             # still checks that `fullgraph=True` is supported in this case, as compilation with `dynamic=None`
             # is the default and does not actually lead to too many recompiles
             has_sliding_layers = any(decoder_cache.is_sliding)

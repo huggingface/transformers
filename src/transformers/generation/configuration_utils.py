@@ -161,8 +161,8 @@ class GenerationConfig(PushToHubMixin):
 
             - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
-            - `"offloaded"`: [`DynamicCache`]
-            - `"offloaded_static"`: [`StaticCache`]
+            - `"offloaded"`: [`DynamicCache(offloaded=True)`]
+            - `"offloaded_static"`: [`StaticCache(offloaded=True)`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
