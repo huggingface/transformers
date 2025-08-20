@@ -222,6 +222,9 @@ class Glm4vMoeTextConfig(PretrainedConfig):
 
     model_type = "Glm4vMoe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_experts_per_tok": "top_k",
+    }
     # Default tensor parallel plan for base model `Glm4vMoe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

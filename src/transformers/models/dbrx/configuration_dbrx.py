@@ -178,6 +178,8 @@ class DbrxConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_hidden_layers": "n_layers",
         "max_position_embeddings": "max_seq_len",
+        "num_experts": "moe_num_experts",
+        "num_experts_per_tok": "moe_top_k",
     }
 
     def __init__(

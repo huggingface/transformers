@@ -118,7 +118,7 @@ class GraniteMoeConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts": "num_local_experts",
-        "top_k": "num_experts_per_tok",
+        "num_experts_per_tok": "top_k",
     }
 
     def __init__(

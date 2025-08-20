@@ -133,12 +133,10 @@ class GraniteMoeHybridConfig(PretrainedConfig):
     model_type = "granitemoehybrid"
     attribute_map = {
         "layers_block_type": "layer_types",
+        "num_experts": "num_local_experts",
+        "num_experts_per_tok": "top_k",
     }
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_experts": "num_local_experts",
-        "top_k": "num_experts_per_tok",
-    }
 
     def __init__(
         self,
