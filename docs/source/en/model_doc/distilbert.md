@@ -72,7 +72,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt").to("cuda")
+inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

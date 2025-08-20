@@ -67,7 +67,7 @@ torch.random.manual_seed(0)
 
 model = AutoModelForCausalLM.from_pretrained( 
     "microsoft/Phi-3.5-MoE-instruct",  
-    device_map="cuda",  
+    device_map="auto",  
     torch_dtype="auto",  
     trust_remote_code=True,  
 ) 

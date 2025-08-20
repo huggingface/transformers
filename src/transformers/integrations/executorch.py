@@ -128,11 +128,7 @@ class TorchExportableModuleForVLM:
         """Export the text decoder component."""
 
         # Create text decoder exportable wrapper
-        self.exportable_text_decoder = TorchExportableModuleForDecoderOnlyLM(
-            model=self.text_decoder,
-            max_batch_size=self.max_batch_size,
-            max_cache_len=self.max_cache_len,
-        )
+        self.exportable_text_decoder = TorchExportableModuleForDecoderOnlyLM(model=self.text_decoder)
 
         # Use the existing text decoder exportable wrapper
         seq_length = 3
