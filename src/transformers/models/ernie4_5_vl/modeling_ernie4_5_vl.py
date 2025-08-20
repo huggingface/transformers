@@ -39,8 +39,6 @@ logger = logging.get_logger(__name__)
 
 
 class TokenType:
-    """token type definition"""
-
     text = 0
     image = 1
     video = 2
@@ -830,31 +828,22 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# TODO: calculate properly outside
+# copy qwen 2.5 vl
 def apply_rotary_pos_emb_vision(
-    tensor: torch.Tensor, freqs: torch.Tensor
-) -> torch.Tensor:
-    """Applies Rotary Position Embedding to the input tensors.
-
-    Args:
-        tensor (torch.Tensor): The input tensor.
-        freqs (torch.Tensor): The frequencies used for the rotation.
-    Returns:
-        output (torch.Tensor): the tensor rotated using the Rotary Position Embedding.
-    """
-    orig_dtype = tensor.dtype
-
-    tensor = tensor.type(dtype=torch.float32)
-    cos = freqs.cos()
-    sin = freqs.sin()
-    cos = cos.unsqueeze(1).tile(1, 1, 2).unsqueeze(0).type(dtype=torch.float32)
-    sin = sin.unsqueeze(1).tile(1, 1, 2).unsqueeze(0).type(dtype=torch.float32)
-    output = tensor * cos + rotate_half(tensor) * sin
-    output = output.to(orig_dtype)
-    return output
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
-# copy qwen 2.5 vl (fix rope)
+# copy qwen 2.5 vl
 class Ernie4_5VLVisionAttention(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -874,20 +863,26 @@ class Ernie4_5VLVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
-
-        # TODO: fix rope
-        query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(dim=0), rotary_pos_emb).squeeze(
-            dim=0
-        )
-        key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(dim=0), rotary_pos_emb).squeeze(
-            dim=0
-        )
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        else:
+            cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
@@ -944,7 +939,7 @@ class Ernie4_5VLVisionAttention(nn.Module):
         return attn_output
 
 
-# copy qwen 2.5 vl (change init + fix rope)
+# copy qwen 2.5 vl (change init)
 class Ernie4_5VLVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
@@ -957,17 +952,26 @@ class Ernie4_5VLVisionBlock(nn.Module):
             hidden_act=config.hidden_act,
         )
 
-    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs,
+    ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
 
 
-# TODO: check if we can use qwen 2.5 vl (at least the rope)
+# similar to qwen 2.5 vl - hard to copy since no window attn, merger
 class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
     config_class = Ernie4_5_VLVisionConfig
     _no_split_modules = ["Ernie4_5VLVisionBlock"]
@@ -994,90 +998,67 @@ class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
 
-    def rot_pos_emb(self, grid_thw, num_pad=0):
-        """rot_pos_emb
-
-        Args:
-            grid_thw (torch.Tensor): grid thw of input
-
-        Returns:
-            torch.Tensor: rotary position embedding
-        """
+    # copy qwen 2.5 vl
+    def rot_pos_emb(self, grid_thw):
         pos_ids = []
-        grid_hw_array = np.array(grid_thw.cpu(), dtype=np.int64)
-        for t, h, w in grid_hw_array:
-            hpos_ids = np.arange(h).reshape([-1, 1])
-            hpos_ids = np.tile(hpos_ids, (1, w))
+        for t, h, w in grid_thw:
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
                 w // self.spatial_merge_size,
                 self.spatial_merge_size,
             )
-            hpos_ids = np.transpose(hpos_ids, (0, 2, 1, 3))
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
             hpos_ids = hpos_ids.flatten()
 
-            wpos_ids = np.arange(w).reshape([1, -1])
-            wpos_ids = np.tile(wpos_ids, (h, 1))
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
             wpos_ids = wpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
                 w // self.spatial_merge_size,
                 self.spatial_merge_size,
             )
-            wpos_ids = np.transpose(wpos_ids, (0, 2, 1, 3))
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
             wpos_ids = wpos_ids.flatten()
-
-            stacked_ids = np.stack([hpos_ids, wpos_ids], axis=-1)
-            tiled_ids = np.tile(stacked_ids, (t, 1))
-            pos_ids.append(tiled_ids)
-
-        pos_ids = np.concatenate(pos_ids, axis=0)
-        if num_pad > 0:
-            pos_ids = np.concatenate(
-                [pos_ids, np.zeros((num_pad, 2), dtype=pos_ids.dtype)]
-            )
-        max_grid_size = np.amax(grid_hw_array[:, 1:])
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_size = grid_thw[:, 1:].max()
         rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(start_dim=1)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    # qwen 2.5 vl without windowed attention and merger at the end
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, num_pad=0
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (torch.Tensor): input tensor
-            grid_thw (torch.Tensor): grid thw of input
-            num_pad (int): number of padding tokens
-
-        Returns:
-            torch.Tensor: output tensor
-        """
         hidden_states = self.patch_embed(hidden_states)
 
-        rotary_pos_emb = self.rot_pos_emb(grid_thw, num_pad=num_pad)
-        rotary_pos_emb = rotary_pos_emb.to(hidden_states.device)
+        seq_len, _ = hidden_states.size()
+        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(
-            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
-        ).cumsum(dim=0, dtype=torch.int32)
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        if num_pad > 0:
-            cu_seqlens = F.pad(cu_seqlens, (1, 1), value=0)
-            cu_seqlens[-1] = cu_seqlens[-2] + num_pad
-        else:
-            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-
-        for idx, blk in enumerate(self.blocks):
+        for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
-                rotary_pos_emb=rotary_pos_emb,
+                position_embeddings=position_embeddings,
+                **kwargs,
             )
-
-        ret = self.ln(hidden_states)  # add norm
-        return ret
+        hidden_states = self.ln(hidden_states)
+        return hidden_states
 
 
 class VariableResolutionResamplerModel(nn.Module):
