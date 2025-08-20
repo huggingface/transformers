@@ -13,11 +13,9 @@
 # limitations under the License.
 
 """Ernie VL model"""
-import math
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,6 +42,7 @@ class TokenType:
     video = 2
 
 
+# no copy
 class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
@@ -1061,11 +1060,8 @@ class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
         return hidden_states
 
 
+# no copy
 class VariableResolutionResamplerModel(nn.Module):
-    """
-    VariableResolutionResamplerModel, support variable resolution
-    """
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1100,112 +1096,86 @@ class VariableResolutionResamplerModel(nn.Module):
         )
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
-
         self.after_norm = Ernie4_5_VLRMSNorm(self.out_dim, config.rms_norm_eps)
 
-    def spatial_conv_reshape(self, x, spatial_conv_size):
+    def _temporal_slicing(self, x, grid_thw):
         """
-        reshape before linear to imitation conv
+        Creates slices along the temporal dimension (usually if we have a video input).
+
+        If a "real" (video) slicing happens, then we change [1,2,1,2,1,2] to [1,1,1,2,2,2] patterns.
+        Otherwise, we repeat along the axis, i.e. [1,1,1] to [1,1,1,1,1,1].
         """
-        S, C = x.shape
-        x = x.reshape([-1, C * (spatial_conv_size**2)])
-        return x
+        # Calculating offsets (based on flattened tensors)
+        grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
+        grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_conv_size**2)
 
-    def forward(self, x, image_mask, token_type_ids, image_type_ids, grid_thw):
-        """
-        x: image_features
-        image_mask: [B]
-        token_types_ids: [B]
-        image_type_ids:  [B_image]
-        grid_thw: [B_image, 3]
-        """
-        assert image_type_ids is not None
+        tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_conv_size**2)).flatten()
+        batch_offsets = torch.empty(
+            tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype
+        )
+        batch_offsets[0] = 0
+        batch_offsets[1:] = tokens_per_img_or_vid.cumsum(dim=0)[:-1]
 
-        def fwd_spatial(x):
-            """
-            x in the shape of [S, H]
-            S is ordered in the following way: [ [patch_h*patch_w (row-major traversal)] * patch_time]
-            H is simply hidden
-            """
-            x = self.spatial_conv_reshape(x, self.spatial_conv_size)
+        first_slice_offsets = []
+        second_slice_offsets = []
+        for temporal_size, spatial_size, batch_offset in zip(
+            grid_t, grid_hw_after_conv, batch_offsets
+        ):
+            # Depending on temporal, we may interleave
+            first_offset_range = range(0, temporal_size, 2)
+            second_offset_range = range(1 if temporal_size > 1 else 0, temporal_size, 2)
 
-            x = self.spatial_linear(x)
+            is_same_offset_range = first_offset_range == second_offset_range
+            for temporal_offset in first_offset_range:
+                first_slice_offsets.append(
+                    torch.arange(
+                        batch_offset + (temporal_offset) * spatial_size,
+                        batch_offset + (temporal_offset + 1) * spatial_size,
+                    )
+                )
 
-            return x
-
-        def fwd_placeholder(x, grid_thw, to_tensor=False):
-            """
-            x: [S, H]
-            grid_thw: [S, 3]
-                the second dimension: [t, h, w]
-            """
-
-            grid_thw_cpu = grid_thw.cpu().numpy()
-            grid_t, grid_hw = grid_thw_cpu[:, 0], grid_thw_cpu[:, 1:]
-            grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_conv_size**2)
-
-            tokens_per_img_or_vid = grid_thw_cpu.prod(-1) // (self.spatial_conv_size**2)
-            batch_offset = np.empty(
-                tokens_per_img_or_vid.size, dtype=tokens_per_img_or_vid.dtype
-            )
-            batch_offset[0] = 0
-            batch_offset[1:] = tokens_per_img_or_vid.cumsum()[:-1]
-
-            assert (
-                self.temporal_conv_size == 2
-            ), f"Hard Code: temporal_conv_size==2, got:{self.temporal_conv_size}"
-
-            # TODO: support any temporal conv size
-            slice_offsets = []
-            for temporoal_size, spatial_size, b_offset in zip(
-                grid_t, grid_hw_after_conv, batch_offset
-            ):
-                for temp_offset in range(0, temporoal_size, 2):
-                    slice_offsets.append(
-                        np.arange(
-                            b_offset + (temp_offset) * spatial_size,
-                            b_offset + (temp_offset + 1) * spatial_size,
+                # We can avoid looping another time if the ranges are the same
+                if is_same_offset_range:
+                    second_slice_offsets.append(
+                        torch.arange(
+                            batch_offset + (temporal_offset) * spatial_size,
+                            batch_offset + (temporal_offset + 1) * spatial_size,
                         )
                     )
-            slice_offsets = torch.tensor(np.concatenate(slice_offsets, axis=-1)).to(
-                x.device
-            )
 
-            slice_offsets2 = []
-            for temporoal_size, spatial_size, b_offset in zip(
-                grid_t, grid_hw_after_conv, batch_offset
-            ):
-                for temp_offset in range(
-                    1 if temporoal_size > 1 else 0, temporoal_size, 2
-                ):
-                    slice_offsets2.append(
-                        np.arange(
-                            b_offset + (temp_offset) * spatial_size,
-                            b_offset + (temp_offset + 1) * spatial_size,
+            if not is_same_offset_range:
+                for temporal_offset in second_offset_range:
+                    second_slice_offsets.append(
+                        torch.arange(
+                            batch_offset + (temporal_offset) * spatial_size,
+                            batch_offset + (temporal_offset + 1) * spatial_size,
                         )
                     )
-            slice_offsets2 = torch.tensor(np.concatenate(slice_offsets2, axis=-1)).to(
-                x.device
-            )
 
-            x_timestep_1 = torch.index_select(x, dim=0, index=slice_offsets)
-            x_timestep_2 = torch.index_select(x, dim=0, index=slice_offsets2)
-            x = torch.concat([x_timestep_1, x_timestep_2], dim=-1)
-            return x
+        first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(x.device)
+        second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(x.device)
 
-        def fwd_temporal(x):
-            x = self.temporal_linear(x)
-            return x
+        return torch.concat(
+            [
+                torch.index_select(x, dim=0, index=first_slice_offsets),
+                torch.index_select(x, dim=0, index=second_slice_offsets)
+            ],
+            dim=-1
+        )
 
-        def fwd_mlp(x):
-            x = self.mlp(x)
-            x = self.after_norm(x)
-            return x
+    def forward(self, x, grid_thw):
+        # image spatial
+        x = x.reshape([-1, x.shape[-1] * (self.spatial_conv_size**2)])
+        x = self.spatial_linear(x)
 
-        x = fwd_spatial(x)
-        x = fwd_placeholder(x, grid_thw)
-        x = fwd_temporal(x)
-        x = fwd_mlp(x)
+        # video temporal
+        x = self._temporal_slicing(x, grid_thw)
+        x = self.temporal_linear(x)
+
+        # final mlp
+        x = self.mlp(x)
+        x = self.after_norm(x)
+
         return x
 
 
@@ -1318,13 +1288,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
     ):
         """vision_mapping_forward"""
         image_mask = input_ids == self.config.image_token_id
-        image_features = self.model.resampler_model(
-            image_features,
-            image_mask,
-            token_type_ids_w_video,
-            image_type_ids,
-            grid_thw,
-        )
+        image_features = self.model.resampler_model(image_features, grid_thw)
 
         if image_features.dim == 2:
             B, N, C = image_features.shape
