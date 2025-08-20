@@ -736,7 +736,7 @@ def create_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
-    has an HybridCache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
+    has an hybrid cache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
     to what is needed in the `modeling_xxx.py` files).
 
     Args:
@@ -761,7 +761,7 @@ def create_causal_mask(
             An optional mask function to combine with the causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the full layers
+    # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
     else:
@@ -828,7 +828,7 @@ def create_sliding_window_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an HybridCache structure, this
+    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
     function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -854,7 +854,7 @@ def create_sliding_window_causal_mask(
             An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
@@ -923,7 +923,7 @@ def create_chunked_causal_mask(
 ) -> Optional[Union[torch.Tensor, BlockMask]]:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an HybridCache structure, this
+    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
     function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -949,7 +949,7 @@ def create_chunked_causal_mask(
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(True)
     else:
