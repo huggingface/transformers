@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-10-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # FLAN-T5
 
@@ -25,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-FLAN-T5 was released in the paper [Scaling Instruction-Finetuned Language Models](https://arxiv.org/pdf/2210.11416.pdf) - it is an enhanced version of T5 that has been finetuned in a mixture of tasks.
+FLAN-T5 was released in the paper [Scaling Instruction-Finetuned Language Models](https://huggingface.co/papers/2210.11416) - it is an enhanced version of T5 that has been finetuned in a mixture of tasks.
 
 One can directly use FLAN-T5 weights without finetuning the model:
 

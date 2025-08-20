@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -479,8 +478,8 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # the last 2 tokens are masked, and should have 0 attn_probs
         self.assertTrue(torch.all(attn_probs[:, :, -mask_tokens:, -mask_tokens:] == 0))
 
-        # in loacal attention each token can only attend to the previous window_size tokens (inlcuding itself)
-        # here window_size is 4, so a token at index 5 can only attend to indcies [2, 3, 4, 5]
+        # in local attention each token can only attend to the previous window_size tokens (including itself)
+        # here window_size is 4, so a token at index 5 can only attend to indices [2, 3, 4, 5]
         # and the attn_probs should be 0 for token [0, 1]
         self.assertTrue(torch.all(attn_probs[:, :, 5, 2:6] != 0))
         self.assertTrue(torch.all(attn_probs[:, :, 5, :2] == 0))
@@ -552,7 +551,7 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 

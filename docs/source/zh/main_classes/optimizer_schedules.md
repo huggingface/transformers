@@ -22,10 +22,6 @@ rendered properly in your Markdown viewer.
 - 继承自 `_LRSchedule` 多个调度器：
 - 一个梯度累积类，用于累积多个批次的梯度
 
-## AdamW (PyTorch)
-
-[[autodoc]] AdamW
-
 ## AdaFactor (PyTorch)
 
 [[autodoc]] Adafactor

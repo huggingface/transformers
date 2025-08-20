@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Hugging Face
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -121,7 +120,7 @@ class NotebookProgressBar:
             self.update_every = 0.5  # Adjusted for smooth updated as html rending is slow on VS Code
             # This is the only adjustment required to optimize training html rending
 
-    def update(self, value: int, force_update: bool = False, comment: str = None):
+    def update(self, value: int, force_update: bool = False, comment: Optional[str] = None):
         """
         The main method to update the progress bar to `value`.
 
@@ -186,7 +185,7 @@ class NotebookProgressBar:
             if self.average_time_per_item == 0:
                 self.label += ", +inf it/s"
             else:
-                self.label += f", {1/self.average_time_per_item:.2f} it/s"
+                self.label += f", {1 / self.average_time_per_item:.2f} it/s"
 
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
@@ -213,7 +212,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
     An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
 
     Args:
-        num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
+        num_steps (`int`): The number of steps during training. column_names (`list[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
     """
@@ -239,13 +238,13 @@ class NotebookTrainingTracker(NotebookProgressBar):
         Write the values in the inner table.
 
         Args:
-            values (`Dict[str, float]`): The values to display.
+            values (`dict[str, float]`): The values to display.
         """
         if self.inner_table is None:
             self.inner_table = [list(values.keys()), list(values.values())]
         else:
             columns = self.inner_table[0]
-            for key in values.keys():
+            for key in values:
                 if key not in columns:
                     columns.append(key)
             self.inner_table[0] = columns
@@ -254,12 +253,12 @@ class NotebookTrainingTracker(NotebookProgressBar):
                 first_column = self.inner_table[0][0]
                 if last_values[0] != values[first_column]:
                     # write new line
-                    self.inner_table.append([values[c] if c in values else "No Log" for c in columns])
+                    self.inner_table.append([values.get(c, "No Log") for c in columns])
                 else:
                     # update last line
                     new_values = values
                     for c in columns:
-                        if c not in new_values.keys():
+                        if c not in new_values:
                             new_values[c] = last_values[columns.index(c)]
                     self.inner_table[-1] = [new_values[c] for c in columns]
             else:

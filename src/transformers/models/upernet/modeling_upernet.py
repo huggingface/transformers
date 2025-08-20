@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -22,13 +22,9 @@ from torch.nn import CrossEntropyLoss
 
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import auto_docstring
 from ...utils.backbone_utils import load_backbone
 from .configuration_upernet import UperNetConfig
-
-
-# General docstring
-_CONFIG_FOR_DOC = "UperNetConfig"
 
 
 class UperNetConvModule(nn.Module):
@@ -41,10 +37,10 @@ class UperNetConvModule(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, Tuple[int, int]],
-        padding: Union[int, Tuple[int, int], str] = 0,
+        kernel_size: Union[int, tuple[int, int]],
+        padding: Union[int, tuple[int, int], str] = 0,
         bias: bool = False,
-        dilation: Union[int, Tuple[int, int]] = 1,
+        dilation: Union[int, tuple[int, int]] = 1,
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
@@ -88,7 +84,7 @@ class UperNetPyramidPoolingModule(nn.Module):
     Pyramid Pooling Module (PPM) used in PSPNet.
 
     Args:
-        pool_scales (`Tuple[int]`):
+        pool_scales (`tuple[int]`):
             Pooling scales used in Pooling Pyramid Module.
         in_channels (`int`):
             Input channels.
@@ -98,7 +94,7 @@ class UperNetPyramidPoolingModule(nn.Module):
             align_corners argument of F.interpolate.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
         super().__init__()
         self.pool_scales = pool_scales
         self.align_corners = align_corners
@@ -110,7 +106,7 @@ class UperNetPyramidPoolingModule(nn.Module):
             self.blocks.append(block)
             self.add_module(str(i), block)
 
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
         ppm_outs = []
         for ppm in self.blocks:
             ppm_out = ppm(x)
@@ -124,7 +120,7 @@ class UperNetPyramidPoolingModule(nn.Module):
 class UperNetHead(nn.Module):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
+    [UPerNet](https://huggingface.co/papers/1807.10221).
     """
 
     def __init__(self, config, in_channels):
@@ -165,15 +161,6 @@ class UperNetHead(nn.Module):
             kernel_size=3,
             padding=1,
         )
-
-    def init_weights(self):
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def psp_forward(self, inputs):
         x = inputs[-1]
@@ -217,7 +204,7 @@ class UperNetHead(nn.Module):
 class UperNetFCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is the implementation of
-    [FCNNet](https://arxiv.org/abs/1411.4038>).
+    [FCNNet](https://huggingface.co/papers/1411.4038>).
 
     Args:
         config:
@@ -231,12 +218,14 @@ class UperNetFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
+        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, tuple[int, int]] = 1
     ) -> None:
         super().__init__()
 
         self.config = config
-        self.in_channels = config.auxiliary_in_channels
+        self.in_channels = (
+            in_channels[in_index] if config.auxiliary_in_channels is None else config.auxiliary_in_channels
+        )
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
@@ -266,15 +255,6 @@ class UperNetFCNHead(nn.Module):
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
-    def init_weights(self):
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
@@ -285,60 +265,26 @@ class UperNetFCNHead(nn.Module):
         return output
 
 
+@auto_docstring
 class UperNetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = UperNetConfig
+    config: UperNetConfig
     main_input_name = "pixel_values"
     _no_split_modules = []
 
     def _init_weights(self, module):
-        if isinstance(module, UperNetPreTrainedModel):
-            module.backbone.init_weights()
-            module.decode_head.init_weights()
-            if module.auxiliary_head is not None:
-                module.auxiliary_head.init_weights()
-
-    def init_weights(self):
-        """Initialize the weights"""
-        self.backbone.init_weights()
-        self.decode_head.init_weights()
-        if self.auxiliary_head is not None:
-            self.auxiliary_head.init_weights()
+        if isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.BatchNorm2d):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
-UPERNET_START_DOCSTRING = r"""
-    Parameters:
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-        config ([`UperNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-UPERNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
-            `attentions` under returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers of the backbone. See `hidden_states` under
-            returned tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """UperNet framework leveraging any vision backbone e.g. for ADE20k, CityScapes.""",
-    UPERNET_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    UperNet framework leveraging any vision backbone e.g. for ADE20k, CityScapes.
+    """
 )
 class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def __init__(self, config):
@@ -348,13 +294,14 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)
-        self.auxiliary_head = UperNetFCNHead(config) if config.use_auxiliary_head else None
+        self.auxiliary_head = (
+            UperNetFCNHead(config, in_channels=self.backbone.channels) if config.use_auxiliary_head else None
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(UPERNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -367,8 +314,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
         ```python

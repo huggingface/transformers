@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-10-17 and added to Hugging Face Transformers on 2023-10-19.*
 
 # Fuyu
 
@@ -102,6 +103,10 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 ## FuyuConfig
 
 [[autodoc]] FuyuConfig
+
+## FuyuModel
+
+[[autodoc]] FuyuModel
 
 ## FuyuForCausalLM
 

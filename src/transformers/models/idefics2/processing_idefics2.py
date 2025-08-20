@@ -17,7 +17,7 @@ Processor class for IDEFICS2.
 """
 
 from itertools import accumulate
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -26,7 +26,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
@@ -85,24 +84,27 @@ class Idefics2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
+    def __init__(
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
+    ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
         if not hasattr(tokenizer, "image_token"):
-            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
-            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
+            self.image_token = AddedToken("<image>", normalized=False, special=True).content
             tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         else:
             self.fake_image_token = tokenizer.image_boundary_token
             self.image_token = tokenizer.image_token
+            self.image_token_id = tokenizer.image_token_id
 
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         tokenizer.add_special_tokens({"additional_special_tokens": [self.end_of_utterance_token]})
@@ -124,8 +126,8 @@ class Idefics2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
@@ -161,10 +163,10 @@ class Idefics2Processor(ProcessorMixin):
         ```
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -178,8 +180,6 @@ class Idefics2Processor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             Idefics2ProcessorKwargs,
@@ -188,9 +188,10 @@ class Idefics2Processor(ProcessorMixin):
         )
         image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
-        inputs = BatchFeature()
+        inputs = {}
 
         if text is not None:
             if isinstance(text, str):
@@ -199,13 +200,14 @@ class Idefics2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-            fake_image_token = self.fake_image_token.content
-            image_token = self.image_token.content
+            fake_image_token = self.fake_image_token
+            image_token = self.image_token
             image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
 
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
+                image_seq_len *= 5
 
             prompt_strings = []
             for sample in text:
@@ -216,6 +218,7 @@ class Idefics2Processor(ProcessorMixin):
                 prompt_strings.append(sample)
 
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
             inputs.update(text_inputs)
 
         if images is not None:
@@ -257,7 +260,7 @@ class Idefics2Processor(ProcessorMixin):
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
-        return inputs
+        return BatchFeature(inputs, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

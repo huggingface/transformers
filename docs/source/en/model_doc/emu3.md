@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-27 and added to Hugging Face Transformers on 2025-01-10.*
 
 # Emu3
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Emu3 model was proposed in [Emu3: Next-Token Prediction is All You Need](https://arxiv.org/abs/2409.18869) by Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan Zhang, Yueze Wang, Zhen Li, Qiying Yu, Yingli Zhao, Yulong Ao, Xuebin Min, Tao Li, Boya Wu, Bo Zhao, Bowen Zhang, Liangdong Wang, Guang Liu, Zheqi He, Xi Yang, Jingjing Liu, Yonghua Lin, Tiejun Huang, Zhongyuan Wang.
+The Emu3 model was proposed in [Emu3: Next-Token Prediction is All You Need](https://huggingface.co/papers/2409.18869) by Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan Zhang, Yueze Wang, Zhen Li, Qiying Yu, Yingli Zhao, Yulong Ao, Xuebin Min, Tao Li, Boya Wu, Bo Zhao, Bowen Zhang, Liangdong Wang, Guang Liu, Zheqi He, Xi Yang, Jingjing Liu, Yonghua Lin, Tiejun Huang, Zhongyuan Wang.
 
 Emu3 is a multimodal LLM that uses vector quantization to tokenize images into discrete tokens. Discretized image tokens are later fused with text token ids for image and text generation. The model can additionally generate images by predicting image token ids. 
 
@@ -62,7 +63,7 @@ from PIL import Image
 import requests
 
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16, device_map="cuda")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16, device_map="auto")
 
 # prepare image and text prompt
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -91,10 +92,10 @@ inputs = processor(
     return_tensors="pt",
     return_for_image_generation=True,
 )
-inputs = inputs.to(device="cuda:0", dtype=torch.bfloat16)
+inputs = inputs.to(device=model.device, dtype=torch.bfloat16)
 
 neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device="cuda:0")
+neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device=model.device)
 
 image_sizes = inputs.pop("image_sizes")
 HEIGHT, WIDTH = image_sizes[0]
@@ -173,6 +174,10 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] Emu3TextModel
     - forward
+
+## Emu3Model
+
+[[autodoc]] Emu3Model
 
 ## Emu3ForCausalLM
 

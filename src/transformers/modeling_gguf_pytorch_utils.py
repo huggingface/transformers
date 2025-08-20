@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -15,7 +14,7 @@
 # limitations under the License.
 
 import re
-from typing import Dict, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -115,7 +114,7 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _split_moe_expert_tensor(
-        self, weights: np.ndarray, parsed_parameters: Dict[str, Dict], name: str, tensor_key_mapping: dict
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], name: str, tensor_key_mapping: dict
     ):
         # Original merge implementation
         # https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py#L1994-L2022
@@ -247,6 +246,7 @@ class Gemma2TensorProcessor(TensorProcessor):
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
+    "qwen3moe": Qwen2MoeTensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -254,10 +254,13 @@ TENSOR_PROCESSORS = {
     "mamba": MambaTensorProcessor,
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
+    "gemma3": Gemma2TensorProcessor,
 }
 
 
 def read_field(reader, field):
+    if field not in reader.fields:
+        return []
     value = reader.fields[field]
     return [_gguf_parse_value(value.parts[_data_index], value.types) for _data_index in value.data]
 
@@ -291,8 +294,12 @@ def get_gguf_hf_weights_map(
     # hack: ggufs have a different name for cohere
     if model_type == "cohere":
         model_type = "command-r"
-    if model_type == "qwen2_moe":
+    elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
+    elif model_type == "qwen3_moe":
+        model_type = "qwen3moe"
+    elif model_type == "gemma3_text":
+        model_type = "gemma3"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -311,9 +318,9 @@ def get_gguf_hf_weights_map(
     # hf => gguf and gguf => hf mappings are reversed
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
-    for hf_name in state_dict.keys():
-        # An exception for qwen2moe model, where the expert layers are packed
-        if model_type == "qwen2moe" and "mlp.experts." in hf_name:
+    for hf_name in state_dict:
+        # An exception for qwen2moe/qwen3moe model, where the expert layers are packed
+        if model_type in ("qwen2moe", "qwen3moe") and "mlp.experts." in hf_name:
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
 
         name, suffix = hf_name, ""
@@ -347,7 +354,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     Args:
         gguf_checkpoint_path (`str`):
             The path the to GGUF file to load
-        return_tensors (`bool`, defaults to `True`):
+        return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
     """
@@ -367,6 +374,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     parsed_parameters = {k: {} for k in GGUF_TO_TRANSFORMERS_MAPPING}
 
     architecture = read_field(reader, "general.architecture")[0]
+    # NOTE: Some GGUF checkpoints may miss `general.name` field in metadata
     model_name = read_field(reader, "general.name")
 
     updated_architecture = None
@@ -386,6 +394,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
+    elif "qwen3moe" in architecture:
+        updated_architecture = "qwen3_moe"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -423,8 +433,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         if isinstance(value, str) and architecture in value:
             value = value.replace(architecture, updated_architecture)
 
-        for parameter in GGUF_TO_TRANSFORMERS_MAPPING:
-            parameter_renames = GGUF_TO_TRANSFORMERS_MAPPING[parameter]
+        for parameter, parameter_renames in GGUF_TO_TRANSFORMERS_MAPPING.items():
             if prefix in parameter_renames and config_key in parameter_renames[prefix]:
                 renamed_config_key = parameter_renames[prefix][config_key]
                 if renamed_config_key == -1:
@@ -438,6 +447,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
+
+    # Gemma3 GGUF checkpoint only contains weights of text backbone
+    if parsed_parameters["config"]["model_type"] == "gemma3":
+        parsed_parameters["config"]["model_type"] = "gemma3_text"
 
     # retrieve config vocab_size from tokenizer
     # Please refer to https://github.com/huggingface/transformers/issues/32526 for more details

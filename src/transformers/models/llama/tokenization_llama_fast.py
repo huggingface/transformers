@@ -14,16 +14,13 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import Optional, Tuple
+from typing import Optional
 
 from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
     from .tokenization_llama import LlamaTokenizer
@@ -174,10 +171,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -192,8 +185,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -222,7 +215,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

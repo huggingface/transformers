@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,19 +32,20 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     from_pretrained_vocab_key = "tokenizer_file"
 
-    def setUp(self):
-        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
-        super().setUp()
-        self.test_rust_tokenizer = True
+    @classmethod
+    def setUpClass(cls):
+        cls.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
+        super().setUpClass()
+        cls.test_rust_tokenizer = True
 
         model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
-        self.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
+        cls.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
-        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+        cls.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @unittest.skip(
         "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"

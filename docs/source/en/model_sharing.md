@@ -28,7 +28,7 @@ To share a model to the Hub, you need a Hugging Face [account](https://hf.co/joi
 <hfoption id="huggingface-CLI">
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 </hfoption>

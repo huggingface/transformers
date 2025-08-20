@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-06-19 and added to Hugging Face Transformers on 2020-11-16.*
 
 # XLNet
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
+The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://huggingface.co/papers/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
 Quoc V. Le. XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method to learn
 bidirectional contexts by maximizing the expected likelihood over all permutations of the input sequence factorization
 order.

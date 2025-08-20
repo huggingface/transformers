@@ -2,9 +2,6 @@ docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
 docs/source/en/add_new_pipeline.md
-docs/source/en/agents.md
-docs/source/en/agents.md
-docs/source/en/attention.md
 docs/source/en/community.md
 docs/source/en/contributing.md
 docs/source/en/custom_models.md
@@ -23,7 +20,6 @@ docs/source/en/internal/time_series_utils.md
 docs/source/en/internal/tokenization_utils.md
 docs/source/en/internal/trainer_utils.md
 docs/source/en/llm_tutorial.md
-docs/source/en/main_classes/agent.md
 docs/source/en/main_classes/callback.md
 docs/source/en/main_classes/configuration.md
 docs/source/en/main_classes/data_collator.md
@@ -212,6 +208,7 @@ docs/source/en/model_doc/roc_bert.md
 docs/source/en/model_doc/roformer.md
 docs/source/en/model_doc/rwkv.md
 docs/source/en/model_doc/sam.md
+docs/source/en/model_doc/sam_hq.md
 docs/source/en/model_doc/segformer.md
 docs/source/en/model_doc/sew-d.md
 docs/source/en/model_doc/sew.md
@@ -269,7 +266,6 @@ docs/source/en/model_doc/yolos.md
 docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
-docs/source/en/model_summary.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
 docs/source/en/peft.md
@@ -282,7 +278,6 @@ docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
-docs/source/en/perf_train_tpu_tf.md
 docs/source/en/perplexity.md
 docs/source/en/philosophy.md
 docs/source/en/pipeline_webserver.md
@@ -311,8 +306,6 @@ docs/source/en/tasks/video_classification.md
 docs/source/en/tasks/visual_question_answering.md
 docs/source/en/tasks/zero_shot_image_classification.md
 docs/source/en/tasks/zero_shot_object_detection.md
-docs/source/en/tasks_explained.md
-docs/source/en/tf_xla.md
 docs/source/en/tflite.md
 docs/source/en/tokenizer_summary.md
 docs/source/en/torchscript.md
@@ -320,17 +313,6 @@ docs/source/en/training.md
 docs/source/en/troubleshooting.md
 src/transformers/activations.py
 src/transformers/activations_tf.py
-src/transformers/agents/agent_types.py
-src/transformers/agents/agents.py
-src/transformers/agents/document_question_answering.py
-src/transformers/agents/evaluate_agent.py
-src/transformers/agents/image_question_answering.py
-src/transformers/agents/prompts.py
-src/transformers/agents/python_interpreter.py
-src/transformers/agents/speech_to_text.py
-src/transformers/agents/text_to_speech.py
-src/transformers/agents/tools.py
-src/transformers/agents/translation.py
 src/transformers/audio_utils.py
 src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
@@ -475,7 +457,6 @@ src/transformers/models/deberta/modeling_tf_deberta.py
 src/transformers/models/deberta_v2/modeling_tf_deberta_v2.py
 src/transformers/models/decision_transformer/modeling_decision_transformer.py
 src/transformers/models/deformable_detr/convert_deformable_detr_to_pytorch.py
-src/transformers/models/deformable_detr/load_custom.py
 src/transformers/models/deit/convert_deit_timm_to_pytorch.py
 src/transformers/models/deprecated/bort/convert_bort_original_gluonnlp_checkpoint_to_pytorch.py
 src/transformers/models/deprecated/mctct/configuration_mctct.py
@@ -954,7 +935,6 @@ src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py
 src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects.py
 src/transformers/utils/dummy_flax_objects.py
-src/transformers/utils/dummy_keras_nlp_objects.py
 src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py

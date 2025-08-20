@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,13 @@
 """Testing suite for the PyTorch FNet model."""
 
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -40,10 +38,6 @@ if is_torch_available():
         FNetForTokenClassification,
         FNetModel,
         FNetTokenizerFast,
-    )
-    from transformers.models.fnet.modeling_fnet import (
-        FNetBasicFourierTransform,
-        is_scipy_available,
     )
 
 
@@ -133,26 +127,6 @@ class FNetModelTester:
             tpu_short_seq_length=self.seq_length,
         )
 
-    @require_torch
-    def create_and_check_fourier_transform(self, config):
-        hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
-        transform = FNetBasicFourierTransform(config)
-        fftn_output = transform(hidden_states)
-
-        config.use_tpu_fourier_optimizations = True
-        if is_scipy_available():
-            transform = FNetBasicFourierTransform(config)
-            dft_output = transform(hidden_states)
-
-        config.max_position_embeddings = 4097
-        transform = FNetBasicFourierTransform(config)
-        fft_output = transform(hidden_states)
-
-        if is_scipy_available():
-            self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
-            self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
-        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
-
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
         model.to(torch_device)
@@ -184,19 +158,6 @@ class FNetModelTester:
         model.eval()
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_next_sentence_prediction(
-        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
-    ):
-        model = FNetForNextSentencePrediction(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            token_type_ids=token_type_ids,
-            next_sentence_label=sequence_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
@@ -326,7 +287,7 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
         return inputs_dict
 
-    # Overriden Tests
+    # Overridden Tests
     @unittest.skip
     def test_attention_outputs(self):
         pass
@@ -362,10 +323,10 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):

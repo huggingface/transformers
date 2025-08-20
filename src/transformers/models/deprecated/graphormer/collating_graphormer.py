@@ -1,7 +1,8 @@
 # Copyright (c) Microsoft Corporation and HuggingFace
 # Licensed under the MIT License.
 
-from typing import Any, Dict, List, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,12 +27,12 @@ def convert_to_single_emb(x, offset: int = 512):
 def preprocess_item(item, keep_features=True):
     requires_backends(preprocess_item, ["cython"])
 
-    if keep_features and "edge_attr" in item.keys():  # edge_attr
+    if keep_features and "edge_attr" in item:  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:
         edge_attr = np.ones((len(item["edge_index"][0]), 1), dtype=np.int64)  # same embedding for all
 
-    if keep_features and "node_feat" in item.keys():  # input_nodes
+    if keep_features and "node_feat" in item:  # input_nodes
         node_feature = np.asarray(item["node_feat"], dtype=np.int64)
     else:
         node_feature = np.ones((item["num_nodes"], 1), dtype=np.int64)  # same embedding for all
@@ -78,7 +79,7 @@ class GraphormerDataCollator:
         self.spatial_pos_max = spatial_pos_max
         self.on_the_fly_processing = on_the_fly_processing
 
-    def __call__(self, features: List[dict]) -> Dict[str, Any]:
+    def __call__(self, features: list[dict]) -> dict[str, Any]:
         if self.on_the_fly_processing:
             features = [preprocess_item(i) for i in features]
 

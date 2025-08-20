@@ -28,10 +28,10 @@ jobs:
       matrix:
         split_keys: ${{ fromJson(inputs.split_keys) }}
     runs-on: 
-      group: aws-g4dn-2xlarge-cache
+      group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
         working-directory: /transformers

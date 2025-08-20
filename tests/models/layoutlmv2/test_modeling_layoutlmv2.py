@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -335,7 +334,8 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -497,7 +497,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList intead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():

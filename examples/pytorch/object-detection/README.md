@@ -56,7 +56,7 @@ python run_object_detection.py \
     --greater_is_better true \
     --load_best_model_at_end true \
     --logging_strategy epoch \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --save_total_limit 2 \
     --push_to_hub true \
@@ -217,7 +217,7 @@ dataset = load_dataset("imagefolder", data_dir="custom_dataset/")
 # ...     })
 # ... })
 
-# Push to hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+# Push to hub (assumes you have ran the hf auth login command in a terminal/notebook)
 dataset.push_to_hub("name of repo on the hub")
 
 # optionally, you can push to a private repo on the hub

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -37,7 +37,7 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
-    box: Optional[Union[List, Tuple[float, float], Tuple[float, float, float, float]]]
+    box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
     num_image_tokens: Optional[int]
     multi_page: Optional[bool]
@@ -64,7 +64,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, int]) -> List:
+def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, int]) -> list:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -95,7 +95,6 @@ class GotOcr2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -107,6 +106,8 @@ class GotOcr2Processor(ProcessorMixin):
         self.img_start_token = "<img>"
         self.img_end_token = "</img>"
         self.img_pad_token = "<imgpad>"
+        self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def _make_list_of_inputs(self, images, text, box, color, multi_page):
@@ -134,7 +135,7 @@ class GotOcr2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
@@ -147,16 +148,16 @@ class GotOcr2Processor(ProcessorMixin):
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             format (`bool`, *optional*):
                 If set, will add the format token to the query, and the model will return the OCR result with formatting.
-            box (`List[float]`, `List[Tuple[float, float]]`, `List[Tuple[float, float, float, float]]`, *optional*):
+            box (`list[float]`, `list[tuple[float, float]]`, `list[tuple[float, float, float, float]]`, *optional*):
                 The box annotation to be added to the query. If a list of floats or a tuple of floats is provided, it
                 will be interpreted as [x1, y1, x2, y2]. If a list of tuples is provided, each tuple should be in the
                 form (x1, y1, x2, y2).
@@ -250,8 +251,11 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Funnel Transformer
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Funnel Transformer model was proposed in the paper [Funnel-Transformer: Filtering out Sequential Redundancy for
-Efficient Language Processing](https://arxiv.org/abs/2006.03236). It is a bidirectional transformer model, like
+Efficient Language Processing](https://huggingface.co/papers/2006.03236). It is a bidirectional transformer model, like
 BERT, but with a pooling operation after each block of layers, a bit like in traditional convolutional neural networks
 (CNN) in computer vision.
 

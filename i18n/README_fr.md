@@ -225,7 +225,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 1. Choisissez le bon framework pour chaque partie de la vie d'un modèle :
     - Entraînez des modèles de pointe en 3 lignes de code.
-    - Trasnférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
+    - Transférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
     - Choisissez facilement le bon framework pour l'entraînement, l'évaluation et la production.
 
 1. Personnalisez facilement un modèle ou un exemple selon vos besoins :
@@ -243,7 +243,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 ### Avec pip
 
-Ce référentiel est testé sur Python 3.9+, Flax 0.4.1+, PyTorch 2.0+ et TensorFlow 2.6+.
+Ce référentiel est testé sur Python 3.9+, Flax 0.4.1+, PyTorch 2.1+ et TensorFlow 2.6+.
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html). Si vous n'êtes pas familier avec les environnements virtuels Python, consultez le [guide utilisateur](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

@@ -47,10 +47,7 @@ from transformers.utils import (
 
 
 if is_torch_available():
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
     from transformers.trainer import FSDP_MODEL_NAME
-else:
-    is_torch_greater_or_equal_than_2_1 = False
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
@@ -109,6 +106,15 @@ if is_accelerate_available():
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
 
 
+FSDP2_ACCELERATE_VERSION = "1.6.0"
+require_accelerate_fsdp2 = partial(require_accelerate, min_version=FSDP2_ACCELERATE_VERSION)
+require_fsdp_v2_version = require_fsdp
+if is_accelerate_available(min_version=FSDP2_ACCELERATE_VERSION):
+    from accelerate.utils.constants import FSDP2_PYTORCH_VERSION
+
+    require_fsdp_v2_version = partial(require_fsdp, min_version=FSDP2_PYTORCH_VERSION)
+
+
 def get_launcher(distributed=False, use_accelerate=False):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
     # - it won't be able to handle that
@@ -148,6 +154,20 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             "LOCAL_RANK": "0",
             "WORLD_SIZE": "1",
         }
+        self.accelerate_fsdp_config = {
+            "fsdp_activation_checkpointing": False,
+            "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
+            "fsdp_backward_prefetch": "BACKWARD_PRE",
+            "fsdp_cpu_ram_efficient_loading": True,
+            "fsdp_forward_prefetch": False,
+            "fsdp_offload_params": False,
+            "fsdp_reshard_after_forward": "FULL_SHARD",
+            "fsdp_state_dict_type": "FULL_STATE_DICT",
+            "fsdp_sync_module_states": True,
+            "fsdp_transformer_layer_cls_to_wrap": "LlamaDecoderLayer",
+            "fsdp_use_orig_params": True,
+            "fsdp_version": 1,
+        }
 
         self.fsdp_config = {
             "backward_prefetch": "BACKWARD_PRE",
@@ -162,6 +182,28 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     def tearDown(self):
         super().tearDown()
+
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
+    def test_accelerate_fsdp_config(self, sharding_strategy, dtype):
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": output_dir,
+            "train_len": 128,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "fsdp": f"{sharding_strategy} offload auto_wrap",
+            "fsdp_config": self.accelerate_fsdp_config,
+        }
+        kwargs[dtype] = True
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
+            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
+            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
+            for k, v in trainer.args.fsdp_config.items():
+                self.assertTrue(k in self.accelerate_fsdp_config)
+                self.assertEqual(v, self.accelerate_fsdp_config[k])
+            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
@@ -251,7 +293,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @run_first
     @slow
-    @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
@@ -310,6 +351,74 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         try:
             subprocess.run(
                 "accelerate launch utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
+                shell=True,
+                check=True,
+            )
+        except:  # noqa
+            raise AssertionError("CPU offloading failed with FSDP!")
+
+    @require_torch_multi_accelerator
+    @run_first
+    @slow
+    @require_fsdp_v2_version
+    @require_accelerate_fsdp2
+    def test_accelerate_fsdp2_integration(self):
+        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        sharding_strategy = "full_shard"
+        use_accelerate = True
+
+        num_gpus = min(2, backend_device_count(torch_device))
+        master_port = get_master_port(real_launcher=True)
+        launcher = f"""accelerate launch
+            --num_processes {num_gpus}
+            --main_process_port {master_port}
+            --use_fsdp
+            --fsdp_version 2
+            --fsdp_auto_wrap_policy TRANSFORMER_BASED_WRAP
+            --fsdp_state_dict_type SHARDED_STATE_DICT
+            --fsdp_transformer_layer_cls_to_wrap BertLayer""".split()
+        args = self.get_base_args(output_dir, 2, 25).split()
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
+
+        # resume from ckpt
+        checkpoint = os.path.join(output_dir, "checkpoint-115")
+        resume_args = args + f"--resume_from_checkpoint {checkpoint}".split()
+
+        is_fsdp_ckpt = os.path.isdir(checkpoint) and (
+            # this checks the FSDP state dict when `SHARDED_STATE_DICT` is used
+            any(
+                FSDP_MODEL_NAME in folder_name
+                for folder_name in os.listdir(checkpoint)
+                if os.path.isdir(os.path.join(checkpoint, folder_name))
+            )
+            # this checks the FSDP state dict when `FULL_STATE_DICT` is used
+            or os.path.isfile(os.path.join(checkpoint, f"{FSDP_MODEL_NAME}.bin"))
+        )
+        self.assertTrue(is_fsdp_ckpt)
+
+        logs_resume = self.run_cmd_and_get_logs(
+            use_accelerate, sharding_strategy, launcher, script, resume_args, output_dir
+        )
+
+        for log, log1 in zip(logs, logs_resume):
+            if "learning_rate" in log:
+                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+
+    @require_torch_multi_accelerator
+    @run_first
+    @slow
+    @require_fsdp
+    @require_fsdp_v2_version
+    @require_accelerate_fsdp2
+    def test_fsdp2_cpu_offloading(self):
+        # TODO: This file is missing and should be added or the test should be removed
+        if not os.path.exists("utils/testing_scripts/fsdp_cpu_offloading.py"):
+            raise unittest.SkipTest("FSDP 2 CPU offloading script not found!")
+
+        try:
+            subprocess.run(
+                "accelerate launch --fsdp_version 2 utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
                 shell=True,
                 check=True,
             )

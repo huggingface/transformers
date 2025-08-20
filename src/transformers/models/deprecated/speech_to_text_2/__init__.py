@@ -13,51 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ....utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_sentencepiece_available,
-    is_speech_available,
-    is_torch_available,
-)
-
-
-_import_structure = {
-    "configuration_speech_to_text_2": ["Speech2Text2Config"],
-    "processing_speech_to_text_2": ["Speech2Text2Processor"],
-    "tokenization_speech_to_text_2": ["Speech2Text2Tokenizer"],
-}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_speech_to_text_2"] = [
-        "Speech2Text2ForCausalLM",
-        "Speech2Text2PreTrainedModel",
-    ]
+from ....utils import _LazyModule
+from ....utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_speech_to_text_2 import Speech2Text2Config
-    from .processing_speech_to_text_2 import Speech2Text2Processor
-    from .tokenization_speech_to_text_2 import Speech2Text2Tokenizer
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_speech_to_text_2 import (
-            Speech2Text2ForCausalLM,
-            Speech2Text2PreTrainedModel,
-        )
-
+    from .configuration_speech_to_text_2 import *
+    from .modeling_speech_to_text_2 import *
+    from .processing_speech_to_text_2 import *
+    from .tokenization_speech_to_text_2 import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

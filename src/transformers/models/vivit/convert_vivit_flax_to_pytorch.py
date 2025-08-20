@@ -73,7 +73,7 @@ def transform_attention(current: np.ndarray):
         return transform_attention_kernel(current)
 
     else:
-        raise Exception(f"Invalid number of dimesions: {np.ndim(current)}")
+        raise Exception(f"Invalid number of dimensions: {np.ndim(current)}")
 
 
 def transform_attention_bias(current: np.ndarray):
@@ -129,7 +129,7 @@ def transform_state_encoder_block(state_dict, i):
 
 
 def get_n_layers(state_dict):
-    return sum([1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"].keys()])
+    return sum([1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"]])
 
 
 def transform_state(state_dict, classification_head=False):

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2020-12-09.*
 
 # MPNet
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://arxiv.org/abs/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
+The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://huggingface.co/papers/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
 
 MPNet adopts a novel pre-training method, named masked and permuted language modeling, to inherit the advantages of
 masked language modeling and permuted language modeling for natural language understanding.

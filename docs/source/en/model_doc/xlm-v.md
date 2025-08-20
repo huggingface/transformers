@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-01-25 and added to Hugging Face Transformers on 2023-06-20.*
 
 # XLM-V
 
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 XLM-V is multilingual language model with a one million token vocabulary trained on 2.5TB of data from Common Crawl (same as XLM-R).
-It was introduced in the [XLM-V: Overcoming the Vocabulary Bottleneck in Multilingual Masked Language Models](https://arxiv.org/abs/2301.10472)
+It was introduced in the [XLM-V: Overcoming the Vocabulary Bottleneck in Multilingual Masked Language Models](https://huggingface.co/papers/2301.10472)
 paper by Davis Liang, Hila Gonen, Yuning Mao, Rui Hou, Naman Goyal, Marjan Ghazvininejad, Luke Zettlemoyer and Madian Khabsa.
 
 From the abstract of the XLM-V paper:

@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     require_deepspeed,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -269,7 +270,6 @@ def make_task_cmds():
         "img_clas": f"""
         {scripts_dir}/image-classification/run_image_classification.py
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
@@ -327,6 +327,7 @@ params = list(itertools.product(stages, task_cmds.keys()))
 
 
 @slow
+@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedModelZoo(TestCasePlus):

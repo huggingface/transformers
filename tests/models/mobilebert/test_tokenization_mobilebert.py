@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Leon Derczynski. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,8 +40,9 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_filter = filter_non_english
     pre_trained_model_path = "google/mobilebert-uncased"
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = [
             "[UNK]",
@@ -61,13 +61,13 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "low",
             "lowest",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        self.tokenizers_list = [
-            (tokenizer_def[0], self.pre_trained_model_path, tokenizer_def[2])  # else the 'google/' prefix is stripped
-            for tokenizer_def in self.tokenizers_list
+        cls.tokenizers_list = [
+            (tokenizer_def[0], cls.pre_trained_model_path, tokenizer_def[2])  # else the 'google/' prefix is stripped
+            for tokenizer_def in cls.tokenizers_list
         ]
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.get_input_output_texts
@@ -275,7 +275,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
                 tokens = tokenizer_r.encode_plus(
@@ -331,8 +331,8 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 kwargs["tokenize_chinese_chars"] = True
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
@@ -345,8 +345,8 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)

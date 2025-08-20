@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for LeViT."""
 
-from typing import Dict, Iterable, Optional, Union
+from collections.abc import Iterable
+from typing import Optional, Union
 
 import numpy as np
 
@@ -38,11 +39,13 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class LevitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LeViT image processor.
@@ -51,7 +54,7 @@ class LevitImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Wwhether to resize the shortest edge of the input to int(256/224 *`size`). Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]`, *optional*, defaults to `{"shortest_edge": 224}`):
+        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the output image after resizing. If size is a dict with keys "width" and "height", the image will
             be resized to `(size["height"], size["width"])`. If size is a dict with key "shortest_edge", the shortest
             edge value `c` is rescaled to `int(c * (256/224))`. The smaller edge of the image will be matched to this
@@ -75,10 +78,10 @@ class LevitImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
-        image_mean (`List[int]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
+        image_mean (`list[int]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`List[int]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
+        image_std (`list[int]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -88,10 +91,10 @@ class LevitImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -119,7 +122,7 @@ class LevitImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -138,7 +141,7 @@ class LevitImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
                 will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
                 `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
@@ -176,10 +179,10 @@ class LevitImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -198,7 +201,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the output image after resizing. If size is a dict with keys "width" and "height", the image
                 will be resized to (height, width). If size is a dict with key "shortest_edge", the shortest edge value
                 `c` is rescaled to int(`c` * (256/224)). The smaller edge of the image will be matched to this value
@@ -207,7 +210,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the output image after center cropping. Crops images to (crop_size["height"],
                 crop_size["width"]).
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -216,9 +219,9 @@ class LevitImageProcessor(BaseImageProcessor):
                 Factor to rescale the image pixel values by.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image pixel values by `image_mean` and `image_std`.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Mean to normalize the image pixel values by.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to normalize the image pixel values by.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:

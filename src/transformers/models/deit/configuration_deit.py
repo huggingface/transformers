@@ -15,7 +15,7 @@
 """DeiT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -69,6 +69,12 @@ class DeiTConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         encoder_stride (`int`, *optional*, defaults to 16):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        pooler_output_size (`int`, *optional*):
+           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        pooler_act (`str`, *optional*, defaults to `"tanh"`):
+           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
+           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
+           supported for Tensorflow.
 
     Example:
 
@@ -103,6 +109,8 @@ class DeiTConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
+        pooler_output_size=None,
+        pooler_act="tanh",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -121,6 +129,8 @@ class DeiTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
+        self.pooler_act = pooler_act
 
 
 class DeiTOnnxConfig(OnnxConfig):

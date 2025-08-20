@@ -144,7 +144,7 @@ def convert_xmod_checkpoint_to_pytorch(
 
         if sorted(bert_output.adapter_modules.keys()) != sorted(xmod_layer.adapter_modules.keys()):
             raise AssertionError("Lists of language adapters do not match.")
-        for lang_code, adapter in xmod_layer.adapter_modules.items():
+        for lang_code in xmod_layer.adapter_modules:
             to_adapter = bert_output.adapter_modules[lang_code]
             from_adapter = xmod_layer.adapter_modules[lang_code]
             to_adapter.dense1.weight = from_adapter.fc1.weight

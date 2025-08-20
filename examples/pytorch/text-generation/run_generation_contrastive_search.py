@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 University of Cambridge, Tencent AI Lab, DeepMind and The University of Hong Kong Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "accelerate >= 0.21.0",
+#     "sentencepiece != 0.1.92",
+#     "protobuf",
+#     "torch >= 1.3",
+# ]
+# ///
+
 """The examples of running contrastive search on the auto-APIs;
 
 Running this example:
@@ -68,7 +78,7 @@ def main():
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+        help="Whether or not to use cpu. If set to False, we will use gpu/npu or mps device if available",
     )
     parser.add_argument(
         "--fp16",

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +16,16 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import ChineseCLIPImageProcessor
+
+    if is_torchvision_available():
+        from transformers import ChineseCLIPImageProcessorFast
 
 
 class ChineseCLIPImageProcessingTester:
@@ -92,6 +94,7 @@ class ChineseCLIPImageProcessingTester:
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ChineseCLIPImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -102,24 +105,26 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "center_crop"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 224, "width": 224})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 224, "width": 224})
+            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+            image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
@@ -132,6 +137,7 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 @require_vision
 class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = ChineseCLIPImageProcessor if is_vision_available() else None
+    fast_image_processing_class = ChineseCLIPImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -143,15 +149,16 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "center_crop"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     @unittest.skip(reason="ChineseCLIPImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_numpy(self):

@@ -16,7 +16,6 @@ import math
 from collections import OrderedDict
 
 import torch
-from packaging import version
 from torch import Tensor, nn
 
 from .utils import logging
@@ -28,19 +27,11 @@ logger = logging.get_logger(__name__)
 class PytorchGELUTanh(nn.Module):
     """
     A fast C implementation of the tanh approximation of the GeLU activation function. See
-    https://arxiv.org/abs/1606.08415.
+    https://huggingface.co/papers/1606.08415.
 
     This implementation is equivalent to NewGELU and FastGELU but much faster. However, it is not an exact numerical
     match due to rounding errors.
     """
-
-    def __init__(self):
-        super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.12.0"):
-            raise ImportError(
-                f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
-                "PytorchGELUTanh. Please upgrade torch."
-            )
 
     def forward(self, input: Tensor) -> Tensor:
         return nn.functional.gelu(input, approximate="tanh")
@@ -49,7 +40,7 @@ class PytorchGELUTanh(nn.Module):
 class NewGELUActivation(nn.Module):
     """
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
-    the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
     """
 
     def forward(self, input: Tensor) -> Tensor:
@@ -61,7 +52,7 @@ class GELUActivation(nn.Module):
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
     information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
     torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
-    Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    Also see the Gaussian Error Linear Units paper: https://huggingface.co/papers/1606.08415
     """
 
     def __init__(self, use_gelu_python: bool = False):
@@ -100,13 +91,13 @@ class ClippedGELUActivation(nn.Module):
     """
     Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
     it allows mapping negatives values in the GeLU spectrum. For more information on this trick, please refer to
-    https://arxiv.org/abs/2004.09602.
+    https://huggingface.co/papers/2004.09602.
 
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created.
 
     For information: OpenAI GPT's gelu is slightly different (and gives slightly different results): 0.5 * x * (1 +
-    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://arxiv.org/abs/1606.08415
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))). See https://huggingface.co/papers/1606.08415
     """
 
     def __init__(self, min: float, max: float):
@@ -139,16 +130,13 @@ class AccurateGELUActivation(nn.Module):
 
 class MishActivation(nn.Module):
     """
-    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://arxiv.org/abs/1908.08681). Also
+    See Mish: A Self-Regularized Non-Monotonic Activation Function (Misra., https://huggingface.co/papers/1908.08681). Also
     visit the official repository for the paper: https://github.com/digantamisra98/Mish
     """
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.9.0"):
-            self.act = self._mish_python
-        else:
-            self.act = nn.functional.mish
+        self.act = nn.functional.mish
 
     def _mish_python(self, input: Tensor) -> Tensor:
         return input * torch.tanh(nn.functional.softplus(input))
@@ -169,7 +157,7 @@ class LinearActivation(nn.Module):
 class LaplaceActivation(nn.Module):
     """
     Applies elementwise activation based on Laplace function, introduced in MEGA as an attention activation. See
-    https://arxiv.org/abs/2209.10655
+    https://huggingface.co/papers/2209.10655
 
     Inspired by squared relu, but with bounded range and gradient for better stability
     """
@@ -181,7 +169,7 @@ class LaplaceActivation(nn.Module):
 
 class ReLUSquaredActivation(nn.Module):
     """
-    Applies the relu^2 activation introduced in https://arxiv.org/abs/2109.08668v2
+    Applies the relu^2 activation introduced in https://huggingface.co/papers/2109.08668v2
     """
 
     def forward(self, input):

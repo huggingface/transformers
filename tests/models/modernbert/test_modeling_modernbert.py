@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import os
+import tempfile
 import unittest
 
 import pytest
@@ -40,6 +41,8 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForMultipleChoice,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
@@ -140,7 +143,7 @@ class ModernBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-        if test := os.environ.get("PYTEST_CURRENT_TEST", False):
+        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
 
             # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
@@ -200,6 +203,22 @@ class ModernBertModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_multiple_choice(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = ModernBertForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            labels=choice_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -224,6 +243,8 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
+            ModernBertForQuestionAnswering,
+            ModernBertForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -235,6 +256,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
+            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -289,7 +311,13 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
                     name == "classifier.weight"
-                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                    and model_class
+                    in [
+                        ModernBertForSequenceClassification,
+                        ModernBertForTokenClassification,
+                        ModernBertForQuestionAnswering,
+                        ModernBertForMultipleChoice,
+                    ]
                 ):
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -308,6 +336,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     def test_for_warning_if_padding_and_no_attention_mask(self):
         (
@@ -357,6 +389,25 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @slow
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
+
+    @pytest.mark.torch_compile_test
+    def test_saved_config_excludes_reference_compile(self):
+        config = ModernBertConfig(reference_compile=True)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            with open(os.path.join(tmpdirname, "config.json")) as f:
+                config_dict = json.load(f)
+            self.assertNotIn("reference_compile", config_dict)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_flash_attention_dispatches_by_defaul(self):
+        "ModernBert should dispatch to FA2 by default, not SDPA"
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            self.assertTrue(model.config._attn_implementation == "flash_attention_2")
 
 
 @require_torch
@@ -451,6 +502,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):

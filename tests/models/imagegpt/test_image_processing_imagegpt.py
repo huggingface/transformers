@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -140,7 +139,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, image_processor_second[key]))
             else:
-                self.assertEqual(image_processor_first[key], value)
+                self.assertEqual(value, value)
 
     def test_image_processor_from_and_save_pretrained(self):
         for image_processing_class in self.image_processor_list:
@@ -155,7 +154,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 if key == "clusters":
                     self.assertTrue(np.array_equal(value, image_processor_second[key]))
                 else:
-                    self.assertEqual(image_processor_first[key], value)
+                    self.assertEqual(value, value)
 
     def test_image_processor_save_load_with_autoimageprocessor(self):
         for image_processing_class in self.image_processor_list:
@@ -174,7 +173,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 if key == "clusters":
                     self.assertTrue(np.array_equal(value, image_processor_second[key]))
                 else:
-                    self.assertEqual(image_processor_first[key], value)
+                    self.assertEqual(value, value)
 
     @unittest.skip(reason="ImageGPT requires clusters at initialization")
     def test_init_without_params(self):

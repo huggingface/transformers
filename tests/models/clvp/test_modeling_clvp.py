@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -374,10 +373,12 @@ class ClvpModelForConditionalGenerationTester:
 
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        audio = ds.sort("id")[0]["audio"]
+        audio_sample = audio["array"]
+        sr = audio["sampling_rate"]
 
         feature_extractor = ClvpFeatureExtractor()
-        input_features = feature_extractor(raw_speech=audio, sampling_rate=sr, return_tensors="pt")[
+        input_features = feature_extractor(raw_speech=audio_sample, sampling_rate=sr, return_tensors="pt")[
             "input_features"
         ].to(torch_device)
 
@@ -500,7 +501,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for Clvp
+    # override as the `logit_scale` parameter initialization is different for Clvp
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -509,7 +510,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale":
                         expected_value = np.log(1 / 0.07)
                         returned_value = param.data.item()
@@ -563,7 +564,8 @@ class ClvpIntegrationTest(unittest.TestCase):
         self.text = "This is an example text."
         ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+        audio = ds.sort("id")["audio"][0]
+        self.speech_samples, self.sr = audio["array"], audio["sampling_rate"]
 
         self.model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev").to(torch_device)
         self.model.eval()

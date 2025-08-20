@@ -14,6 +14,8 @@
 # limitations under the License.
 """Graphormer model configuration"""
 
+from typing import Optional
+
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 
@@ -76,7 +78,7 @@ class GraphormerConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the activation of the linear transformer layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         bias (`bool`, *optional*, defaults to `True`):
             Uses bias in the attention module - unsupported at the moment.
@@ -153,14 +155,14 @@ class GraphormerConfig(PretrainedConfig):
         pre_layernorm: bool = False,
         apply_graphormer_init: bool = False,
         activation_fn: str = "gelu",
-        embed_scale: float = None,
+        embed_scale: Optional[float] = None,
         freeze_embeddings: bool = False,
         num_trans_layers_to_freeze: int = 0,
         traceable: bool = False,
         q_noise: float = 0.0,
         qn_block_size: int = 8,
-        kdim: int = None,
-        vdim: int = None,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
         bias: bool = True,
         self_attention: bool = True,
         pad_token_id=0,
@@ -213,3 +215,6 @@ class GraphormerConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+
+__all__ = ["GraphormerConfig"]

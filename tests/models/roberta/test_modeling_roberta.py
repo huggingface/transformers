@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,8 @@
 
 
 import unittest
+
+import pytest
 
 from transformers import AutoTokenizer, RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
@@ -418,7 +419,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -577,6 +577,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
 
         torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if not is_torch_greater_or_equal_than_2_4:

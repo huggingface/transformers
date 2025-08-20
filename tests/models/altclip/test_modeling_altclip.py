@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -198,14 +197,6 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="AltCLIPVisionModel use the same cv backbone with CLIP model.")
     def test_model_from_pretrained(self):
         pass
@@ -306,7 +297,7 @@ class AltCLIPTextModelTester:
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
     test_pruning = False
     test_head_masking = False
 
@@ -357,14 +348,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="AltCLIPTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "BAAI/AltCLIP"
@@ -393,8 +376,10 @@ class AltCLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return AltCLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return AltCLIPConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -428,7 +413,7 @@ def prepare_img():
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
-    fx_compatible = True
+    fx_compatible = False  # Cannot support if `can_return_tuple`
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -547,8 +532,8 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +18,12 @@ import re
 import shutil
 import tempfile
 import unittest
-from typing import Tuple
+from functools import lru_cache
 
 from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 if is_torch_available():
@@ -40,19 +39,24 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = PerceiverTokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def perceiver_tokenizer(self):
         return PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
 
-    def get_tokenizer(self, **kwargs) -> PerceiverTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PerceiverTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # XXX The default common tokenizer tests assume that every ID is decodable on its own.
         # This assumption is invalid for Perceiver because single bytes might not be
         # valid utf-8 (byte 128 for instance).

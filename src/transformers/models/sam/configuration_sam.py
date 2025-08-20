@@ -176,16 +176,34 @@ class SamVisionConfig(PretrainedConfig):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             The indexes of the global attention layers.
         num_pos_feats (`int`, *optional*, defaults to 128):
             The dimensionality of the position embedding.
         mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     SamVisionConfig,
+    ...     SamVisionModel,
+    ... )
+
+    >>> # Initializing a SamVisionConfig with `"facebook/sam-vit-huge"` style configuration
+    >>> configuration = SamVisionConfig()
+
+    >>> # Initializing a SamVisionModel (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> model = SamVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     base_config_key = "vision_config"
+    model_type = "sam_vision_model"
 
     def __init__(
         self,

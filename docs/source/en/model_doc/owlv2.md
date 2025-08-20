@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-16 and added to Hugging Face Transformers on 2023-10-13.*
 
 # OWLv2
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://arxiv.org/abs/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
+OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://huggingface.co/papers/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
 
 The abstract from the paper is the following:
 
@@ -31,7 +32,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/owlv2_overview.png"
 alt="drawing" width="600"/>
 
-<small> OWLv2 high-level overview. Taken from the <a href="https://arxiv.org/abs/2306.09683">original paper</a>. </small>
+<small> OWLv2 high-level overview. Taken from the <a href="https://huggingface.co/papers/2306.09683">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
@@ -102,6 +103,13 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2ImageProcessor
 
 [[autodoc]] Owlv2ImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_image_guided_detection
+
+## Owlv2ImageProcessorFast
+
+[[autodoc]] Owlv2ImageProcessorFast
     - preprocess
     - post_process_object_detection
     - post_process_image_guided_detection

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -170,7 +170,9 @@ class InformerModelTester:
 
         embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
-        ).to(torch_device)
+        )
+        embed_positions._init_weight()
+        embed_positions = embed_positions.to(torch_device)
         self.parent.assertTrue(torch.equal(model.encoder.embed_positions.weight, embed_positions.weight))
         self.parent.assertTrue(torch.equal(model.decoder.embed_positions.weight, embed_positions.weight))
 
@@ -382,7 +384,8 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -475,7 +478,8 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 def prepare_batch(filename="train-batch.pt"):
     file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
-    batch = torch.load(file, map_location=torch_device)
+    check_torch_load_is_safe()
+    batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 
 
