@@ -187,6 +187,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self, **kwargs):
         return super().test_batching_equivalence(atol=3e-5, rtol=5e-5)
 
+
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 
 
