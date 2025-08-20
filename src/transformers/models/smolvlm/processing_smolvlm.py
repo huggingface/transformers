@@ -177,10 +177,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
-    def expand_text_with_image_tokens(self, text, image_inputs):
-        image_rows = image_inputs.pop("rows", [[0] * len(text)])
-        image_cols = image_inputs.pop("cols", [[0] * len(text)])
-
+    def expand_text_with_image_tokens(self, text, image_rows, image_cols):
         prompt_strings = []
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
@@ -327,6 +324,9 @@ class SmolVLMProcessor(ProcessorMixin):
             images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
             vision_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+
+            image_rows = vision_inputs.pop("rows", [[0] * len(text)])
+            image_cols = vision_inputs.pop("cols", [[0] * len(text)])
             inputs.update(vision_inputs)
 
             if text is not None:
@@ -336,7 +336,8 @@ class SmolVLMProcessor(ProcessorMixin):
                     raise ValueError(
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
-                text = self.expand_text_with_image_tokens(text, vision_inputs)
+                text = self.expand_text_with_image_tokens(text, image_rows=image_rows, image_cols=image_cols)
+
         elif videos is not None:
             vision_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
             if text is not None:
@@ -348,7 +349,8 @@ class SmolVLMProcessor(ProcessorMixin):
                     )
                 text = self.expand_text_with_video_tokens(text, vision_inputs)
 
-            # If user has not requested video metadata, pop it
+            # If user has not requested video metadata, pop it. By default metadata
+            # is always returned to expand video tokens correctly
             if "return_metadata" not in kwargs:
                 vision_inputs.pop("video_metadata")
             inputs.update(vision_inputs)
