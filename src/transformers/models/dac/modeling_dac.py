@@ -490,10 +490,10 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=0.02)
 
-    def apply_weight_norm(self, old_weight_norm=False):
-        # original version of DAC uses old weight norm
+    def apply_weight_norm(self, legacy=True):
+        # original version of DAC uses legacy weight norm
         weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not old_weight_norm:
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
             weight_norm = nn.utils.parametrizations.weight_norm
 
         for layer in self.quantizer.quantizers:
@@ -524,9 +524,9 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
             weight_norm(layer.res_unit3.conv1)
             weight_norm(layer.res_unit3.conv2)
 
-    def remove_weight_norm(self, old_weight_norm=False):
+    def remove_weight_norm(self, legacy=True):
         remove_weight_norm = nn.utils.remove_weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not old_weight_norm:
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
             remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
 
         for layer in self.quantizer.quantizers:

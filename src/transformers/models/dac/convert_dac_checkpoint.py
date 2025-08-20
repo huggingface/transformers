@@ -192,17 +192,12 @@ def convert_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     repo_id=None,
+    legacy_weight_norm=True,
 ):
     # NOTE: Models on Hub (https://huggingface.co/descript/models) did conversion on CPU.
     # However, for equivalent weights after removing weight norm, conversion should be done on GPU.
-    torch_device = "cpu"
-    # -- Below ensures conversion is done on GPU
-    # # check if cuda is available
-    # if not torch.cuda.is_available():
-    #     raise ValueError(
-    #         "Please run this script on a machine with a GPU for weight nor layers to be correctly copied."
-    #     )
     # torch_device = "cuda"
+    torch_device = "cpu"
     model_dict = torch.load(checkpoint_path, torch_device, weights_only=True)
 
     config = DacConfig()
@@ -226,9 +221,9 @@ def convert_checkpoint(
     original_checkpoint = model_dict["state_dict"]
 
     # original model uses old weight norm function
-    model.apply_weight_norm(old_weight_norm=True)
+    model.apply_weight_norm(legacy=legacy_weight_norm)
     recursively_load_weights(original_checkpoint, model, model_name)
-    model.remove_weight_norm(old_weight_norm=True)
+    model.remove_weight_norm(legacy=legacy_weight_norm)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -253,6 +248,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
+    parser.add_argument(
+        "--legacy_weight_norm",
+        default=True,
+        type=bool,
+        help="Whether legacy weight normalization was used by original model.",
+    )
     args = parser.parse_args()
 
-    convert_checkpoint(args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_checkpoint(
+        args.model, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.legacy_weight_norm
+    )
