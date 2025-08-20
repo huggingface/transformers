@@ -152,12 +152,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
     attributes = ["image_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
-    feature_extractor_class = "MiniCPM_O_2_6FeatureExtractor"
+    feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None):
         super().__init__(image_processor, feature_extractor, tokenizer)
         self.version = image_processor.version
+        self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
         self.image_tag = "(<image>./</image>)"
         self.image_pattern = "\(<image>./</image>\)"
         self.audio_tag = "(<audio>./</audio>)"
