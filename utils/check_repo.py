@@ -103,7 +103,9 @@ PRIVATE_MODELS = [
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
+    "MossTTSDPretrainedModel",
     "Ovis2VisionModel",
+    "XYTokenizerPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
