@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -115,15 +115,19 @@ class SemanticEncoder(nn.Module):
         super().__init__()
         if len(config.strides) != len(config.channel_ratios):
             raise ValueError("Number of strides must match the number of channel_ratios.")
-
         self.conv = nn.Conv1d(
-            config.input_channels, config.encoder_channels, config.kernel_size, 1, config.kernel_size // 2, bias=False
+            config.semantic_hidden_size,
+            config.semantic_hidden_size,
+            config.kernel_size,
+            1,
+            config.kernel_size // 2,
+            bias=False,
         )
 
-        in_channels = config.encoder_channels
+        in_channels = config.semantic_hidden_size
         conv_blocks = []
         for i, stride in enumerate(config.strides):
-            out_channels = int(config.encoder_channels * config.channel_ratios[i])
+            out_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
             conv_blocks += [SemanticEncoderBlock(config, in_channels, out_channels, stride)]
             in_channels = out_channels
 
@@ -171,8 +175,8 @@ class SemanticDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv1 = nn.Conv1d(
-            in_channels=config.decoder_channels,
-            out_channels=int(config.decoder_channels * config.channel_ratios[0]),
+            in_channels=config.semantic_hidden_size,
+            out_channels=int(config.semantic_hidden_size * config.channel_ratios[0]),
             kernel_size=config.kernel_size,
             stride=1,
             padding=config.kernel_size // 2,
@@ -180,19 +184,19 @@ class SemanticDecoder(nn.Module):
         )
         conv_blocks = []
         for i, stride in enumerate(config.strides):
-            in_channels = int(config.decoder_channels * config.channel_ratios[i])
+            in_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
 
             if i < (len(config.channel_ratios) - 1):
-                out_channels = int(config.decoder_channels * config.channel_ratios[i + 1])
+                out_channels = int(config.semantic_hidden_size * config.channel_ratios[i + 1])
             else:
-                out_channels = config.decoder_channels
+                out_channels = config.semantic_hidden_size
 
             conv_blocks += [SemanticDecoderBlock(config, in_channels, out_channels, stride)]
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
         self.conv2 = nn.Conv1d(
-            config.decoder_channels,
-            config.output_channels,
+            config.semantic_hidden_size,
+            config.semantic_hidden_size,
             config.kernel_size,
             stride=1,
             padding=config.kernel_size // 2,
@@ -381,16 +385,16 @@ class XcodecModel(XcodecPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2
-        dac = AutoModel.from_config(config.acoustic_model_config)
-        self.acoustic_encoder = dac.encoder
-        self.acoustic_decoder = dac.decoder
+        acoustic_model = AutoModel.from_config(config.acoustic_model_config)
+        self.acoustic_encoder = acoustic_model.encoder
+        self.acoustic_decoder = acoustic_model.decoder
         self._adjust_dac_decoder(self.acoustic_decoder)
         self.encoder_semantic = SemanticEncoder(config)
         self.decoder_semantic = SemanticDecoder(config)
-        self.semantic_model = AutoModel.from_config(config.semantic_model_config)
-        self.fc = nn.Linear(config.hidden_dim, config.hidden_dim)
-        self.fc1 = nn.Linear(config.hidden_dim, config.intermediate_dim)
-        self.fc2 = nn.Linear(config.hidden_dim, config.output_dim)
+        self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
+        self.fc = nn.Linear(config.hidden_size, config.hidden_size)
+        self.fc1 = nn.Linear(config.hidden_size, config.semantic_model_config.hidden_size)
+        self.fc2 = nn.Linear(config.hidden_size, config.acoustic_model_config.hidden_size)
         self.quantizer = XcodecResidualVectorQuantization(config)
 
     @staticmethod
@@ -524,16 +528,16 @@ class XcodecModel(XcodecPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
-        r"""
+        """
         Encodes and quantizes the input audio into discrete codes, then decodes those codes back into an audio waveform.
+
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
                 The raw float values of the input audio waveform.
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
                 Discrete code indices computed using `model.encode`.
             bandwidth (`float`, *optional*):
-                Target bandwidth in kbps. Must be one of `config.target_bandwidths`.
-                Defaults to the highest available bandwidth.
+                Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
             return_dict (`bool`, *optional*):
                 Whether to return a [`XcodecOutput`] instead of a plain tuple.
 
@@ -548,12 +552,13 @@ class XcodecModel(XcodecPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoFeatureExtractor, XcodecModel
 
-        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
-        >>> audio_sample = dataset["train"]["audio"][0]["array"]
-
-        >>> model_id = "Manel/X-Codec"
+        >>> model_id = "hf-audio/xcodec-hubert-librispeech"
         >>> model = XcodecModel.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+        >>> audio_sample = dataset[0]['audio']['array']
 
         >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
 

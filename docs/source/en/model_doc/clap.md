@@ -48,7 +48,7 @@ tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
 texts = ["the sound of a cat", "the sound of a dog", "music playing"]
 
-inputs = tokenizer(texts, padding=True, return_tensors="pt").to("cuda")
+inputs = tokenizer(texts, padding=True, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     text_features = model.get_text_features(**inputs)
