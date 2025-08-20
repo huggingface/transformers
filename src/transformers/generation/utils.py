@@ -1853,11 +1853,11 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            decoder_cache_kwargs = {
+            self_attention_cache_kwargs = {
                 "config": self.config.get_text_config(decoder=True),
                 "max_cache_len": max_cache_len,
             }
-            self._cache = cache_cls(**decoder_cache_kwargs)
+            self._cache = cache_cls(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_cache_kwargs = {
                     "config": self.config.get_text_config(encoder=True),
