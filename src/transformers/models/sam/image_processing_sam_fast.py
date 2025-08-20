@@ -36,6 +36,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -51,15 +52,12 @@ if is_torch_available():
     import torch
     from torch.nn import functional as F
 
-if is_torchvision_available():
+if is_torchvision_v2_available():
     from torchvision.ops.boxes import batched_nms
-
-    from ...image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F_t
-    else:
-        from torchvision.transforms import functional as F_t
+    from torchvision.transforms.v2 import functional as F_t
+elif is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
+    from torchvision.transforms import functional as F_t
 
 
 class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
