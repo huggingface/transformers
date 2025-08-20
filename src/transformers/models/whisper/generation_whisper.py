@@ -2075,7 +2075,10 @@ class WhisperGenerationMixin(GenerationMixin):
                         + end_timestamp_pos.to(torch.float32 if device.type == "mps" else torch.float64)
                         * time_precision,
                         "tokens": sliced_tokens,
-                        "idxs": (idx_offset + last_slice, idx_offset + current_slice),
+                        "idxs": (
+                            idx_offset + last_slice - num_special_tokens,
+                            idx_offset + current_slice - num_special_tokens,
+                        ),
                         "result": seek_outputs[idx],
                     }
                 )
@@ -2114,13 +2117,16 @@ class WhisperGenerationMixin(GenerationMixin):
                     "start": time_offset[prev_idx],
                     "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
                     "tokens": seek_sequence,
-                    "idxs": (idx_offset, idx_offset + len(seek_sequence)),
+                    "idxs": (idx_offset - num_special_tokens, idx_offset + len(seek_sequence) - num_special_tokens),
                     "result": seek_outputs[idx],
                 }
             ]
             if return_token_timestamps:
                 segments[-1]["token_timestamps"] = (
-                    token_timestamps[idx_offset : idx_offset + len(seek_sequence)] + time_offset[prev_idx]
+                    token_timestamps[
+                        idx_offset - num_special_tokens : idx_offset + len(seek_sequence) - num_special_tokens
+                    ]
+                    + time_offset[prev_idx]
                 )
             segment_offset = seek_num_frames[prev_idx]
 
