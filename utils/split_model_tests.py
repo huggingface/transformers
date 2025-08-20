@@ -62,5 +62,5 @@ if __name__ == "__main__":
         start = end
         end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         model_splits.append(d[start:end])
-
+    model_splits = [["models/vit"]]
     print(model_splits)
