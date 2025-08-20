@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-02-23 and added to Hugging Face Transformers on 2024-07-08.*
 
 
 <div style="float: right;">
@@ -71,7 +72,7 @@ model = AutoModelForDepthEstimation.from_pretrained(
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   outputs = model(inputs)

@@ -22,9 +22,10 @@ import re
 import string
 import time
 from argparse import ArgumentParser, Namespace
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import AsyncIterator, Optional
+from typing import Optional
 
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -245,7 +246,7 @@ class ChatArguments:
         default="main",
         metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    device: str = field(default="auto", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
         default="auto",
         metadata={

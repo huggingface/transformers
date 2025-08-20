@@ -267,7 +267,6 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 )
 
                 coords_to_probs = collections.defaultdict(list)
-                token_type_ids_example = token_type_ids_example
                 for i, p in enumerate(tf.squeeze(probabilities).numpy().tolist()):
                     segment_id = token_type_ids_example[:, 0].tolist()[i]
                     col = token_type_ids_example[:, 1].tolist()[i] - 1

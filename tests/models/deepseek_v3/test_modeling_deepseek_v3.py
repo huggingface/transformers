@@ -288,32 +288,11 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @unittest.skip(
         "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
     )
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-23 and added to Hugging Face Transformers on 2020-11-27.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -67,7 +68,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     torch_dtype=torch.float16,
     device_map="auto",
 )
-inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

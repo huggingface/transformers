@@ -335,7 +335,7 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf decoder checkpoint config",
     )
-    parser.add_argument("--add_adapter", default=True, type=bool, help="whethere to add model adapter layers")
+    parser.add_argument("--add_adapter", default=True, type=bool, help="whether to add model adapter layers")
     parser.add_argument("--adapter_stride", default=2, type=int, help="stride of adapter layers")
     parser.add_argument("--adapter_kernel_size", default=3, type=int, help="kernel size of adapter layers")
     parser.add_argument("--encoder_output_dim", default=1024, type=int, help="encoder output dim")

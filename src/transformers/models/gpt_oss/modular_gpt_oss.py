@@ -41,7 +41,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralForSequenceClassification, MixtralModel
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 from .configuration_gpt_oss import GptOssConfig
 
@@ -94,7 +94,7 @@ class GptOssExperts(nn.Module):
             with torch.no_grad():
                 expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=num_experts)
                 expert_mask = expert_mask.permute(2, 1, 0)
-                # we sum on the top_k and on the sequence lenght to get which experts
+                # we sum on the top_k and on the sequence length to get which experts
                 # are hit this time around
                 expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             for expert_idx in expert_hit[:]:
@@ -454,8 +454,13 @@ class GptOssForCausalLM(MixtralForCausalLM):
     pass
 
 
+class GptOssForSequenceClassification(MixtralForSequenceClassification):
+    pass
+
+
 __all__ = [
     "GptOssForCausalLM",
+    "GptOssForSequenceClassification",
     "GptOssModel",
     "GptOssPreTrainedModel",
 ]
