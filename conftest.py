@@ -23,7 +23,12 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from transformers.testing_utils import HfDoctestModule, HfDocTestParser, is_torch_available, patch_torch_compile_force_graph
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_torch_compile_force_graph,
+)
 
 
 NOT_DEVICE_TESTS = {
