@@ -228,23 +228,23 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {})
         
         # Test setting a valid plan
-        valid_plan = {'layers.*.self_attn.q_proj': 'colwise'}
+        valid_plan = {'model.layers.*.self_attn.q_proj': 'colwise'}
         model.tp_plan = valid_plan
         self.assertEqual(model.tp_plan, valid_plan)
         
         # Test updating the plan
-        model.tp_plan.update({'layers.*.self_attn.k_proj': 'colwise'})
+        model.tp_plan.update({'model.layers.*.self_attn.k_proj': 'colwise'})
         expected_plan = {
-            'layers.*.self_attn.q_proj': 'colwise',
-            'layers.*.self_attn.k_proj': 'colwise'
+            'model.layers.*.self_attn.q_proj': 'colwise',
+            'model.layers.*.self_attn.k_proj': 'colwise'
         }
         self.assertEqual(model.tp_plan, expected_plan)
         
         # Test overriding existing entry
-        model.tp_plan.update({'layers.*.self_attn.q_proj': 'colwise_rep'})
+        model.tp_plan.update({'model.layers.*.self_attn.q_proj': 'colwise_rep'})
         expected_plan = {
-            'layers.*.self_attn.q_proj': 'colwise_rep',
-            'layers.*.self_attn.k_proj': 'colwise'
+            'model.layers.*.self_attn.q_proj': 'colwise_rep',
+            'model.layers.*.self_attn.k_proj': 'colwise'
         }
         self.assertEqual(model.tp_plan, expected_plan)
         
@@ -290,9 +290,9 @@ class TestTensorParallelProperties(TestCasePlus):
         
         # Test valid layer patterns that should match the model structure
         valid_plans = [
-            {'layers.*.self_attn.q_proj': 'colwise'},
-            {'layers.*.self_attn.k_proj': 'rowwise'},
-            {'layers.*.mlp.gate_proj': 'colwise_rep'},
+            {'model.layers.*.self_attn.q_proj': 'colwise'},
+            {'model.layers.*.self_attn.k_proj': 'rowwise'},
+            {'model.layers.*.mlp.gate_proj': 'colwise_rep'},
         ]
         
         for plan in valid_plans:
@@ -323,8 +323,8 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {})
         
         # Test setting a plan after None
-        model.tp_plan = {'layers.*.self_attn.q_proj': 'colwise'}
-        self.assertEqual(model.tp_plan, {'layers.*.self_attn.q_proj': 'colwise'})
+        model.tp_plan = {'model.layers.*.self_attn.q_proj': 'colwise'}
+        self.assertEqual(model.tp_plan, {'model.layers.*.self_attn.q_proj': 'colwise'})
 
 
 @require_torch_multi_accelerator
