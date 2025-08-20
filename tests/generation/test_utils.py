@@ -51,7 +51,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     set_model_tester_for_less_flaky_test,
@@ -2366,7 +2365,6 @@ class GenerationTesterMixin:
                 self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """Tests that generate has equivalent outputs with SDPA and eager attention implementations."""
