@@ -33,7 +33,7 @@ You can find all the original LayoutLM checkpoints under the [LayoutLM](https://
 
 The example below demonstrates question answering with the [`AutoModel`] class. 
 
-<hfoptions>
+<hfoptions id="usage">
 <hfoption id="AutoModel">
 
 ```py

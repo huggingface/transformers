@@ -60,7 +60,7 @@ model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torc
 input_ids = tokenizer('''def print_prime(n):
    """
    Print all primes between 1 and n
-   """''', return_tensors="pt").to("cuda")
+   """''', return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -91,7 +91,7 @@ model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", torch_dtype=torc
 input_ids = tokenizer('''def print_prime(n):
    """
    Print all primes between 1 and n
-   """''', return_tensors="pt").to("cuda")
+   """''', return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -116,7 +116,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     input_ids = tokenizer('''def print_prime(n):
        """
        Print all primes between 1 and n
-       """''', return_tensors="pt").to("cuda")
+       """''', return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))

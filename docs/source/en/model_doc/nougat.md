@@ -65,14 +65,14 @@ into a single instance to both extract the input features and decode the predict
 >>> import re
 >>> from PIL import Image
 
->>> from transformers import NougatProcessor, VisionEncoderDecoderModel
+>>> from transformers import NougatProcessor, VisionEncoderDecoderModel, infer_device
 >>> from datasets import load_dataset
 >>> import torch
 
 >>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
 >>> model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base")
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = infer_device()
 >>> model.to(device)  # doctest: +IGNORE_RESULT
 
 >>> # prepare PDF image for the model
