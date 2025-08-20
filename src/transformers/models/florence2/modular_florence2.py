@@ -1156,7 +1156,6 @@ class Florence2VisionChannelBlock(nn.Module):
         config: Florence2VisionConfig,
         stage_idx: int,
         drop_path_rate: float,
-        kernel_size: int = 3,
     ):
         super().__init__()
 
@@ -1166,8 +1165,8 @@ class Florence2VisionChannelBlock(nn.Module):
         self.conv1 = nn.Conv2d(
             dim_in,
             dim_in,
-            kernel_size=kernel_size,
-            padding=kernel_size // 2,
+            kernel_size=3,
+            padding=1,
             groups=dim_in,
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
@@ -1177,8 +1176,8 @@ class Florence2VisionChannelBlock(nn.Module):
         self.conv2 = nn.Conv2d(
             dim_in,
             dim_in,
-            kernel_size=kernel_size,
-            padding=kernel_size // 2,
+            kernel_size=3,
+            padding=1,
             groups=dim_in,
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
@@ -1296,15 +1295,14 @@ class Florence2VisionSpatialBlock(nn.Module):
         config: Florence2VisionConfig,
         stage_idx: int,
         drop_path_rate: float,
-        kernel_size: int = 3,
     ):
         super().__init__()
 
         self.conv1 = nn.Conv2d(
             config.embed_dim[stage_idx],
             config.embed_dim[stage_idx],
-            kernel_size=kernel_size,
-            padding=kernel_size // 2,
+            kernel_size=3,
+            padding=1,
             groups=config.embed_dim[stage_idx],
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
@@ -1314,8 +1312,8 @@ class Florence2VisionSpatialBlock(nn.Module):
         self.conv2 = nn.Conv2d(
             config.embed_dim[stage_idx],
             config.embed_dim[stage_idx],
-            kernel_size=kernel_size,
-            padding=kernel_size // 2,
+            kernel_size=3,
+            padding=1,
             groups=config.embed_dim[stage_idx],
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
