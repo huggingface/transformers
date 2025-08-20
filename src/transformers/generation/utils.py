@@ -32,9 +32,8 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HybridChunkedCache,
-    OffloadedCache,
-    OffloadedHybridCache,
+    QuantizedCache,
+    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -71,8 +70,9 @@ from .candidate_generator import (
     _prepare_token_type_ids,
 )
 from .configuration_utils import (
-    QUANT_BACKEND_CLASSES_MAPPING,
-    STATIC_CACHE_CLASSES_MAPPING,
+    ALL_STATIC_CACHE_IMPLEMENTATIONS,
+    DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS,
+    STATIC_CACHE_IMPLEMENTATIONS,
     GenerationConfig,
     GenerationMode,
 )
@@ -1822,27 +1822,18 @@ class GenerationMixin(ContinuousMixin):
 
         Returns the resulting cache object.
         """
-        if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
-            cache_implementation = "hybrid_chunked"
-
-        cache_cls: Cache = STATIC_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
+        offload_cache = "offloaded" in cache_implementation
 
         if hasattr(self, "_cache"):
             cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
 
-        if cache_implementation == "sliding_window":
-            max_cache_len = min(self.config.sliding_window, max_cache_len)
-
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(cache_to_check, cache_cls))
+            or cache_to_check.offloading != offload_cache
             or cache_to_check.max_batch_size != batch_size
-            or isinstance(
-                cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
-            )  # due to internal slicing, we always re-init
             or cache_to_check.max_cache_len < max_cache_len
         )
 
@@ -1853,12 +1844,12 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            cache_kwargs = {"config": self.config.get_text_config(), "max_cache_len": max_cache_len}
-            self._cache = cache_cls(**cache_kwargs)
+            cache_kwargs = {"config": self.config, "max_cache_len": max_cache_len, "offloading": offload_cache}
+            self._cache = StaticCache(**cache_kwargs)
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
+                self._cache = EncoderDecoderCache(self._cache, StaticCache(**encoder_kwargs))
         else:
             self._cache.reset()
         return self._cache
@@ -1957,7 +1948,12 @@ class GenerationMixin(ContinuousMixin):
             else {}
         )
         if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in STATIC_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+                if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
+                    logger.warning_once(
+                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
+                        f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
+                    )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
                     batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
@@ -1977,7 +1973,6 @@ class GenerationMixin(ContinuousMixin):
                     cache_config["config"] = self.config.get_text_config()
                 # Pop the backend from the config (defaults to quanto if not defined)
                 backend = cache_config.pop("backend", "quanto")
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[backend]
 
                 if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
@@ -1989,10 +1984,9 @@ class GenerationMixin(ContinuousMixin):
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"
                     )
-
-                model_kwargs[cache_name] = cache_class(**cache_config)
+                model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
             elif generation_config.cache_implementation == "offloaded":
-                model_kwargs[cache_name] = OffloadedCache()
+                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
             elif generation_config.cache_implementation == "dynamic":
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
