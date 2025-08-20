@@ -86,6 +86,9 @@ PRIVATE_MODELS = [
     "Idefics2PerceiverResampler",
     "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
+    "Kosmos2_5TextModel",
+    "Kosmos2_5TextForCausalLM",
+    "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
@@ -94,6 +97,7 @@ PRIVATE_MODELS = [
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
     "EvollaSaProtPreTrainedModel",
+    "Ovis2VisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -139,6 +143,8 @@ IGNORE_NON_TESTED = (
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+        "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam2VideoModel",  # inherit from Sam2Model (tested).
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -193,6 +199,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/bark/test_modeling_bark.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
+    "models/sam2_video/test_modeling_sam2_video.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -245,6 +252,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "Sam2Model",
+    "Sam2VideoModel",
     "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
@@ -406,6 +415,9 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("kosmos-2.5", "kosmos2_5"),
+        ("dinov3_convnext", "dinov3"),
+        ("dinov3_vit", "dinov3"),
     ]
 )
 

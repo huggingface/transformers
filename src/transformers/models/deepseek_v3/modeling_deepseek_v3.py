@@ -502,8 +502,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
@@ -556,7 +555,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0

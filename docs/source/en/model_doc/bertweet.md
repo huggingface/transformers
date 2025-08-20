@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-05-20 and added to Hugging Face Transformers on 2020-11-16.*
 
 # BERTweet
 
@@ -66,7 +67,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     torch_dtype=torch.float16,
     device_map="auto"
 )
-inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

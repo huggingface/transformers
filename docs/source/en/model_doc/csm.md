@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-27 and added to Hugging Face Transformers on 2025-05-07.*
 
 # Csm
 
@@ -37,10 +38,10 @@ CSM can be used to simply generate speech from a text prompt:
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -71,11 +72,11 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -116,11 +117,11 @@ CSM supports batched inference!
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -305,11 +306,11 @@ print("="*50)
 CSM Transformers integration supports training!
 
 ```python
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)

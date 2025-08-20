@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 from pytest import mark
@@ -708,6 +709,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.skipTest(reason="CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
 
     @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 

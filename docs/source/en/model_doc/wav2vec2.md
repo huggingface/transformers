@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-20 and added to Hugging Face Transformers on 2021-02-02.*
 
 # Wav2Vec2
 
@@ -158,13 +159,14 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 ```python
 >>> # Let's see how to use a user-managed pool for batch decoding multiple audios
 >>> from multiprocessing import get_context
->>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
+>>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC, infer_device
 >>> from datasets import load_dataset
 >>> import datasets
 >>> import torch
 
+>>> device = infer_device()
 >>> # import model, feature extractor, tokenizer
->>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to("cuda")
+>>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to(device)
 >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
 >>> # load example dataset
@@ -182,8 +184,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 
 
 >>> def map_to_pred(batch, pool):
+...     device = infer_device()
 ...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
-...     inputs = {k: v.to("cuda") for k, v in inputs.items()}
+...     inputs = {k: v.to(device) for k, v in inputs.items()}
 
 ...     with torch.no_grad():
 ...         logits = model(**inputs).logits

@@ -54,7 +54,7 @@ from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -74,6 +74,7 @@ from .integrations.tensor_parallel import (
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -120,11 +121,9 @@ from .utils import (
     is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_npu_available,
-    is_torch_sdpa_available,
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    strtobool,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -180,15 +179,6 @@ _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
 
 
 def is_local_dist_rank_0():
@@ -409,8 +399,7 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    else:
-        return next(state_dict.values()).dtype
+    return next(state_dict.values()).dtype
 
 
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
@@ -890,8 +879,8 @@ def _load_state_dict_into_meta_model(
                     param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
-                    # special case for GptOssForCausalLM, we wait for the param to be leave the meta device before casting it to cpu
-                    if model.__class__.__name__ == "GptOssForCausalLM" and value.device.type == "meta":
+                    # special case for gpt_oss model, we wait for the param to be leave the meta device before casting it to cpu
+                    if model.config.model_type == "gpt_oss" and value.device.type == "meta":
                         continue
                     param_to = "cpu"
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
@@ -1615,9 +1604,7 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    is_quantized
-                    and new_state_dict[key].shape[-1] == 1
-                    and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                    is_quantized and tensor.shape[-1] == 1 and tensor.numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
                     mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
@@ -2126,7 +2113,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _pp_plan = None
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
-    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # In practice, it means that they support attention (mask) interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
     _can_record_outputs = None
@@ -2523,7 +2510,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
@@ -2611,7 +2598,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
@@ -2640,14 +2627,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        if not self._supports_sdpa and not is_init_check:
+        if not self._supports_sdpa:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
-        if not is_torch_sdpa_available():
-            raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.1.1.")
 
         if (
             torch.version.hip is not None
@@ -2720,30 +2705,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        if re.match(r"^[^/:]+/[^/:]+:?[^/:]+$", applicable_attn_implementation):
+        # Register kernel if relevant
+        if attn_implementation is not None and re.match(
+            r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation
+        ):
             if not is_kernels_available():
                 raise ValueError("kernels is not installed. Please install it with `pip install kernels`.")
             attention_wrapper = None
             # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-            if "|" in applicable_attn_implementation:
-                attention_wrapper, applicable_attn_implementation = applicable_attn_implementation.split("|")
+            actual_attn_name = attn_implementation
+            if "|" in attn_implementation:
+                attention_wrapper, actual_attn_name = attn_implementation.split("|")
                 # `transformers` has wrapper for sdpa, paged, flash, flex etc.
                 attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
             # Extract repo_id and kernel_name from the string
-            if ":" in applicable_attn_implementation:
-                repo_id, kernel_name = attn_implementation.split(":")
+            if ":" in actual_attn_name:
+                repo_id, kernel_name = actual_attn_name.split(":")
                 kernel_name = kernel_name.strip()
             else:
-                repo_id = applicable_attn_implementation
+                repo_id = actual_attn_name
                 kernel_name = None
             repo_id = repo_id.strip()
+            # extract the rev after the @ if it exists
+            repo_id, _, rev = repo_id.partition("@")
+            repo_id = repo_id.strip()
+            rev = rev.strip() if rev else None
             try:
-                kernel = get_kernel(repo_id)
+                kernel = get_kernel(repo_id, revision=rev)
                 if hasattr(kernel, "flash_attn_varlen_func"):
                     if attention_wrapper is None:
                         attention_wrapper = flash_attention_forward
                     kernel_function = partial(attention_wrapper, implementation=kernel)
+                    lazy_import_flash_attention(kernel)
                 elif kernel_name is not None:
                     kernel_function = getattr(kernel, kernel_name)
                 ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
@@ -2755,50 +2748,53 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Could not find a kernel repository '{repo_id}' compatible with your device in the hub: {e}. Using "
                     "default attention implementation instead (sdpa if available, eager otherwise)."
                 )
-
-                attn_implementation = "sdpa"  # Try to fallback to sdpa in this case
-            return attn_implementation
+                try:
+                    self._sdpa_can_dispatch(is_init_check)
+                    attn_implementation = "sdpa"
+                except (ValueError, ImportError) as e:
+                    attn_implementation = "eager"
         else:
-            return self.get_correct_attn_implementation(applicable_attn_implementation, is_init_check)
+            attn_implementation = self.get_correct_attn_implementation(attn_implementation, is_init_check)
+            # preload flash attention here to allow compile with fullgraph
+            if attn_implementation.startswith("flash_attention"):
+                lazy_import_flash_attention(attn_implementation)
 
-    def get_correct_attn_implementation(self, _requested_attention: str, is_init_check: bool = False) -> str:
-        requested_attention = "sdpa" if _requested_attention is None else _requested_attention
-        if is_init_check and requested_attention == "sdpa":
-            if not self._supports_sdpa:
-                requested_attention = "eager"
-        if requested_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+        return attn_implementation
+
+    def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
+        applicable_attention = "sdpa" if requested_attention is None else requested_attention
+
+        if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
-                f'Specified `attn_implementation="{requested_attention}"` is not supported. The only possible arguments are '
-                '`attn_implementation="eager"` (manual attention implementation)'
+                f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
+                '`attn_implementation="eager"`'
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += (
-                    ', `"attn_implementation=flash_attention_3"` (implementation using flash attention 3)'
-                    ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
-                )
+                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`'
             if self._supports_sdpa:
-                message += ', `"attn_implementation=sdpa"` (implementation using torch.nn.functional.scaled_dot_product_attention)'
+                message += ', `"attn_implementation=sdpa"'
             if self._supports_flex_attn:
-                message += ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
+                message += ', `"attn_implementation=flex_attention"`'
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if requested_attention == "flash_attention_2":
+        if applicable_attention == "flash_attention_2":
             self._flash_attn_2_can_dispatch(is_init_check)
-        elif requested_attention == "flash_attention_3":
+        elif applicable_attention == "flash_attention_3":
             self._flash_attn_3_can_dispatch(is_init_check)
-        elif requested_attention == "flex_attention":
+        elif applicable_attention == "flex_attention":
             self._flex_attn_can_dispatch(is_init_check)
-        elif requested_attention == "sdpa":
+        elif applicable_attention == "sdpa":
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
                 self._sdpa_can_dispatch(is_init_check)
             except (ValueError, ImportError) as e:
-                if _requested_attention == "sdpa":
+                if requested_attention == "sdpa":
                     raise e
-                requested_attention = "eager"
-        return requested_attention
+                applicable_attention = "eager"
+
+        return applicable_attention
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2809,9 +2805,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with open(class_file, "r") as f:
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
-        return (
-            "eager_attention_forward" in code and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
-        )
+        if re.search(r"class \w+Attention\(nn.Module\)", code):
+            return (
+                "eager_attention_forward" in code
+                and "ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]" in code
+            )
+        else:
+            # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
+            return True
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
@@ -2840,18 +2841,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "(see https://huggingface.co/docs/transformers/en/attention_interface)"
                 )
             else:
-                try:
-                    applicable_attn_implementation = self._check_and_adjust_attn_implementation(
-                        requested_implementation, is_init_check=False
-                    )
-                    # Apply the change (on the internal attr, to avoid setting it recursively)
-                    self.config._attn_implementation_internal = applicable_attn_implementation
-                except Exception as e:
-                    logger.warning(
-                        f"Impossible to set the requested `attn_implementation`. The following error was captured: {str(e)}"
-                    )
+                requested_implementation = self._check_and_adjust_attn_implementation(
+                    requested_implementation, is_init_check=False
+                )
+                # Apply the change (on the internal attr, to avoid setting it recursively)
+                self.config._attn_implementation_internal = requested_implementation
 
-        subconfigs_changed = set()
         # Apply it to all submodels as well
         for submodule in self.modules():
             # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
@@ -2860,44 +2855,65 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 submodule is not self
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
+                # If it was already changed, no need to do it again
+                and not hasattr(submodule.config, "_attn_was_changed")
             ):
-                sub_implementation = attn_implementation
-                if isinstance(attn_implementation, dict):
-                    for subconfig_key in self.config.sub_configs:
-                        # We need to check for exact object match here, with `is`
-                        if getattr(self.config, subconfig_key) is submodule.config:
-                            sub_implementation = attn_implementation.get(
-                                subconfig_key, submodule.config._attn_implementation
-                            )
-                            break
-                # check the module can use correctly, otherwise we silently set the config without the model using it
-                try:
+                # In this case, warn and skip
+                if not submodule._can_set_attn_implementation():
+                    logger.warning(
+                        f"{submodule.__class__.__name__} does not support setting its attention implementation dynamically, because it "
+                        "does not follow the functional approach based on AttentionInterface "
+                        "(see https://huggingface.co/docs/transformers/en/attention_interface)"
+                    )
+                # Set the attn on the submodule
+                else:
+                    sub_implementation = requested_implementation
+                    if isinstance(attn_implementation, dict):
+                        for subconfig_key in self.config.sub_configs:
+                            # We need to check for exact object match here, with `is`
+                            if getattr(self.config, subconfig_key) is submodule.config:
+                                sub_implementation = attn_implementation.get(
+                                    subconfig_key, submodule.config._attn_implementation
+                                )
+                                break
+                    # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
                     sub_implementation = submodule.get_correct_attn_implementation(sub_implementation)
-                    submodule.config._attn_implementation = sub_implementation
-                    subconfigs_changed.add(submodule.config.__class__)
-                except Exception:
-                    pass
+                    submodule.config._attn_implementation_internal = sub_implementation
+
+                # Still add it as "changed" even if it was skipped, as we would otherwise try to set it in the dark afterwards
+                # We need to set it on the config itself, to differentiate 2 subconfigs of the same __class__ potentially
+                submodule.config._attn_was_changed = True
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
             subconfig = getattr(self.config, subconfig_key)
-            requested_implementation = (
-                attn_implementation
+            sub_implementation = (
+                requested_implementation
                 if not isinstance(attn_implementation, dict)
                 else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
             )
             # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
             if (
-                subconfig.__class__ not in subconfigs_changed
-                and requested_implementation != subconfig._attn_implementation
-                and requested_implementation in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys()
+                not hasattr(subconfig, "_attn_was_changed")
+                # If it's already the same, then no need to enter here and raise warnings
+                and sub_implementation != subconfig._attn_implementation
             ):
-                subconfig._attn_implementation_internal = requested_implementation
+                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                    raise ValueError(
+                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                        'The only possible arguments are "eager" (manual attention implementation)'
+                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                    )
+                subconfig._attn_implementation_internal = sub_implementation
                 logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{requested_implementation}` "
+                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
                     "without finding the associated sub-model. For this reason we could not check if the model supports it. "
                     "You may encounter undefined behavior."
                 )
+            # Unset the attribute in this case, to avoid issues in the future
+            else:
+                if hasattr(subconfig, "_attn_was_changed"):
+                    del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """
@@ -2919,13 +2935,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
-        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
-        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value accross the library
+            # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
@@ -4494,6 +4510,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
+                Accept HF kernel references in the form:
+                  <namespace>/<repo_name>[@<revision>][:<kernel_name>]
+
+                - <namespace> and <repo_name> are any non-"/" and non-":" sequences.
+                - "@<revision>" is optional (branch, tag, or commit-ish), e.g. "@main", "@v1.2.0", "@abc123".
+                - ":<kernel_name>" is optional and selects a function inside the kernel repo.
+                - Both options can appear together and in this order only: @revision first, then :kernel_name.
+                - We intentionally allow a leading "<wrapper>|" prefix (e.g., "flash|...") because the code
+                  strips it before loading; '|' is not excluded in the character classes here.
+
+                Examples that match:
+                  "org/model"
+                  "org/model@main"
+                  "org/model:custom_kernel"
+                  "org/model@v1.2.3:custom_kernel"
+
             > Parameters for big model inference
 
             torch_dtype (`str` or `torch.dtype`, *optional*):
@@ -5855,7 +5887,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
-                f"`loss_type={loss_type}` was set in the config but it is unrecognised."
+                f"`loss_type={loss_type}` was set in the config but it is unrecognized. "
                 f"Using the default loss: `ForCausalLMLoss`."
             )
             loss_type = "ForCausalLM"
