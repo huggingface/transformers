@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
