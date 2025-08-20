@@ -457,7 +457,6 @@ def is_torch_sdpa_available():
     return True
 
 
-
 def is_torch_flex_attn_available() -> bool:
     if not is_torch_available() or _torch_version == "N/A":
         return False
@@ -1078,7 +1077,7 @@ def is_ninja_available() -> bool:
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
