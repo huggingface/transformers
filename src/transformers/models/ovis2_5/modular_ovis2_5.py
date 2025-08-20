@@ -13,22 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
 
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ..auto import AutoModel
+from ...utils import auto_docstring
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
-from ..ovis2.modeling_ovis2 import Ovis2Model, Ovis2VisionModel, Ovis2VisualEmbeddingTable, Ovis2ForConditionalGeneration, Ovis2ModelOutputWithPast
-from ..ovis2.modeling_ovis2 import Ovis2VisualEmbeddingTable, Ovis2ForConditionalGeneration
-from ..siglip2.modeling_siglip2 import Siglip2Encoder, Siglip2VisionEmbeddings, Siglip2VisionTransformer, Siglip2MLP, Siglip2Attention, Siglip2EncoderLayer
+from ..ovis2.configuration_ovis2 import Ovis2Config
+from ..ovis2.modeling_ovis2 import (
+    Ovis2ForConditionalGeneration,
+    Ovis2Model,
+    Ovis2VisionModel,
+    Ovis2VisualEmbeddingTable,
+)
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionRotaryEmbedding
-from ..configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
+from ..qwen3.configuration_qwen3 import Qwen3Config
+from ..siglip2.modeling_siglip2 import Siglip2Encoder, Siglip2VisionEmbeddings, Siglip2VisionTransformer
 
 
 class Ovis2_5ModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -39,13 +43,58 @@ class Ovis2_5CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     pass
 
 
-class Ovis2_5VisionConfig(Ovis2VisionConfig):
-    pass
+class Ovis2_5VisionConfig(PretrainedConfig):
+    model_type = "ovis2_5"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        intermediate_size=4096,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        num_channels=3,
+        num_patches=-1,
+        image_size=512,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        hidden_stride=2,
+        window_size=112,
+        fullatt_block_indexes=None,
+        temporal_patch_size=1,
+        preserve_original_pe=True,
+        use_rope=True,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.hidden_act = hidden_act
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_stride = hidden_stride
+        self.window_size = window_size
+        self.fullatt_block_indexes = fullatt_block_indexes
+        self.temporal_patch_size = temporal_patch_size
+        self.preserve_original_pe = preserve_original_pe
+        self.use_rope = use_rope
+
+
+class Ovis2_5TextConfig(Qwen3Config):
+    model_type = "ovis2_5_text"
 
 
 class Ovis2_5Config(Ovis2Config):
-    pass
-
+    model_type = "ovis2_5"
+    sub_configs = {"vision_config": Ovis2_5VisionConfig, "text_config": Ovis2_5TextConfig}
 
 
 class Ovis2_5VisionEmbeddings(Siglip2VisionEmbeddings):
@@ -57,27 +106,26 @@ class Ovis2_5VisionEmbeddings(Siglip2VisionEmbeddings):
         # siglip2 naflex
         if self.num_patches > 0:
             self.patch_embedding = nn.Linear(
-                    in_features=config.num_channels * self.patch_size * self.patch_size,
-                    out_features=self.embed_dim,
-                )
+                in_features=config.num_channels * self.patch_size * self.patch_size,
+                out_features=self.embed_dim,
+            )
             if self.preserve_original_pe:  # TODO: rename
                 self.position_embedding_size = int(self.num_patches**0.5)
         else:
             self.patch_embedding = nn.Conv2d(
-                    in_channels=config.num_channels,
-                    out_channels=self.embed_dim,
-                    kernel_size=self.patch_size,
-                    stride=self.patch_size,
-                    padding="valid",
-                )
+                in_channels=config.num_channels,
+                out_channels=self.embed_dim,
+                kernel_size=self.patch_size,
+                stride=self.patch_size,
+                padding="valid",
+            )
             if self.preserve_original_pe:
                 self.num_patches = (self.image_size // self.patch_size) ** 2
                 self.position_embedding_size = self.image_size // self.patch_size
 
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
-    def forward(self, pixel_values: torch.FloatTensor, 
-                grid_thws: Optional[torch.LongTensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, grid_thws: Optional[torch.LongTensor] = None) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
@@ -91,30 +139,33 @@ class Ovis2_5VisionEmbeddings(Siglip2VisionEmbeddings):
         if isinstance(self.patch_embedding, nn.Linear):
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         elif isinstance(self.patch_embedding, nn.Conv2d):
-            pixel_values = pixel_values.view(-1, self.config.num_channels * self.config.temporal_patch_size, self.patch_size,
-                   self.patch_size)
+            pixel_values = pixel_values.view(
+                -1, self.config.num_channels * self.config.temporal_patch_size, self.patch_size, self.patch_size
+            )
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
             patch_embeds = patch_embeds.reshape(-1, self.embed_dim)
-
 
         if self.preserve_original_pe:
             assert grid_thws is not None
             pos_embed_new = torch.zeros_like(patch_embeds)
             ori_h = ori_w = self.position_embedding_size
-            positional_embeddings = self.position_embedding.weight.reshape(
-                                self.position_embedding_size, self.position_embedding_size, -1
-                            ).unsqueeze(0).permute(0,3,1,2)
+            positional_embeddings = (
+                self.position_embedding.weight.reshape(self.position_embedding_size, self.position_embedding_size, -1)
+                .unsqueeze(0)
+                .permute(0, 3, 1, 2)
+            )
             # pos_embed = self.pos_embed.reshape(1, ori_h, ori_w, -1).permute(0, 3, 1, 2)
             cnt = 0
             for t, h, w in grid_thws:
                 thw = t * h * w
-                pe = F.interpolate(positional_embeddings, size=(h, w), mode='bicubic', align_corners=False)
+                pe = F.interpolate(positional_embeddings, size=(h, w), mode="bicubic", align_corners=False)
                 pe = pe.permute(0, 2, 3, 1).reshape(1, h * w, -1)
                 pe = pe[0].repeat(t, 1)
-                pe = pe.reshape(t, h // self.hidden_stride, self.hidden_stride, w // self.hidden_stride,
-                                self.hidden_stride, -1)
+                pe = pe.reshape(
+                    t, h // self.hidden_stride, self.hidden_stride, w // self.hidden_stride, self.hidden_stride, -1
+                )
                 pe = pe.permute(0, 1, 3, 2, 4, 5).reshape(thw, -1)
-                pos_embed_new[cnt:cnt + thw] = pe
+                pos_embed_new[cnt : cnt + thw] = pe
                 cnt += thw
             patch_embeds = patch_embeds + pos_embed_new
 
@@ -344,4 +395,4 @@ class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration, GenerationM
         return self.model.get_image_features(pixel_values=pixel_values)
 
 
-__all__ = ["Ovis2_5PreTrainedModel", "Ovis2_5Model", "Ovis2_5ForConditionalGeneration"]
+__all__ = ["Ovis2_5Config", "Ovis2_5PreTrainedModel", "Ovis2_5Model", "Ovis2_5ForConditionalGeneration"]
