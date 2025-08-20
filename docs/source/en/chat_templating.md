@@ -161,7 +161,7 @@ It can be confusing to manage multiple templates though, so we recommend using a
 
 It is important to set a chat template format that matches the template format a model was pretrained on, otherwise performance may suffer. Even if you’re training the model further, performance is best if the chat tokens are kept constant.
 
-But if you’re training a model from scratch or finetuning a model for chat, you have more options to select a template. For example, [ChatML](https://github.com/openai/openai-python/blob/release-v0.28.0/chatml.md) is a popular format that is flexbile enough to handle many use cases. It even includes support for [generation prompts](#add_generation_prompt), but it doesn’t add beginning-of-string (`BOS`) or end-of-string (`EOS`) tokens. If your model expects `BOS` and `EOS` tokens, set `add_special_tokens=True` and make sure to add them to your template.
+But if you’re training a model from scratch or finetuning a model for chat, you have more options to select a template. For example, [ChatML](https://github.com/openai/openai-python/blob/release-v0.28.0/chatml.md) is a popular format that is flexible enough to handle many use cases. It even includes support for [generation prompts](#add_generation_prompt), but it doesn’t add beginning-of-string (`BOS`) or end-of-string (`EOS`) tokens. If your model expects `BOS` and `EOS` tokens, set `add_special_tokens=True` and make sure to add them to your template.
 
 ```py
 {%- for message in messages %}

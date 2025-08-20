@@ -777,8 +777,8 @@ class Sam2PromptEncoder(nn.Module):
         # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = torch.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
 
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
+        # This is required for the ONNX export. The dtype, device need to be explicitly
+        # specified as otherwise torch.onnx.export interprets as double
         point_embedding = torch.where(
             labels[..., None] != -10,
             point_embedding,
@@ -1435,7 +1435,7 @@ class Sam2Model(Sam2PreTrainedModel):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
-            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            size, the number of boxes per image and the coordinates of the top left and bottom right point of the box.
             In the order (`x1`, `y1`, `x2`, `y2`):
 
             - `x1`: the x coordinate of the top left point of the input box

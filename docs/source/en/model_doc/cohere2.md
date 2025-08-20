@@ -74,7 +74,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -116,7 +116,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to("cuda")
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
 output = model.generate(
     input_ids,
     max_new_tokens=100,
