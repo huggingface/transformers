@@ -20,7 +20,7 @@ import torch.nn.functional as F
 
 from .cache_utils import Cache
 from .configuration_utils import PretrainedConfig
-from .utils import is_torch_xpu_available
+from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
 
@@ -38,6 +38,9 @@ _is_torch_xpu_available = is_torch_xpu_available()
 
 if _is_torch_greater_or_equal_than_2_6:
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
+
+
+logger = logging.get_logger(__name__)
 
 
 def and_masks(*mask_functions: list[Callable]) -> Callable:
@@ -99,6 +102,18 @@ def chunked_overlay(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     return inner_mask
 
 
+def _legacy_chunked_overlay(chunk_size: int) -> Callable:
+    """
+    Same as the above function, but do not correctly account for left padding tokens.
+    Only kept for compatibility with older torch versions (< 2.6).
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return kv_idx // chunk_size == q_idx // chunk_size
+
+    return inner_mask
+
+
 def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
     """
     This return the mask_function function to create a sliding window mask.
@@ -110,6 +125,8 @@ def chunked_causal_mask_function(chunk_size: int, left_padding: torch.Tensor) ->
     """
     This return the mask_function function to create a chunked attention mask.
     """
+    if not _is_torch_greater_or_equal_than_2_6:
+        return and_masks(_legacy_chunked_overlay(chunk_size), causal_mask_function)
     return and_masks(chunked_overlay(chunk_size, left_padding), causal_mask_function)
 
 
@@ -980,6 +997,18 @@ def create_chunked_causal_mask(
         left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
     else:
         left_padding_tokens = torch.zeros(batch_size, device=cache_position.device, dtype=int)
+    # Raise a warning for older versions if the problematic left-padding situation arises
+    if (
+        not _is_torch_greater_or_equal_than_2_6
+        and config._attn_implementation != "flex_attention"
+        and kv_length > chunk_size
+        and (left_padding_tokens > 0).any()
+    ):
+        logger.warning_once(
+            "Due to limitations of your current torch version, we cannot correctly account for the left-padding "
+            "when computing the chunked attention pattern. This will lead to a wrong attention mask for the padded "
+            "sequences. Behavior will be undefined. Please upgrade to `torch>=2.6` to solve this issue."
+        )
     mask_factory_function = chunked_causal_mask_function(chunk_size, left_padding_tokens)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
