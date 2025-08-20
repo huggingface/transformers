@@ -1000,7 +1000,6 @@ def create_chunked_causal_mask(
     # Raise a warning for older versions if the problematic left-padding situation arises
     if (
         not _is_torch_greater_or_equal_than_2_6
-        and config._attn_implementation != "flex_attention"
         and kv_length + kv_offset > chunk_size
         and (left_padding_tokens > 0).any()
     ):
