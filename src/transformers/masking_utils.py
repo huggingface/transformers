@@ -994,8 +994,7 @@ def create_chunked_causal_mask(
     # to start the chunk from the actual start of the sequence for the padded sequence
     if attention_mask is not None:
         # Only count the left padding tokens, not all of them
-        padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
-        left_padding_tokens = (padding_mask.cumsum(dim=-1) == torch.zeros_like(padding_mask)).sum(dim=-1)
+        left_padding_tokens = (attention_mask.cumsum(dim=-1) == torch.zeros_like(attention_mask)).sum(dim=-1)
     else:
         left_padding_tokens = torch.zeros(batch_size, device=cache_position.device, dtype=int)
     # Raise a warning for older versions if the problematic left-padding situation arises
