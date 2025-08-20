@@ -159,7 +159,6 @@ from .utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
-    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_xla_available,
@@ -622,15 +621,6 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
-
-
-def require_torch_sdpa(test_case):
-    """
-    Decorator marking a test that requires PyTorch's SDPA.
-
-    These tests are skipped when requirements are not met (torch version).
-    """
-    return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
 def require_read_token(test_case):
