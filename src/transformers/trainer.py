@@ -3925,11 +3925,6 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            kwargs = {}
-            # For LOMO optimizers you need to explicitly use the learnign rate
-            if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
-                kwargs["learning_rate"] = self._get_learning_rate()
-
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
                 # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
