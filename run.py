@@ -1,4 +1,5 @@
 import os
+import sys
 
 start = int(os.environ.get("START"))
 end = int(os.environ.get("END"))
@@ -11,16 +12,20 @@ with open("test_names.txt") as fp:
     test_names = fp.read().strip().split("\n")
 
 print(len(test_names))
+sys.stdout.flush()
 
 # results saved to here
 final_report_name = "summary_short.txt"
 os.system(f"rm -rf {final_report_name}")
 os.system(f'echo "" > {final_report_name}')
+sys.stdout.flush()
 
 # run the tests
 for idx, test in enumerate(test_names[start:end]):
 
     print(f"test {idx}: {test}")
+    sys.stdout.flush()
+    sys.stdout.flush()
 
     cmd = f"HF_HOME=/mnt/cache RUN_SLOW=1 python3 -m pytest -v {test} --make-reports=tests_fa2"
     os.system(cmd)
