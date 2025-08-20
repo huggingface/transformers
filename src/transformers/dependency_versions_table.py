@@ -105,7 +105,5 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
-    "opentelemetry-exporter-otlp": "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk": "opentelemetry-sdk",
     "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
 }
