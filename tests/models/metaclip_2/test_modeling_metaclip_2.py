@@ -284,13 +284,13 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2VisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2VisionModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "visual_projection"))
@@ -459,13 +459,13 @@ class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2TextModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
         self.assertTrue(hasattr(model, "text_projection"))
@@ -698,7 +698,7 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -899,7 +899,7 @@ def prepare_img():
 class MetaClip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "nielsr/metaclip-2-huge-worldwide"
+        model_name = "facebook/metaclip-2-worldwide-huge-quickgelu"
         model = MetaClip2Model.from_pretrained(model_name, attn_implementation="sdpa").to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 

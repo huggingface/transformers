@@ -48,7 +48,7 @@ from transformers import pipeline
 
 clip = pipeline(
    task="zero-shot-image-classification",
-   model="nielsr/metaclip-2-huge-worldwide",
+   model="facebook/metaclip-2-worldwide-huge-quickgelu",
    torch_dtype=torch.bfloat16,
    device=0
 )
@@ -65,8 +65,8 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("nielsr/metaclip-2-huge-worldwide", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
-processor = AutoProcessor.from_pretrained("nielsr/metaclip-2-huge-worldwide")
+model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
