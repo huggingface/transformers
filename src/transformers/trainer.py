@@ -4269,9 +4269,10 @@ class Trainer:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
 
-        # Handle context parallelism state dict properly
-        if state_dict is None and self.is_cp_enabled:
-            # Use accelerator.get_state_dict() for proper gathering when context parallelism is enabled
+        # Defer to accelerate's get_state_dict when using parallelism configurations
+        # that require special state dict handling (e.g., context parallelism, tensor parallelism)
+        if state_dict is None and self.parallelism_config is not None:
+            # This handles context parallelism, tensor parallelism, and other distributed scenarios
             state_dict = self.accelerator.get_state_dict(self.model)
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
