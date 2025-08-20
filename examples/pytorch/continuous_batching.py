@@ -2,6 +2,7 @@ import time
 import argparse
 import datasets
 import torch
+import json
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -13,6 +14,7 @@ def batch_generate(
     generation_config: GenerationConfig,
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0, # -1: no display, 0: display stats, >0: display inputs and some outputs
+    output_file: str = None,
 ) -> tuple[float, float]:
 
     # Actual batch generation
@@ -29,15 +31,17 @@ def batch_generate(
 
     # Decode outputs
     token_count = 0
+    data = []
     for i, request in enumerate(batch_outputs):
         input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
+        data.append({"input": input_text})
         try:
             output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
             token_count += len(batch_outputs[request].generated_tokens[1:])
+            data[-1]["output"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
-            token_count += len(batch_outputs[request].generated_tokens[1:])
-            output_text = tokenizer.decode(batch_outputs[request].generated_tokens[1:], skip_special_tokens=False)
+            data[-1]["output"] = "__ERROR__"
         if i < displayed_samples:
             if len(output_text) > 0:
                 print("-" * 20)
@@ -47,6 +51,12 @@ def batch_generate(
                 print(f"{request} Input:  {input_text}")
                 print("[WARN]")
                 print(f"{request} Output was empty!")
+
+    # If an output file is provided, save the reordered data to it
+    data.sort(key=lambda x: x["input"])
+    if output_file is not None:
+        with open(output_file, "w") as f:
+            json.dump(data, f, indent=4)
 
     # Compute stats and maybe print them
     gen_time = end_time_simple - start_time_simple
@@ -62,10 +72,16 @@ if __name__ == "__main__":
 
     # Parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attn-implementation", type=str, default="paged_attention|kernels-community/flash-attn")
-    parser.add_argument("--matmul-precision", type=str, default="high") # set to "none" to disable
+    parser.add_argument("--num-blocks", type=int, default=None)
+    parser.add_argument("--max-batch-tokens", type=int, default=None)
+
+    parser.add_argument("--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation")
+    parser.add_argument("--matmul-precision", "-mp", type=str, default="high") # set to "none" to disable
+    parser.add_argument("--use-cuda-graph", action="store_true", default=False)
+
     parser.add_argument("--samples", type=int, default=500)
-    parser.add_argument("--use-cuda-graph", action="store_true")
+    parser.add_argument("--displayed", type=int, default=1, help="Number of samples to display")
+    parser.add_argument("--output-file", type=str, default=None)
     args = parser.parse_args()
 
     # Set matmul precision
@@ -76,12 +92,12 @@ if __name__ == "__main__":
     model_id = "meta-llama/Llama-3.2-3b-Instruct"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        attn_implementation=args.attn_implementation,
+        attn_implementation=args.attn,
         dtype=torch.bfloat16,
         torch_dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
-    model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
+    # model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -97,6 +113,8 @@ if __name__ == "__main__":
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=False,
+        num_blocks=args.num_blocks,
+        max_batch_tokens=args.max_batch_tokens,
     )
 
     # Run warmup batch generation
@@ -114,48 +132,16 @@ if __name__ == "__main__":
         simple_batch_inputs,
         generation_config,
         tokenizer,
-        displayed_samples=5,
+        displayed_samples=args.displayed,
+        output_file=args.output_file,
     )
 
 
-# TODO: remove this or incorporate it into the script above
-
-# train_dataset = train_dataset.select(range(5))  # Use only 5 examples for the simple version
-
-# tokenized_test_prompts = tokenizer(_TEST_PROMPTS, padding=True, padding_side="left", truncation=True, max_length=512)
-# simple_batch_inputs = list(tokenized_test_prompts["input_ids"])
-
-# def tokenize_function(examples):
-#     # Truncate to avoid overly long prompts exceeding max context length
-#     return tokenizer(examples["question"], padding=True, truncation=True, max_length=512)
+# python examples/pytorch/continuous_batching.py --attn sdpa_paged --matmul-precision none --samples 50 --displayed 0
+# Using calculated self.num_blocks = 4096, self.block_size = 32, self.max_batch_tokens = 2048
+# CB generation took: 18.80 seconds for 13775 tokens. 732.74tok/s
 
 
-# tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
-# simple_batch_inputs = [item["input_ids"] for item in tokenized_datasets]
-
-
-# model.config.attn_implementation = "sdpa"
-# start_time_simple = time.time()
-# batch_size = 64
-# full_outputs = []
-# from tqdm import tqdm
-
-# for i in tqdm(range(0, len(simple_batch_inputs)-batch_size, batch_size)):
-#     outputs = model.generate(
-#         torch.tensor(simple_batch_inputs[i:i+batch_size], device=model.device),
-#         generation_config=GenerationConfig(
-#             max_new_tokens=16, eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.pad_token_id
-#         ),
-#     )
-#     full_outputs.extend(outputs.tolist())
-
-# end_time_simple = time.time()
-# print(f"\nSimple batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
-
-# print("\nResults from simple generate_batch:")
-# for i, request in enumerate(full_outputs):
-#     output_text = tokenizer.decode(request, skip_special_tokens=False)
-#     print("-" * 20)
-#     print(f"  Output: {output_text}")
-# print("-" * 20)
-# print("--- Finished Simple Batch Generation Example ---\n\n")
+# python examples/pytorch/continuous_batching.py --attn sdpa_paged --matmul-precision none --samples 100 --displayed 1
+# Setting up static tensors with T = 4096, max_token_budget = 524288, 139538202624 bytes available
+# CB generation took: 29.53 seconds for 26384 tokens. 893.41tok/s
