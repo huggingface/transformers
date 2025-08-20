@@ -21,7 +21,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
-from typing import Optional, Union
+from typing import Any, Optional, TypeVar, Union
 
 import torch
 import torch.nn as nn
@@ -33,6 +33,7 @@ from ..generation.configuration_utils import GenerationConfig
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils.logging import logging
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+from .cb.memory_management import PagedAttentionMemoryHandler
 
 
 class RequestStatus(Enum):
@@ -60,6 +61,9 @@ class GenerationOutput:
         generated_tokens (list[int]): The generated tokens.
         logprobs (list[float]): The log probabilities of the generated tokens.
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
+        status (RequestStatus): The status of the request.
+        created_time (float): The time the request was created.
+        next_token (Optional[int]): The next token to be generated.
     """
 
     request_id: str
@@ -77,24 +81,36 @@ class RequestState:
     """Tracks the state of a generation request through its lifecycle.
 
     Attributes:
-        status (RequestStatus): can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
+        request_id (str): The ID of the generation request.
+        full_prompt_ids (list[int] | None): The tokens IDs of the full prompt.
+        prompt_ids (list[int] | None): The tokens IDs currently being processed.
+        remaining_prompt_ids (list[int]): The tokens IDs remaining to be processed (for split requests).
+        static_outputs (list[int]): The generated tokens.
+        allocated_blocks (list[int]): The identifiers of the allocated blocks to the request.
+        position_offset (int): The current position in the sequence for position_ids.
+        status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
+        max_new_tokens (int): The maximum number of new tokens to generate.
+        eos_token_id (int): The ID of the end-of-sequence token.
+        created_time (float): The time the request was created.
+        error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
+        next_token (Optional[str]): The next token to be generated.
     """
 
     # Required fields
     request_id: str
-    prompt_ids: Optional[list[int]] = None  # the one being processed
-    full_prompt_ids: Optional[list[int]] = None  # the full prompt
-    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests
-    static_outputs: list[int] = field(default_factory=list)
-    allocated_blocks: list[int] = field(default_factory=list)
+    full_prompt_ids: Optional[list[int]] = None  # Full initial prompt
+    prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed (initial + generated)
+    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
+    static_outputs: list[int] = field(default_factory=list)  # Generated tokens
+    allocated_blocks: list[int] = field(default_factory=list)  # Block IDs allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
-    status: RequestStatus = RequestStatus.PENDING
-    max_new_tokens: int = 20
-    eos_token_id: int = -1
-    created_time: float = field(default_factory=time.time)
-    error: Optional[str] = None
-    next_token: Optional[str] = None
+    status: RequestStatus = RequestStatus.PENDING  # Status of the request
+    max_new_tokens: int = 20  # Maximum number of new tokens to generate
+    eos_token_id: int = -1  # ID of the end-of-sequence token
+    created_time: float = field(default_factory=time.time)  # Time the request was created
+    error: Optional[str] = None  # Error message if the request failed
+    next_token: Optional[str] = None  # Next token to be generated
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -104,6 +120,7 @@ class RequestState:
         """Get the number of tokens generated so far."""
         return len(self.static_outputs)
 
+    # TODO: this logic seems one token off, check it out
     @traced
     def update_with_token(self, token_id: int) -> bool:
         """Update the request with a newly generated token and check for completion.
@@ -147,6 +164,12 @@ class RequestState:
         )
 
 
+T = TypeVar("T")
+def getattr_no_none(obj: Any, attr: str, default: T) -> T:
+    x = getattr(obj, attr, None)
+    return x if x is not None else default
+
+
 @attach_tracer()
 class PagedAttentionCache:
     def __init__(
@@ -169,58 +192,54 @@ class PagedAttentionCache:
             layer_device_map: Optional mapping of layer indices to devices
             initial_prompt_shapes: Optional sample prompts to help calculate optimal cache size
         """
-        # Extract model dimensions
-        self.num_key_value_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-        num_key_value_heads = self.num_key_value_heads
-        if tp_size is not None and tp_size > 1:
-            if num_key_value_heads % tp_size != 0:
-                raise ValueError(
-                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
-                )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            # self.num_key_value_heads //= tp_size
-
-        self.head_dim = (
-            config.head_dim
-            if hasattr(config, "head_dim") and config.head_dim is not None
-            else config.hidden_size // config.num_attention_heads
-        )
-        self.num_hidden_layers = config.num_hidden_layers
-
-        # Calculate optimal block size and number if not provided
-        num_blocks = getattr(generation_config, "num_blocks", 1024)
-        block_size = getattr(generation_config, "block_size", 32)
-        max_memory_percent = getattr(generation_config, "max_memory", 0.9)
-        max_batch_tokens = getattr(generation_config, "max_batch_tokens", 256)
-        if num_blocks is None or max_batch_tokens is None:
-            num_blocks, max_batch_tokens = compute_optimal_blocks(
-                generation_config.max_new_tokens,
-                block_size=block_size,
-                head_dim=self.head_dim,
-                num_layers=self.num_hidden_layers,
-                num_heads=self.num_key_value_heads,
-                max_memory_percent=max_memory_percent,
-                dtype=dtype,
-                num_blocks=num_blocks,
-            )
-        logger.warning(
-            f"Using calculated num_blocks={num_blocks}, block_size={block_size}, max concurrent requests {max_batch_tokens}"
-        )
-        self.max_batch_tokens = max_batch_tokens
-        self.block_size = block_size
-        self.num_blocks = num_blocks
-        self.cache_shape = (num_key_value_heads, num_blocks, self.block_size, self.head_dim)
-
         self.dtype = dtype
         self.device = device
 
+        # Extract model dimensions
+        self.num_key_value_heads: int = getattr_no_none(config, "num_key_value_heads", config.num_attention_heads)
+        self.head_dim: int = getattr_no_none(config, "head_dim", config.hidden_size // config.num_attention_heads)
+
+        self.num_hidden_layers = config.num_hidden_layers
+        self.block_size = getattr(generation_config, "block_size", 32)
+
+        # Handle TP
+        if tp_size is not None and tp_size > 1:
+            if self.num_key_value_heads % tp_size != 0:
+                raise ValueError(
+                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
+                )
+            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
+            # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
+
+        # Infer number of blocks and max batch tokens
+        memory_handler = PagedAttentionMemoryHandler(
+            block_size=self.block_size,
+            head_dim=self.head_dim,
+            num_heads=self.num_key_value_heads,
+            num_layers=self.num_hidden_layers,
+            hidden_size=config.hidden_size,
+            vocab_size=config.vocab_size,
+        )
+        num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
+            num_blocks=getattr(generation_config, "num_blocks", None),
+            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
+            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
+            cache_dtype=self.dtype,
+        )
+
+        # Add the infered attributes to the class
+        self.num_blocks = num_blocks
+        self.max_batch_tokens = max_batch_tokens
+        logger.warning(f"Using calculated {self.num_blocks = }, {self.block_size = }, {self.max_batch_tokens = }")
+        logger.warning(f"Using {self.num_key_value_heads = }, {self.head_dim = }, {self.num_hidden_layers = }")
+
+        # Initialize the cache
+        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         for idx in range(config.num_hidden_layers):
+            available_memory = memory_handler.get_available_memory() // 1024
+            logger.warning(f"Initializing cache for layer {idx}, available memory: {available_memory} kb")
             layer_device = layer_device_map[idx] if layer_device_map is not None else device
             new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
@@ -603,30 +622,6 @@ class PrefillFirstScheduler(Scheduler):
                 del self.active_requests[request_id]
 
 
-def get_device_and_memory():
-    # Select best available device
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        total_memory = torch.cuda.get_device_properties(device).total_memory
-        reserved_memory = torch.cuda.memory_reserved(device)
-        allocated_memory = torch.cuda.memory_allocated(device)
-
-    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - torch.mps.recommended_max_memory()
-        reserved_memory = 0  # MPS does not track reserved separately
-
-    else:
-        device = torch.device("cpu")
-        total_memory = None
-        reserved_memory = 0
-        allocated_memory = 0
-
-    return device, total_memory, reserved_memory, allocated_memory
-
-
 @traced(standalone=True)
 def compute_optimal_blocks(
     max_num_tokens,
@@ -638,7 +633,7 @@ def compute_optimal_blocks(
     num_blocks=None,
     dtype=torch.float16,
 ):
-    device, total, reserved, allocated = get_device_and_memory()
+    device, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
     available_memory = int((total - max(allocated, reserved)) * max_memory_percent)
 
     dtype_size = torch.tensor([], dtype=dtype).element_size()
@@ -674,36 +669,6 @@ class PagedAttentionArgs:
     block_tables: dict[str, list[int]]
     cache: PagedAttentionCache
     use_cache: bool = False
-
-
-@traced
-def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
-    # Number of documents
-    valid_docs_q = cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1]
-    valid_docs_k = cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1]
-    num_valid_docs = min(valid_docs_q.sum(), valid_docs_k.sum())
-
-    # Trim to valid docs
-    cumulative_seqlens_q = cumulative_seqlens_q[: num_valid_docs + 1]
-    cumulative_seqlens_k = cumulative_seqlens_k[: num_valid_docs + 1]
-
-    total_q = cumulative_seqlens_q[-1]
-    total_k = cumulative_seqlens_k[-1]
-
-    q_indices = torch.arange(total_q, device=cumulative_seqlens_q.device)
-    k_indices = torch.arange(total_k, device=cumulative_seqlens_k.device)
-
-    q_doc_ids = torch.bucketize(q_indices, cumulative_seqlens_q[1:], right=True)
-    k_doc_ids = torch.bucketize(k_indices, cumulative_seqlens_k[1:], right=False)
-    doc_mask = q_doc_ids[:, None] == k_doc_ids[None, :]
-    # apply causal mask where no decoding (same nb of q than k)
-
-    is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
-    apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:, None] == k_doc_ids
-    # TODO don't apply on prefill splitting
-    causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
-    doc_mask.masked_fill_((apply_causal & causal_mask), False)
-    return doc_mask
 
 
 # Continuous Batch Processor (Internal Logic)
@@ -763,49 +728,68 @@ class ContinuousBatchProcessor:
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
+
+        available_memory = PagedAttentionMemoryHandler.get_available_memory()
+        print(f"Setting up static tensors with {T = }, {max_token_budget = }, {available_memory} bytes available")
+
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.zeros((1, T), **tensor_metadata)
         self.position_ids = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask = torch.zeros(
-            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        self.attention_mask = torch.full(
+            (1, 1, T, max_token_budget),
+            torch.finfo(self.model_dtype).min,
+            dtype=self.model_dtype,
+            device=self.model_device
         )
         self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.zeros((T,), **tensor_metadata)
-        self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
+        self.write_index = torch.full((T,), -1, **tensor_metadata)
+        self.read_index = torch.full((max_token_budget,), -1, **tensor_metadata)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
         self.output_ids = torch.full((1, T), -1, **tensor_metadata)
+        torch.cuda.synchronize()
+        available_memory = PagedAttentionMemoryHandler.get_available_memory()
+        print("Allocated static tensors,", available_memory, "bytes available")
+        # self.actual_tokens = T
+        # self.cache_used = max_token_budget
+        self.actual_tokens = 0
+        self.cache_used = 0
 
     @traced
     @torch.no_grad()
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
-        self.input_ids.zero_()
-        self.position_ids.zero_()
-        self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
-        self.cumulative_seqlens_q.zero_()
-        self.cumulative_seqlens_k.zero_()
-        self.write_index.fill_(-1)
-        self.read_index.fill_(-1)
-        self.logits_indices.fill_(-1)
+        t = self.actual_tokens
+        c = self.cache_used
+        self.input_ids[:, :t].zero_()
+        self.position_ids[:, :t].zero_()
+        self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
+        self.cumulative_seqlens_q[:t+1].zero_()
+        self.cumulative_seqlens_k[:t+1].zero_()
+        self.write_index[:t].fill_(-1)
+        self.read_index[:c].fill_(-1)
+        self.logits_indices[:t].fill_(-1)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
-        self.output_ids.zero_()
+        self.output_ids[:, :t].fill_(-1)
+
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # torch.set_printoptions(threshold=100000,linewidth=10000)
+        t = self.actual_tokens
+        c = self.attention_mask.size(-1) # TODO: figure out why this does not work self.cache_used
         return {
-            "input_ids": self.input_ids,
-            "position_ids": self.position_ids,
-            "attention_mask": self.attention_mask,
-            "cu_seq_lens_q": self.cumulative_seqlens_q,
-            "cu_seq_lens_k": self.cumulative_seqlens_k,
-            "write_index": self.write_index,
-            "read_index": self.read_index,
-            "logits_indices": self.logits_indices,
+            "input_ids": self.input_ids[:, :t],
+            "position_ids": self.position_ids[:, :t],
+            "attention_mask": self.attention_mask[:, :, :t, :c], # NOTE: this is probably not used for paged attention
+            "cu_seq_lens_q": self.cumulative_seqlens_q[:t+1],
+            "cu_seq_lens_k": self.cumulative_seqlens_k[:t+1],
+            "write_index": self.write_index[:t],
+            "read_index": self.read_index[:c],
+            "logits_indices": self.logits_indices[:t],
             "max_seqlen_q": self.max_seqlen_q,
             "max_seqlen_k": self.max_seqlen_k,
             "block_tables": self.cache._block_tables,
@@ -934,6 +918,10 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+
+        self.actual_tokens = len(input_ids)
+        self.cache_used = len(read_index)
+
         min_value = torch.finfo(self.model_dtype).min
         if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
             for i in range(len(cumulative_seqlens_q) - 1):
@@ -1249,7 +1237,8 @@ class ContinuousBatchingManager:
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
         else:
             next_tokens = torch.argmax(probs, dim=-1)
-        batch_processor.output_ids.copy_(next_tokens)
+        tokens = batch_processor.actual_tokens
+        batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
         """Main processing loop running in the background thread."""
@@ -1305,7 +1294,7 @@ class ContinuousBatchingManager:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
-        device, total, reserved, allocated = get_device_and_memory()
+        device, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
         logger.info(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if is_first:
