@@ -34,15 +34,15 @@ for idx, test in enumerate(test_names[start:end]):
         with open(report_name, "r") as fp:
             report = fp.read().strip()
         for line in report.split("\n"):
-            if line.startswith(("FAILED", "PASSED")):
+            if line.startswith(("FAILED", "PASSED", "ERROR", "SKIPPED")):
 
                 with open(final_report_name, "r") as fp:
                     saved_report = fp.read()
                     saved_tests = saved_report.strip().split("\n")
 
-                if line.startswith(("FAILED",)):
+                if line.startswith(("FAILED", "ERROR")):
                     saved_tests = [line] + saved_tests
-                elif line.startswith(("PASSED",)):
+                elif line.startswith(("PASSED", "SKIPPED")):
                     saved_tests = saved_tests + [line]
 
                 saved_report = "\n".join(saved_tests)
