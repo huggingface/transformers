@@ -79,6 +79,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = [
+    "Mxfp4Config",
     "Exaone4Config",
     "SmolLM3Config",
     "Gemma3nVisionConfig",
@@ -168,6 +169,8 @@ OBJECTS_TO_IGNORE = [
     "DetrConfig",
     "DetrImageProcessor",
     "DinatModel",
+    "DINOv3ConvNextConfig",
+    "DINOv3ViTConfig",
     "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
@@ -822,6 +825,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     except OSError:
         source = []
 
+    # Find the line where the docstring starts
     idx = 0
     while idx < len(source) and '"""' not in source[idx]:
         idx += 1
@@ -829,9 +833,11 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     ignore_order = False
     if idx < len(source):
         line_before_docstring = source[idx - 1]
+        # Match '# no-format' (allowing surrounding whitespaces)
         if re.search(r"^\s*#\s*no-format\s*$", line_before_docstring):
-            # This object is ignored
+            # This object is ignored by the auto-docstring tool
             return
+        # Match '# ignore-order' (allowing surrounding whitespaces)
         elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
             ignore_order = True
 
@@ -958,14 +964,15 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         idx -= 1
     idx += 1
 
-    if "".join(source[start_idx:idx])[:-1] != old_doc_args:
+    # `old_doc_args` is built from `obj.__doc__`, which may have
+    # different indentation than the raw source from `inspect.getsourcelines`.
+    # We use `inspect.cleandoc` to remove indentation uniformly from both
+    # strings before comparing them.
+    source_args_as_str = "".join(source[start_idx:idx])
+    if inspect.cleandoc(source_args_as_str) != inspect.cleandoc(old_doc_args):
         # Args are not fully defined in the docstring of this object
-        # This can happen due to a mismatch in indentation calculation where the docstring parsing
-        # in match_docstring_with_signature uses obj.__doc__.split("\n") while here we use
-        # inspect.getsourcelines(obj) which can have different line endings or indentation.
-        # See https://github.com/huggingface/transformers/pull/38915/files#r2200675302 for more details.
         obj_file = find_source_file(obj)
-        actual_args_section = "".join(source[start_idx:idx])[:-1]
+        actual_args_section = source_args_as_str.rstrip()
         raise ValueError(
             f"Cannot fix docstring of {obj.__name__} in {obj_file} because the argument section in the source code "
             f"does not match the expected format. This usually happens when:\n"
@@ -982,6 +989,10 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     # Replace content
     lines = content.split("\n")
+    prev_line_indentation = find_indent(lines[line_number + start_idx - 2])
+    # Now increase the indentation of every line in new_doc_args by prev_line_indentation
+    new_doc_args = "\n".join([f"{' ' * prev_line_indentation}{line}" for line in new_doc_args.split("\n")])
+
     lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-27 and added to Hugging Face Transformers on 2025-05-07.*
 
 # Csm
 
@@ -21,7 +22,7 @@ rendered properly in your Markdown viewer.
 The Conversational Speech Model (CSM) is the first open-source contextual text-to-speech model [released by Sesame](https://www.sesame.com/research/crossing_the_uncanny_valley_of_voice). It is designed to generate natural-sounding speech with or without conversational context. This context typically consists of multi-turn dialogue between speakers, represented as sequences of text and corresponding spoken audio.
 
 **Model Architecture:**
-CSM is composed of two LLaMA-style auto-regressive transformer decoders: a backbone decoder that predicts the first codebook token and a depth decoder that generates the remaining tokens. It uses the pretrained codec model [Mimi](./mimi.md), introduced by Kyutai, to encode speech into discrete codebook tokens and decode them back into audio.
+CSM is composed of two LLaMA-style auto-regressive transformer decoders: a backbone decoder that predicts the first codebook token and a depth decoder that generates the remaining tokens. It uses the pretrained codec model [Mimi](./mimi), introduced by Kyutai, to encode speech into discrete codebook tokens and decode them back into audio.
 
 The original csm-1b checkpoint is available under the [Sesame](https://huggingface.co/sesame/csm-1b) organization on Hugging Face.
 
@@ -37,10 +38,10 @@ CSM can be used to simply generate speech from a text prompt:
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -71,11 +72,11 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -116,11 +117,11 @@ CSM supports batched inference!
 
 ```python
 import torch
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -305,11 +306,11 @@ print("="*50)
 CSM Transformers integration supports training!
 
 ```python
-from transformers import CsmForConditionalGeneration, AutoProcessor
+from transformers import CsmForConditionalGeneration, AutoProcessor, infer_device
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = "cuda"
+device = infer_device()
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)

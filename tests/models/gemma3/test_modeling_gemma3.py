@@ -500,13 +500,15 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water in the background. It looks like a lovely,'],
                 ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like'],
+                ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like'],
                 ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant coastline in the background. It looks'],
             }
         )  # fmt: skip
@@ -544,7 +546,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -558,6 +561,11 @@ class Gemma3IntegrationTest(unittest.TestCase):
                     [
                         'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like',
                         "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
+                    ],
+                ("rocm", (9, 4)):
+                    [
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
                     ],
                 ("rocm", (9, 5)):
                     [
@@ -593,7 +601,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
@@ -602,6 +611,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There are clouds in the blue sky above.'],
                 ("cuda", 7): [],
                 ("cuda", 8): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
+                ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"]
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -647,7 +657,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
         EXPECTED_TEXTS = Expectations(
@@ -659,6 +670,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("cuda", 7): [],
                 ("cuda", 8): [
                     "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the",
+                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
+                ],
+                ("rocm", (9, 4)) : [
+                    "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background",
                     'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
                 ],
                 ("rocm", (9, 5)) : [
@@ -697,13 +712,15 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
                 ("cuda", 7): [],
                 ("cuda", 8): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"],
+                ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -717,7 +734,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -725,6 +743,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("xpu", 3): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
                 ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("rocm", (9, 4)): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
                 ("rocm", (9, 5)): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip
@@ -750,7 +769,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -790,12 +810,16 @@ class Gemma3IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        # cache_implementation="hybrid" an in the original transformers implementation
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="hybrid")[
+            :, input_size:
+        ]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
+    @pytest.mark.torch_export_test
     def test_export_text_only_with_hybrid_cache(self):
         if not is_torch_greater_or_equal("2.6.0"):
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
@@ -809,7 +833,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         # Export + HybridCache
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         logging.info(f"\nExported program: {exported_program}")
 
         # Test generation with the exported model
@@ -828,9 +855,44 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 **input_text,
                 max_new_tokens=max_new_tokens_to_generate,
                 do_sample=False,  # Use greedy decoding to match the exported model
+                cache_implementation="hybrid",
             )
 
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
         self.assertEqual(export_generated_text, eager_generated_text)
+
+    def test_dynamic_sliding_window_is_default(self):
+        """
+        Test that the dynamic sliding window cache (added in #40039) is the default cache implementation for Gemma3
+        models, despite the fact that Hub checkpoints may have `cache_implementation="hybrid"` (static sliding window).
+        """
+        model_id = "google/gemma-3-1b-it"
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        # the default cache is static sliding window
+        self.assertEqual(model.config.cache_implementation, "hybrid")
+        self.assertEqual(model.generation_config.cache_implementation, "hybrid")
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        prompt = "What is the capital of France?"
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        foward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+
+        generate_outputs = model.generate(
+            **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True
+        )
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+
+        # If we manually specify the cache implementation = "hybrid", it will use the static sliding window cache
+        generate_outputs = model.generate(
+            **model_inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            cache_implementation="hybrid",
+        )
+        self.assertNotIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
