@@ -20,7 +20,6 @@ from ..cache_utils import (
     DynamicLayer,
     DynamicSlidingWindowLayer,
     EncoderDecoderCache,
-    HybridCache,
     StaticCache,
 )
 from ..generation.configuration_utils import GenerationConfig
@@ -36,9 +35,6 @@ from ..pytorch_utils import (
     is_torch_greater_or_equal_than_2_3,
     is_torch_greater_or_equal_than_2_6,
 )
-
-
-# Add this to src/transformers/integrations/executorch.py
 
 
 class TorchExportableModuleForVLM:
@@ -207,7 +203,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         model: PreTrainedModel,
     ):
         """
-        Initializes the exportable module with `HybridCache`.
+        Initializes the exportable module.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
@@ -636,7 +632,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
-    specifically for decoder-only LM to `HybridCache`. This module ensures that the
+    specifically for decoder-only LM to hybrid `StaticCache`. This module ensures that the
     exported model is compatible with further lowering and execution in `ExecuTorch`.
     """
 
@@ -645,13 +641,13 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         model: PreTrainedModel,
     ):
         """
-        Initializes the exportable module with `HybridCache`.
+        Initializes the exportable module.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
 
         Raises:
-            AssertionError: If the model doesn't have the expected configuration for HybridCache.
+            AssertionError: If the model doesn't have the expected configuration for an hybrid StaticCache.
         """
         super().__init__()
         self.model = model
@@ -676,8 +672,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         if not config.use_cache:
             raise AssertionError("Model must have caching enabled.")
 
-        # Initialize the HybridCache
-        self.cache = HybridCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        # Initialize the cache
+        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         max_batch_size = generation_config.cache_config.get("batch_size")
