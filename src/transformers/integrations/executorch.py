@@ -659,16 +659,25 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
                 "The model must have a generation config to be exported with static caching. "
                 "Please set `generation_config` in `model`."
             )
-        if "batch_size" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a batch_size in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"batch_size": 1, ...} ...)'
-            )
-        if "max_cache_len" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a max_cache_len in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"max_cache_len": 4096, ...} ...)'
-            )
+        if generation_config.cache_config is None:
+            logging.warning("The model has no cache_config, using default cache_config.")
+            max_batch_size = 1
+            max_cache_len = 4096
+            device = self.model.device
+        else:
+            max_batch_size = generation_config.cache_config.get("batch_size", None)
+            if max_batch_size is None:
+                logging.warning("The model's cache_config has no attribute batch_size, using 1 as default.")
+                max_batch_size = 1
+            max_cache_len = generation_config.cache_config.get("max_cache_len", None)
+            if max_cache_len is None:
+                logging.warning("The model's cache_config has no attribute max_cache_len, using 4096 as default.")
+                max_cache_len = 4096
+            device = generation_config.cache_config.get("device", None)
+            if device is None:
+                logging.warning("The model's cache_config has no attribute device, using model.device as default.")
+                device = self.model.device
+
         if not config.use_cache:
             raise AssertionError("Model must have caching enabled.")
 
@@ -676,8 +685,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        max_batch_size = generation_config.cache_config.get("batch_size")
-        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.cache.early_initialization(max_batch_size, num_heads, head_dim, dtype, device)
