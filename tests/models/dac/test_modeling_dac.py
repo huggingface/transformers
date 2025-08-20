@@ -376,12 +376,14 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
 
+# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
     norm = np.linalg.norm(arr)
     normalized_arr = arr / norm
     return normalized_arr
 
 
+# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
     arr1_np = arr1.cpu().numpy().squeeze()
     arr2_np = arr2.cpu().numpy().squeeze()
