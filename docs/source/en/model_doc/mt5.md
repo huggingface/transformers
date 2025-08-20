@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-22 and added to Hugging Face Transformers on 2020-11-17.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -72,7 +73,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
 This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
 Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -114,7 +115,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
 This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
 Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))

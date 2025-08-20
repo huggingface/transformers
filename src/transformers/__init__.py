@@ -380,7 +380,6 @@ else:
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
         "Cache",
-        "CacheConfig",
         "DynamicCache",
         "EncoderDecoderCache",
         "HQQQuantizedCache",
@@ -389,7 +388,6 @@ else:
         "OffloadedCache",
         "OffloadedStaticCache",
         "QuantizedCache",
-        "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
         "SlidingWindowCache",
@@ -490,6 +488,7 @@ else:
         "Conv1D",
         "apply_chunking_to_forward",
         "prune_layer",
+        "infer_device",
     ]
     _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
@@ -580,7 +579,6 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .cache_utils import Cache as Cache
-    from .cache_utils import CacheConfig as CacheConfig
     from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
@@ -592,7 +590,6 @@ if TYPE_CHECKING:
     from .cache_utils import OffloadedCache as OffloadedCache
     from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantizedCacheConfig as QuantizedCacheConfig
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import SinkCache as SinkCache

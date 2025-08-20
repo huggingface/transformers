@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-08-24 and added to Hugging Face Transformers on 2023-08-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -73,7 +74,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # basic code generation
 prompt = "# Function to calculate the factorial of a number\ndef factorial(n):"
-input_ids = tokenizer(prompt, return_tensors="pt").to("cuda")
+input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 output = model.generate(
     **input_ids,
@@ -120,7 +121,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 prompt = "# Write a Python function to check if a string is a palindrome\ndef is_palindrome(s):"
-input_ids = tokenizer(prompt, return_tensors="pt").to("cuda")
+input_ids = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, max_new_tokens=200, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-03-28 and added to Hugging Face Transformers on 2024-04-18.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -69,7 +70,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
