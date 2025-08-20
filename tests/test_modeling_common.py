@@ -98,7 +98,6 @@ from transformers.testing_utils import (
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
-    require_torch_sdpa,
     run_first,
     run_test_using_subprocess,
     set_config_for_less_flaky_test,
@@ -114,7 +113,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
-    is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
 
@@ -1384,11 +1382,7 @@ class ModelTesterMixin:
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
             for attn_implementation in ["eager", "sdpa"]:
-                if (
-                    attn_implementation == "sdpa"
-                    and (not model_class._supports_sdpa or not is_torch_sdpa_available())
-                    or config.output_attentions
-                ):
+                if attn_implementation == "sdpa" and not model_class._supports_sdpa or config.output_attentions:
                     continue
 
                 configs_no_init._attn_implementation = attn_implementation
@@ -3297,6 +3291,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "MetaClip2ForImageClassification",
                 "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
@@ -3493,6 +3488,10 @@ class ModelTesterMixin:
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
 
+            # forcing the prefill size to go over sliding window size to check for SWA correctness
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
             # TODO it is unclear why saving and reloading with dtype works while
             # casting with `.to(dtype=..., device=...)` does not.
             # Discovered on tests with `Bart` models.
@@ -3680,7 +3679,20 @@ class ModelTesterMixin:
             model = model_class(config)
             self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
 
-    @require_torch_sdpa
+            # Test that using `dict` atttention implementation works with `from_pretrained`
+            #  Set all backbones to "eager" because "eager" attention is always available
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                new_model = model.from_pretrained(tmpdirname, attn_implementation=attn_implementation_per_subconfig)
+                self.assertTrue(new_model.config._attn_implementation == "eager")
+                for submodule in new_model.modules():
+                    if (
+                        submodule is not new_model
+                        and isinstance(submodule, PreTrainedModel)
+                        and submodule.config.__class__ != new_model.config.__class__
+                    ):
+                        self.assertTrue(submodule.config._attn_implementation == "eager")
+
     def test_sdpa_can_dispatch_non_composite_models(self):
         """
         Tests if non-composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -3718,7 +3730,6 @@ class ModelTesterMixin:
                             f"The eager model should not have SDPA attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
                         )
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -3775,7 +3786,6 @@ class ModelTesterMixin:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
@@ -3783,7 +3793,6 @@ class ModelTesterMixin:
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
 
-    @require_torch_sdpa
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -3865,7 +3874,6 @@ class ModelTesterMixin:
                 with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
-    @require_torch_sdpa
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     @slow
@@ -3931,7 +3939,6 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     _ = model(**inputs_dict)
 
-    @require_torch_sdpa
     def test_sdpa_matches_eager_sliding_window(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

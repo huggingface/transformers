@@ -246,7 +246,7 @@ class ChatArguments:
         default="main",
         metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    device: str = field(default="auto", metadata={"help": "Device to use for inference."})
     torch_dtype: Optional[str] = field(
         default="auto",
         metadata={

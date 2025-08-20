@@ -123,6 +123,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .florence2 import *
     from .fnet import *
     from .focalnet import *
     from .fsmt import *
@@ -240,6 +241,7 @@ if TYPE_CHECKING:
     from .oneformer import *
     from .openai import *
     from .opt import *
+    from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *

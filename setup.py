@@ -190,7 +190,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.19,!=1.0.18",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1",
+    "torch>=2.2",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -203,8 +203,6 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
-    "opentelemetry-sdk",
     "mistral-common[opencv]>=1.6.3",
 ]
 
@@ -337,6 +335,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
+extras["chat_template"] = deps_list("jinja2")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -390,6 +389,7 @@ extras["all"] = (
     + extras["video"]
     + extras["num2words"]
     + extras["mistral-common"]
+    + extras["chat_template"]
 )
 
 
@@ -445,7 +445,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+extras["open-telemetry"] = deps_list("opentelemetry-api")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [

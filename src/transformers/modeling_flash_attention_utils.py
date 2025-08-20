@@ -112,7 +112,6 @@ def _lazy_define_process_function(flash_function):
     NOTE: While all supported kwargs are marked as `True`, everything else is marked as `False`.
           This might be confusing for kwargs that we use in any case, e.g. `is_causal`.
     """
-    global _process_flash_kwargs_fn, _hf_api_to_flash_mapping
 
     flash_parameters = inspect.signature(flash_function).parameters
     process_parameters = inspect.signature(_process_flash_attention_kwargs).parameters
@@ -337,9 +336,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
     # If the lengths are not equal, most probably we are in decoding stage with cache
     # In that case the position ids will not always start with `0` and we need a better way to infer
     # cumulative seq lengths.
+    tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
     if not is_packed_sequence:
-        tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
-
         last_position_ids = position_ids[:, -1]
         q_len = (
             torch.ones(position_ids.size(0), **tensor_kwargs)
@@ -359,8 +357,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
 
         cu_seq_lens_q = torch.cat(
             (
-                indices_q,
-                torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+                indices_q.to(**tensor_kwargs),
+                torch.tensor(position_ids.size(), **tensor_kwargs),
             )
         )
         cu_seq_lens_k = cu_seq_lens_q
@@ -534,7 +532,12 @@ def _process_flash_attention_kwargs(
         flash_kwargs["dropout_p"] = dropout
 
     if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
-        flash_kwargs["window_size"] = (sliding_window, sliding_window)
+        # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
+        # and the current token for a total size of 5. However, we usually define our window sizes by
+        # their total window size (when causal). Encoder models as of now seldom use SWA and when they
+        # do, they have a custom workaround (e.g. ModernBERT) which would align with this symmetric logic, i.e.
+        # for a total of `2*sliding_window + 1`.
+        flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     if supports_mapping["deterministic"]:
         flash_kwargs["deterministic"] = (
