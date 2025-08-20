@@ -894,8 +894,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
                 model=self.full_model,
-                max_static_cache_length=self.generation_config.cache_config.max_cache_len,
-                batch_size=self.generation_config.cache_config.batch_size,
+                max_static_cache_length=self.generation_config.cache_config.get('max_cache_len'),
+                batch_size=self.generation_config.cache_config.get('batch_size'),
             )
             .to("cpu")
             .eval()
@@ -938,7 +938,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             encoder_hidden_states
             if encoder_hidden_states is not None
             else torch.zeros(
-                (self.generation_config.cache_config.batch_size, 10, self.config.d_model),
+                (self.generation_config.cache_config.get('batch_size'), 10, self.config.d_model),
                 dtype=torch.float32,
                 device=device,
             )
