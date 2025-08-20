@@ -20,10 +20,10 @@ class MinistralConfig(MistralConfig):
     r"""
     This is the configuration class to store the configuration of a [`MinistralModel`]. It is used to instantiate an
     Ministral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Ministral-7B-v0.1 or Ministral-7B-Instruct-v0.1.
+    with the defaults will yield a similar configuration to that of the Ministral-8B-Instruct-2410.
 
-    [ministralai/Ministral-7B-v0.1](https://huggingface.co/ministralai/Ministral-7B-v0.1)
-    [ministralai/Ministral-7B-Instruct-v0.1](https://huggingface.co/ministralai/Ministral-7B-Instruct-v0.1)
+    [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
+    [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -82,10 +82,10 @@ class MinistralConfig(MistralConfig):
     ```python
     >>> from transformers import MinistralModel, MinistralConfig
 
-    >>> # Initializing a Ministral 7B style configuration
+    >>> # Initializing a Ministral 8B style configuration
     >>> configuration = MinistralConfig()
 
-    >>> # Initializing a model from the Ministral 7B style configuration
+    >>> # Initializing a model from the Ministral 8B style configuration
     >>> model = MinistralModel(configuration)
 
     >>> # Accessing the model configuration

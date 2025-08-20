@@ -241,7 +241,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),
         ("ministral", "MinistralConfig"),
-        ("ministral", "MinistralConfig"),
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
         ("mixtral", "MixtralConfig"),
