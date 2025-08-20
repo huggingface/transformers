@@ -402,9 +402,8 @@ Code for reproducing expected outputs can be found here:
 
 Higher tolerances for encoder and decoder outputs are expected due to:
 1. Transformer model does not use weight norm for speed-up. And during model conversion, weight norm was removed on
-CPU (old script: https://github.com/huggingface/transformers/blob/8e077a3e452e8cab94ef62b37d68258bd3dcffed/src/transformers/models/dac/convert_dac_checkpoint.py#L230)
-This leads to slightly different weight (1e-8) and the error accumulates. Removing weight norm on GPU would produce
-equivalent weights (current conversion script).
+CPU. This leads to slightly different weight (1e-8) and the error accumulates. Removing weight norm on GPU would produce
+equivalent weights.
 2. Original version uses Snake1D activation with JIT: https://github.com/descriptinc/descript-audio-codec/blob/c7cfc5d2647e26471dc394f95846a0830e7bec34/dac/nn/layers.py#L18
 Transformer version does not use JIT, so outputs are slightly different.
 

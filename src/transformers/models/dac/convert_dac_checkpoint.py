@@ -193,12 +193,16 @@ def convert_checkpoint(
     pytorch_dump_folder_path,
     repo_id=None,
 ):
-    # check if cuda is available
-    if not torch.cuda.is_available():
-        raise ValueError(
-            "Please run this script on a machine with a GPU for weight nor layers to be correctly copied."
-        )
-    torch_device = "cuda"
+    # NOTE: Models on Hub (https://huggingface.co/descript/models) did conversion on CPU.
+    # However, for equivalent weights after removing weight norm, conversion should be done on GPU.
+    torch_device = "cpu"
+    # -- Below ensures conversion is done on GPU
+    # # check if cuda is available
+    # if not torch.cuda.is_available():
+    #     raise ValueError(
+    #         "Please run this script on a machine with a GPU for weight nor layers to be correctly copied."
+    #     )
+    # torch_device = "cuda"
     model_dict = torch.load(checkpoint_path, torch_device, weights_only=True)
 
     config = DacConfig()

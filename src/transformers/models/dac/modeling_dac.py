@@ -86,6 +86,9 @@ class DacDecoderOutput(ModelOutput):
 class Snake1d(nn.Module):
     """
     A 1-dimensional Snake activation function module.
+
+    Original version from DAC used JIT compilation: https://github.com/descriptinc/descript-audio-codec/blob/main/dac/nn/layers.py#L18-L33
+    This leads to slight differences in output.
     """
 
     def __init__(self, hidden_dim):
