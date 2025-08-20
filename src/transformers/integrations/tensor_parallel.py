@@ -1013,7 +1013,7 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    tp_plan = model.tp_plan or {}
+    tp_plan = model.tp_plan() or {}
     tp_plan.update(getattr(type(model), "tp_plan", None) or {})
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
@@ -1085,20 +1085,20 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
         model.config.distributed_config = distributed_config
-
-    if model.tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-        for v in model.tp_plan.values():
+    model_plan = model.tp_plan()
+    if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
         for name, module in model.named_modules():
             if not getattr(module, "_is_hooked", False):
                 from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
 
-                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
+                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
                     model=model,
                     module=module,
-                    tp_plan=model.tp_plan,
+                    tp_plan=model_plan,
                     layer_name="",
                     current_module_plan=plan,
                     device_mesh=device_mesh,
