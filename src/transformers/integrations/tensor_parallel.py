@@ -1085,7 +1085,7 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
         model.config.distributed_config = distributed_config
-    model_plan = model.tp_plan()
+    model_plan = model.tp_plan
     if model_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
         for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
