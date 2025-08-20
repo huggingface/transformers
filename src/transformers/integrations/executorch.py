@@ -824,7 +824,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.lm_head = model.lm_head
         self.config = model.config
 
-        # Get the device from the model
+        # Detect the device of the exported models by checking a parameter
+        # We'll use the model's device as the target device
         model_device = next(model.parameters()).device
 
         # Initialize static cache for decoder and DynamicCache for encoder
@@ -962,28 +963,24 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
     def generate(self, prompt_token_ids, max_new_tokens):
         with torch.no_grad():
-            # Detect the device of the exported models by checking a parameter
-            # We'll use the model's device as the target device
             model_device = self.full_model.device
 
             # Move input to the model's device if it's on a different device
             if prompt_token_ids.device != model_device:
                 prompt_token_ids = prompt_token_ids.to(model_device)
 
-            device = prompt_token_ids.device
-
             # Run encoder
             encoder_output = self.exported_encoder.module()(prompt_token_ids)
 
             # Initialize with start token (0 for T5) on the correct device
-            decoder_input_ids = torch.tensor([[0]], dtype=torch.long, device=device)
+            decoder_input_ids = torch.tensor([[0]], dtype=torch.long, device=model_device)
             generated_ids = [0]
 
             # Generate tokens one by one
             for i in range(max_new_tokens - 1):
                 # Run decoder for next token prediction
                 logits = self.exported_decoder.module()(
-                    decoder_input_ids, encoder_output, torch.tensor([i], dtype=torch.long, device=device)
+                    decoder_input_ids, encoder_output, torch.tensor([i], dtype=torch.long, device=model_device)
                 )
 
                 # Get next token
@@ -991,7 +988,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 generated_ids.append(next_token)
 
                 # Update input for next iteration on the correct device
-                decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device=device)
+                decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device=model_device)
 
                 # Check if EOS token
                 if next_token == self.config.eos_token_id:
