@@ -52,7 +52,7 @@ pipe = pipeline(
     task="text-generation",
     model="google/gemma-2-9b",
     torch_dtype=torch.bfloat16,
-    device="cuda",
+    device_map="auto",
 )
 
 pipe("Explain quantum computing simply. ", max_new_tokens=50)
@@ -74,7 +74,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 input_text = "Explain quantum computing simply."
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -108,7 +108,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 input_text = "Explain quantum computing simply."
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=32, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))

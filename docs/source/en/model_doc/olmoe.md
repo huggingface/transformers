@@ -59,9 +59,9 @@ print(result)
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", torch_dtype="auto", device_map="auto").to(device)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
@@ -79,9 +79,9 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 quantization_config = BitsAndBytesConfig(
    load_in_4bit=True,

@@ -52,10 +52,10 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 #### Basic Video Tracking
 
 ```python
->>> from transformers import Sam2VideoModel, Sam2VideoProcessor
+>>> from transformers import Sam2VideoModel, Sam2VideoProcessor, infer_device
 >>> import torch
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = infer_device()
 >>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(device, dtype=torch.bfloat16)
 >>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
 
