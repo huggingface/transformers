@@ -53,7 +53,7 @@ pipeline = pipeline(
     task="text-generation",
     model="google/gemma-2b",
     torch_dtype=torch.bfloat16,
-    device="cuda",
+    device_map="auto",
 )
 
 pipeline("LLMs generate text through a process known as", max_new_tokens=50)
@@ -75,7 +75,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 input_text = "LLMs generate text through a process known as"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(**input_ids, max_new_tokens=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -114,7 +114,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 input_text = "LLMs generate text through a process known as."
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(
     **input_ids,
     max_new_tokens=50,
@@ -152,7 +152,7 @@ visualizer("LLMs generate text through a process known as")
        attn_implementation="sdpa"
    )
    input_text = "LLMs generate text through a process known as"
-   input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+   input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
    past_key_values = DynamicCache()
    outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
