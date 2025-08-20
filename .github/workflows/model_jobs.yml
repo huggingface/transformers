@@ -136,7 +136,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=400 END=800 python3 run.py
 
       - name: "Upload"
@@ -150,7 +149,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=800 END=1200 python3 run.py
 
       - name: "Upload"
@@ -164,7 +162,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=1200 END=1600 python3 run.py
 
       - name: "Upload"
@@ -178,7 +175,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=1600 END=2000 python3 run.py
 
       - name: "Upload"
@@ -192,7 +188,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=2000 END=2400 python3 run.py
 
       - name: "Upload"
@@ -206,7 +201,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=2400 END=2800 python3 run.py
 
       - name: "Upload"
@@ -220,7 +214,6 @@ jobs:
         working-directory: /transformers
         if: ${{ always() }}
         run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=2800 END=3000 python3 run.py
 
       - name: "Upload"
