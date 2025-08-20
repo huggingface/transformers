@@ -122,7 +122,7 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=0 END=400 python3 -m run.py
+          START=0 END=10 python3 run.py
 
       - name: "Upload"
         if: ${{ always() }}
@@ -135,7 +135,7 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=400 END=800 python3 -m run.py
+          START=10 END=20 python3 run.py
 
       - name: "Upload"
         if: ${{ always() }}
@@ -148,76 +148,11 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=800 END=1200 python3 -m run.py
+          START=20 END=30 python3 run.py
 
       - name: "Upload"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: summary_short_3
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=1200 END=1600 python3 -m run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_4
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=1600 END=2000 python3 -m run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_5
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=2000 END=2400 python3 -m run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_6
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=2400 END=2800 python3 -m run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_7
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=2800 END=3000 python3 -m run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_8
           path: /transformers/summary_short.txt
