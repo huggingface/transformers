@@ -120,6 +120,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
+        if: ${{ always() }}
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=0 END=10 python3 run.py
@@ -133,6 +134,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
+        if: ${{ always() }}
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=10 END=20 python3 run.py
@@ -146,6 +148,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
+        if: ${{ always() }}
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
           START=20 END=30 python3 run.py
