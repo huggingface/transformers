@@ -430,7 +430,7 @@ class BltPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
-    _supports_attention_backend = True
+    _supports_attention_backend = False
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
@@ -440,7 +440,7 @@ class BltPreTrainedModel(PreTrainedModel):
 
 
 class BltLocalEncoder(BltPreTrainedModel):
-    config_class = BltLocalEncoderConfig
+    config: BltLocalEncoderConfig
     base_model_prefix = "local_encoder"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -554,7 +554,7 @@ class BltLocalEncoder(BltPreTrainedModel):
 
 
 class BltLocalDecoder(BltPreTrainedModel):
-    config_class = BltLocalDecoderConfig
+    config: BltLocalDecoderConfig
     base_model_prefix = "local_decoder"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -635,7 +635,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
 
 class BltGlobalTransformer(BltPreTrainedModel):
-    config_class = BltGlobalTransformerConfig
+    config: BltGlobalTransformerConfig
     base_model_prefix = "global_transformer"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -1040,6 +1040,8 @@ class BltModel(BltPreTrainedModel):
 
 
 class BltPatcher(BltPreTrainedModel):
+    config: BltPatcherConfig
+
     def __init__(self, config: BltPatcherConfig):
         super().__init__(config)
         self.rotary_emb = BltRotaryEmbedding(config=self.config)
@@ -1301,12 +1303,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def tie_weights(self):
-        """Prevent double execution from from_pretrained()."""
-        if hasattr(self, "_weights_tied"):
-            return
-        self._weights_tied = True
 
 
 __all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM"]

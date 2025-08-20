@@ -34,7 +34,6 @@ class BltLocalEncoderConfig(PretrainedConfig):
         cross_attn_all_layers=False,
         cross_attn_k=2,
         hidden_size_global=2048,
-        pm_size=0,
         hidden_size=1024,
         num_attention_heads=16,
         num_key_value_heads=None,
@@ -47,13 +46,13 @@ class BltLocalEncoderConfig(PretrainedConfig):
         hidden_act="silu",
         intermediate_size=2816,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.cross_attn_all_layers = cross_attn_all_layers
         self.cross_attn_k = cross_attn_k
         self.hidden_size_global = hidden_size_global
-        self.pm_size = pm_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads or num_attention_heads
@@ -68,7 +67,7 @@ class BltLocalEncoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class BltLocalDecoderConfig(PretrainedConfig):
@@ -96,6 +95,7 @@ class BltLocalDecoderConfig(PretrainedConfig):
         hidden_act="silu",
         intermediate_size=2816,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,7 +116,7 @@ class BltLocalDecoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class BltGlobalTransformerConfig(PretrainedConfig):
@@ -140,6 +140,7 @@ class BltGlobalTransformerConfig(PretrainedConfig):
         hidden_act="silu",
         intermediate_size=5632,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -156,7 +157,7 @@ class BltGlobalTransformerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class BltPatcherConfig(PretrainedConfig):
@@ -173,7 +174,6 @@ class BltPatcherConfig(PretrainedConfig):
             rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
             dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
             rope_theta (`<fill_type>`, *optional*, defaults to 10000.0): <fill_docstring>
-            attn_bias_type (`<fill_type>`, *optional*, defaults to `"local_block_causal"`): <fill_docstring>
             intermediate_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
             rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
             initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
@@ -192,10 +192,10 @@ class BltPatcherConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         dropout=0.0,
         rope_theta=10000.0,
-        attn_bias_type="local_block_causal",
         intermediate_size=2048,
         rope_scaling=None,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -208,13 +208,12 @@ class BltPatcherConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.rope_theta = rope_theta
-        self.attn_bias_type = attn_bias_type
         self.hidden_act = "silu"  # Blt uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.rope_scaling = rope_scaling
         self.initializer_range = initializer_range
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class BltConfig(PretrainedConfig):
@@ -290,14 +289,13 @@ class BltConfig(PretrainedConfig):
         encoder_config=None,
         decoder_config=None,
         global_config=None,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         initializer_range=0.02,
         rope_theta=500000.0,
         rope_scaling=None,
         **kwargs,
     ):
         # Basic model configuration
-        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
@@ -315,7 +313,6 @@ class BltConfig(PretrainedConfig):
         self.realtime_patching = kwargs.get("realtime_patching", True)
         self.patching_threshold_add = kwargs.get("patching_threshold_add")
         self.monotonicity = kwargs.get("monotonicity", False)
-        self.pm_size = kwargs.get("pm_size", 0)
 
         # Cross attention configurations
         self.cross_attn_k = cross_attn_k

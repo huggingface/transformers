@@ -322,34 +322,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids():
         return
 
-    # def test_attention_outputs(self):
-    #     if not self.has_attentions:
-    #         self.skipTest(reason="Model does not output attentions")
-
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    #     config.return_dict = True
-    #     config._attn_implementation = "eager"
-
-    #     for model_class in self.all_model_classes:
-    #         inputs_dict["output_attentions"] = True
-    #         inputs_dict["output_hidden_states"] = False
-    #         config.return_dict = True
-    #         model = model_class._from_config(config, attn_implementation="eager")
-    #         config = model.config
-    #         model.to(torch_device)
-    #         model.eval()
-    #         with torch.no_grad():
-    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-    #         # For Blt, check separate attention outputs from each component
-    #         attentions = outputs.attentions
-    #         encoder_attentions = outputs.encoder_attentions
-    #         global_attentions = outputs.global_attentions
-
-    #         # Each component should have attention outputs equal to their layer count
-    #         self.assertEqual(len(attentions), config.decoder_config.num_hidden_layers)
-    #         self.assertEqual(len(encoder_attentions), config.encoder_config.num_hidden_layers)
-    #         self.assertEqual(len(global_attentions), config.global_config.num_hidden_layers)
-
 
 @require_torch_accelerator
 class BltIntegrationTest(unittest.TestCase):
@@ -368,9 +340,9 @@ class BltIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BltForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", attn_implementation="sdpa")
+        model = BltForCausalLM.from_pretrained("itazap/blt-1b-hf", device_map="auto", attn_implementation="sdpa")
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
@@ -455,7 +427,7 @@ class BltIntegrationTest(unittest.TestCase):
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
-        model = BltForCausalLM.from_pretrained("itazap/blt-1b-testing", attn_implementation="sdpa", device_map="auto")
+        model = BltForCausalLM.from_pretrained("itazap/blt-1b-hf", attn_implementation="sdpa", device_map="auto")
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
@@ -473,10 +445,10 @@ class BltIntegrationTest(unittest.TestCase):
         prompt = "my name is"
 
         model = BltForCausalLM.from_pretrained(
-            "itazap/blt-1b-testing", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
+            "itazap/blt-1b-hf", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
@@ -565,7 +537,7 @@ class BltIntegrationTest(unittest.TestCase):
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
         model = BltForCausalLM.from_pretrained(
-            "itazap/blt-1b-testing", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
+            "itazap/blt-1b-hf", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
         )
 
         with torch.no_grad():
@@ -584,9 +556,9 @@ class BltIntegrationTest(unittest.TestCase):
 
         prompt = "my name is"
 
-        model = BltForCausalLM.from_pretrained("itazap/blt-1b-testing", device_map="auto", attn_implementation="eager")
+        model = BltForCausalLM.from_pretrained("itazap/blt-1b-hf", device_map="auto", attn_implementation="eager")
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
@@ -608,12 +580,12 @@ class BltIntegrationTest(unittest.TestCase):
         prompt = "my name is"
 
         model = BltForCausalLM.from_pretrained(
-            "itazap/blt-1b-testing", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
+            "itazap/blt-1b-hf", device_map="auto", attn_implementation="sdpa", torch_dtype=torch.bfloat16
         )
 
         model.generation_config.cache_implementation = "static"
 
-        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-testing")
+        tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 

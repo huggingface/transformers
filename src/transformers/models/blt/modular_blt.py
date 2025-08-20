@@ -352,6 +352,7 @@ class BltCrossAttention(MllamaTextCrossAttention):
 @auto_docstring
 class BltPreTrainedModel(MllamaPreTrainedModel):
     config: BltConfig
+    _supports_attention_backend = False
     _no_split_modules = ["BltTransformerLayer", "BltLocalEncoder", "BltLocalDecoder", "BltGlobalTransformer"]
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
@@ -371,7 +372,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
 
 
 class BltLocalEncoder(BltPreTrainedModel):
-    config_class = BltLocalEncoderConfig
+    config: BltLocalEncoderConfig
     base_model_prefix = "local_encoder"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -485,7 +486,7 @@ class BltLocalEncoder(BltPreTrainedModel):
 
 
 class BltLocalDecoder(BltPreTrainedModel):
-    config_class = BltLocalDecoderConfig
+    config: BltLocalDecoderConfig
     base_model_prefix = "local_decoder"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -566,7 +567,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
 
 class BltGlobalTransformer(BltPreTrainedModel):
-    config_class = BltGlobalTransformerConfig
+    config: BltGlobalTransformerConfig
     base_model_prefix = "global_transformer"
     _no_split_modules = ["BltTransformerLayer"]
 
@@ -789,6 +790,8 @@ class BltModel(BltPreTrainedModel):
 
 
 class BltPatcher(BltPreTrainedModel):
+    config: BltPatcherConfig
+
     def __init__(self, config: BltPatcherConfig):
         super().__init__(config)
         self.rotary_emb = BltRotaryEmbedding(config=self.config)
@@ -944,14 +947,7 @@ class BltForCausalLM(MllamaForCausalLM):
         self.vocab_size = config.vocab_size
         self.model = BltModel(config)
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
-
         self.post_init()
-
-    def tie_weights(self):
-        """Prevent double execution from from_pretrained()."""
-        if hasattr(self, '_weights_tied'):
-            return
-        self._weights_tied = True
 
     def forward(
         self,
