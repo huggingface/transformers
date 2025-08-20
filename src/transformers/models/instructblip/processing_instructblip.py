@@ -73,8 +73,8 @@ class InstructBlipProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "image_token"):
-            self.image_token = AddedToken("<image>", normalized=False, special=True)
-            tokenizer.add_tokens([self.image_token], special_tokens=True)
+            self.image_token = "<image>"
+            tokenizer.add_tokens([AddedToken("<image>", normalized=False, special=True)], special_tokens=True)
         else:
             self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
@@ -148,28 +148,13 @@ class InstructBlipProcessor(ProcessorMixin):
         encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
+        return tokenizer_input_names + image_processor_input_names + qformer_input_names
 
     # overwrite to save the Q-Former tokenizer in a separate folder
     def save_pretrained(self, save_directory, **kwargs):

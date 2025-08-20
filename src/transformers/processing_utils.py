@@ -368,6 +368,8 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
 
     """
 
+    _defaults = {}
+
     common_kwargs: CommonKwargs = {
         **CommonKwargs.__annotations__,
     }
@@ -1397,10 +1399,32 @@ class ProcessorMixin(PushToHubMixin):
             f"other functions can find it!"
         )
 
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
+        return self.tokenizer.decode(*args, **kwargs)
+
     @property
     def model_input_names(self):
-        first_attribute = getattr(self, self.attributes[0])
-        return getattr(first_attribute, "model_input_names", None)
+        model_input_names = []
+        for attribute_name in self.attributes:
+            attribute = getattr(self, attribute_name, None)
+            attr_input_names = getattr(attribute, "model_input_names")
+            model_input_names.extend(attr_input_names)
+        return model_input_names
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
@@ -1672,17 +1696,19 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
+        modalities = ["image", "video", "audio"]
         for modality in modalities:
-            token_str = getattr(self, f"{modality}_token")
-            token_id = getattr(self, f"{modality}_token_id")
-            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
-            text_count = [sample.count(token_str) for sample in text]
+            token_str = getattr(self, f"{modality}_token", None)
+            token_id = getattr(self, f"{modality}_token_id", None)
+            if token_str is not None and token_id is not None:
+                ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+                text_count = [sample.count(token_str) for sample in text]
 
-            if ids_count != text_count:
-                raise ValueError(
-                    f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
-                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
-                )
+                if ids_count != text_count:
+                    raise ValueError(
+                        f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                        "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                    )
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)
