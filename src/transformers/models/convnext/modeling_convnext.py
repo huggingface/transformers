@@ -379,7 +379,9 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None,
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""
         Examples:
