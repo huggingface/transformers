@@ -467,7 +467,7 @@ if __name__ == "__main__":
         if quantized:
             self.skipTest("Training test for quantized models is not supported.")
 
-        model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+        model_id = f"openai/gpt-oss-{model}"
 
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
