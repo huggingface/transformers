@@ -255,7 +255,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         reason="Supported only for text-only inputs (otherwise dynamic control flows for multimodal inputs)"
     )
     @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])

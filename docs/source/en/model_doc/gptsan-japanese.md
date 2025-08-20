@@ -42,14 +42,15 @@ fine-tune for translation or summarization.
 The `generate()` method can be used to generate text using GPTSAN-Japanese model.
 
 ```python
->>> from transformers import AutoModel, AutoTokenizer
+>>> from transformers import AutoModel, AutoTokenizer, infer_device
 >>> import torch
 
+>>> device = infer_device()
 >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
->>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").cuda()
+>>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
 >>> x_tok = tokenizer("は、", prefix_text="織田信長", return_tensors="pt")
 >>> torch.manual_seed(0)
->>> gen_tok = model.generate(x_tok.input_ids.cuda(), token_type_ids=x_tok.token_type_ids.cuda(), max_new_tokens=20)
+>>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(mdoel.device), max_new_tokens=20)
 >>> tokenizer.decode(gen_tok[0])
 '織田信長は、2004年に『戦国BASARA』のために、豊臣秀吉'
 ```
