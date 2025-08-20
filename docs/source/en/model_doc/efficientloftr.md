@@ -34,18 +34,16 @@ The example below demonstrates how to match keypoints between two images with [`
 <hfoption id="Pipeline">
 
 ```py
-import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="keypoint-matching",
-    model="zju-community/efficientloftr",
-    threshold=0.2
-)
-pipeline(images=[
-    "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg",
-    "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-])
+keypoint_matcher = pipeline(task="keypoint-matching", model="zju-community/efficientloftr")
+
+url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+
+results = keypoint_matcher([url_0, url_1], threshold=0.9)
+print(results[0])
+# {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
 ```
 <hfoption id="AutoModel">
 <hfoption id="AutoModel">
