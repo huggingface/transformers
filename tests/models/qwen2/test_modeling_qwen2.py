@@ -261,7 +261,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
             ],
             ("rocm", (9, 5)): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+                "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
             ]
         })  # fmt: off
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
@@ -305,8 +305,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
             "2.7.0"
         )  # Due to https://github.com/pytorch/pytorch/issues/150994
         exported_program = exportable_module.export(
-            input_ids=prompt_token_ids,
-            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
             strict=strict,
         )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(

@@ -504,6 +504,8 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
+    _can_compile_fullgraph = False
+
     def _init_weights(self, module):
         LlamaPreTrainedModel._init_weights(module)
         if isinstance(module, DeepseekV2MoEGate):

@@ -41,10 +41,10 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
   which could be used to further minimize the RAM usage:
 
 ```python
->>> from transformers import GPTJForCausalLM
+>>> from transformers import GPTJForCausalLM, infer_device
 >>> import torch
 
->>> device = "cuda"
+>>> device = infer_device()
 >>> model = GPTJForCausalLM.from_pretrained(
 ...     "EleutherAI/gpt-j-6B",
 ...     revision="float16",
@@ -96,10 +96,10 @@ model.
 ...or in float16 precision:
 
 ```python
->>> from transformers import GPTJForCausalLM, AutoTokenizer
+>>> from transformers import GPTJForCausalLM, AutoTokenizer, infer_device
 >>> import torch
 
->>> device = "cuda"
+>>> device = infer_device()
 >>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
@@ -109,7 +109,7 @@ model.
 ...     "researchers was the fact that the unicorns spoke perfect English."
 ... )
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+>>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 
 >>> gen_tokens = model.generate(
 ...     input_ids,
