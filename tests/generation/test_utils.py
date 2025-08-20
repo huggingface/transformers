@@ -1736,6 +1736,9 @@ class GenerationTesterMixin:
         to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -1956,6 +1959,9 @@ class GenerationTesterMixin:
         """
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -2048,8 +2054,9 @@ class GenerationTesterMixin:
                 model.generate(**generation_kwargs, **inputs_dict)
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
     @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
         `.forward` called from `.generate` sees no graph breaks or recompilations when compiled.
@@ -2097,7 +2104,7 @@ class GenerationTesterMixin:
             # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            compile_config = CompileConfig(dynamic=False)  # Error out on dynamic shapes
+            compile_config = CompileConfig(fullgraph=True, dynamic=False)  # Error out on dynamic shapes
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
@@ -2173,8 +2180,11 @@ class GenerationTesterMixin:
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
-                self.skipTest("This model doesn't support compilation without graph breaks")
+                self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:
@@ -2744,6 +2754,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    @pytest.mark.torch_export_test
     def test_cache_dependant_input_preparation_exporting(self):
         self.assertFalse(
             is_torchdynamo_exporting()
@@ -4083,16 +4094,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         #     )
         #     results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
-        # deduced from the device_map : layer 0 on device 0 and layer 1 on device 1
-        layer_device_map = {0: 0, 1: 1}
-        past_key_values = StaticCache(
-            config=model.config,
-            max_batch_size=1,
-            max_cache_len=30,
-            device=torch_device,
-            dtype=model.dtype,
-            layer_device_map=layer_device_map,
-        )
+        past_key_values = StaticCache(config=model.config, max_cache_len=30)
         results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
 
         # check device of each layer
@@ -4287,13 +4289,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         max_cache_len = 10
         batch_size = 2
         query_length = input_ids.shape[-1] - init_input_ids.shape[-1]
-        static_cache = StaticCache(
-            config=config,
-            max_batch_size=batch_size,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=torch.float32,
-        )
+        static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
         static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
         model_inputs = model.prepare_inputs_for_generation(
             input_ids, past_key_values=static_cache, cache_position=cache_position, attention_mask=attention_mask
@@ -4357,6 +4353,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(model_inputs["encoder_outputs"] == "foo")
         # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
 
+    @pytest.mark.torch_compile_test
     def test_generate_compile_fullgraph_tiny(self):
         """
         Tests that we can call end-to-end generation with a tiny model (i.e. doesn't crash)
@@ -4946,6 +4943,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=2, do_sample=False)
 
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_cpu_offload_doesnt_compile(self):
         """Test that CPU offload doesn't trigger compilation"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
@@ -5058,6 +5056,26 @@ class GenerationIntegrationTests(unittest.TestCase):
                 trust_remote_code=True,
             )
             assert value == "success"
+
+    def test_custom_generate_callable(self):
+        """Tests that passing a callable to `custom_generate` executes the callable decoding loop"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+
+        def custom_loop(model, input_ids, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+            # Check that generate() correctly prepares the stopping criteria
+            assert stopping_criteria[0].max_length == input_ids.shape[1] + 3
+            return "callable_success"
+
+        value = model.generate(
+            **model_inputs,
+            max_new_tokens=3,
+            custom_generate=custom_loop,
+        )
+        self.assertEqual(value, "callable_success")
 
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):

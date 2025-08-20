@@ -243,6 +243,8 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: ModernBertConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
