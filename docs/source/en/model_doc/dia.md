@@ -42,9 +42,9 @@ tokens and decodes them back into audio.
 ### Generation with Text
 
 ```python
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
@@ -64,9 +64,9 @@ processor.save_audio(outputs, "example.wav")
 
 ```python
 from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -91,9 +91,9 @@ processor.save_audio(outputs, "example_with_audio.wav")
 
 ```python
 from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
+from transformers import AutoProcessor, DiaForConditionalGeneration, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")

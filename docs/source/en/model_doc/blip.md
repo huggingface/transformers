@@ -73,7 +73,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 question = "What is the weather in this image?"
-inputs = processor(images=image, text=question, return_tensors="pt").to("cuda", torch.float16)
+inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
 
 output = model.generate(**inputs)
 processor.batch_decode(output, skip_special_tokens=True)[0]

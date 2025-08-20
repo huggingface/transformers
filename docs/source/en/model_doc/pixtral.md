@@ -58,7 +58,7 @@ from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 model_id = "mistral-community/pixtral-12b"
 processor = AutoProcessor.from_pretrained(model_id)
-model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 chat = [
     {

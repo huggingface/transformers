@@ -3297,6 +3297,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "MetaClip2ForImageClassification",
                 "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
@@ -3492,6 +3493,10 @@ class ModelTesterMixin:
 
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
+
+            # forcing the prefill size to go over sliding window size to check for SWA correctness
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
 
             # TODO it is unclear why saving and reloading with dtype works while
             # casting with `.to(dtype=..., device=...)` does not.
