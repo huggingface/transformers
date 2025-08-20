@@ -1219,10 +1219,10 @@ class PretrainedConfig(PushToHubMixin):
             for key in config_to_return.to_dict():
                 if key.startswith(prefix_to_discard):
                     delattr(config_to_return, key)
-            # old encoder/decoder models use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
-            if decoder:
+            # old encoder/decoder models may use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
+            if decoder and hasattr(config_to_return, "decoder_layers"):
                 config_to_return.num_hidden_layers = config_to_return.decoder_layers
-            else:
+            elif encoder and hasattr(config_to_return, "encoder_layers"):
                 config_to_return.num_hidden_layers = config_to_return.encoder_layers
 
         return config_to_return
