@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -151,7 +150,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_torch_sdpa
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",

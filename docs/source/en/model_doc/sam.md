@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-05 and added to Hugging Face Transformers on 2023-04-19.*
 
 # SAM
 
@@ -51,9 +52,9 @@ Below is an example on how to run mask generation given an image and a 2D point:
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import SamModel, SamProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -77,9 +78,9 @@ You can also process your own masks alongside the input images in the processor 
 import torch
 from PIL import Image
 import requests
-from transformers import SamModel, SamProcessor
+from transformers import SamModel, SamProcessor, infer_device
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 

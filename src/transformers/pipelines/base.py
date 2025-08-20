@@ -449,7 +449,7 @@ def get_default_model_and_revision(
     else:
         # XXX This error message needs to be updated to be more generic if more tasks are going to become
         # parametrized
-        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_XX_to_YY"')
+        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_xx_to_yy"')
 
     if framework is None:
         framework = "pt"
@@ -1269,7 +1269,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         elif isinstance(inputs, list):
             return [self._ensure_tensor_on_device(item, device) for item in inputs]
         elif isinstance(inputs, tuple):
-            return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
+            return tuple(self._ensure_tensor_on_device(item, device) for item in inputs)
         elif isinstance(inputs, torch.Tensor):
             return inputs.to(device)
         else:

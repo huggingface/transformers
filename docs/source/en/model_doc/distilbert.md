@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-10-02 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -71,7 +72,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt").to("cuda")
+inputs = tokenizer("I love using Hugging Face Transformers!", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

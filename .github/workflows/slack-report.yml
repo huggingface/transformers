@@ -24,6 +24,10 @@ on:
       report_repo_id:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
+
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -41,6 +45,10 @@ jobs:
           echo "Setup status: ${{ inputs.setup_status }}"
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: ${{ inputs.commit_sha || github.sha }}
+
       - uses: actions/download-artifact@v4
 
       - name: Prepare some setup values
@@ -67,7 +75,7 @@ jobs:
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
-          CI_SHA: ${{ github.sha }}
+          CI_SHA: ${{ inputs.commit_sha || github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
           REPORT_REPO_ID: ${{ inputs.report_repo_id }}

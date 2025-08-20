@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import is_flash_attn_available
@@ -144,7 +144,7 @@ class GPTBigCodeAttention(nn.Module):
             )
 
         self.scale_attn_weights = config.scale_attn_weights
-        self.scaling = self.head_dim**0.5 if config.scale_attn_weights else 1.0
+        self.scaling = self.head_dim**-0.5 if config.scale_attn_weights else 1.0
         self.is_cross_attention = is_cross_attention
 
         self.layer_idx = layer_idx
@@ -487,14 +487,14 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         if batch_size <= 0:
             raise ValueError("batch_size has to be defined and > 0")
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
                 "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
@@ -588,9 +588,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,

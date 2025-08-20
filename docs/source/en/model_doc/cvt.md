@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-03-29 and added to Hugging Face Transformers on 2022-05-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Convolutional Vision Transformer (CvT)
 
-Convolutional Vision Transformer (CvT) is a model that combines the strengths of convolutional neural networks (CNNs) and Vision transformers for the computer vision tasks. It introduces convolutional layers into the vision transformer architecture, allowing it to capture local patterns in images while maintaining the global context provided by self-attention mechanisms.
+[Convolutional Vision Transformer (CvT)](https://huggingface.co/papers/2103.15808) is a model that combines the strengths of convolutional neural networks (CNNs) and Vision transformers for the computer vision tasks. It introduces convolutional layers into the vision transformer architecture, allowing it to capture local patterns in images while maintaining the global context provided by self-attention mechanisms.
 
 You can find all the CvT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=cvt) organization.
 
@@ -47,7 +48,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0 
 )
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
@@ -68,7 +69,7 @@ model = AutoModelForImageClassification.from_pretrained(
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   logits = model(**inputs).logits

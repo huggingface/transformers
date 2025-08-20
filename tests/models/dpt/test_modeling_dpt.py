@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
@@ -255,6 +257,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Inductor error for dynamic shape")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -345,7 +348,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]],
-                ("cuda", 8): [[6.3215, 6.3635, 6.4155], [6.3863, 6.3622, 6.4174], [6.3530, 6.3184, 6.3583]],
+                ("cuda", 8): [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -420,6 +423,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(output_enlarged.shape == expected_shape)
         torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
 
+    @pytest.mark.torch_export_test
     def test_export(self):
         for strict in [True, False]:
             with self.subTest(strict=strict):
