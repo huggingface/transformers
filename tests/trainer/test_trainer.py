@@ -5049,7 +5049,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, remove_unused_columns=False
+                output_dir=tmpdir,
+                report_to="none",
+                max_steps=5,
+                per_device_train_batch_size=1,
+                remove_unused_columns=False,
             )
             trainer = Trainer(
                 model=model,
@@ -5058,6 +5062,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 train_dataset=train_dataset,
             )
             trainer.train()
+
 
 @require_torch
 @is_staging_test
