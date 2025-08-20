@@ -114,10 +114,10 @@ At batch size 8, on an NVIDIA A100, Flash Attention 2 is also 10% faster than Be
 You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 (or 🤗 Better Transformer) all at once.
 
 ```python
-from transformers import BarkModel
+from transformers import BarkModel, infer_device
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 
 # load in fp16 and use Flash Attention 2
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
