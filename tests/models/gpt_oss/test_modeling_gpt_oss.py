@@ -228,41 +228,45 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     if int(os.environ.get("RANK", "0")) == 0:
         # Generate key to look up expected outputs
         key = generate_config_key(quantized, model_size, kernels, attn_impl, mode)
-        
+
         # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
                 expected_results = json.load(f)
-            
+
             # Check if we have expected results for this configuration
             if key in expected_results:
                 expected_outputs = expected_results[key]
-                
+
                 # Compare actual outputs with expected outputs
                 assert len(output_texts) == len(expected_outputs), f"Output length mismatch for {key}"
-                
+
                 for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
                     actual_stripped = actual.strip()
                     expected_stripped = expected.strip()
-                    
+
                     # Make lengths match by taking minimum length to be resilient to generation differences
                     min_length = min(len(actual_stripped), len(expected_stripped))
                     actual_truncated = actual_stripped[:min_length]
                     expected_truncated = expected_stripped[:min_length]
-                    
+
                     if actual_truncated != expected_truncated:
-                        diff = '\n'.join(difflib.unified_diff(
-                            expected_truncated.splitlines(keepends=True),
-                            actual_truncated.splitlines(keepends=True),
-                            fromfile=f'expected[{i}]',
-                            tofile=f'actual[{i}]',
-                            lineterm=''
-                        ))
-                        raise AssertionError(f"Output mismatch at index {i} for {key}:\n"
-                                           f"Expected: '{expected_stripped}'\n"
-                                           f"Actual:   '{actual_stripped}'\n"
-                                           f"Diff (truncated to min length {min_length}):\n{diff}")
-                    
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        raise AssertionError(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
+
                 print(f"✓ Outputs match expected results for {key}")
             else:
                 print(f"Warning: No expected results found for configuration: {key}")
@@ -404,41 +408,44 @@ if __name__ == "__main__":
 
         # Generate key to look up expected outputs
         key = self.generate_config_key(quantized, model, kernels, attn_impl, mode)
-        
+
         # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
                 expected_results = json.load(f)
-            
+
             # Check if we have expected results for this configuration
             if key in expected_results:
                 expected_outputs = expected_results[key]
-                
+
                 # Compare actual outputs with expected outputs
-                self.assertEqual(len(output_texts), len(expected_outputs), 
-                               f"Output length mismatch for {key}")
-                
+                self.assertEqual(len(output_texts), len(expected_outputs), f"Output length mismatch for {key}")
+
                 for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
                     actual_stripped = actual.strip()
                     expected_stripped = expected.strip()
-                    
+
                     # Make lengths match by taking minimum length to be resilient to generation differences
                     min_length = min(len(actual_stripped), len(expected_stripped))
                     actual_truncated = actual_stripped[:min_length]
                     expected_truncated = expected_stripped[:min_length]
-                    
+
                     if actual_truncated != expected_truncated:
-                        diff = '\n'.join(difflib.unified_diff(
-                            expected_truncated.splitlines(keepends=True),
-                            actual_truncated.splitlines(keepends=True),
-                            fromfile=f'expected[{i}]',
-                            tofile=f'actual[{i}]',
-                            lineterm=''
-                        ))
-                        self.fail(f"Output mismatch at index {i} for {key}:\n"
-                                 f"Expected: '{expected_stripped}'\n"
-                                 f"Actual:   '{actual_stripped}'\n"
-                                 f"Diff (truncated to min length {min_length}):\n{diff}")
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        self.fail(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
             else:
                 # If no expected results exist, this is a new configuration
                 # We could optionally add it to the results file here
