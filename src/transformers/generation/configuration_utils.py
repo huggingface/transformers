@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-NEED_SETUP_CACHE_CLASSES_MAPPING = {}
+STATIC_CACHE_CLASSES_MAPPING = {}
 QUANT_BACKEND_CLASSES_MAPPING = {}
 ALL_CACHE_IMPLEMENTATIONS = []
 
@@ -60,7 +60,7 @@ if is_torch_available():
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
-    NEED_SETUP_CACHE_CLASSES_MAPPING = {
+    STATIC_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
         "sliding_window": SlidingWindowCache,
@@ -70,7 +70,7 @@ if is_torch_available():
         "offloaded_hybrid_chunked": OffloadedHybridCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
+    ALL_CACHE_IMPLEMENTATIONS = list(STATIC_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -1536,8 +1536,10 @@ class CompileConfig:
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
 
     Args:
-        fullgraph (`bool`, *optional*, defaults to `True`):
-            If `True`, requires that the whole forward be capturable in a single graph.
+        fullgraph (`bool`, *optional*, defaults to `False`):
+            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            that the entire function be capturable into a single graph. If this is not possible (that is, if there are
+            graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):
             Whether to try to use dynamic shape graphs.
         backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
@@ -1566,7 +1568,7 @@ class CompileConfig:
     ```
     """
 
-    fullgraph: bool = True
+    fullgraph: bool = False
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"
