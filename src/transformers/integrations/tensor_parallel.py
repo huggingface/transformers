@@ -1014,7 +1014,6 @@ def shard_and_distribute_module(
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
     tp_plan = model.tp_plan or {}
-    tp_plan.update(getattr(type(model), "tp_plan", None) or {})
     module_to_tp = model.get_submodule(param_name)  # TODO: can i loop over modules?
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
