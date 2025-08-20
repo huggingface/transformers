@@ -336,9 +336,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
     # If the lengths are not equal, most probably we are in decoding stage with cache
     # In that case the position ids will not always start with `0` and we need a better way to infer
     # cumulative seq lengths.
+    tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
     if not is_packed_sequence:
-        tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
-
         last_position_ids = position_ids[:, -1]
         q_len = (
             torch.ones(position_ids.size(0), **tensor_kwargs)
@@ -358,8 +357,8 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
 
         cu_seq_lens_q = torch.cat(
             (
-                indices_q,
-                torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+                indices_q.to(**tensor_kwargs),
+                torch.tensor(position_ids.size(), **tensor_kwargs),
             )
         )
         cu_seq_lens_k = cu_seq_lens_q
