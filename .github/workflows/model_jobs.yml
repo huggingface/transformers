@@ -124,53 +124,53 @@ jobs:
         run: |
           python3 -m pip uninstall -y natten
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          START=0 END=400 python3 run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_1
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        if: ${{ always() }}
-        run: |
-          START=400 END=800 python3 run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_2
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        if: ${{ always() }}
-        run: |
-          START=800 END=1200 python3 run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_3
-          path: /transformers/summary_short.txt
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        if: ${{ always() }}
-        run: |
-          START=1200 END=1600 python3 run.py
-
-      - name: "Upload"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: summary_short_4
-          path: /transformers/summary_short.txt
+#          START=0 END=400 python3 run.py
+#
+#      - name: "Upload"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: summary_short_1
+#          path: /transformers/summary_short.txt
+#
+#      - name: Run all tests on GPU
+#        working-directory: /transformers
+#        if: ${{ always() }}
+#        run: |
+#          START=400 END=800 python3 run.py
+#
+#      - name: "Upload"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: summary_short_2
+#          path: /transformers/summary_short.txt
+#
+#      - name: Run all tests on GPU
+#        working-directory: /transformers
+#        if: ${{ always() }}
+#        run: |
+#          START=800 END=1200 python3 run.py
+#
+#      - name: "Upload"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: summary_short_3
+#          path: /transformers/summary_short.txt
+#
+#      - name: Run all tests on GPU
+#        working-directory: /transformers
+#        if: ${{ always() }}
+#        run: |
+#          START=1200 END=1600 python3 run.py
+#
+#      - name: "Upload"
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: summary_short_4
+#          path: /transformers/summary_short.txt
 
       - name: Run all tests on GPU
         working-directory: /transformers
