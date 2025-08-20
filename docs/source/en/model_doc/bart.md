@@ -112,10 +112,6 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 [[autodoc]] BartTokenizerFast
     - all
 
-
-<frameworkcontent>
-<pt>
-
 ## BartModel
 
 [[autodoc]] BartModel
@@ -140,62 +136,3 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 [[autodoc]] BartForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFBartModel
-
-[[autodoc]] TFBartModel
-    - call
-
-## TFBartForConditionalGeneration
-
-[[autodoc]] TFBartForConditionalGeneration
-    - call
-
-## TFBartForSequenceClassification
-
-[[autodoc]] TFBartForSequenceClassification
-    - call
-
-</tf>
-<jax>
-
-## FlaxBartModel
-
-[[autodoc]] FlaxBartModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForConditionalGeneration
-
-[[autodoc]] FlaxBartForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForSequenceClassification
-
-[[autodoc]] FlaxBartForSequenceClassification
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForQuestionAnswering
-
-[[autodoc]] FlaxBartForQuestionAnswering
-    - __call__
-    - encode
-    - decode
-
-## FlaxBartForCausalLM
-
-[[autodoc]] FlaxBartForCausalLM
-    - __call__
-</jax>
-</frameworkcontent>
-
-
-
