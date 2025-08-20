@@ -96,6 +96,28 @@ class Ovis2_5Config(Ovis2Config):
     model_type = "ovis2_5"
     sub_configs = {"vision_config": Ovis2_5VisionConfig, "text_config": Ovis2_5TextConfig}
 
+    def __init__(
+        self,
+        vision_config=None,
+        text_config=None,
+        image_token_id=151665,
+        visual_indicator_token_ids=[151666, 151667, 151668],
+        vocab_size=151643,
+        hidden_size=1536,
+        **kwargs,
+    ):
+        super().__init__(
+            vision_config=vision_config,
+            text_config=text_config,
+            image_token_id=image_token_id,
+            visual_indicator_token_ids=visual_indicator_token_ids,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            **kwargs
+        )
+        # TODO: add video token id
+
+
 
 class Ovis2_5VisionEmbeddings(Siglip2VisionEmbeddings):
     def __init__(self, config):
