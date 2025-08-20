@@ -1819,8 +1819,8 @@ class Trainer:
             if kahan_sum is not None:
                 kahan_sum = bool(kahan_sum)
 
+            adam_kwargs["weight_decay"] = args.weight_decay
             stable_adamw_kwargs = {
-                "weight_decay": args.weight_decay,
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
                 "kahan_sum": kahan_sum,
