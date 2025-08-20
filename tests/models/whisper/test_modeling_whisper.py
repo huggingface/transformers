@@ -1421,7 +1421,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
     @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     # TODO (joao, eustache): fix me :)
