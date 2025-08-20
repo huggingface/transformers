@@ -2730,7 +2730,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = "sdpa" if attn_implementation is None else attn_implementation
-        use_kernels_flash = attn_implementation == "flash_attention2" and not is_flash_attn_2_available()
+        use_kernels_flash = attn_implementation == "flash_attention_2" and not is_flash_attn_2_available()
         if use_kernels_flash:
             applicable_attn_implementation = "kernels-community/flash-attn"
         if re.match(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", applicable_attn_implementation):
