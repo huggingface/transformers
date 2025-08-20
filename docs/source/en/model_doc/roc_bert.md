@@ -65,7 +65,7 @@ model = AutoModelForMaskedLM.from_pretrained(
    torch_dtype=torch.float16,
    device_map="auto",
 )
-inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
+inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
    outputs = model(**inputs)

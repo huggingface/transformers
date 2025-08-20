@@ -99,7 +99,7 @@ Use [`~PreTrainedModel.from_pretrained`] to load the weights and configuration f
 
 When you load a model, configure the following parameters to ensure the model is optimally loaded.
 
-- `device_map="auto"` automatically allocates the model weights to your fastest device first, which is typically the GPU.
+- `device_map="auto"` automatically allocates the model weights to your fastest device first.
 - `torch_dtype="auto"` directly initializes the model weights in the data type they're stored in, which can help avoid loading the weights twice (PyTorch loads weights in `torch.float32` by default).
 
 ```py
@@ -109,10 +109,10 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_d
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 ```
 
-Tokenize the text and return PyTorch tensors with the tokenizer. Move the model to a GPU if it's available to accelerate inference.
+Tokenize the text and return PyTorch tensors with the tokenizer. Move the model to an accelerator if it's available to accelerate inference.
 
 ```py
-model_inputs = tokenizer(["The secret to baking a good cake is "], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["The secret to baking a good cake is "], return_tensors="pt").to(model.device)
 ```
 
 The model is now ready for inference or training.
@@ -169,12 +169,14 @@ Create a [`Pipeline`] object and select a task. By default, [`Pipeline`] downloa
 <hfoptions id="pipeline-tasks">
 <hfoption id="text generation">
 
-Set `device="cuda"` to accelerate inference with a GPU.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline
+from transformers import pipeline, infer_device
 
-pipeline = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device="cuda")
+device = infer_device()
+
+pipeline = pipeline("text-generation", model="meta-llama/Llama-2-7b-hf", device=device)
 ```
 
 Prompt [`Pipeline`] with some initial text to generate more text.
@@ -187,12 +189,14 @@ pipeline("The secret to baking a good cake is ", max_length=50)
 </hfoption>
 <hfoption id="image segmentation">
 
-Set `device="cuda"` to accelerate inference with a GPU.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline
+from transformers import pipeline, infer_device
 
-pipeline = pipeline("image-segmentation", model="facebook/detr-resnet-50-panoptic", device="cuda")
+device = infer_device()
+
+pipeline = pipeline("image-segmentation", model="facebook/detr-resnet-50-panoptic", device=device)
 ```
 
 Pass an image - a URL or local path to the image - to [`Pipeline`].
@@ -212,12 +216,14 @@ segments[1]["label"]
 </hfoption>
 <hfoption id="automatic speech recognition">
 
-Set `device="cuda"` to accelerate inference with a GPU.
+Use [`~infer_device`] to automatically detect an available accelerator for inference.
 
 ```py
-from transformers import pipeline
+from transformers import pipeline, infer_device
 
-pipeline = pipeline("automatic-speech-recognition", model="openai/whisper-large-v3", device="cuda")
+device = infer_device()
+
+pipeline = pipeline("automatic-speech-recognition", model="openai/whisper-large-v3", device=device)
 ```
 
 Pass an audio file to [`Pipeline`].

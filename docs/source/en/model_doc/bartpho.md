@@ -82,7 +82,7 @@ Quang tổng hợp hay gọi tắt là quang hợp là quá trình thu nhận v�
 tảo và một số vi khuẩn để tạo ra hợp chất hữu cơ phục vụ bản thân cũng như làm nguồn thức ăn cho hầu hết các sinh vật 
 trên Trái Đất. Quang hợp trong thực vật thường liên quan đến chất tố diệp lục màu xanh lá cây và tạo ra oxy như một sản phẩm phụ
 """
-inputs = tokenizer(text, return_tensors="pt").to("cuda")
+inputs = tokenizer(text, return_tensors="pt").to(model.device)
 
 outputs = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
