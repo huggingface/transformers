@@ -14,9 +14,9 @@
 """Testing suite for the PyTorch Xcodec model."""
 
 import inspect
+import json
 import math
 import os
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -445,7 +445,16 @@ with open(RESULTS_PATH, "r") as f:
 
 # convert dicts into tuples ordered to match test args
 EXPECTED_OUTPUTS_JSON = [
-    (f"{d['repo_id']}_{d['bandwidth']}", d["repo_id"], d["bandwidth"], d["codes"], d["decoded"], d["codec_error"], d["codec_tol"], d["dec_tol"])
+    (
+        f"{d['repo_id']}_{d['bandwidth']}",
+        d["repo_id"],
+        d["bandwidth"],
+        d["codes"],
+        d["decoded"],
+        d["codec_error"],
+        d["codec_tol"],
+        d["dec_tol"],
+    )
     for d in raw_data
 ]
 
@@ -454,8 +463,9 @@ EXPECTED_OUTPUTS_JSON = [
 @require_torch
 class XcodecIntegrationTest(unittest.TestCase):
     @parameterized.expand(EXPECTED_OUTPUTS_JSON)
-    def test_integration(self, test_name, repo_id, bandwidth, codes, decoded, codec_error, codec_tol, dec_tol):
-
+    def test_integration(
+        self, test_name, repo_id, bandwidth, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol
+    ):
         # load model
         model = XcodecModel.from_pretrained(repo_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(repo_id)
@@ -474,31 +484,29 @@ class XcodecIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             ENC_TOL = 0
             audio_codes = model.encode(x, bandwidth=bandwidth, return_dict=False)
-            if codes is not None:
-                codes = torch.tensor(codes).to(torch_device)
+            if exp_codes is not None:
+                exp_codes = torch.tensor(exp_codes).to(torch_device)
                 torch.testing.assert_close(
-                    audio_codes[..., : codes.shape[-1]],
-                    codes,
+                    audio_codes[..., : exp_codes.shape[-1]],
+                    exp_codes,
                     rtol=ENC_TOL,
                     atol=ENC_TOL,
                 )
 
             # dec_tol = 1e-5    # increased to 1e-4 for passing on 4 kbps
             input_values_dec = model.decode(audio_codes).audio_values
-            if decoded is not None:
-                decoded = torch.tensor(decoded).to(torch_device)
+            if exp_decoded is not None:
+                exp_decoded = torch.tensor(exp_decoded).to(torch_device)
                 torch.testing.assert_close(
-                    input_values_dec[..., : decoded.shape[-1]],
-                    decoded,
+                    input_values_dec[..., : exp_decoded.shape[-1]],
+                    exp_decoded,
                     rtol=dec_tol,
                     atol=dec_tol,
                 )
 
             # compute codec error
             codec_err = compute_rmse(input_values_dec, x)
-            torch.testing.assert_close(
-                codec_err, codec_error, rtol=codec_tol, atol=codec_tol
-            )
+            torch.testing.assert_close(codec_err, exp_codec_err, rtol=codec_tol, atol=codec_tol)
 
             # make sure forward and decode gives same result
             audio_values_enc_dec = model(x, bandwidth=bandwidth).audio_values

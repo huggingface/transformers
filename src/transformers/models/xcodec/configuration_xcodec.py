@@ -131,7 +131,10 @@ class XcodecConfig(PretrainedConfig):
                 self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
             else:
                 # assume HubertConfig as probably created from scratch
-                self.semantic_model_config = HubertConfig.from_dict(semantic_model_config)
+                logger.warning(
+                    "Could not determine semantic model type from config architecture. Defaulting to `HubertConfig`."
+                )
+                self.semantic_model_config = HubertConfig(**semantic_model_config)
         elif isinstance(semantic_model_config, WavLMConfig) or isinstance(semantic_model_config, HubertConfig):
             self.semantic_model_config = semantic_model_config
         else:
