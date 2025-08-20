@@ -22,7 +22,7 @@ if is_torch_available():
     from torch.nn.attention.flex_attention import create_block_mask
 
     from transformers import LlamaConfig
-    from transformers.masking_utils import create_causal_mask, find_packed_sequence_indices
+    from transformers.masking_utils import create_causal_mask, create_chunked_causal_mask, find_packed_sequence_indices
 
 
 # fmt: off
@@ -135,3 +135,58 @@ class MaskTest(unittest.TestCase):
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
         EXPECTED_SEQUENCE_INDICES = torch.tensor([[0, 0, 0, 0, 1, 1, 2, 2, 2, 2], [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]])
         self.assertTrue((find_packed_sequence_indices(position_ids) == EXPECTED_SEQUENCE_INDICES).all())
+
+    def test_chunked_mask_with_left_padding_and_large_prefill(self):
+        # Make sur we have an attention_chunk_size in the config
+        config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")
+
+        batch_size = 2
+        sequence_length = 8
+        pad_tokens = 4
+        input_ids = torch.randint(100, 200, (batch_size, sequence_length))
+        attention_mask = torch.tensor(
+            [[0 if i < pad_tokens else 1 for i in range(sequence_length)], [1] * sequence_length]
+        )
+        inputs_embeds = torch.empty_like(input_ids, dtype=torch.float16)
+
+        cache_position = torch.arange(sequence_length)
+        position_ids = torch.empty(batch_size, sequence_length, dtype=cache_position.dtype)
+        position_ids[0, :pad_tokens] = 1
+        position_ids[0, pad_tokens:] = torch.arange(sequence_length - pad_tokens)
+        position_ids[1, :] = cache_position
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+            # Here, for the padded sequence, the chunk size should start correctly at index 4 (otherwise, with 4 padding
+            # tokens are chunk_size=3, the first chunk is from indices 0-2, then 3-6 if we don't account for the padding correctly)
+            [[[[False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False],
+                [False, False, False, False,  True,  True, False, False],
+                [False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False,  True]]],
+
+
+            [[[ True, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False],
+                [False, False, False,  True,  True, False, False, False],
+                [False, False, False,  True,  True,  True, False, False],
+                [False, False, False, False, False, False,  True, False],
+                [False, False, False, False, False, False,  True,  True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
