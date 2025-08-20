@@ -1160,15 +1160,15 @@ class QuantizedCache(Cache):
             The quantization backend to use. One of `("quanto", "hqq").
         config (`PretrainedConfig`):
             The config of the model for which this Cache will be used.
-        nbits (`int`, *optional*, defaults to `4`):
+        nbits (`int`, *optional*, defaults to 4):
             The number of bits for quantization.
-        axis_key (`int`, *optional*, defaults to `0`):
+        axis_key (`int`, *optional*, defaults to 0):
             The axis on which to quantize the keys.
-        axis_value (`int`, *optional*, defaults to `0`):
+        axis_value (`int`, *optional*, defaults to 0):
             The axis on which to quantize the values.
-        q_group_size (`int`, *optional*, defaults to `64`):
+        q_group_size (`int`, *optional*, defaults to 64):
             Quantization is done per-channel according to a set `q_group_size` for both keys and values.
-        residual_length (`int`, *optional*, defaults to `128`):
+        residual_length (`int`, *optional*, defaults to 128):
             Maximum capacity for the original precision cache
     """
 
