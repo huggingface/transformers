@@ -505,7 +505,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 "Please set `generation_config.cache_implementation='static'`."
             )
 
-
         cache_config = {} if generation_config.cache_config is None else generation_config.cache_config
         batch_size = cache_config.get("batch_size", 1)
         max_cache_len = cache_config.get("max_cache_len", 4096)
