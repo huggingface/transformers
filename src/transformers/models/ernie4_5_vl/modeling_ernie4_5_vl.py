@@ -1103,7 +1103,8 @@ class VariableResolutionResamplerModel(nn.Module):
         Creates slices along the temporal dimension (usually if we have a video input).
 
         If a "real" (video) slicing happens, then we change [1,2,1,2,1,2] to [1,1,1,2,2,2] patterns.
-        Otherwise, we repeat along the axis, i.e. [1,1,1] to [1,1,1,1,1,1].
+        Otherwise, we repeat along the axis, i.e. [1,1,1] to [1,1,1,1,1,1]. NOTE: It is hard-coded
+        for `temporal_conv_size == 2`.
         """
         # Calculating offsets (based on flattened tensors)
         grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
