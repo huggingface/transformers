@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Sequence, TypeAlias, TypedDict, Union
+from typing import Any, Sequence, TypedDict, Union
 
-from typing_extensions import overload
+from typing_extensions import TypeAlias, overload
 
 from ..image_utils import is_pil_image
 from ..utils import is_vision_available, requires_backends
@@ -166,4 +166,3 @@ class KeypointMatchingPipeline(Pipeline):
             pair_result.append(Match(keypoint_image_0=kp_0, keypoint_image_1=kp_1, score=score.item()))
         pair_result = sorted(pair_result, key=lambda x: x["score"], reverse=True)
         return pair_result
-
