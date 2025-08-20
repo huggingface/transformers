@@ -4,8 +4,6 @@ from typing import Any, Optional
 
 import torch
 
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
-
 from .configuration_utils import PretrainedConfig
 from .utils import (
     is_hqq_available,
@@ -1070,54 +1068,6 @@ class DynamicCache(Cache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
-
-
-# Utilities for `DynamicCache` <> torch.export support
-
-if is_torch_greater_or_equal("2.3"):
-
-    def _get_cache_dict(cache: DynamicCache):
-        if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
-            raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-        if not is_torch_greater_or_equal_than_2_6:
-            logger.warning_once(
-                "DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
-            )
-
-        return {
-            "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
-            "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
-        }
-
-    def _unflatten_dynamic_cache(
-        values,
-        context: torch.utils._pytree.Context,
-    ):
-        dictionary = torch.utils._pytree._dict_unflatten(values, context)
-        cache = DynamicCache()
-        # Reconstruct layers from keys and values lists
-        key_list = dictionary.get("key_cache", [])
-        value_list = dictionary.get("value_cache", [])
-        for idx in range(max(len(key_list), len(value_list))):
-            key = key_list[idx] if idx < len(key_list) else None
-            value = value_list[idx] if idx < len(value_list) else None
-            cache.update(key, value, idx)
-        return cache
-
-    torch.utils._pytree.register_pytree_node(
-        DynamicCache,
-        lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache)),
-        _unflatten_dynamic_cache,
-        serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-        flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-            _get_cache_dict(dynamic_cache)
-        ),
-    )
-    # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
-    torch.fx._pytree.register_pytree_flatten_spec(
-        DynamicCache, lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec)
-    )
 
 
 class OffloadedCache(Cache):

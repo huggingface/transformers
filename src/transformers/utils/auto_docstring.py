@@ -63,6 +63,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "openai": "OpenAIGPTConfig",
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
+    "kosmos2-5": "Kosmos2_5Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
 }

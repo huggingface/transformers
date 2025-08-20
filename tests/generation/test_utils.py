@@ -1736,6 +1736,9 @@ class GenerationTesterMixin:
         to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -1956,6 +1959,9 @@ class GenerationTesterMixin:
         """
         set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
                 self.skipTest(reason="This model does not support the static cache format")
 
@@ -2050,7 +2056,7 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     @pytest.mark.torch_compile_test
     @require_torch_greater_or_equal("2.6")  # Uses torch.compiler.set_stance
-    def test_generate_compile_model_forward(self):
+    def test_generate_compile_model_forward_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile, keeping the same results. Also confirms that
         `.forward` called from `.generate` sees no graph breaks or recompilations when compiled.
@@ -2098,7 +2104,7 @@ class GenerationTesterMixin:
             # 3. compilation-specific setup and generation parameterization
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            compile_config = CompileConfig(dynamic=False)  # Error out on dynamic shapes
+            compile_config = CompileConfig(fullgraph=True, dynamic=False)  # Error out on dynamic shapes
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
@@ -2174,8 +2180,11 @@ class GenerationTesterMixin:
         In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
         """
         for model_class in self.all_generative_model_classes:
+            # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
+            # use a static cache because they don't create the causal masks correctly.
+            # TODO: cyril -> relax this by adding a `_support_static_cache` attribute
             if not model_class._can_compile_fullgraph:
-                self.skipTest("This model doesn't support compilation without graph breaks")
+                self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:
