@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be  rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-10-05 and added to Hugging Face Transformers on 2022-06-29.*
 
 
 
@@ -74,11 +75,11 @@ image_processor = AutoImageProcessor.from_pretrained(
    "apple/mobilevit-small",
    use_fast=True,
 )
-model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
+model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small", device_map="auto")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     logits = model(**inputs).logits

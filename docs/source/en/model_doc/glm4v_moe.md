@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-28 and added to Hugging Face Transformers on 2025-08-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -29,7 +30,7 @@ Vision-language models (VLMs) have become a key cornerstone of intelligent syste
 
 Through our open-source work, we aim to explore the technological frontier together with the community while empowering more developers to create exciting and innovative applications.
 
-[GLM-4.5V](https://github.com/zai-org/GLM-V) is based on ZhipuAI’s next-generation flagship text foundation model GLM-4.5-Air (106B parameters, 12B active).  It continues the technical approach of [GLM-4.1V-Thinking](https://arxiv.org/abs/2507.01006), achieving SOTA performance among models of the same scale on 42 public vision-language benchmarks.  It covers common tasks such as image, video, and document understanding, as well as GUI agent operations.
+[GLM-4.5V](https://huggingface.co/papers/2508.06471) ([Github repo](https://github.com/zai-org/GLM-V)) is based on ZhipuAI’s next-generation flagship text foundation model GLM-4.5-Air (106B parameters, 12B active).  It continues the technical approach of [GLM-4.1V-Thinking](https://huggingface.co/papers/2507.01006), achieving SOTA performance among models of the same scale on 42 public vision-language benchmarks.  It covers common tasks such as image, video, and document understanding, as well as GUI agent operations.
 
 ![bench_45](https://raw.githubusercontent.com/zai-org/GLM-V/refs/heads/main/resources/bench_45v.jpeg)
 

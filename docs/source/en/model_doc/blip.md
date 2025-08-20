@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-01-28 and added to Hugging Face Transformers on 2022-12-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -72,7 +73,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 question = "What is the weather in this image?"
-inputs = processor(images=image, text=question, return_tensors="pt").to("cuda", torch.float16)
+inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
 
 output = model.generate(**inputs)
 processor.batch_decode(output, skip_special_tokens=True)[0]

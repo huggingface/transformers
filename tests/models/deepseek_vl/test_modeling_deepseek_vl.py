@@ -28,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -193,7 +192,6 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_initialization(self):
         pass
 
-    @require_torch_sdpa
     # Copied from tests.models.janus.test_modeling_janus.JanusVisionText2TextModelTest.test_sdpa_can_dispatch_composite_models
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:

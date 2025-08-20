@@ -17,6 +17,7 @@ import math
 import unittest
 from unittest.util import safe_repr
 
+import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
@@ -518,6 +519,7 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @slow
+    @pytest.mark.torch_compile_test
     def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 

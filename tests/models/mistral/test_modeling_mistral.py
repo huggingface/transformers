@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -225,7 +224,6 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_7b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -278,6 +276,7 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+    @pytest.mark.torch_compile_test
     @slow
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2

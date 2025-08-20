@@ -34,9 +34,6 @@ if is_torch_available():
         xLSTMModel,
     )
     from transformers.models.xlstm.modeling_xlstm import xLSTMBlock, xLSTMCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
-else:
-    is_torch_greater_or_equal_than_2_2 = False
 
 
 class xLSTMModelTester:
