@@ -79,8 +79,8 @@ class ConvNextLayerNorm(nn.LayerNorm):
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, *args, data_format="channels_last", **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
         if data_format not in ["channels_last", "channels_first"]:
             raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
