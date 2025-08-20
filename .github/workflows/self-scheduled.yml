@@ -50,7 +50,7 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
