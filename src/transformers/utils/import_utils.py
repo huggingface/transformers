@@ -451,17 +451,10 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
+    # Mostly retained for backward compatibility in remote code, since sdpa works correctly on all torch versions >= 2.2
     if not is_torch_available() or _torch_version == "N/A":
         return False
-
-    # NOTE: MLU is OK with non-contiguous inputs.
-    if is_torch_mlu_available():
-        return True
-    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
-    if is_torch_npu_available():
-        return True
-    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
-    return version.parse(_torch_version) >= version.parse("2.1.1")
+    return True
 
 
 def is_torch_flex_attn_available():
