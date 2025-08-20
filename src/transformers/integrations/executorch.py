@@ -898,8 +898,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
                 model=self.full_model,
-                max_static_cache_length=self.generation_config.cache_config.get('max_cache_len'),
-                batch_size=self.generation_config.cache_config.get('batch_size'),
+                max_static_cache_length=self.generation_config.cache_config.get("max_cache_len"),
+                batch_size=self.generation_config.cache_config.get("batch_size"),
             )
             .to(target_device)
             .eval()
@@ -947,7 +947,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             encoder_hidden_states
             if encoder_hidden_states is not None
             else torch.zeros(
-                (self.generation_config.cache_config.get('batch_size'), 10, self.config.d_model),
+                (self.generation_config.cache_config.get("batch_size"), 10, self.config.d_model),
                 dtype=torch.float32,
                 device=device,
             )
@@ -965,13 +965,13 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             # Detect the device of the exported models by checking a parameter
             # We'll use the model's device as the target device
             model_device = self.full_model.device
-            
+
             # Move input to the model's device if it's on a different device
             if prompt_token_ids.device != model_device:
                 prompt_token_ids = prompt_token_ids.to(model_device)
-            
+
             device = prompt_token_ids.device
-            
+
             # Run encoder
             encoder_output = self.exported_encoder.module()(prompt_token_ids)
 
