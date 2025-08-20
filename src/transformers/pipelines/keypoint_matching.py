@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Union
+from typing import Any, Sequence, TypeAlias, TypedDict, Union
 
 from typing_extensions import overload
 
@@ -27,7 +27,13 @@ if is_vision_available():
     from ..image_utils import load_image
 
 
-def validate_image_pairs(images: Union[list, list[list]]):
+ImagePair: TypeAlias = Sequence[Union["Image.Image", str]]
+
+Keypoint = TypedDict("Keypoint", {"x": float, "y": float})
+Match = TypedDict("Match", {"keypoint_image_0": Keypoint, "keypoint_image_1": Keypoint, "score": float})
+
+
+def validate_image_pairs(images: Any) -> Sequence[Sequence[ImagePair]]:
     error_message = (
         "Input images must be a one of the following :",
         " - A pair of images.",
@@ -38,11 +44,11 @@ def validate_image_pairs(images: Union[list, list[list]]):
         """images is a PIL Image or a string."""
         return is_pil_image(image) or isinstance(image, str)
 
-    if isinstance(images, list):
+    if isinstance(images, Sequence):
         if len(images) == 2 and all((_is_valid_image(image)) for image in images):
             return [images]
         if all(
-            isinstance(image_pair, list)
+            isinstance(image_pair, Sequence)
             and len(image_pair) == 2
             and all(_is_valid_image(image) for image in image_pair)
             for image_pair in images
@@ -75,14 +81,17 @@ class KeypointMatchingPipeline(Pipeline):
         return preprocess_params, {}, postprocess_params
 
     @overload
-    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
+    def __call__(self, inputs: ImagePair, threshold: float = 0.0, **kwargs: Any) -> list[Match]: ...
 
     @overload
-    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+    def __call__(self, inputs: list[ImagePair], threshold: float = 0.0, **kwargs: Any) -> list[list[Match]]: ...
 
     def __call__(
-        self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+        self,
+        inputs: Union[list[ImagePair], ImagePair],
+        threshold: float = 0.0,
+        **kwargs: Any,
+    ) -> Union[list[Match], list[list[Match]]]:
         """
         Find matches between keypoints in two images.
 
@@ -98,27 +107,31 @@ class KeypointMatchingPipeline(Pipeline):
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
 
+            threshold (`float`, *optional*, defaults to 0.0):
+                The threshold to use for keypoint matching. Keypoints matched with a lower matching score will be filtered out.
+                A value of 0 means that all matched keypoints will be returned.
+
             kwargs:
-                - `threshold` (`float`, *optional*, defaults to 0.0):
-                    The threshold to use for keypoint matching.
-            timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
-                the call may block forever.
+                `timeout (`float`, *optional*, defaults to None)`
+                    The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                    the call may block forever.
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
-            dictionary, if the input is a list of several images, will return a list of dictionaries corresponding to
-            the images.
+            Union[list[Match], list[list[Match]]]:
+                A list of matches or a list if a single image pair is provided, or of lists of matches if a batch
+                of image pairs is provided. Each match is a dictionary containing the following keys:
 
-            The dictionaries contain the following keys:
-
-            - **label** (`str`) -- The label identified by the model.
-            - **score** (`int`) -- The score attributed by the model for that label.
+                - **keypoint_image_0** (`Keypoint`): The keypoint in the first image (x, y coordinates).
+                - **keypoint_image_1** (`Keypoint`): The keypoint in the second image (x, y coordinates).
+                - **score** (`float`): The matching score between the two keypoints.
         """
         if inputs is None:
             raise ValueError("Cannot call the keypoint-matching pipeline without an inputs argument!")
         formatted_inputs = validate_image_pairs(inputs)
-        return super().__call__(formatted_inputs, **kwargs)
+        outputs = super().__call__(formatted_inputs, threshold=threshold, **kwargs)
+        if len(formatted_inputs) == 1:
+            return outputs[0]
+        return outputs
 
     def preprocess(self, images, timeout=None):
         images = [load_image(image, timeout=timeout) for image in images]
@@ -135,16 +148,22 @@ class KeypointMatchingPipeline(Pipeline):
         forward_outputs = {"model_outputs": model_outputs, "target_sizes": [preprocess_outputs["target_sizes"]]}
         return forward_outputs
 
-    def postprocess(self, forward_outputs, threshold=0.0):
+    def postprocess(self, forward_outputs, threshold=0.0) -> list[Match]:
         model_outputs = forward_outputs["model_outputs"]
         target_sizes = forward_outputs["target_sizes"]
         postprocess_outputs = self.image_processor.post_process_keypoint_matching(
             model_outputs, target_sizes=target_sizes, threshold=threshold
         )
         postprocess_outputs = postprocess_outputs[0]
-        dict_result = {
-            "keypoints0": postprocess_outputs["keypoints0"].tolist(),
-            "keypoints1": postprocess_outputs["keypoints1"].tolist(),
-            "matching_scores": postprocess_outputs["matching_scores"].tolist(),
-        }
-        return dict_result
+        pair_result = []
+        for kp_0, kp_1, score in zip(
+            postprocess_outputs["keypoints0"],
+            postprocess_outputs["keypoints1"],
+            postprocess_outputs["matching_scores"],
+        ):
+            kp_0 = Keypoint(x=kp_0[0].item(), y=kp_0[1].item())
+            kp_1 = Keypoint(x=kp_1[0].item(), y=kp_1[1].item())
+            pair_result.append(Match(keypoint_image_0=kp_0, keypoint_image_1=kp_1, score=score.item()))
+        pair_result = sorted(pair_result, key=lambda x: x["score"], reverse=True)
+        return pair_result
+
