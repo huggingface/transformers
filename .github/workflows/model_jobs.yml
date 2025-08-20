@@ -122,11 +122,37 @@ jobs:
         working-directory: /transformers
         run: |
           python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
-          python3 -m run.sh
+          START=0 END=10 python3 -m run.py
 
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
+      - name: "Upload"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: summary_short
+          name: summary_short_1
+          path: /transformers/summary_short.txt
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
+          START=10 END=20 python3 -m run.py
+
+      - name: "Upload"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary_short_2
+          path: /transformers/summary_short.txt
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pip uninstall -y ninja && python3 -m pip install ninja && python3 -m pip install flash-attn --no-build-isolation
+          START=20 END=30 python3 -m run.py
+
+      - name: "Upload"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary_short_3
           path: /transformers/summary_short.txt

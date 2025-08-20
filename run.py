@@ -1,5 +1,8 @@
 import os
 
+start = int(os.environ.get("START"))
+end = int(os.environ.get("END"))
+
 # collect the test
 os.system('RUN_SLOW=1 python3 -m pytest tests/models/ -k "(not IntegrationTest) and (test_flash_attn_2 or _fa2_)" --collect-only --quiet | grep "::test" > test_names.txt')
 
@@ -15,7 +18,7 @@ os.system(f"rm -rf {final_report_name}")
 os.system(f'echo "" > {final_report_name}')
 
 # run the tests
-for idx, test in enumerate(test_names[:30]):
+for idx, test in enumerate(test_names[start:end]):
 
     print(f"test {idx}: {test}")
 
