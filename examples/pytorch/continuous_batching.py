@@ -145,3 +145,7 @@ if __name__ == "__main__":
 # python examples/pytorch/continuous_batching.py --attn sdpa_paged --matmul-precision none --samples 100 --displayed 1
 # Setting up static tensors with T = 4096, max_token_budget = 524288, 139538202624 bytes available
 # CB generation took: 29.53 seconds for 26384 tokens. 893.41tok/s
+
+# Without changes to continuous_batching.py
+# Using calculated num_blocks=369, block_size=32, max concurrent requests 23
+# CB generation took: 79.58 seconds for 25813 tokens. 324.38tok/s
