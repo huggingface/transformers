@@ -770,6 +770,16 @@ class Trainer:
         else:
             self.label_smoother = None
 
+        # Check for multi-label classification incompatibility
+        if self.args.label_smoothing_factor > 0:
+            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
+                warnings.warn(
+                    "Label smoothing is not compatible with multi-label classification. "
+                    "Disabling label smoothing for this training run.",
+                    UserWarning,
+                )
+                self.label_smoother = None
+
         self.control = TrainerControl()
 
         self.state = TrainerState(
