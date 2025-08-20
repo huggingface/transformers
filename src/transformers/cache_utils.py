@@ -248,17 +248,16 @@ class StaticLayer(CacheLayerMixin):
     """
     A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
     It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
+
+    Args:
+        max_cache_len (`int`):
+            Maximum number of tokens that can be stored, used for tensor preallocation.
     """
 
     is_compileable = True
     is_sliding = False
 
     def __init__(self, max_cache_len: int):
-        """
-        Args:
-            max_cache_len (`int`):
-                Maximum number of tokens that can be stored, used for tensor preallocation.
-        """
         super().__init__()
         self.max_cache_len = max_cache_len
 
@@ -357,18 +356,17 @@ class SlidingWindowLayer(StaticLayer):
     A static cache layer that stores the key and value states as static tensors of shape
     `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`. It lazily allocates its full backing
     tensors, and then mutates them in-place. Built for `torch.compile` support.
+
+    Args:
+        max_cache_len (`int`):
+            Maximum number of tokens that can be stored, used for tensor preallocation.
+        sliding_window (`int`):
+            The size of the sliding window.
     """
 
     is_sliding = True
 
     def __init__(self, max_cache_len: int, sliding_window: int):
-        """
-        Args:
-            max_cache_len (`int`):
-                Maximum number of tokens that can be stored, used for tensor preallocation.
-            sliding_window (`int`):
-                The size of the sliding window.
-        """
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
         self.cumulative_length = 0
@@ -722,7 +720,7 @@ class Cache:
     A `Cache` is mostly a list of `CacheLayerMixin` objects, one per model layer. It serves as a container for
     the Cache of each layer.
 
-    Parameters:
+    Args:
         layers (`Optional`, *optional*):
             A list of pre-created `CacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate` will
             be used.
@@ -966,6 +964,22 @@ class DynamicCache(Cache):
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
+    Args:
+        ddp_cache_data (`Iterable[tuple[torch.Tensor, torch.Tensor]]`, *optional*):
+            It was originally added for compatibility with `torch.distributed` (DDP). In a nutshell, it is
+            `map(gather_map, zip(*caches))`, i.e. each item in the iterable contains the key and value states
+            for a layer gathered across replicas by torch.distributed (shape=[global batch size, num_heads, seq_len, head_dim]).
+            Note: it needs to be the 1st arg as well to work correctly
+        config (`PretrainedConfig`, *optional*):
+            The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
+            or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
+            `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+        offloading (`bool`, *optional*, defaults to `False`):
+            Whether to perform offloading of the layers to `cpu`, to save GPU memory.
+        offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
+            If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
+            usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+
     Example:
 
     ```python
@@ -991,25 +1005,6 @@ class DynamicCache(Cache):
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
     ):
-        """
-        Create a `DynamicCache`. Specialized constructor for DDP cache data, needed for BC.
-
-        Args:
-            ddp_cache_data (`Iterable[tuple[torch.Tensor, torch.Tensor]]`, *optional*):
-                It was originally added for compatibility with `torch.distributed` (DDP). In a nutshell, it is
-                `map(gather_map, zip(*caches))`, i.e. each item in the iterable contains the key and value states
-                for a layer gathered across replicas by torch.distributed (shape=[global batch size, num_heads, seq_len, head_dim]).
-                Note: it needs to be the 1st arg as well to work correctly
-            config (`PretrainedConfig`, *optional*):
-                The config of the model for which this Cache will be used. If passed, it will be used to check for sliding
-                or hybrid layer structure, greatly reducing the memory requirement of the cached tensors to
-                `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
-            offloading (`bool`, *optional*, defaults to `False`):
-                Whether to perform offloading of the layers to `cpu`, to save GPU memory.
-            offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
-                If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
-                usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
-        """
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
@@ -1081,6 +1076,18 @@ class StaticCache(Cache):
 
     See `Cache` for details on common methods that are implemented by all cache classes.
 
+    Args:
+        config (`PretrainedConfig`):
+            The config of the model for which this Cache will be used. It will be used to check for sliding
+            or hybrid layer structure, and initialize each layer accordingly.
+        max_cache_len (`int`):
+            The maximum number of tokens that this Cache should hold.
+        offloading (`bool`, *optional*, defaults to `False`):
+            Whether to perform offloading of the layers to `cpu`, to save GPU memory.
+        offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
+            If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
+            usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+
     Example:
 
     ```python
@@ -1110,21 +1117,6 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        """
-        Create a `Static`. Specialized constructor for DDP cache data, needed for BC.
-
-        Args:
-            config (`PretrainedConfig`):
-                The config of the model for which this Cache will be used. It will be used to check for sliding
-                or hybrid layer structure, and initialize each layer accordingly.
-            max_cache_len (`int`):
-                The maximum number of tokens that this Cache should hold.
-            offloading (`bool`, *optional*, defaults to `False`):
-                Whether to perform offloading of the layers to `cpu`, to save GPU memory.
-            offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
-                If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
-                usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
-        """
         config = config.get_text_config()
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding
@@ -1162,6 +1154,22 @@ class QuantizedCache(Cache):
     described in the paper.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
+
+    Args:
+        backend (`str`):
+            The quantization backend to use. One of `("quanto", "hqq").
+        config (`PretrainedConfig`):
+            The config of the model for which this Cache will be used.
+        nbits (`int`, *optional*, defaults to `4`):
+            The number of bits for quantization.
+        axis_key (`int`, *optional*, defaults to `0`):
+            The axis on which to quantize the keys.
+        axis_value (`int`, *optional*, defaults to `0`):
+            The axis on which to quantize the values.
+        q_group_size (`int`, *optional*, defaults to `64`):
+            Quantization is done per-channel according to a set `q_group_size` for both keys and values.
+        residual_length (`int`, *optional*, defaults to `128`):
+            Maximum capacity for the original precision cache
     """
 
     def __init__(
@@ -1195,6 +1203,12 @@ class EncoderDecoderCache(Cache):
     cross-attention caches.
 
     See `Cache` for details on common methods that are implemented by all cache classes.
+
+    Args:
+        caches (`Iterable`):
+            Usually an iterable of length 2, containing 2 `Cache` objects, the first one for self-attention, the
+            second one for cross-attention. Can optionally also be an iterable of length 1, containing a
+            `tuple[tuple[torch.Tensor]]` (usually used for compatibility with torch dp and ddp).
 
     Example:
 
