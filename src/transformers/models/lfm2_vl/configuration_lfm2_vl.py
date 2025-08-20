@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch LFM2-VL model."""
 
 import torch
@@ -46,8 +60,6 @@ class Lfm2VlConfig(PretrainedConfig):
             The maximum number of image tokens for smart resize.
         encoder_patch_size (`int`, *optional*, defaults to 16):
             The patch size of the encoder.
-        max_num_patches (`int`, *optional*, defaults to 1024):
-            The maximum number of image tokens passed to the encoder per image or tile.
         use_image_special_tokens (`bool`, *optional*, defaults to `True`):
             Whether to use image special tokens.
         do_image_splitting (`bool`, *optional*, defaults to `True`):
@@ -65,16 +77,13 @@ class Lfm2VlConfig(PretrainedConfig):
     """
 
     model_type = "lfm2-vl"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=396,
+        image_token_id=396,
         projector_hidden_act="gelu",
         projector_hidden_size=2560,
         projector_bias=True,
@@ -83,7 +92,6 @@ class Lfm2VlConfig(PretrainedConfig):
         min_image_tokens=64,
         max_image_tokens=256,
         encoder_patch_size=16,
-        max_num_patches=1024,
         use_image_special_tokens=True,
         do_image_splitting=True,
         min_tiles=2,
@@ -96,7 +104,7 @@ class Lfm2VlConfig(PretrainedConfig):
     ):
         self.vision_config = vision_config
         self.text_config = text_config
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.projector_hidden_size = projector_hidden_size
         self.projector_bias = projector_bias
@@ -105,7 +113,6 @@ class Lfm2VlConfig(PretrainedConfig):
         self.min_image_tokens = min_image_tokens
         self.max_image_tokens = max_image_tokens
         self.encoder_patch_size = encoder_patch_size
-        self.max_num_patches = max_num_patches
         self.use_image_special_tokens = use_image_special_tokens
         self.do_image_splitting = do_image_splitting
         self.min_tiles = min_tiles

@@ -17,14 +17,13 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 
 from transformers.models.lfm2_vl.processing_lfm2_vl import (
-    round_by_factor,
-    ceil_by_factor,
-    floor_by_factor,
-    find_closest_aspect_ratio,
     Lfm2VlProcessor,
+    ceil_by_factor,
+    find_closest_aspect_ratio,
+    floor_by_factor,
+    round_by_factor,
 )
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -139,12 +138,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.small_image, text=image_str)
-        small_image_expected_seq_len = (
-            self.small_image.height
-            // processor_kwargs["encoder_patch_size"]
-            * self.small_image.width
-            // processor_kwargs["encoder_patch_size"]
-        ) ** processor_kwargs["downsample_factor"]
         encoder_feature_dims = 3 * processor.encoder_patch_size * processor.encoder_patch_size
         self.assertEqual(np.array(inputs["pixel_values"]).shape, (1, processor.max_num_patches, encoder_feature_dims))
         self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (1, processor.max_num_patches))
@@ -154,7 +147,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 [
                     (
                         self.small_image.height // processor_kwargs["encoder_patch_size"],
-                        self.small_image.width // processor_kwargs["encoder_patch_size"]
+                        self.small_image.width // processor_kwargs["encoder_patch_size"],
                     )
                 ]
             ),
@@ -171,9 +164,11 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         small_image_expected_seq_len = (
             self.small_image.height
-            // processor_kwargs["encoder_patch_size"] // processor_kwargs["downsample_factor"]  
+            // processor_kwargs["encoder_patch_size"]
+            // processor_kwargs["downsample_factor"]
             * self.small_image.width
-            // processor_kwargs["encoder_patch_size"] // processor_kwargs["downsample_factor"]
+            // processor_kwargs["encoder_patch_size"]
+            // processor_kwargs["downsample_factor"]
         )
 
         image_str = "<image>"

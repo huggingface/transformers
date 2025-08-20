@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch LFM2-VL model."""
 
 from dataclasses import dataclass
@@ -98,13 +112,15 @@ class PixelUnshuffleBlock(nn.Module):
         super().__init__()
         self.factor = factor
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        n, w, h, c = x.size()
-        x = x.reshape(n, w, h // self.factor, c * self.factor)
-        x = x.permute(0, 2, 1, 3)
-        x = x.reshape(n, h // self.factor, w // self.factor, c * self.factor**2)
-        x = x.permute(0, 2, 1, 3)
-        return x
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, width, height, channels = hidden_states.size()
+        hidden_states = hidden_states.reshape(batch_size, width, height // self.factor, channels * self.factor)
+        hidden_states = hidden_states.permute(0, 2, 1, 3)
+        hidden_states = hidden_states.reshape(
+            batch_size, height // self.factor, width // self.factor, channels * self.factor**2
+        )
+        hidden_states = hidden_states.permute(0, 2, 1, 3)
+        return hidden_states
 
 
 class Lfm2VlPreTrainedModel(PreTrainedModel):
@@ -122,7 +138,6 @@ class Lfm2VlPreTrainedModel(PreTrainedModel):
 
 
 class Lfm2VlModel(Lfm2VlPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
 
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
@@ -132,10 +147,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             self.vision_tower.vision_model.encoder.layers = self.vision_tower.vision_model.encoder.layers[
                 : config.vision_feature_layer + 1
             ]
-        if config.downsample_factor > 1:
-            self.pixel_unshuffle = PixelUnshuffleBlock(config.downsample_factor)
-        else:
-            self.pixel_unshuffle = nn.Identity()
+        self.pixel_unshuffle = PixelUnshuffleBlock(config.downsample_factor)
 
         self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -244,7 +256,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Lfm2VlModelOutputWithPast:
         """
@@ -279,9 +290,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        print(f"Saving inputs embeds: {inputs_embeds.shape} {inputs_embeds.dtype}")
-        torch.save(inputs_embeds, "/home/anna/liquid-speech/inputs_embeds_hf.pt")
-
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -312,9 +320,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         self.model = Lfm2VlModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def _supports_default_dynamic_cache(self):
-        return False
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -375,7 +380,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        image_sizes: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Lfm2VlCausalLMOutputWithPast:
         r"""
@@ -399,12 +403,10 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         >>> from transformers.image_utils import load_image
 
         >>> model = AutoModelForImageTextToText.from_pretrained(
-        ...     "",
-        ...     trust_remote_code=True
+        ...     "LiquidAI/LFM2-VL-1.6B",
         ... )
         >>> processor = AutoProcessor.from_pretrained(
-        ...     "",
-        ...     trust_remote_code=True
+        ...     "LiquidAI/LFM2-VL-1.6B",
         ... )
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -453,7 +455,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            image_sizes=image_sizes,
             **kwargs,
         )
 

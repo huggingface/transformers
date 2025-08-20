@@ -46,18 +46,16 @@ model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
     torch_dtype="bfloat16",
-    trust_remote_code=True
 )
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+processor = AutoProcessor.from_pretrained(model_id)
 
 # Load image and create conversation
-url = "https://www.ilankelman.org/stopsigns/australia.jpg"
 image = load_image(url)
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "image": image},
+            {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg},
             {"type": "text", "text": "What is in this image?"},
         ],
     },
