@@ -205,7 +205,7 @@ We will work to enable running with `device_map="auto"` and flex-attention witho
 tensor-parallel in the future.
 
 ```py
-from transformers import Llama4ForConditionalGeneration, AutoTokenizer
+from transformers import Llama4ForConditionalGeneration, AutoTokenizer, infer_device
 import torch
 import time
 
@@ -228,7 +228,9 @@ messages = [
 ]
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-torch.cuda.synchronize()
+device = infer_device()
+torch_device_module = getattr(torch, device, torch.cuda)
+torch_device_module.synchronize()
 start = time.time()
 out = model.generate(
     input_ids.to(model.device),
@@ -238,7 +240,7 @@ out = model.generate(
 )
 print(time.time()-start)
 print(tokenizer.batch_decode(out[:, input_ids.shape[-1]:]))
-print(f"{torch.cuda.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
+print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} GiB")
 ```
 
 </hfoption>

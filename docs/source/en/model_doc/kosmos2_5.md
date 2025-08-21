@@ -46,10 +46,10 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
 repo = "ydshieh/kosmos-2.5"
-device = "cuda:0"
+device = f"{infer_device()}:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
@@ -85,10 +85,10 @@ import re
 import torch
 import requests
 from PIL import Image, ImageDraw
-from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
 repo = "ydshieh/kosmos-2.5"
-device = "cuda:0"
+device = f"{infer_device()}:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
