@@ -517,7 +517,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         )
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        device = device
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -662,7 +661,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             raise AssertionError("Model must have caching enabled.")
 
         # Initialize the cache
-        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
