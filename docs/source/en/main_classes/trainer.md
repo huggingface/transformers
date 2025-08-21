@@ -29,7 +29,6 @@ when used with other models. When using it with your own model, make sure:
 - your model can compute the loss if a `labels` argument is provided and that loss is returned as the first
   element of the tuple (if your model returns tuples)
 - your model can accept multiple label arguments (use `label_names` in [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`
-- For classification models, you should not set `label_names`; such models expect a single `labels` tensor. `label_names` is only required when your model’s `forward()` method genuinely accepts multiple label arguments (e.g., extractive QA).
 </Tip>
 
 ## Trainer[[api-reference]]
