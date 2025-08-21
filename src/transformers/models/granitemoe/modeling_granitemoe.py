@@ -29,6 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...kernels.scattermoe import scattered_experts
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -317,6 +318,17 @@ class GraniteMoeTopKGating(nn.Module):
         return index_sorted_experts, batch_index, batch_gates, expert_size, logits
 
 
+# TODO add support for combileable bincount in PyTorch directly
+@torch.library.custom_op("transformers::bincount", mutates_args={})
+def bincount(x: torch.Tensor, minlength: int) -> torch.Tensor:
+    return x.bincount(minlength=minlength).to(torch.uint32)
+
+
+@bincount.register_fake
+def _(x: torch.Tensor, minlength: int) -> torch.Tensor:
+    return torch.empty(minlength, device=x.device, dtype=torch.uint32)
+
+
 class GraniteMoeMoE(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
@@ -341,36 +353,85 @@ class GraniteMoeMoE(nn.Module):
             top_k=config.num_experts_per_tok,
         )
 
-    def forward(self, layer_input):
-        """
-        Forward pass of the mixture of experts layer.
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
 
-        Args:
-            layer_input (Tensor):
-                Input tensor.
+    # def forward(self, layer_input):
+    #     """
+    #     Forward pass of the mixture of experts layer.
 
-        Returns:
-            Tensor:
-                Output tensor.
-            Tensor:
-                Router logits.
-        """
-        bsz, length, emb_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
+    #     Args:
+    #         layer_input (Tensor):
+    #             Input tensor.
 
-        expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)
+    #     Returns:
+    #         Tensor:
+    #             Output tensor.
+    #         Tensor:
+    #             Router logits.
+    #     """
+    #     bsz, length, emb_size = layer_input.size()
+    #     layer_input = layer_input.reshape(-1, emb_size)
+    #     _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
+
+    #     expert_inputs = layer_input[batch_index]
+    #     hidden_states = self.input_linear(expert_inputs, expert_size)
+    #     chunked_hidden_states = hidden_states.chunk(2, dim=-1)
+    #     hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+    #     expert_outputs = self.output_linear(hidden_states, expert_size)
+
+    #     expert_outputs = expert_outputs * batch_gates[:, None]
+
+    #     zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
+    #     layer_output = zeros.index_add(0, batch_index, expert_outputs)
+    #     layer_output = layer_output.view(bsz, length, self.input_size)
+    #     return layer_output, router_logits
+    
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        original_shape = hidden_states.shape
+        hidden_states = hidden_states.view(-1, self.hidden_size)
+
+        router_logits = self.router.layer(hidden_states)
+        router_weights, selected_experts = router_logits.topk(self.top_k, dim=-1)
+
+        router_weights = F.softmax(router_weights.float(), dim=-1)
+        router_weights = router_weights.type_as(hidden_states)
+
+        with torch.no_grad():
+            sorted_expert_idxs, sorted_scattered_idxs = selected_experts.flatten().sort()
+            expert_frequency = bincount(x=sorted_expert_idxs, minlength=self.num_experts)
+            expert_offsets = expert_frequency.cumsum(-1)
+
+        hidden_states = scattered_experts(
+            inputs=hidden_states,
+            expert_weights=self.input_linear.weight.permute(0, 2, 1),
+            k=self.top_k,
+            sorted_expert_idxs=sorted_expert_idxs,
+            sorted_scattered_idxs=sorted_scattered_idxs,
+            expert_offsets=expert_offsets,
+            gates=None,
+            grouped_in=False,
+            grouped_out=True,
+        )
+
         chunked_hidden_states = hidden_states.chunk(2, dim=-1)
         hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        expert_outputs = self.output_linear(hidden_states, expert_size)
 
-        expert_outputs = expert_outputs * batch_gates[:, None]
+        hidden_states = scattered_experts(
+            inputs=hidden_states,
+            expert_weights=self.weight.permute(0, 2, 1),
+            k=1,
+            sorted_expert_idxs=sorted_expert_idxs,
+            sorted_scattered_idxs=sorted_scattered_idxs,
+            expert_offsets=expert_offsets,
+            gates=router_weights,
+            grouped_in=True,
+            grouped_out=False,
+        )
 
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        layer_output = zeros.index_add(0, batch_index, expert_outputs)
-        layer_output = layer_output.view(bsz, length, self.input_size)
-        return layer_output, router_logits
+        hidden_states = hidden_states.view(original_shape)
+
+        return hidden_states, router_logits
 
 
 # Copied from transformers.models.granite.modeling_granite.repeat_kv with Granite->GraniteMoe
