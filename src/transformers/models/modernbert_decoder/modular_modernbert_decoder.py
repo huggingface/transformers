@@ -457,9 +457,13 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         self, attn_implementation: Optional[str], is_init_check: bool = False
     ) -> str:
         """We overwrite this to make sdpa the first selection again if nothing was requested."""
-        attn_implementation = (
-            "sdpa" if attn_implementation is None and self._sdpa_can_dispatch() else attn_implementation
-        )
+
+        try:
+            attn_implementation = (
+                "sdpa" if attn_implementation is None and self._sdpa_can_dispatch() else attn_implementation
+            )
+        except (ValueError, ImportError):
+            pass
 
         return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check)
 
