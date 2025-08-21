@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     require_gguf,
     require_read_token,
     require_torch_accelerator,
+    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
@@ -439,6 +440,7 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am interested in [The Park]\nThe"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_bloom_fp16(self):
         tokenizer = AutoTokenizer.from_pretrained(self.bloom_model_id, gguf_file=self.fp16_bloom_model_id)
         model = AutoModelForCausalLM.from_pretrained(
