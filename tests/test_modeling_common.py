@@ -3501,6 +3501,11 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
+                # Some models have support for FA but not SDPA - making sure we have a valid attention
+                initial_attention_implementation = "sdpa"
+                if model.config._attn_implementation != "sdpa":
+                    initial_attention_implementation = "eager"
+
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
@@ -3526,7 +3531,7 @@ class ModelTesterMixin:
                     model.set_attn_implementation(attn_implementation)
                     outputs_fa = model(dummy_input, output_hidden_states=True)
 
-                model.set_attn_implementation("sdpa")
+                model.set_attn_implementation(initial_attention_implementation)
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder
@@ -3563,7 +3568,7 @@ class ModelTesterMixin:
                     model.set_attn_implementation(attn_implementation)
                     outputs_fa = model(dummy_input, **other_inputs)
 
-                model.set_attn_implementation("sdpa")
+                model.set_attn_implementation(initial_attention_implementation)
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder

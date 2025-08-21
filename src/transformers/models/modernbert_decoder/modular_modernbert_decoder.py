@@ -398,12 +398,8 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     config: ModernBertDecoderConfig
-    base_model_prefix = "model"
     _skip_keys_device_placement = ["past_key_values"]
     _no_split_modules = ["ModernBertDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = False
-    _supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -456,6 +452,20 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             module.weight.data.fill_(1.0)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+    def _check_and_adjust_attn_implementation(
+        self, attn_implementation: Optional[str], is_init_check: bool = False
+    ) -> str:
+        """We overwrite this to make sdpa the first selection again if nothing was requested."""
+
+        try:
+            attn_implementation = (
+                "sdpa" if attn_implementation is None and self._sdpa_can_dispatch() else attn_implementation
+            )
+        except (ValueError, ImportError):
+            pass
+
+        return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check)
 
 
 @auto_docstring

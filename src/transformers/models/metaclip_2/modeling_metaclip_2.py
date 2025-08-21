@@ -545,6 +545,7 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
     config: MetaClip2TextConfig
 
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
+    _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
 
     def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
@@ -789,6 +790,7 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 class MetaClip2Model(MetaClip2PreTrainedModel):
     config: MetaClip2Config
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer", "MetaClip2VisionEmbeddings"]
+    _supports_flash_attn = False  # mask creation only accounts for sdpa/eager
 
     def __init__(self, config: MetaClip2Config):
         super().__init__(config)
