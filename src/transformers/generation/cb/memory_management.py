@@ -85,7 +85,6 @@ class PagedAttentionMemoryHandler:
             num_blocks=num_blocks,
             cache_dtype=cache_dtype,
         )
-        logger.warning(f"{available_memory = }, {memory_footprint = }, {num_blocks = }, {max_batch_tokens = }")
         if sum(memory_footprint) > available_memory:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available_memory}")
         return num_blocks, max_batch_tokens
