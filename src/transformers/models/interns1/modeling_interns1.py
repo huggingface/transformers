@@ -595,6 +595,7 @@ class InternS1ModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
+
     router_logits: Optional[tuple[torch.FloatTensor]] = None
 
 

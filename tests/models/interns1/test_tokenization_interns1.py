@@ -15,20 +15,20 @@
 
 
 import copy
-import unittest
 import os
-import json
 from functools import lru_cache
 
-from transformers import InternS1Tokenizer, AddedToken
-from ...test_tokenization_common import use_cache_if_possible
+from transformers import AddedToken, InternS1Tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
-    require_tokenizers,
     require_sentencepiece,
+    require_tokenizers,
     slow,
 )
+
+from ...test_tokenization_common import use_cache_if_possible
 from ..qwen2.test_tokenization_qwen2 import Qwen2TokenizationTest
+
 
 Qwen2TokenizationTest.__test__ = False
 
@@ -129,36 +129,26 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
                 all_size_2 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_2, 0)
-                self.assertEqual(
-                    vocab_size_2, vocab_size + len(new_toks)
-                )  # Modified here
+                self.assertEqual(vocab_size_2, vocab_size + len(new_toks))  # Modified here
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
-                tokens = tokenizer.encode(
-                    "aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False
-                )
+                tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
 
                 new_toks_2 = {
-                    "eos_token": AddedToken(
-                        ">>>>|||<||<<|<<", rstrip=True, lstrip=True
-                    ),
-                    "pad_token": AddedToken(
-                        "<<<<<|||>|>>>>|>", rstrip=True, lstrip=True
-                    ),
+                    "eos_token": AddedToken(">>>>|||<||<<|<<", rstrip=True, lstrip=True),
+                    "pad_token": AddedToken("<<<<<|||>|>>>>|>", rstrip=True, lstrip=True),
                 }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_3, 0)
-                self.assertEqual(
-                    vocab_size_3, vocab_size_2 + len(new_toks_2)
-                )  # Modified here
+                self.assertEqual(vocab_size_3, vocab_size_2 + len(new_toks_2))  # Modified here
                 self.assertEqual(added_toks_2, len(new_toks_2))
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
@@ -205,10 +195,10 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
         tokenizer = self.tokenizer_class.from_pretrained("internlm/Intern-S1")
         text = """**CC(C)(C)OC(=O)NC@@HC(=O)O, the SMILES representation of N-tert-butyloxycarbonyl-L-phenylalanine, often abbreviated as Boc-Phe-OH.
 It's a pretty important molecule in organic chemistry and biochemistry. The `CC(C)(C)` at the beginning represents the tert-butyl group - that's the protecting group.
-Then we have `OC(=O)` which is the carbonyl part of the ester. The `N` is the nitrogen atom from the amino group, and `[C@@H]` shows us we have a chiral carbon with 
-specific stereochemistry (this is the L-form, which is the natural form found in proteins). The `(CC1=CC=CC=C1)` part is the benzyl side chain - that's what makes this 
-phenylalanine instead of some other amino acid. It's basically a benzene ring attached to the main carbon chain. Finally, `C(=O)O` represents the carboxylic acid group 
-that's still free and available for reactions."""
+Then we have `OC(=O)` which is the carbonyl part of the ester. The `N` is the nitrogen atom from the amino group, and `[C@@H]` shows us we have a chiral carbon with
+ specific stereochemistry (this is the L-form, which is the natural form found in proteins). The `(CC1=CC=CC=C1)` part is the benzyl side chain - that's what makes this
+ phenylalanine instead of some other amino acid. It's basically a benzene ring attached to the main carbon chain. Finally, `C(=O)O` represents the carboxylic acid group
+ that's still free and available for reactions."""
 
         self.assertEqual(text, tokenizer.decode(tokenizer.encode(text)))
         self.assertEqual(

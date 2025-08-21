@@ -24,35 +24,33 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ..convnextv2.modeling_convnextv2 import ConvNextV2DropPath
-from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging
-)
-from ..auto import AutoModel
 from ...modeling_outputs import BaseModelOutput
-from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
-from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
-                                          InternVLVisionRMSNorm,
-                                          InternVLVisionAttention,
-                                          InternVLVisionModelOutputWithPooling,
-                                          InternVLVisionPatchEmbeddings,
-                                          InternVLVisionMLP,
-                                          InternVLVisionPreTrainedModel,
-                                          InternVLMultiModalProjector,
-                                          InternVLModelOutputWithPast,
-                                          InternVLVisionEmbeddings,
-                                          InternVLCausalLMOutputWithPast,
-                                          InternVLVisionLayer,
-                                          InternVLForConditionalGeneration,
-                                          InternVLVisionModel,
-                                          InternVLModel)
-from .configuration_interns1 import InternS1Config, InternS1VisionConfig
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import AutoModel
+from ..convnextv2.modeling_convnextv2 import ConvNextV2DropPath
+from ..internvl.modeling_internvl import (
+    InternVLCausalLMOutputWithPast,
+    InternVLForConditionalGeneration,
+    InternVLModel,
+    InternVLModelOutputWithPast,
+    InternVLMultiModalProjector,
+    InternVLPreTrainedModel,
+    InternVLVisionAttention,
+    InternVLVisionEmbeddings,
+    InternVLVisionLayer,
+    InternVLVisionMLP,
+    InternVLVisionModel,
+    InternVLVisionModelOutputWithPooling,
+    InternVLVisionPatchEmbeddings,
+    InternVLVisionPreTrainedModel,
+    InternVLVisionRMSNorm,
+)
 from ..internvl.processing_internvl import InternVLProcessor
 from ..internvl.video_processing_internvl import InternVLVideoProcessor
+from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
+from .configuration_interns1 import InternS1Config, InternS1VisionConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -62,7 +60,7 @@ class InternS1Processor(InternVLProcessor):
 
 
 class InternS1VideoProcessor(InternVLVideoProcessor):
-   pass
+    pass
 
 
 class InternS1VisionRMSNorm(InternVLVisionRMSNorm):
@@ -89,7 +87,6 @@ class InternS1VisionModelOutputWithPooling(InternVLVisionModelOutputWithPooling)
 
 
 class InternS1VisionPatchEmbeddings(InternVLVisionPatchEmbeddings):
-
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
@@ -167,8 +164,7 @@ class InternS1VisionEncoder(nn.Module):
             copy_config = copy.deepcopy(config)
             copy_config.drop_path_rate = dpr[idx]
             dpr_configs.append(copy_config)
-        self.layer = nn.ModuleList([
-            InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     @can_return_tuple
@@ -229,6 +225,7 @@ class InternS1ModelOutputWithPast(InternVLModelOutputWithPast):
         Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
         loss for Mixture of Experts models.
     """
+
     router_logits: Optional[tuple[torch.FloatTensor]] = None
 
 
@@ -244,7 +241,7 @@ class InternS1Model(InternVLModel):
 
         # Note: We aim for InternS1 to support both dense and MoE configurations in its LLM component.
         self.is_moe_model = False
-        if hasattr(config.text_config, 'output_router_logits'):
+        if hasattr(config.text_config, "output_router_logits"):
             self.is_moe_model = True
 
         self.post_init()
@@ -275,10 +272,11 @@ class InternS1Model(InternVLModel):
         )
         if self.is_moe_model:
             output_router_logits = (
-                output_router_logits if output_router_logits is not None else
-                self.config.text_config.output_router_logits
+                output_router_logits
+                if output_router_logits is not None
+                else self.config.text_config.output_router_logits
             )
-            kwargs['output_router_logits'] = output_router_logits
+            kwargs["output_router_logits"] = output_router_logits
 
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -360,7 +358,7 @@ class InternS1ForConditionalGeneration(InternVLForConditionalGeneration):
 
         # Note: We aim for InternS1 to support both dense and MoE configurations in its LLM component.
         self.is_moe_model = False
-        if hasattr(config.text_config, 'output_router_logits'):
+        if hasattr(config.text_config, "output_router_logits"):
             self.is_moe_model = True
         self.post_init()
 
@@ -427,9 +425,11 @@ class InternS1ForConditionalGeneration(InternVLForConditionalGeneration):
         )
         if self.is_moe_model:
             output_router_logits = (
-                output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+                output_router_logits
+                if output_router_logits is not None
+                else self.config.text_config.output_router_logits
             )
-            kwargs['output_router_logits'] = output_router_logits
+            kwargs["output_router_logits"] = output_router_logits
 
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -497,5 +497,5 @@ __all__ = [
     "InternS1Model",
     "InternS1ForConditionalGeneration",
     "InternS1VideoProcessor",
-    "InternS1Processor"
+    "InternS1Processor",
 ]

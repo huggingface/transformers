@@ -19,20 +19,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_vision_available
+from ...utils import TensorType, is_torchvision_v2_available, is_vision_available
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
+
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
