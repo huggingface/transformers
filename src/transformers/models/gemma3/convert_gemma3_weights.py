@@ -636,16 +636,19 @@ def main(*args):
         # Retrieval tasks.
         # https://github.com/embeddings-benchmark/mteb/blob/main/docs/usage/usage.md#running-sentencetransformer-model-with-prompts
         task_prompts = {
-            "clustering": "task: clustering | query: ",
-            "classification": "task: classification | query: ",
-            "question_answering": "task: question answering | query: ",
-            "search_result": "task: search result | query: ",
-            "sentence_similarity": "task: sentence similarity | query: ",
-            "fact_checking": "task: fact checking | query: ",
-            "retrieval_document": "title: | text: ",
             "query": "task: search result | query: ",
-            "document": "title: | text: ",
-            "passage": "title: | text: ",
+            "document": "title: none | text: ",
+            "BitextMining": "task: search result | query: ",
+            "Clustering": "task: clustering | query: ",
+            "Classification": "task: classification | query: ",
+            "InstructionRetrieval": "task: code retrieval | query: ",
+            "MultilabelClassification": "task: classification | query: ",
+            "PairClassification": "task: sentence similarity | query: ",
+            "Reranking": "task: search result | query: ",
+            "Retrieval-query": "task: search result | query: ",
+            "Retrieval-document": "title: none | text: ",
+            "STS": "task: sentence similarity | query: ",
+            "Summarization": "task: summarization | query: ",
         }
 
         transformer = models.Transformer(output_path)
