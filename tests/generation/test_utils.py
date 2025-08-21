@@ -51,7 +51,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     set_model_tester_for_less_flaky_test,
@@ -83,8 +82,7 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
-        HybridCache,
-        QuantoQuantizedCache,
+        QuantoQuantizedLayer,
         StaticCache,
     )
     from transformers.generation import (
@@ -1957,7 +1955,6 @@ class GenerationTesterMixin:
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
         has the expected shapes
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # Here, we should ideally not skip any model, and test them all. However, some old models cannot correctly
             # use a static cache because they don't create the causal masks correctly.
@@ -2042,7 +2039,7 @@ class GenerationTesterMixin:
             }
 
             results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertTrue(isinstance(results.past_key_values, QuantoQuantizedCache))
+            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.past_key_values.layers))
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
@@ -2063,7 +2060,6 @@ class GenerationTesterMixin:
 
         ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
-        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             # 1. Test exclusion criteria
             if not model_class._can_compile_fullgraph:
@@ -2164,7 +2160,12 @@ class GenerationTesterMixin:
             finally:
                 torch._logging.set_logs()
 
-            if "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out):
+            # Compilation of sliding layers necessarily has recompiles with `dynamic=False` - however this test
+            # still checks that `fullgraph=True` is supported in this case, as compilation with `dynamic=None`
+            # is the default and does not actually lead to too many recompiles
+            has_sliding_layers = any(decoder_cache.is_sliding)
+            has_recompilation = "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out)
+            if not has_sliding_layers and has_recompilation:
                 raise RuntimeError(
                     f"`torch.compile` recompiled part of the forward pass in {model.__class__.__name__}. "
                     "See the test logs for more details."
@@ -2366,7 +2367,6 @@ class GenerationTesterMixin:
                 self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """Tests that generate has equivalent outputs with SDPA and eager attention implementations."""
@@ -2532,11 +2532,11 @@ class GenerationTesterMixin:
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -2581,7 +2581,7 @@ class GenerationTesterMixin:
 
         # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
         # new token(s)
-        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
         # elaborate checks
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input

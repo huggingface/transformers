@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     require_torch_fp16,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -194,7 +193,6 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return logits_processor_kwargs
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
@@ -692,7 +690,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
-    @require_torch_sdpa
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_eager_matches_sdpa_generate(self):
