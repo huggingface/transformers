@@ -19,8 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import collections.abc
+import copy
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
@@ -42,7 +42,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     torch_int,
 )
 from ..auto import AutoModel
@@ -400,7 +399,7 @@ class InternS1DropPath(nn.Module):
 class InternS1VisionLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: InternS1VisionConfig, drop_path_rate: float = 0.0) -> None:
+    def __init__(self, config: InternS1VisionConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -416,8 +415,8 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # Note: Compared to InternVL, we have added support for drop_path to facilitate user fine-tuning.
-        self.drop_path1 = InternS1DropPath(drop_path_rate)
-        self.drop_path2 = InternS1DropPath(drop_path_rate)
+        self.drop_path1 = InternS1DropPath(config.drop_path_rate)
+        self.drop_path2 = InternS1DropPath(config.drop_path_rate)
 
     def forward(
         self,
@@ -451,10 +450,14 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
 
 class InternS1VisionEncoder(nn.Module):
     def __init__(self, config: InternS1VisionConfig) -> None:
-        super().__init__()
         self.config = config
         dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
-        self.layer = nn.ModuleList([InternS1VisionLayer(config, dpr[idx]) for idx in range(config.num_hidden_layers)])
+        dpr_configs = []
+        for idx in range(config.num_hidden_layers):
+            copy_config = copy.deepcopy(config)
+            copy_config.drop_path_rate = dpr[idx]
+            dpr_configs.append(copy_config)
+        self.layer = nn.ModuleList([InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     @can_return_tuple
@@ -653,6 +656,7 @@ class InternS1Model(InternS1PreTrainedModel):
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
         )
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
@@ -679,6 +683,30 @@ class InternS1Model(InternS1PreTrainedModel):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         return vision_features
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+            )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -733,24 +761,10 @@ class InternS1Model(InternS1PreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -761,7 +775,6 @@ class InternS1Model(InternS1PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
@@ -954,7 +967,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model.get_decoder
+        return self.model.get_decoder()
 
     def get_image_features(
         self,
@@ -970,7 +983,7 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1073,7 +1086,6 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
             image_sizes=image_sizes,
             **kwargs,

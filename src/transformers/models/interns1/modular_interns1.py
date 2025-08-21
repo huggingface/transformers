@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import copy
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -24,18 +24,15 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ..convnextv2.modeling_convnextv2 import ConvNextV2DropPath
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging
 )
 from ..auto import AutoModel
-from ...modeling_outputs import BaseModelOutput
 from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
 from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
                                           InternVLVisionRMSNorm,
@@ -48,11 +45,24 @@ from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
                                           InternVLModelOutputWithPast,
                                           InternVLVisionEmbeddings,
                                           InternVLCausalLMOutputWithPast,
+                                          InternVLVisionLayer,
+                                          InternVLVisionEncoder,
                                           InternVLForConditionalGeneration,
+                                          InternVLVisionModel,
                                           InternVLModel)
 from .configuration_interns1 import InternS1Config, InternS1VisionConfig
+from ..internvl.processing_internvl import InternVLProcessor
+from ..internvl.video_processing_internvl import InternVLVideoProcessor
 
 logger = logging.get_logger(__name__)
+
+
+class InternS1Processor(InternVLProcessor):
+    pass
+
+
+class InternS1VideoProcessor(InternVLVideoProcessor):
+   pass
 
 
 class InternS1VisionRMSNorm(InternVLVisionRMSNorm):
@@ -109,27 +119,13 @@ class InternS1DropPath(ConvNextV2DropPath):
 NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": InternS1VisionRMSNorm}
 
 
-class InternS1VisionLayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: InternS1VisionConfig, drop_path_rate: float = 0.0) -> None:
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = InternS1VisionAttention(config)
-        self.mlp = InternS1VisionMLP(config)
-        # InternS1 uses different layernorm implementations for different models
-        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-
-        init_values = config.layer_scale_init_value
-        self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+class InternS1VisionLayer(InternVLVisionLayer):
+    def __init__(self, config: InternS1VisionConfig) -> None:
+        super().__init__(config)
 
         # Note: Compared to InternVL, we have added support for drop_path to facilitate user fine-tuning.
-        self.drop_path1 = InternS1DropPath(drop_path_rate)
-        self.drop_path2 = InternS1DropPath(drop_path_rate)
+        self.drop_path1 = InternS1DropPath(config.drop_path_rate)
+        self.drop_path2 = InternS1DropPath(config.drop_path_rate)
 
     def forward(
         self,
@@ -161,98 +157,23 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
         return layer_output, attention_weights
 
 
-class InternS1VisionEncoder(nn.Module):
+class InternS1VisionEncoder(InternVLVisionEncoder):
     def __init__(self, config: InternS1VisionConfig) -> None:
-        super().__init__()
         self.config = config
         dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
+        dpr_configs = []
+        for idx in range(config.num_hidden_layers):
+            copy_config = copy.deepcopy(config)
+            copy_config.drop_path_rate = dpr[idx]
+            dpr_configs.append(copy_config)
         self.layer = nn.ModuleList([
-            InternS1VisionLayer(config, dpr[idx]) for idx in range(config.num_hidden_layers)])
+            InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-
-    @can_return_tuple
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(hidden_states, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
 
 
 @auto_docstring
-class InternS1VisionModel(InternS1VisionPreTrainedModel):
-    def __init__(self, config: InternS1VisionConfig) -> None:
-        super().__init__(config)
-        self.config = config
-
-        self.embeddings = InternS1VisionEmbeddings(config)
-        self.encoder = InternS1VisionEncoder(config)
-
-        self.layernorm = (
-            nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> Union[tuple, InternS1VisionModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-
-        return InternS1VisionModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+class InternS1VisionModel(InternVLVisionModel):
+    pass
 
 
 class InternS1PreTrainedModel(InternVLPreTrainedModel):
@@ -349,24 +270,10 @@ class InternS1Model(InternVLModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
-
-            if input_ids is None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                special_image_mask = special_image_mask.all(-1)
-            else:
-                special_image_mask = input_ids == self.config.image_token_id
-
-            n_image_tokens = (special_image_mask).sum()
-            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
-                n_image_features = image_features.shape[0] * image_features.shape[1]
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
@@ -558,4 +465,6 @@ __all__ = [
     "InternS1PreTrainedModel",
     "InternS1Model",
     "InternS1ForConditionalGeneration",
+    "InternS1VideoProcessor",
+    "InternS1Processor"
 ]
