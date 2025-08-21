@@ -938,13 +938,10 @@ class ContinuousBatchProcessor:
         if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
             for i in range(len(cu_seq_lens_q) - 1):
                 if (
-                    cu_seq_lens_q[i + 1] - cu_seq_lens_q[i]
-                    < cu_seq_lens_k[i + 1] - cu_seq_lens_k[i]
+                    cu_seq_lens_q[i + 1] - cu_seq_lens_q[i] < cu_seq_lens_k[i + 1] - cu_seq_lens_k[i]
                     and cu_seq_lens_q[i + 1] - cu_seq_lens_q[i] >= 1
                 ):
-                    diagonal = (
-                        cu_seq_lens_k[i + 1] - (cu_seq_lens_q[i + 1] - cu_seq_lens_q[i]) + 1
-                    )
+                    diagonal = cu_seq_lens_k[i + 1] - (cu_seq_lens_q[i + 1] - cu_seq_lens_q[i]) + 1
                     diagonal = diagonal - cu_seq_lens_k[i]
                 else:
                     diagonal = 1
