@@ -115,14 +115,16 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
 import torch
+
+device = f"{infer_device}:0"
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
     torch_dtype=torch.float16,
-    device_map="auto"
+    device_map=device
 )
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -216,12 +218,10 @@ LLaVa-OneVision also can perform inference with videos as input, where video fra
 ```python
 from huggingface_hub import hf_hub_download
 import torch
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
-
-device = f"{infer_device()}:0"
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map=device)
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
