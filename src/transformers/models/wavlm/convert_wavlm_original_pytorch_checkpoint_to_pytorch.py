@@ -14,12 +14,9 @@
 # limitations under the License.
 """Convert WavLM checkpoint."""
 
-
 import argparse
 
 import torch
-
-from transformers import WavLMConfig, WavLMModel, logging
 
 # Step 1. clone https://github.com/microsoft/unilm
 # Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
@@ -28,6 +25,8 @@ from transformers import WavLMConfig, WavLMModel, logging
 # import classes
 from unilm.wavlm.WavLM import WavLM as WavLMOrig
 from unilm.wavlm.WavLM import WavLMConfig as WavLMConfigOrig
+
+from transformers import WavLMConfig, WavLMModel, logging
 
 
 logging.set_verbosity_info()
@@ -74,9 +73,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    assert (
-        hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+    assert hf_shape == value.shape, (
+        f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+        f" {value.shape} for {full_name}"
+    )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -144,28 +144,32 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape, (
+                f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was"
+                " found."
+            )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -174,9 +178,8 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 @torch.no_grad()
 def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
-
     # load the pre-trained checkpoints
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=True)
     cfg = WavLMConfigOrig(checkpoint["cfg"])
     model = WavLMOrig(cfg)
     model.load_state_dict(checkpoint["model"])

@@ -23,7 +23,6 @@ Inspired by https://github.com/pytorch/pytorch/blob/master/torch/distributed/lau
 
 """
 
-
 import importlib
 import sys
 from argparse import REMAINDER, ArgumentParser
@@ -39,9 +38,7 @@ def parse_args():
     """
     parser = ArgumentParser(
         description=(
-            "PyTorch TPU distributed training launch "
-            "helper utility that will spawn up "
-            "multiple distributed processes"
+            "PyTorch TPU distributed training launch helper utility that will spawn up multiple distributed processes"
         )
     )
 

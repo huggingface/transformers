@@ -14,14 +14,14 @@
 # limitations under the License.
 
 import os
-from contextlib import contextmanager
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -30,48 +30,24 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-c-cpp-defect-detection": "https://huggingface.co/uclanlp/plbart-c-cpp-defect-detection/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-cs-java": "https://huggingface.co/uclanlp/plbart-cs-java/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-en_XX-java": "https://huggingface.co/uclanlp/plbart-en_XX-java/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-go-en_XX": "https://huggingface.co/uclanlp/plbart-go-en_XX/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-java-clone-detection": "https://huggingface.co/uclanlp/plbart-java-clone-detection/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-java-cs": "https://huggingface.co/uclanlp/plbart-java-cs/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-java-en_XX": "https://huggingface.co/uclanlp/plbart-java-en_XX/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-javascript-en_XX": "https://huggingface.co/uclanlp/plbart-javascript-en_XX/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-php-en_XX": "https://huggingface.co/uclanlp/plbart-php-en_XX/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-python-en_XX": "https://huggingface.co/uclanlp/plbart-python-en_XX/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-refine-java-medium": "https://huggingface.co/uclanlp/plbart-refine-java-medium/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-refine-java-small": "https://huggingface.co/uclanlp/plbart-refine-java-small/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-ruby-en_XX": "https://huggingface.co/uclanlp/plbart-ruby-en_XX/resolve/main/sentencepiece.bpe.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "uclanlp/plbart-base": 1024,
-    "uclanlp/plbart-c-cpp-defect-detection": 1024,
-    "uclanlp/plbart-cs-java": 1024,
-    "uclanlp/plbart-en_XX-java": 1024,
-    "uclanlp/plbart-go-en_XX": 1024,
-    "uclanlp/plbart-java-clone-detection": 1024,
-    "uclanlp/plbart-java-cs": 1024,
-    "uclanlp/plbart-java-en_XX": 1024,
-    "uclanlp/plbart-javascript-en_XX": 1024,
-    "uclanlp/plbart-php-en_XX": 1024,
-    "uclanlp/plbart-python-en_XX": 1024,
-    "uclanlp/plbart-refine-java-medium": 1024,
-    "uclanlp/plbart-refine-java-small": 1024,
-    "uclanlp/plbart-ruby-en_XX": 1024,
-}
 
 FAIRSEQ_LANGUAGE_CODES = {
-    "base": ["java", "python", "en_XX"],
-    "multi": ["java", "python", "en_XX", "javascript", "php", "ruby", "go"],
+    "base": ["__java__", "__python__", "__en_XX__"],
+    "multi": ["__java__", "__python__", "__en_XX__", "__javascript__", "__php__", "__ruby__", "__go__"],
+}
+
+FAIRSEQ_LANGUAGE_CODES_MAP = {
+    "java": "__java__",
+    "python": "__python__",
+    "en_XX": "__en_XX__",
+    "javascript": "__javascript__",
+    "php": "__php__",
+    "ruby": "__ruby__",
+    "go": "__go__",
 }
 
 
+@requires(backends=("sentencepiece",))
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
@@ -79,8 +55,8 @@ class PLBartTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
-    <tokens> <eos>``` for target language documents.
+    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and `<language code>
+    <tokens> <eos>` for target language documents.
 
     Args:
         vocab_file (`str`):
@@ -131,19 +107,14 @@ class PLBartTokenizer(PreTrainedTokenizer):
     >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
     >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
     >>> expected_translation_english = "Returns the maximum value of a b c."
-    >>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(example_python_phrase, text_target=expected_translation_english, return_tensors="pt")
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
+    prefix_tokens: list[int] = []
+    suffix_tokens: list[int] = []
 
     def __init__(
         self,
@@ -159,31 +130,17 @@ class PLBartTokenizer(PreTrainedTokenizer):
         tokenizer_file=None,
         src_lang=None,
         tgt_lang=None,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         additional_special_tokens=None,
-        **kwargs
+        clean_up_tokenization_spaces=True,
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            language_codes=language_codes,
-            tokenizer_file=tokenizer_file,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
+        src_lang = self._convert_lang_code_special_format(src_lang)
+        tgt_lang = self._convert_lang_code_special_format(tgt_lang)
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
@@ -215,12 +172,12 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        _additional_special_tokens = list(self.lang_code_to_id.keys())
 
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
         if self.language_codes == "base":
@@ -229,8 +186,26 @@ class PLBartTokenizer(PreTrainedTokenizer):
                 self.lang_code_to_id[self._src_lang] if self._src_lang is not None else self._src_lang
             )
         else:
-            self._src_lang = src_lang if src_lang is not None else "en_XX"
+            self._src_lang = src_lang if src_lang is not None else "__en_XX__"
             self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            language_codes=language_codes,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=_additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
@@ -266,26 +241,27 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
+        new_src_lang = self._convert_lang_code_special_format(new_src_lang)
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -300,8 +276,8 @@ class PLBartTokenizer(PreTrainedTokenizer):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An PLBART sequence has the following format, where `X` represents the sequence:
@@ -313,13 +289,13 @@ class PLBartTokenizer(PreTrainedTokenizer):
         separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
@@ -327,20 +303,20 @@ class PLBartTokenizer(PreTrainedTokenizer):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. PLBart does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
 
         sep = [self.sep_token_id]
@@ -356,9 +332,10 @@ class PLBartTokenizer(PreTrainedTokenizer):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
             raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
-        self.src_lang = src_lang
+        self.src_lang = self._convert_lang_code_special_format(src_lang)
+        self.tgt_lang = self._convert_lang_code_special_format(tgt_lang)
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
-        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        tgt_lang_id = self.convert_tokens_to_ids(self.tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
@@ -367,7 +344,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
@@ -390,7 +367,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -409,28 +386,25 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
+        src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[List[str]] = None,
+        tgt_texts: Optional[list[str]] = None,
         tgt_lang: str = "python",
         **kwargs,
     ) -> BatchEncoding:
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
+        self.src_lang = self._convert_lang_code_special_format(src_lang)
+        self.tgt_lang = self._convert_lang_code_special_format(tgt_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.set_tgt_lang_special_tokens(self.tgt_lang)
-        yield
-        self.set_src_lang_special_tokens(self.src_lang)
+    def _switch_to_input_mode(self):
+        return self.set_src_lang_special_tokens(self.src_lang)
+
+    def _switch_to_target_mode(self):
+        return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        src_lang = self._convert_lang_code_special_format(src_lang)
         self.cur_lang_code = self.lang_code_to_id[src_lang] if src_lang is not None else None
         self.prefix_tokens = []
         if self.cur_lang_code is not None:
@@ -440,9 +414,19 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        lang = self._convert_lang_code_special_format(lang)
+
         self.cur_lang_code = self.lang_code_to_id[lang] if lang is not None else None
         self.prefix_tokens = []
         if self.cur_lang_code is not None:
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
         else:
             self.suffix_tokens = [self.eos_token_id]
+
+    def _convert_lang_code_special_format(self, lang: str) -> str:
+        """Convert Language Codes to format tokenizer uses if required"""
+        lang = FAIRSEQ_LANGUAGE_CODES_MAP.get(lang, lang)
+        return lang
+
+
+__all__ = ["PLBartTokenizer"]

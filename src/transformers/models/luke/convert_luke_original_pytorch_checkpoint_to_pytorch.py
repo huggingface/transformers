@@ -32,7 +32,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     config = LukeConfig(use_entity_aware_attention=True, **metadata["model_config"])
 
     # Load in the weights from the checkpoint_path
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # Load the entity vocab file
     entity_vocab = load_entity_vocab(entity_vocab_path)
@@ -42,7 +42,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     # Add special tokens to the token vocabulary for downstream tasks
     entity_token_1 = AddedToken("<ent>", lstrip=False, rstrip=False)
     entity_token_2 = AddedToken("<ent2>", lstrip=False, rstrip=False)
-    tokenizer.add_special_tokens(dict(additional_special_tokens=[entity_token_1, entity_token_2]))
+    tokenizer.add_special_tokens({"additional_special_tokens": [entity_token_1, entity_token_2]})
     config.vocab_size += 2
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
@@ -77,13 +77,17 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         raise ValueError(f"Missing keys {', '.join(missing_keys)}. Expected only missing embeddings.position_ids")
     if not (all(key.startswith("entity_predictions") or key.startswith("lm_head") for key in unexpected_keys)):
         raise ValueError(
-            f"Unexpected keys {', '.join([key for key in unexpected_keys if not (key.startswith('entity_predictions') or key.startswith('lm_head'))])}"
+            "Unexpected keys"
+            f" {', '.join([key for key in unexpected_keys if not (key.startswith('entity_predictions') or key.startswith('lm_head'))])}"
         )
 
     # Check outputs
     tokenizer = LukeTokenizer.from_pretrained(pytorch_dump_folder_path, task="entity_classification")
 
-    text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+    text = (
+        "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the"
+        " new world number one avoid a humiliating second- round exit at Wimbledon ."
+    )
     span = (39, 42)
     encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
@@ -116,20 +120,21 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
 
     if not (outputs.entity_last_hidden_state.shape != expected_shape):
         raise ValueError(
-            f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is {expected_shape}"
+            f"Outputs.entity_last_hidden_state.shape is {outputs.entity_last_hidden_state.shape}, Expected shape is"
+            f" {expected_shape}"
         )
     if not torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4):
         raise ValueError
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 
 def load_entity_vocab(entity_vocab_path):
     entity_vocab = {}
     with open(entity_vocab_path, "r", encoding="utf-8") as f:
-        for (index, line) in enumerate(f):
+        for index, line in enumerate(f):
             title, _ = line.rstrip().split("\t")
             entity_vocab[title] = index
 

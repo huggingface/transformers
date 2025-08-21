@@ -14,23 +14,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" I-BERT configuration"""
-from collections import OrderedDict
-from typing import Mapping
+"""I-BERT configuration"""
 
-from transformers.onnx import OnnxConfig
+from collections import OrderedDict
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kssteven/ibert-roberta-base": "https://huggingface.co/kssteven/ibert-roberta-base/resolve/main/config.json",
-    "kssteven/ibert-roberta-large": "https://huggingface.co/kssteven/ibert-roberta-large/resolve/main/config.json",
-    "kssteven/ibert-roberta-large-mnli": "https://huggingface.co/kssteven/ibert-roberta-large-mnli/resolve/main/config.json",
-}
 
 
 class IBertConfig(PretrainedConfig):
@@ -74,14 +68,14 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         quant_mode (`bool`, *optional*, defaults to `False`):
             Whether to quantize the model or not.
         force_dequant (`str`, *optional*, defaults to `"none"`):
-            Force dequantize specific nonlinear layer. Dequatized layers are then executed with full precision.
-            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As deafult, it is set as
+            Force dequantize specific nonlinear layer. Dequantized layers are then executed with full precision.
+            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As default, it is set as
             `"none"`, which does not dequantize any layers. Please specify `"gelu"`, `"softmax"`, or `"layernorm"` to
             dequantize GELU, Softmax, or LayerNorm, respectively. `"nonlinear"` will dequantize all nonlinear layers,
             i.e., GELU, Softmax, and LayerNorm.
@@ -109,7 +103,7 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         quant_mode=False,
         force_dequant="none",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -143,3 +137,6 @@ class IBertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["IBertConfig", "IBertOnnxConfig"]

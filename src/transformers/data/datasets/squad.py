@@ -16,16 +16,15 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import torch
-from torch.utils.data import Dataset
-
 from filelock import FileLock
+from torch.utils.data import Dataset
 
 from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import check_torch_load_is_safe, logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
 
@@ -50,8 +49,10 @@ class SquadDataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     doc_stride: int = field(
@@ -61,15 +62,19 @@ class SquadDataTrainingArguments:
     max_query_length: int = field(
         default=64,
         metadata={
-            "help": "The maximum number of tokens for the question. Questions longer than this will "
-            "be truncated to this length."
+            "help": (
+                "The maximum number of tokens for the question. Questions longer than this will "
+                "be truncated to this length."
+            )
         },
     )
     max_answer_length: int = field(
         default=30,
         metadata={
-            "help": "The maximum length of an answer that can be generated. This is needed because the start "
-            "and end predictions are not conditioned on one another."
+            "help": (
+                "The maximum length of an answer that can be generated. This is needed because the start "
+                "and end predictions are not conditioned on one another."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -87,7 +92,10 @@ class SquadDataTrainingArguments:
     lang_id: int = field(
         default=0,
         metadata={
-            "help": "language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+            "help": (
+                "language id of input for language-specific xlm models (see"
+                " tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+            )
         },
     )
     threads: int = field(default=1, metadata={"help": "multiple threads for converting example to features"})
@@ -104,7 +112,7 @@ class SquadDataset(Dataset):
     """
 
     args: SquadDataTrainingArguments
-    features: List[SquadFeatures]
+    features: list[SquadFeatures]
     mode: Split
     is_language_sensitive: bool
 
@@ -140,7 +148,8 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.old_features = torch.load(cached_features_file)
+                check_torch_load_is_safe()
+                self.old_features = torch.load(cached_features_file, weights_only=True)
 
                 # Legacy cache files have only features, while new cache files
                 # will have dataset and examples also.
@@ -153,7 +162,8 @@ class SquadDataset(Dataset):
 
                 if self.dataset is None or self.examples is None:
                     logger.warning(
-                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in future run"
+                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in"
+                        " future run"
                     )
             else:
                 if mode == Split.dev:
@@ -185,7 +195,7 @@ class SquadDataset(Dataset):
     def __len__(self):
         return len(self.features)
 
-    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, i) -> dict[str, torch.Tensor]:
         # Convert to Tensors and build dataset
         feature = self.features[i]
 

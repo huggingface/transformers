@@ -19,7 +19,7 @@ import time
 from json import JSONDecodeError
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List
+from typing import Optional
 
 import torch
 from torch.utils.data import DataLoader
@@ -55,10 +55,10 @@ def eval_data_dir(
     task="summarization",
     local_rank=None,
     num_return_sequences=1,
-    dataset_kwargs: Dict = None,
+    dataset_kwargs: Optional[dict] = None,
     prefix="",
     **generate_kwargs,
-) -> Dict:
+) -> dict:
     """Run evaluation on part of the data for one gpu and save to {save_dir}/rank_{rank}_output.json"""
     model_name = str(model_name)
     assert local_rank is not None
@@ -111,7 +111,7 @@ def eval_data_dir(
         if num_return_sequences > 1:
             preds = chunks(preds, num_return_sequences)  # batch size chunks, each of size num_return_seq
         for i, pred in enumerate(preds):
-            results.append(dict(pred=pred, id=ids[i].item()))
+            results.append({"pred": pred, "id": ids[i].item()})
     save_json(results, save_path)
     return results, sampler.num_replicas
 
@@ -124,7 +124,7 @@ def run_generate():
     parser.add_argument(
         "--model_name",
         type=str,
-        help="like facebook/bart-large-cnn,t5-base, etc.",
+        help="like facebook/bart-large-cnn,google-t5/t5-base, etc.",
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
@@ -154,7 +154,7 @@ def run_generate():
     parser.add_argument("--src_lang", type=str, default=None, required=False)
     parser.add_argument("--tgt_lang", type=str, default=None, required=False)
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")
@@ -211,7 +211,7 @@ def run_generate():
         calc_bleu = "translation" in args.task
         score_fn = calculate_bleu if calc_bleu else calculate_rouge
         metric_name = "bleu" if calc_bleu else "rouge"
-        metrics: Dict = score_fn(preds, labels)
+        metrics: dict = score_fn(preds, labels)
         metrics["n_obs"] = len(preds)
         runtime = time.time() - start_time
         metrics["seconds_per_sample"] = round(runtime / metrics["n_obs"], 4)
@@ -227,17 +227,17 @@ def run_generate():
             shutil.rmtree(json_save_dir)
 
 
-def combine_partial_results(partial_results) -> List:
+def combine_partial_results(partial_results) -> list:
     """Concatenate partial results into one file, then sort it by id."""
     records = []
     for partial_result in partial_results:
         records.extend(partial_result)
-    records = list(sorted(records, key=lambda x: x["id"]))
+    records = sorted(records, key=lambda x: x["id"])
     preds = [x["pred"] for x in records]
     return preds
 
 
-def gather_results_from_each_node(num_replicas, save_dir, timeout) -> List[Dict[str, List]]:
+def gather_results_from_each_node(num_replicas, save_dir, timeout) -> list[dict[str, list]]:
     # WAIT FOR lots of .json files
     start_wait = time.time()
     logger.info("waiting for all nodes to finish")

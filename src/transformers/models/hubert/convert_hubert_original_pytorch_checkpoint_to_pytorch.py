@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Hubert checkpoint."""
 
-
 import argparse
 import json
 import os
@@ -39,7 +38,8 @@ logger = logging.get_logger(__name__)
 
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
-    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
+    "encoder.pos_conv.0": "encoder.pos_conv_embed.batch_norm",
+    "encoder.pos_conv.1": "encoder.pos_conv_embed.conv",
     "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
     "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
     "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
@@ -64,9 +64,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_shape = hf_pointer.shape
 
-    assert (
-        hf_shape == value.shape
-    ), f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+    assert hf_shape == value.shape, (
+        f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+        f" {value.shape} for {full_name}"
+    )
 
     if weight_type == "weight":
         hf_pointer.weight.data = value
@@ -76,6 +77,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
     else:
         hf_pointer.data = value
 
@@ -116,6 +123,12 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
                         weight_type = "weight"
                     elif "bias" in name:
                         weight_type = "bias"
+                    elif "running_mean" in name:
+                        weight_type = "running_mean"
+                    elif "running_var" in name:
+                        weight_type = "running_var"
+                    elif "num_batches_tracked" in name:
+                        weight_type = "num_batches_tracked"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
@@ -134,28 +147,32 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape, (
+                f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was"
+                " found."
+            )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape, (
+                f"{full_name} has size {value.shape}, but"
+                f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
+            )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -186,7 +203,7 @@ def convert_hubert_checkpoint(
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                logger.error(f"--pytorch_dump_folder_path ({pytorch_dump_folder_path}) should be a directory")
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
@@ -200,7 +217,7 @@ def convert_hubert_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
+            return_attention_mask = config.feat_extract_norm == "layer"
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,

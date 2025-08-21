@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,18 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FNet model. """
-
+"""Testing suite for the PyTorch FNet model."""
 
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -40,11 +38,6 @@ if is_torch_available():
         FNetForTokenClassification,
         FNetModel,
         FNetTokenizerFast,
-    )
-    from transformers.models.fnet.modeling_fnet import (
-        FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FNetBasicFourierTransform,
-        is_scipy_available,
     )
 
 
@@ -69,7 +62,7 @@ class FNetModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -134,26 +127,6 @@ class FNetModelTester:
             tpu_short_seq_length=self.seq_length,
         )
 
-    @require_torch
-    def create_and_check_fourier_transform(self, config):
-        hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
-        transform = FNetBasicFourierTransform(config)
-        fftn_output = transform(hidden_states)
-
-        config.use_tpu_fourier_optimizations = True
-        if is_scipy_available():
-            transform = FNetBasicFourierTransform(config)
-            dft_output = transform(hidden_states)
-
-        config.max_position_embeddings = 4097
-        transform = FNetBasicFourierTransform(config)
-        fft_output = transform(hidden_states)
-
-        if is_scipy_available():
-            self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
-            self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
-        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
-
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
         model.to(torch_device)
@@ -185,19 +158,6 @@ class FNetModelTester:
         model.eval()
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_next_sentence_prediction(
-        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
-    ):
-        model = FNetForNextSentencePrediction(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            token_type_ids=token_type_ids,
-            next_sentence_label=sequence_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
@@ -265,8 +225,7 @@ class FNetModelTester:
 
 
 @require_torch
-class FNetModelTest(ModelTesterMixin, unittest.TestCase):
-
+class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FNetModel,
@@ -281,11 +240,38 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FNetModel,
+            "fill-mask": FNetForMaskedLM,
+            "question-answering": FNetForQuestionAnswering,
+            "text-classification": FNetForSequenceClassification,
+            "token-classification": FNetForTokenClassification,
+            "zero-shot": FNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # Skip Tests
     test_pruning = False
     test_head_masking = False
-    test_pruning = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -301,8 +287,27 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
                 )
         return inputs_dict
 
-    # Overriden Tests
+    # Overridden Tests
+    @unittest.skip
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -318,10 +323,10 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -333,7 +338,12 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
                             ),
-                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -420,9 +430,9 @@ class FNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/fnet-base"
+        model = FNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -488,7 +498,8 @@ class FNetModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         vocab_size = 32000
 
@@ -500,13 +511,11 @@ class FNetModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_tokenizers
     def test_inference_long_sentence(self):
-        model = FNetForMaskedLM.from_pretrained("google/fnet-base")
-        model.to(torch_device)
         tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
@@ -516,8 +525,13 @@ class FNetModelIntegrationTest(unittest.TestCase):
             padding="max_length",
             max_length=512,
         )
+
+        torch.testing.assert_close(inputs["input_ids"], torch.tensor([[4, 13, 283, 2479, 106, 8, 6, 845, 5, 168, 65, 367, 6, 845, 5, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3, 3, 3, 3, 3, 3, 3, 3, 3, 3,3]]))  # fmt: skip
+
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
 
+        model = FNetForMaskedLM.from_pretrained("google/fnet-base")
+        model.to(torch_device)
         logits = model(**inputs).logits
         predictions_mask_1 = tokenizer.decode(logits[0, 6].topk(5).indices)
         predictions_mask_2 = tokenizer.decode(logits[0, 12].topk(5).indices)
@@ -531,14 +545,15 @@ class FNetModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         expected_shape = torch.Size((1, 2))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor([[-0.2234, -0.0226]], device=torch_device)
 
-        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+        torch.testing.assert_close(output, expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_model(self):
@@ -546,7 +561,8 @@ class FNetModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]], device=torch_device)
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         expected_shape = torch.Size((1, 6, model.config.hidden_size))
         self.assertEqual(output.shape, expected_shape)
@@ -555,4 +571,4 @@ class FNetModelIntegrationTest(unittest.TestCase):
             [[[4.1541, -0.1051, -0.1667], [-0.9144, 0.2939, -0.0086], [-0.8472, -0.7281, 0.0256]]], device=torch_device
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

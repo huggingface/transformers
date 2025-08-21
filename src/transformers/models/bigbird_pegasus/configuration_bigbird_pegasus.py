@@ -12,10 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BigBirdPegasus model configuration"""
+"""BigBirdPegasus model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig
@@ -25,13 +26,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
-
-BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json",
-    "google/bigbird-pegasus-large-pubmed": "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json",
-    "google/bigbird-pegasus-large-bigpatent": "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json",
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-}
 
 
 class BigBirdPegasusConfig(PretrainedConfig):
@@ -79,11 +73,11 @@ class BigBirdPegasusConfig(PretrainedConfig):
             just in case (e.g., 1024 or 2048 or 4096).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -103,19 +97,18 @@ class BigBirdPegasusConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel
 
-    ```
+    >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration
+    >>> configuration = BigBirdPegasusConfig()
 
-        >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
+    >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration
+    >>> model = BigBirdPegasusModel(configuration)
 
-        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
-        BigBirdPegasusConfig()
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
-        >>> # Initializing a model from the bigbird-pegasus-base style configuration >>> model =
-        BigBirdPegasusModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -154,7 +147,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -349,8 +342,9 @@ class BigBirdPegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 self._config.hidden_size // num_encoder_attention_heads,
             )
 
+            mask_dtype = common_inputs["attention_mask"].dtype
             common_inputs["attention_mask"] = torch.cat(
-                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
             common_inputs["past_key_values"] = [
                 (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)
@@ -414,3 +408,6 @@ class BigBirdPegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+
+__all__ = ["BigBirdPegasusConfig", "BigBirdPegasusOnnxConfig"]

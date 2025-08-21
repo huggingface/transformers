@@ -1,8 +1,4 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,158 +13,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_tf_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
-
-
-_import_structure = {
-    "configuration_roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerOnnxConfig"],
-    "tokenization_roformer": ["RoFormerTokenizer"],
-}
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_roformer_fast"] = ["RoFormerTokenizerFast"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_roformer"] = [
-        "ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RoFormerForCausalLM",
-        "RoFormerForMaskedLM",
-        "RoFormerForMultipleChoice",
-        "RoFormerForQuestionAnswering",
-        "RoFormerForSequenceClassification",
-        "RoFormerForTokenClassification",
-        "RoFormerLayer",
-        "RoFormerModel",
-        "RoFormerPreTrainedModel",
-        "load_tf_weights_in_roformer",
-    ]
-
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_roformer"] = [
-        "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFRoFormerForCausalLM",
-        "TFRoFormerForMaskedLM",
-        "TFRoFormerForMultipleChoice",
-        "TFRoFormerForQuestionAnswering",
-        "TFRoFormerForSequenceClassification",
-        "TFRoFormerForTokenClassification",
-        "TFRoFormerLayer",
-        "TFRoFormerModel",
-        "TFRoFormerPreTrainedModel",
-    ]
-
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_roformer"] = [
-        "FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FlaxRoFormerForMaskedLM",
-        "FlaxRoFormerForMultipleChoice",
-        "FlaxRoFormerForQuestionAnswering",
-        "FlaxRoFormerForSequenceClassification",
-        "FlaxRoFormerForTokenClassification",
-        "FlaxRoFormerModel",
-        "FlaxRoFormerPreTrainedModel",
-    ]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerOnnxConfig
-    from .tokenization_roformer import RoFormerTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_roformer_fast import RoFormerTokenizerFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_roformer import (
-            ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RoFormerForCausalLM,
-            RoFormerForMaskedLM,
-            RoFormerForMultipleChoice,
-            RoFormerForQuestionAnswering,
-            RoFormerForSequenceClassification,
-            RoFormerForTokenClassification,
-            RoFormerLayer,
-            RoFormerModel,
-            RoFormerPreTrainedModel,
-            load_tf_weights_in_roformer,
-        )
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_roformer import (
-            TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFRoFormerForCausalLM,
-            TFRoFormerForMaskedLM,
-            TFRoFormerForMultipleChoice,
-            TFRoFormerForQuestionAnswering,
-            TFRoFormerForSequenceClassification,
-            TFRoFormerForTokenClassification,
-            TFRoFormerLayer,
-            TFRoFormerModel,
-            TFRoFormerPreTrainedModel,
-        )
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_roformer import (
-            FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FlaxRoFormerForMaskedLM,
-            FlaxRoFormerForMultipleChoice,
-            FlaxRoFormerForQuestionAnswering,
-            FlaxRoFormerForSequenceClassification,
-            FlaxRoFormerForTokenClassification,
-            FlaxRoFormerModel,
-            FlaxRoFormerPreTrainedModel,
-        )
-
-
+    from .configuration_roformer import *
+    from .modeling_flax_roformer import *
+    from .modeling_roformer import *
+    from .modeling_tf_roformer import *
+    from .tokenization_roformer import *
+    from .tokenization_roformer_fast import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

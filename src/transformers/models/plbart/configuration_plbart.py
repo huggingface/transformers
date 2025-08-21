@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PLBART model configuration"""
+"""PLBART model configuration"""
+
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
@@ -22,11 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/config.json",
-    # See all PLBART models at https://huggingface.co/models?filter=plbart
-}
 
 
 class PLBartConfig(PretrainedConfig):
@@ -74,11 +70,11 @@ class PLBartConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
@@ -91,19 +87,25 @@ class PLBartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PLBartModel, PLBartConfig
+    >>> from transformers import PLBartConfig, PLBartModel
 
     >>> # Initializing a PLBART uclanlp/plbart-base style configuration
     >>> configuration = PLBartConfig()
-    >>> # Initializing a model from the uclanlp/plbart-base style configuration
+
+    >>> # Initializing a model (with random weights) from the uclanlp/plbart-base style configuration
     >>> model = PLBartModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "initializer_range": "init_std",
+    }
 
     def __init__(
         self,
@@ -131,7 +133,7 @@ class PLBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -190,3 +192,6 @@ class PLBartOnnxConfig(OnnxConfigWithPast):
                     ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
                 ]
             )
+
+
+__all__ = ["PLBartConfig"]

@@ -12,17 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Wav2Vec2 model."""
+"""Flax Wav2Vec2 model."""
 
 from functools import partial
-from typing import Optional, Tuple, Union
-
-import numpy as np
+from typing import Optional, Union
 
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -68,8 +67,8 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: jnp.ndarray = None
     extract_features: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 @flax.struct.dataclass
@@ -80,7 +79,7 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when model is in train mode, `jnp.ndarray` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
         projected_states (`jnp.ndarray` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
@@ -103,12 +102,12 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     projected_states: jnp.ndarray = None
     projected_quantized_states: jnp.ndarray = None
     codevector_perplexity: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[np.ndarray] = None,
@@ -116,11 +115,11 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         mask_prob:
             probability for each token to be chosen as start of the span to be masked. this will be multiplied by
@@ -137,7 +136,8 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
+            f" `sequence_length`: {sequence_length}`"
         )
 
     # compute number of masked spans in batch
@@ -149,7 +149,7 @@ def _compute_mask_indices(
         num_masked_spans = sequence_length // mask_length
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
 
     # get random indices to mask
     spec_aug_mask_idxs = np.array(
@@ -179,14 +179,14 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
+def _sample_negative_indices(features_shape: tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
     batch_size, sequence_length, hidden_size = features_shape
     if sequence_length <= 1:
         raise ValueError(
-            f"`features should have `sequence_length` > 1, but are of shape "
+            "`features should have `sequence_length` > 1, but are of shape "
             f"(batch_size, sequence_length, hidden_size) = ({batch_size, sequence_length, hidden_size})."
         )
 
@@ -212,9 +212,9 @@ def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attentio
     return sampled_negative_indices
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
+WAV2VEC2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
-    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
+    Representations](https://huggingface.co/papers/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
     Auli.
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -251,13 +251,14 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 """
 
 
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
+WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *jnp.ndarray*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.*  via the torchcodec library
+            (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+            To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
+            into a tensor of type `jnp.ndarray`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -386,7 +387,8 @@ class FlaxConvLayersCollection(nn.Module):
             raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
         else:
             raise ValueError(
-                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+                f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group',"
+                " 'layer']"
             )
 
     def __call__(self, hidden_states):
@@ -444,7 +446,8 @@ class FlaxWav2Vec2Attention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         dense = partial(
@@ -472,7 +475,7 @@ class FlaxWav2Vec2Attention(nn.Module):
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # get query proj
@@ -494,7 +497,7 @@ class FlaxWav2Vec2Attention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -660,7 +663,6 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             hidden_states = jnp.where(
@@ -700,7 +702,7 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
 class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See [CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     config: Wav2Vec2Config
@@ -856,7 +858,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: Wav2Vec2Config,
-        input_shape: Tuple = (1, 1024),
+        input_shape: tuple = (1, 1024),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -865,7 +867,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_values = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_values)
@@ -884,13 +886,13 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_values,
         attention_mask=None,
         mask_time_indices=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -1031,7 +1033,6 @@ class FlaxWav2Vec2Module(nn.Module):
     def _get_feature_vector_attention_mask(
         self, feature_vector_length: int, attention_mask: jnp.ndarray, add_adapter=None
     ):
-
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(axis=-1)[:, -1]
@@ -1050,7 +1051,7 @@ class FlaxWav2Vec2Module(nn.Module):
 
 @add_start_docstrings(
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2Module
@@ -1062,18 +1063,16 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2Model
+    >>> from transformers import AutoProcessor, FlaxWav2Vec2Model
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
-    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
+    >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2Model.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1088,7 +1087,7 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2Model,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2Model, output_type=FlaxWav2Vec2BaseModelOutput, config_class=Wav2Vec2Config
@@ -1168,7 +1167,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
 
 @add_start_docstrings(
     "Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).",
-    WAV_2_VEC_2_START_DOCSTRING,
+    WAV2VEC2_START_DOCSTRING,
 )
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForCTCModule
@@ -1181,18 +1180,16 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
     ```python
     >>> import jax.numpy as jnp
-    >>> from transformers import Wav2Vec2Processor, FlaxWav2Vec2ForCTC
+    >>> from transformers import AutoProcessor, FlaxWav2Vec2ForCTC
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
-    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+    >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
     >>> model = FlaxWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1211,7 +1208,7 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2ForCTC,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
 )
 append_replace_return_docstrings(FlaxWav2Vec2ForCTC, output_type=FlaxCausalLMOutput, config_class=Wav2Vec2Config)
 
@@ -1315,11 +1312,11 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         return input_lengths
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV2VEC2_START_DOCSTRING)
 class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForPreTrainingModule
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WAV2VEC2_INPUTS_DOCSTRING)
     # overwrite since has `gumbel_temperature` input
     def __call__(
         self,
@@ -1327,7 +1324,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
         attention_mask=None,
         mask_time_indices=None,
         gumbel_temperature: int = 1,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         gumbel_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -1381,19 +1378,17 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> import optax
     >>> import numpy as np
     >>> import jax.numpy as jnp
-    >>> from transformers import Wav2Vec2FeatureExtractor, FlaxWav2Vec2ForPreTraining
+    >>> from transformers import AutoFeatureExtractor, FlaxWav2Vec2ForPreTraining
     >>> from transformers.models.wav2vec2.modeling_flax_wav2vec2 import _compute_mask_indices
     >>> from datasets import load_dataset
-    >>> import soundfile as sf
 
-    >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-large-lv60")
     >>> model = FlaxWav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-lv60")
 
 
-    >>> def map_to_array(batch):
-    ...     speech, _ = sf.read(batch["file"])
-    ...     batch["speech"] = speech
-    ...     return batch
+    >>> def map_to_array(example):
+    ...     example["speech"] = example["audio"]["array"]
+    ...     return example
 
 
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1418,8 +1413,11 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxWav2Vec2ForPreTraining,
-    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
+    WAV2VEC2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config
 )
+
+
+__all__ = ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]

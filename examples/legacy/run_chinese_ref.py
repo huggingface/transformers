@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 import argparse
 import json
-from typing import List
 
 from ltp import LTP
+
 from transformers import BertTokenizer
 
 
@@ -19,14 +19,14 @@ def _is_chinese_char(cp):
     # like the all of the other languages.
     if (
         (cp >= 0x4E00 and cp <= 0x9FFF)
-        or (cp >= 0x3400 and cp <= 0x4DBF)  #
-        or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-        or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-        or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-        or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+        or (cp >= 0x3400 and cp <= 0x4DBF)
+        or (cp >= 0x20000 and cp <= 0x2A6DF)
+        or (cp >= 0x2A700 and cp <= 0x2B73F)
+        or (cp >= 0x2B740 and cp <= 0x2B81F)
+        or (cp >= 0x2B820 and cp <= 0x2CEAF)
         or (cp >= 0xF900 and cp <= 0xFAFF)
-        or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-    ):  #
+        or (cp >= 0x2F800 and cp <= 0x2FA1F)
+    ):
         return True
 
     return False
@@ -41,7 +41,7 @@ def is_chinese(word: str):
     return 1
 
 
-def get_chinese_word(tokens: List[str]):
+def get_chinese_word(tokens: list[str]):
     word_set = set()
 
     for token in tokens:
@@ -52,7 +52,7 @@ def get_chinese_word(tokens: List[str]):
     return word_list
 
 
-def add_sub_symbol(bert_tokens: List[str], chinese_word_set: set()):
+def add_sub_symbol(bert_tokens: list[str], chinese_word_set: set()):
     if not chinese_word_set:
         return bert_tokens
     max_word_len = max([len(w) for w in chinese_word_set])
@@ -76,7 +76,7 @@ def add_sub_symbol(bert_tokens: List[str], chinese_word_set: set()):
     return bert_word
 
 
-def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokenizer):
+def prepare_ref(lines: list[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokenizer):
     ltp_res = []
 
     for i in range(0, len(lines), 100):
@@ -93,7 +93,6 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
 
     ref_ids = []
     for input_ids, chinese_word in zip(bert_res, ltp_res):
-
         input_tokens = []
         for id in input_ids:
             token = bert_tokenizer._convert_id_to_token(id)
@@ -117,7 +116,7 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
 def main(args):
     # For Chinese (Ro)Bert, the best result is from : RoBERTa-wwm-ext (https://github.com/ymcui/Chinese-BERT-wwm)
     # If we want to fine-tune these model, we have to use same tokenizer : LTP (https://github.com/HIT-SCIR/ltp)
-    with open(args.file_name, "r", encoding="utf-8") as f:
+    with open(args.file_name, encoding="utf-8") as f:
         data = f.readlines()
     data = [line.strip() for line in data if len(line) > 0 and not line.isspace()]  # avoid delimiter like '\u2029'
     ltp_tokenizer = LTP(args.ltp)  # faster in GPU device

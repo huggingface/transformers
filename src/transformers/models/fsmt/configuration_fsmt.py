@@ -12,10 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FSMT configuration"""
-
-
-import copy
+"""FSMT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -23,19 +20,19 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
-
 
 class DecoderConfig(PretrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
+
     model_type = "fsmt_decoder"
 
-    def __init__(self, vocab_size=0, bos_token_id=0):
-        super().__init__()
+    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True, **kwargs):
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.bos_token_id = bos_token_id
+        self.is_encoder_decoder = is_encoder_decoder
 
 
 class FSMTConfig(PretrainedConfig):
@@ -49,7 +46,7 @@ class FSMTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        langs (`List[str]`):
+        langs (`list[str]`):
             A list with source language and target_language (e.g., ['en', 'ru']).
         src_vocab_size (`int`):
             Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the
@@ -95,9 +92,9 @@ class FSMTConfig(PretrainedConfig):
             End of stream token id.
         decoder_start_token_id (`int`, *optional*):
             This model starts decoding with `eos_token_id`
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether this is an encoder/decoder model.
@@ -107,7 +104,10 @@ class FSMTConfig(PretrainedConfig):
             Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
             no beam search.
         length_penalty (`float`, *optional*, defaults to 1)
-            Exponential penalty to the length that will be used by default in the `generate` method of the model.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         early_stopping (`bool`, *optional*, defaults to `False`)
             Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
             when at least `num_beams` sentences are finished per batch or not.
@@ -122,11 +122,19 @@ class FSMTConfig(PretrainedConfig):
     ```python
     >>> from transformers import FSMTConfig, FSMTModel
 
-    >>> config = FSMTConfig.from_pretrained("facebook/wmt19-en-ru")
+    >>> # Initializing a FSMT facebook/wmt19-en-ru style configuration
+    >>> config = FSMTConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = FSMTModel(config)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
+
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    sub_configs = {"decoder": DecoderConfig}
 
     # update the defaults from config file
     def __init__(
@@ -162,7 +170,7 @@ class FSMTConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **common_kwargs
+        **common_kwargs,
     ):
         self.langs = langs
         self.src_vocab_size = src_vocab_size
@@ -181,7 +189,12 @@ class FSMTConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
+        self.decoder = DecoderConfig(
+            vocab_size=tgt_vocab_size,
+            bos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            num_hidden_layers=encoder_layers,
+        )
         if "decoder" in common_kwargs:
             del common_kwargs["decoder"]
 
@@ -208,14 +221,5 @@ class FSMTConfig(PretrainedConfig):
             **common_kwargs,
         )
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["FSMTConfig"]

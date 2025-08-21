@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BigBird checkpoint."""
 
-
 import argparse
 
 from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdForQuestionAnswering, load_tf_weights_in_big_bird
@@ -43,7 +42,6 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, p
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
@@ -54,8 +52,10 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="The config json file corresponding to the pre-trained BERT model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "The config json file corresponding to the pre-trained BERT model. \n"
+            "This specifies the model architecture."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

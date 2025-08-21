@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Configuration base class and utilities."""
-
+"""Configuration base class and utilities."""
 
 import copy
 import json
@@ -21,37 +19,38 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.errors import OfflineModeIsEnabled
+from huggingface_hub.utils import HFValidationError
 
 from . import __version__
 from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
 )
 from .training_args import ParallelMode
 from .utils import (
-    CONFIG_NAME,
     MODEL_CARD_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    cached_path,
-    hf_bucket_url,
+    cached_file,
     is_datasets_available,
     is_offline_mode,
-    is_remote_url,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -71,6 +70,9 @@ TASK_MAPPING = {
     "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    "automatic-speech-recognition": {**MODEL_FOR_CTC_MAPPING_NAMES, **MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES},
+    "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    "image-text-to-text": MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)
@@ -82,18 +84,16 @@ class ModelCard:
 
     Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
     Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
+    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://huggingface.co/papers/1810.03993
 
     Note: A model card can be loaded and saved to disk.
-
-    Parameters:
     """
 
     def __init__(self, **kwargs):
         warnings.warn(
             "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
         )
-        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recommended attributes from https://huggingface.co/papers/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})
@@ -132,8 +132,6 @@ class ModelCard:
             pretrained_model_name_or_path: either:
 
                 - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                  user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
                   method, e.g.: `./my_model_directory/`.
                 - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
@@ -153,11 +151,6 @@ class ModelCard:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
 
-            find_from_standard_name: (*optional*) boolean, default True:
-                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them
-                with our standard modelcard filename. Can be used to directly feed a model/config url and access the
-                colocated modelcard.
-
             return_unused_kwargs: (*optional*) bool:
 
                 - If False, then this function returns just the final model card object.
@@ -168,21 +161,15 @@ class ModelCard:
         Examples:
 
         ```python
-        modelcard = ModelCard.from_pretrained(
-            "bert-base-uncased"
-        )  # Download model card from huggingface.co and cache.
-        modelcard = ModelCard.from_pretrained(
-            "./test/saved_model/"
-        )  # E.g. model card was saved using *save_pretrained('./test/saved_model/')*
+        # Download model card from huggingface.co and cache.
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased")
+        # Model card was saved using *save_pretrained('./test/saved_model/')*
+        modelcard = ModelCard.from_pretrained("./test/saved_model/")
         modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
-        modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         ```"""
-        # This imports every model so let's do it dynamically here.
-        from transformers.models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)
-        find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
 
@@ -190,37 +177,30 @@ class ModelCard:
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            # For simplicity we use the same pretrained url than the configuration files
-            # but with a different suffix (modelcard.json). This suffix is replaced below.
-            model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
-            model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            model_card_file = pretrained_model_name_or_path
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_model_card_file = pretrained_model_name_or_path
+            is_local = True
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
+            try:
+                # Load from URL or cache if already cached
+                resolved_model_card_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=MODEL_CARD_NAME,
+                    cache_dir=cache_dir,
+                    proxies=proxies,
+                    user_agent=user_agent,
+                )
+                if is_local:
+                    logger.info(f"loading model card file {resolved_model_card_file}")
+                else:
+                    logger.info(f"loading model card file {MODEL_CARD_NAME} from cache at {resolved_model_card_file}")
+                # Load model card
+                modelcard = cls.from_json_file(resolved_model_card_file)
 
-        if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(WEIGHTS_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(TF2_WEIGHTS_NAME, MODEL_CARD_NAME)
-
-        try:
-            # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(
-                model_card_file, cache_dir=cache_dir, proxies=proxies, user_agent=user_agent
-            )
-            if resolved_model_card_file == model_card_file:
-                logger.info(f"loading model card file {model_card_file}")
-            else:
-                logger.info(f"loading model card file {model_card_file} from cache at {resolved_model_card_file}")
-            # Load model card
-            modelcard = cls.from_json_file(resolved_model_card_file)
-
-        except (EnvironmentError, json.JSONDecodeError):
-            # We fall back on creating an empty model card
-            modelcard = cls()
+            except (OSError, json.JSONDecodeError):
+                # We fall back on creating an empty model card
+                modelcard = cls()
 
         # Update model card with kwargs if needed
         to_remove = []
@@ -245,7 +225,7 @@ class ModelCard:
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `ModelCard` from a json file of parameters."""
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         dict_obj = json.loads(text)
         return cls(**dict_obj)
@@ -297,6 +277,8 @@ TASK_TAG_TO_NAME_MAPPING = {
     "token-classification": "Token Classification",
     "translation": "Translation",
     "zero-shot-classification": "Zero Shot Classification",
+    "automatic-speech-recognition": "Automatic Speech Recognition",
+    "audio-classification": "Audio Classification",
 }
 
 
@@ -311,6 +293,7 @@ METRIC_TAGS = [
     "rouge",
     "sacrebleu",
     "spearmanr",
+    "wer",
 ]
 
 
@@ -339,7 +322,7 @@ def infer_metric_tags_from_eval_results(eval_results):
     if eval_results is None:
         return {}
     result = {}
-    for key in eval_results.keys():
+    for key in eval_results:
         if key.lower().replace(" ", "_") in METRIC_TAGS:
             result[key.lower().replace(" ", "_")] = key
         elif key.lower() == "rouge1":
@@ -358,9 +341,9 @@ def is_hf_dataset(dataset):
     if not is_datasets_available():
         return False
 
-    from datasets import Dataset
+    from datasets import Dataset, IterableDataset
 
-    return isinstance(dataset, Dataset)
+    return isinstance(dataset, (Dataset, IterableDataset))
 
 
 def _get_mapping_values(mapping):
@@ -376,17 +359,18 @@ def _get_mapping_values(mapping):
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[Union[str, List[str]]] = None
+    language: Optional[Union[str, list[str]]] = None
     license: Optional[str] = None
-    tags: Optional[Union[str, List[str]]] = None
+    tags: Optional[Union[str, list[str]]] = None
     finetuned_from: Optional[str] = None
-    tasks: Optional[Union[str, List[str]]] = None
-    dataset: Optional[Union[str, List[str]]] = None
-    dataset_tags: Optional[Union[str, List[str]]] = None
-    dataset_args: Optional[Union[str, List[str]]] = None
-    eval_results: Optional[Dict[str, float]] = None
-    eval_lines: Optional[List[str]] = None
-    hyperparameters: Optional[Dict[str, Any]] = None
+    tasks: Optional[Union[str, list[str]]] = None
+    dataset: Optional[Union[str, list[str]]] = None
+    dataset_tags: Optional[Union[str, list[str]]] = None
+    dataset_args: Optional[Union[str, list[str]]] = None
+    dataset_metadata: Optional[dict[str, Any]] = None
+    eval_results: Optional[dict[str, float]] = None
+    eval_lines: Optional[list[str]] = None
+    hyperparameters: Optional[dict[str, Any]] = None
     source: Optional[str] = "trainer"
 
     def __post_init__(self):
@@ -402,7 +386,12 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except requests.exceptions.HTTPError:
+            except (
+                requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError,
+                HFValidationError,
+                OfflineModeIsEnabled,
+            ):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -412,10 +401,12 @@ class TrainingSummary:
         dataset_names = _listify(self.dataset)
         dataset_tags = _listify(self.dataset_tags)
         dataset_args = _listify(self.dataset_args)
+        dataset_metadata = _listify(self.dataset_metadata)
         if len(dataset_args) < len(dataset_tags):
             dataset_args = dataset_args + [None] * (len(dataset_tags) - len(dataset_args))
-        dataset_mapping = {tag: name for tag, name in zip(dataset_tags, dataset_names)}
-        dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
+        dataset_mapping = dict(zip(dataset_tags, dataset_names))
+        dataset_arg_mapping = dict(zip(dataset_tags, dataset_args))
+        dataset_metadata_mapping = dict(zip(dataset_tags, dataset_metadata))
 
         task_mapping = {
             task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
@@ -438,7 +429,12 @@ class TrainingSummary:
                 result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
 
             if ds_tag is not None:
-                result["dataset"] = {"name": dataset_mapping[ds_tag], "type": ds_tag}
+                metadata = dataset_metadata_mapping.get(ds_tag, {})
+                result["dataset"] = {
+                    "name": dataset_mapping[ds_tag],
+                    "type": ds_tag,
+                    **metadata,
+                }
                 if dataset_arg_mapping[ds_tag] is not None:
                     result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
 
@@ -465,8 +461,11 @@ class TrainingSummary:
         metric_mapping = infer_metric_tags_from_eval_results(self.eval_results)
 
         metadata = {}
+        metadata = _insert_value(metadata, "library_name", "transformers")
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
+        if self.finetuned_from is not None and isinstance(self.finetuned_from, str) and len(self.finetuned_from) > 0:
+            metadata = _insert_value(metadata, "base_model", self.finetuned_from)
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
         metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
@@ -492,9 +491,12 @@ class TrainingSummary:
         if self.finetuned_from is None:
             model_card += "This model was trained from scratch on "
         else:
-            model_card += f"This model is a fine-tuned version of [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            model_card += (
+                "This model is a fine-tuned version of"
+                f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            )
 
-        if self.dataset is None:
+        if self.dataset is None or (isinstance(self.dataset, list) and len(self.dataset) == 0):
             model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):
@@ -562,15 +564,18 @@ class TrainingSummary:
         finetuned_from=None,
         tasks=None,
         dataset_tags=None,
+        dataset_metadata=None,
         dataset=None,
         dataset_args=None,
     ):
         # Infer default from dataset
-        one_dataset = trainer.train_dataset if trainer.train_dataset is not None else trainer.eval_dataset
-        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None):
+        one_dataset = trainer.eval_dataset if trainer.eval_dataset is not None else trainer.train_dataset
+        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None or dataset_metadata is None):
             default_tag = one_dataset.builder_name
             # Those are not real datasets from the Hub so we exclude them.
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
+                if dataset_metadata is None:
+                    dataset_metadata = [{"config": one_dataset.config_name, "split": str(one_dataset.split)}]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
                 if dataset_args is None:
@@ -596,6 +601,8 @@ class TrainingSummary:
 
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
+        if len(model_name) == 0:
+            model_name = finetuned_from
 
         # Add `generated_from_trainer` to the tags
         if tags is None:
@@ -615,9 +622,10 @@ class TrainingSummary:
             model_name=model_name,
             finetuned_from=finetuned_from,
             tasks=tasks,
-            dataset_tags=dataset_tags,
             dataset=dataset,
+            dataset_tags=dataset_tags,
             dataset_args=dataset_args,
+            dataset_metadata=dataset_metadata,
             eval_results=eval_results,
             eval_lines=eval_lines,
             hyperparameters=hyperparameters,
@@ -679,7 +687,7 @@ class TrainingSummary:
             _, eval_lines, eval_results = parse_keras_history(keras_history)
         else:
             eval_lines = []
-            eval_results = dict()
+            eval_results = {}
         hyperparameters = extract_hyperparameters_from_keras(model)
 
         return cls(
@@ -701,14 +709,14 @@ class TrainingSummary:
 
 def parse_keras_history(logs):
     """
-    Parse the `logs` of either a `tf.keras.History` object returned by `model.fit()` or an accumulated logs `dict`
+    Parse the `logs` of either a `keras.History` object returned by `model.fit()` or an accumulated logs `dict`
     passed to the `PushToHubCallback`. Returns lines and logs compatible with those returned by `parse_log_history`.
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
         if not hasattr(logs, "epoch"):
             # This history looks empty, return empty results
-            return None, [], dict()
+            return None, [], {}
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
@@ -718,7 +726,7 @@ def parse_keras_history(logs):
     lines = []
     for i in range(len(logs["epoch"])):
         epoch_dict = {log_key: log_value_list[i] for log_key, log_value_list in logs.items()}
-        values = dict()
+        values = {}
         for k, v in epoch_dict.items():
             if k.startswith("val_"):
                 k = "validation_" + k[4:]
@@ -748,7 +756,7 @@ def parse_log_history(log_history):
         while idx >= 0 and "eval_loss" not in log_history[idx]:
             idx -= 1
 
-        if idx > 0:
+        if idx >= 0:
             return None, None, log_history[idx]
         else:
             return None, None, None
@@ -768,6 +776,7 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
+            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -796,14 +805,14 @@ def parse_log_history(log_history):
 
 
 def extract_hyperparameters_from_keras(model):
-    import tensorflow as tf
+    from .modeling_tf_utils import keras
 
-    hyperparameters = dict()
+    hyperparameters = {}
     if hasattr(model, "optimizer") and model.optimizer is not None:
         hyperparameters["optimizer"] = model.optimizer.get_config()
     else:
         hyperparameters["optimizer"] = None
-    hyperparameters["training_precision"] = tf.keras.mixed_precision.global_policy().name
+    hyperparameters["training_precision"] = keras.mixed_precision.global_policy().name
 
     return hyperparameters
 
@@ -830,7 +839,7 @@ def make_markdown_table(lines):
     """
     if lines is None or len(lines) == 0:
         return ""
-    col_widths = {key: len(str(key)) for key in lines[0].keys()}
+    col_widths = {key: len(str(key)) for key in lines[0]}
     for line in lines:
         for key, value in line.items():
             if col_widths[key] < len(_maybe_round(value)):
@@ -872,12 +881,17 @@ def extract_hyperparameters_from_trainer(trainer):
     if total_eval_batch_size != hyperparameters["eval_batch_size"]:
         hyperparameters["total_eval_batch_size"] = total_eval_batch_size
 
-    if trainer.args.adafactor:
-        hyperparameters["optimizer"] = "Adafactor"
-    else:
-        hyperparameters[
-            "optimizer"
-        ] = f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and epsilon={trainer.args.adam_epsilon}"
+    if trainer.args.optim:
+        optimizer_name = trainer.args.optim
+        optimizer_args = trainer.args.optim_args if trainer.args.optim_args else "No additional optimizer arguments"
+
+        if "adam" in optimizer_name.lower():
+            hyperparameters["optimizer"] = (
+                f"Use {optimizer_name} with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+                f" epsilon={trainer.args.adam_epsilon} and optimizer_args={optimizer_args}"
+            )
+        else:
+            hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:
@@ -890,10 +904,10 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_amp:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer.use_apex:
+        if trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
+        else:
+            hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

@@ -12,21 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Splinter model configuration"""
+"""Splinter model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/config.json",
-    "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/config.json",
-    "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/config.json",
-    "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/config.json",
-    # See all Splinter models at https://huggingface.co/models?filter=splinter
-}
 
 
 class SplinterConfig(PretrainedConfig):
@@ -56,7 +48,7 @@ class SplinterConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -88,6 +80,7 @@ class SplinterConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "splinter"
 
     def __init__(
@@ -107,7 +100,7 @@ class SplinterConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         question_token_id=104,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -125,3 +118,6 @@ class SplinterConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.question_token_id = question_token_id
+
+
+__all__ = ["SplinterConfig"]

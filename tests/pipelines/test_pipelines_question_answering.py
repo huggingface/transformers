@@ -14,6 +14,8 @@
 
 import unittest
 
+from huggingface_hub import QuestionAnsweringOutputElement
+
 from transformers import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -22,22 +24,60 @@ from transformers import (
 )
 from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
+    is_pipeline_test,
+    is_torch_available,
+    nested_simplify,
+    require_torch,
+    require_torch_or_tf,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+
+if is_torch_available():
+    import torch
+
+from .test_pipelines_common import ANY
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 
 
 @is_pipeline_test
-class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    if not hasattr(model_mapping, "is_dummy"):
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if not hasattr(tf_model_mapping, "is_dummy"):
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if isinstance(model.config, LxmertConfig):
             # This is an bimodal model, we need to find a more consistent way
             # to switch on those models.
             return None, None
-        question_answerer = QuestionAnsweringPipeline(model, tokenizer)
+        question_answerer = QuestionAnsweringPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
 
         examples = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
@@ -94,17 +134,32 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             question_answerer(question="In what field is HuggingFace working ?", context=None)
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", topk=20
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)}
+                for i in range(len(outputs))
+            ],
         )
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
 
         # Very long context require multiple features
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20
         )
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+
+        # Using batch is OK
+        if question_answerer.tokenizer.pad_token_id is None:
+            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
+        new_outputs = question_answerer(
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
+        )
+        self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(nested_simplify(outputs), nested_simplify(new_outputs))
 
     @require_torch
     def test_small_model_pt(self):
@@ -113,10 +168,55 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            torch_dtype=torch.float16,
+        )
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            torch_dtype=torch.bfloat16,
+        )
+
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
+        )
+
+        self.assertEqual(nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
+    def test_small_model_pt_iterator(self):
+        # https://github.com/huggingface/transformers/issues/18510
+        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+
+        def data():
+            for i in range(10):
+                yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
+
+        for outputs in pipe(data()):
+            self.assertEqual(
+                nested_simplify(outputs), {"score": 0.063, "start": 0, "end": 11, "answer": "HuggingFace"}
+            )
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
@@ -147,10 +247,31 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         question_answerer.postprocess = ensure_large_logits_postprocess
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(nested_simplify(outputs), {"score": 0.111, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @slow
+    @require_torch
+    def test_small_model_japanese(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="KoichiYasuoka/deberta-base-japanese-aozora-ud-head",
+        )
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている")  # fmt: skip
+
+        # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
+        # a pretokenizer
+        self.assertEqual(nested_simplify(output),{"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"})  # fmt: skip
+
+        # Disable word alignment
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)  # fmt: skip
+        self.assertEqual(
+            nested_simplify(output),
+            {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+        )
 
     @slow
     @require_torch
@@ -167,16 +288,18 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
         self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
 
-    @require_tf
-    def test_small_model_tf(self):
-        question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf"
-        )
+    @require_torch
+    def test_duplicate_handling(self):
+        question_answerer = pipeline("question-answering", model="deepset/tinyroberta-squad2")
+
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Who is the chancellor of Germany?",
+            context="Angela Merkel was the chancellor of Germany.",
+            top_k=10,
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.011, "start": 0, "end": 11, "answer": "HuggingFace"})
+        answers = [output["answer"] for output in outputs]
+        self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
 
     @slow
     @require_torch
@@ -199,8 +322,43 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         )
         outputs = qa_pipeline(
             {
-                "context": "Yes Bank founder Rana Kapoor has approached the Bombay High Court, challenging a special court's order from August this year that had remanded him in police custody for a week in a multi-crore loan fraud case. Kapoor, who is currently lodged in Taloja Jail, is an accused in the loan fraud case and some related matters being probed by the CBI and Enforcement Directorate. A single bench presided over by Justice S K Shinde on Tuesday posted the plea for further hearing on October 14. In his plea filed through advocate Vijay Agarwal, Kapoor claimed that the special court's order permitting the CBI's request for police custody on August 14 was illegal and in breach of the due process of law. Therefore, his police custody and subsequent judicial custody in the case were all illegal. Kapoor has urged the High Court to quash and set aside the special court's order dated August 14. As per his plea, in August this year, the CBI had moved two applications before the special court, one seeking permission to arrest Kapoor, who was already in judicial custody at the time in another case, and the other, seeking his police custody. While the special court refused to grant permission to the CBI to arrest Kapoor, it granted the central agency's plea for his custody. Kapoor, however, said in his plea that before filing an application for his arrest, the CBI had not followed the process of issuing him a notice under Section 41 of the CrPC for appearance before it. He further said that the CBI had not taken prior sanction as mandated under section 17 A of the Prevention of Corruption Act for prosecuting him. The special court, however, had said in its order at the time that as Kapoor was already in judicial custody in another case and was not a free man the procedure mandated under Section 41 of the CrPC need not have been adhered to as far as issuing a prior notice of appearance was concerned. ADVERTISING It had also said that case records showed that the investigating officer had taken an approval from a managing director of Yes Bank before beginning the proceedings against Kapoor and such a permission was a valid sanction. However, Kapoor in his plea said that the above order was bad in law and sought that it be quashed and set aside. The law mandated that if initial action was not in consonance with legal procedures, then all subsequent actions must be held as illegal, he said, urging the High Court to declare the CBI remand and custody and all subsequent proceedings including the further custody as illegal and void ab-initio. In a separate plea before the High Court, Kapoor's daughter Rakhee Kapoor-Tandon has sought exemption from in-person appearance before a special PMLA court. Rakhee has stated that she is a resident of the United Kingdom and is unable to travel to India owing to restrictions imposed due to the COVID-19 pandemic. According to the CBI, in the present case, Kapoor had obtained a gratification or pecuniary advantage of ₹ 307 crore, and thereby caused Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was not eligible for the same",
-                "question": "Is this person invovled in fraud?",
+                "context": (
+                    "Yes Bank founder Rana Kapoor has approached the Bombay High Court, challenging a special court's"
+                    " order from August this year that had remanded him in police custody for a week in a multi-crore"
+                    " loan fraud case. Kapoor, who is currently lodged in Taloja Jail, is an accused in the loan fraud"
+                    " case and some related matters being probed by the CBI and Enforcement Directorate. A single"
+                    " bench presided over by Justice S K Shinde on Tuesday posted the plea for further hearing on"
+                    " October 14. In his plea filed through advocate Vijay Agarwal, Kapoor claimed that the special"
+                    " court's order permitting the CBI's request for police custody on August 14 was illegal and in"
+                    " breach of the due process of law. Therefore, his police custody and subsequent judicial custody"
+                    " in the case were all illegal. Kapoor has urged the High Court to quash and set aside the special"
+                    " court's order dated August 14. As per his plea, in August this year, the CBI had moved two"
+                    " applications before the special court, one seeking permission to arrest Kapoor, who was already"
+                    " in judicial custody at the time in another case, and the other, seeking his police custody."
+                    " While the special court refused to grant permission to the CBI to arrest Kapoor, it granted the"
+                    " central agency's plea for his custody. Kapoor, however, said in his plea that before filing an"
+                    " application for his arrest, the CBI had not followed the process of issuing him a notice under"
+                    " Section 41 of the CrPC for appearance before it. He further said that the CBI had not taken"
+                    " prior sanction as mandated under section 17 A of the Prevention of Corruption Act for"
+                    " prosecuting him. The special court, however, had said in its order at the time that as Kapoor"
+                    " was already in judicial custody in another case and was not a free man the procedure mandated"
+                    " under Section 41 of the CrPC need not have been adhered to as far as issuing a prior notice of"
+                    " appearance was concerned. ADVERTISING It had also said that case records showed that the"
+                    " investigating officer had taken an approval from a managing director of Yes Bank before"
+                    " beginning the proceedings against Kapoor and such a permission was a valid sanction. However,"
+                    " Kapoor in his plea said that the above order was bad in law and sought that it be quashed and"
+                    " set aside. The law mandated that if initial action was not in consonance with legal procedures,"
+                    " then all subsequent actions must be held as illegal, he said, urging the High Court to declare"
+                    " the CBI remand and custody and all subsequent proceedings including the further custody as"
+                    " illegal and void ab-initio. In a separate plea before the High Court, Kapoor's daughter Rakhee"
+                    " Kapoor-Tandon has sought exemption from in-person appearance before a special PMLA court. Rakhee"
+                    " has stated that she is a resident of the United Kingdom and is unable to travel to India owing"
+                    " to restrictions imposed due to the COVID-19 pandemic. According to the CBI, in the present case,"
+                    " Kapoor had obtained a gratification or pecuniary advantage of ₹ 307 crore, and thereby caused"
+                    " Yes Bank a loss of ₹ 1,800 crore by extending credit facilities to Avantha Group, when it was"
+                    " not eligible for the same"
+                ),
+                "question": "Is this person involved in fraud?",
             }
         )
         self.assertEqual(
@@ -254,21 +412,11 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.972, "start": 1892},
         )
 
-    @slow
-    @require_tf
-    def test_large_model_tf(self):
-        question_answerer = pipeline("question-answering", framework="tf")
-        outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
-        )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
-
-
-@is_pipeline_test
+@require_torch_or_tf
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()

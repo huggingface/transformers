@@ -16,17 +16,16 @@
 
 URL: https://github.com/facebookresearch/ConvNeXt"""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
+from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
 from transformers.utils import logging
 
 
@@ -62,9 +61,9 @@ def get_convnext_config(checkpoint_url):
         filename = "imagenet-22k-id2label.json"
         expected_shape = (1, 21841)
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841
@@ -129,11 +128,11 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnext." + key
@@ -144,10 +143,10 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Check outputs on an image, prepared by ConvNextFeatureExtractor
+    # Check outputs on an image, prepared by ConvNextImageProcessor
     size = 224 if "224" in checkpoint_url else 384
-    feature_extractor = ConvNextFeatureExtractor(size=size)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
+    image_processor = ConvNextImageProcessor(size=size)
+    pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
 
     logits = model(pixel_values).logits
 
@@ -191,8 +190,8 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     print("Pushing model to the hub...")
     model_name = "convnext"

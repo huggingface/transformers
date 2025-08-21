@@ -1,7 +1,0 @@
-transformers
-datasets
-torch>=1.5.0
-torchaudio
-jiwer==2.2.0
-lang-trans==0.6.0
-librosa==0.8.0

@@ -1,0 +1,82 @@
+name: Check Tiny Models
+
+on:
+  push:
+    branches:
+      - check_tiny_models*
+  repository_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+env:
+  TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
+
+jobs:
+  check_tiny_models:
+    name: Check tiny models
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          # Semantic version range syntax or exact version of a Python version
+          python-version: '3.8'
+          # Optional - x64 or x86 architecture, defaults to x64
+          architecture: 'x64'
+
+      - name: Install
+        run: |
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake
+          pip install --upgrade pip
+          python -m pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video,tf-cpu]
+          pip install tensorflow_probability
+          python -m pip install -U 'natten<0.15.0'
+
+      - name: Create all tiny models (locally)
+        run: |
+          python utils/create_dummy_models.py tiny_local_models --all --num_workers 2
+
+      - name: Local tiny model reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiny_local_model_creation_reports
+          path: tiny_local_models/reports
+
+      # GitHub-hosted runners have 2-core CPUs
+      - name: Run pipeline tests against all new (local) tiny models
+        run: |
+          OMP_NUM_THREADS=1 TRANSFORMERS_TINY_MODEL_PATH=tiny_local_models python -m pytest --max-worker-restart=0 -n 2 --dist=loadfile -s -rA --make-reports=tests_pipelines tests/models -m is_pipeline_test -k "test_pipeline_" | tee tests_output.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiny_local_model_creation_reports
+          path: reports/tests_pipelines
+
+      - name: Create + Upload tiny models for new model architecture(s)
+        run: |
+          python utils/update_tiny_models.py --num_workers 2
+
+      - name: Full report
+        run: cat tiny_models/reports/tiny_model_creation_report.json
+
+      - name: Failure report
+        run: cat tiny_models/reports/simple_failed_report.txt
+
+      - name: Summary report
+        run: cat tiny_models/reports/tiny_model_summary.json
+
+      - name: New tiny model creation reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiny_model_creation_reports
+          path: tiny_models/reports

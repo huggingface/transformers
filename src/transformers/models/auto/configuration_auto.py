@@ -12,391 +12,984 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Config class."""
+"""Auto Config class."""
+
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
-from typing import List, Union
+from collections.abc import Callable, Iterator, KeysView, ValuesView
+from typing import Any, TypeVar, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
 
 logger = logging.get_logger(__name__)
 
-CONFIG_MAPPING_NAMES = OrderedDict(
+
+_CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
+
+
+CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
-        ("yolos", "YolosConfig"),
-        ("tapex", "BartConfig"),
-        ("dpt", "DPTConfig"),
-        ("decision_transformer", "DecisionTransformerConfig"),
-        ("glpn", "GLPNConfig"),
-        ("maskformer", "MaskFormerConfig"),
-        ("decision_transformer", "DecisionTransformerConfig"),
-        ("poolformer", "PoolFormerConfig"),
-        ("convnext", "ConvNextConfig"),
-        ("van", "VanConfig"),
-        ("resnet", "ResNetConfig"),
-        ("regnet", "RegNetConfig"),
-        ("yoso", "YosoConfig"),
-        ("swin", "SwinConfig"),
-        ("vilt", "ViltConfig"),
-        ("vit_mae", "ViTMAEConfig"),
-        ("realm", "RealmConfig"),
-        ("nystromformer", "NystromformerConfig"),
-        ("xglm", "XGLMConfig"),
-        ("imagegpt", "ImageGPTConfig"),
-        ("qdqbert", "QDQBertConfig"),
-        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
-        ("trocr", "TrOCRConfig"),
-        ("fnet", "FNetConfig"),
-        ("segformer", "SegformerConfig"),
-        ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
-        ("perceiver", "PerceiverConfig"),
-        ("gptj", "GPTJConfig"),
-        ("layoutlmv2", "LayoutLMv2Config"),
-        ("plbart", "PLBartConfig"),
-        ("beit", "BeitConfig"),
-        ("data2vec-vision", "Data2VecVisionConfig"),
-        ("rembert", "RemBertConfig"),
-        ("visual_bert", "VisualBertConfig"),
-        ("canine", "CanineConfig"),
-        ("roformer", "RoFormerConfig"),
-        ("clip", "CLIPConfig"),
-        ("bigbird_pegasus", "BigBirdPegasusConfig"),
-        ("deit", "DeiTConfig"),
-        ("luke", "LukeConfig"),
-        ("detr", "DetrConfig"),
-        ("gpt_neo", "GPTNeoConfig"),
-        ("big_bird", "BigBirdConfig"),
-        ("speech_to_text_2", "Speech2Text2Config"),
-        ("speech_to_text", "Speech2TextConfig"),
-        ("vit", "ViTConfig"),
-        ("wav2vec2", "Wav2Vec2Config"),
-        ("m2m_100", "M2M100Config"),
-        ("convbert", "ConvBertConfig"),
-        ("led", "LEDConfig"),
-        ("blenderbot-small", "BlenderbotSmallConfig"),
-        ("retribert", "RetriBertConfig"),
-        ("ibert", "IBertConfig"),
-        ("mt5", "MT5Config"),
-        ("t5", "T5Config"),
-        ("mobilebert", "MobileBertConfig"),
-        ("distilbert", "DistilBertConfig"),
+        ("aimv2", "Aimv2Config"),
+        ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
-        ("bert-generation", "BertGenerationConfig"),
-        ("camembert", "CamembertConfig"),
-        ("xlm-roberta-xl", "XLMRobertaXLConfig"),
-        ("xlm-roberta", "XLMRobertaConfig"),
-        ("pegasus", "PegasusConfig"),
-        ("marian", "MarianConfig"),
-        ("mbart", "MBartConfig"),
-        ("megatron-bert", "MegatronBertConfig"),
-        ("mpnet", "MPNetConfig"),
+        ("align", "AlignConfig"),
+        ("altclip", "AltCLIPConfig"),
+        ("arcee", "ArceeConfig"),
+        ("aria", "AriaConfig"),
+        ("aria_text", "AriaTextConfig"),
+        ("audio-spectrogram-transformer", "ASTConfig"),
+        ("autoformer", "AutoformerConfig"),
+        ("aya_vision", "AyaVisionConfig"),
+        ("bamba", "BambaConfig"),
+        ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
-        ("blenderbot", "BlenderbotConfig"),
-        ("reformer", "ReformerConfig"),
-        ("longformer", "LongformerConfig"),
-        ("roberta", "RobertaConfig"),
-        ("deberta-v2", "DebertaV2Config"),
-        ("deberta", "DebertaConfig"),
-        ("flaubert", "FlaubertConfig"),
-        ("fsmt", "FSMTConfig"),
-        ("squeezebert", "SqueezeBertConfig"),
-        ("hubert", "HubertConfig"),
+        ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
-        ("openai-gpt", "OpenAIGPTConfig"),
-        ("gpt2", "GPT2Config"),
-        ("transfo-xl", "TransfoXLConfig"),
-        ("xlnet", "XLNetConfig"),
-        ("xlm-prophetnet", "XLMProphetNetConfig"),
-        ("prophetnet", "ProphetNetConfig"),
-        ("xlm", "XLMConfig"),
+        ("bert-generation", "BertGenerationConfig"),
+        ("big_bird", "BigBirdConfig"),
+        ("bigbird_pegasus", "BigBirdPegasusConfig"),
+        ("biogpt", "BioGptConfig"),
+        ("bit", "BitConfig"),
+        ("bitnet", "BitNetConfig"),
+        ("blenderbot", "BlenderbotConfig"),
+        ("blenderbot-small", "BlenderbotSmallConfig"),
+        ("blip", "BlipConfig"),
+        ("blip-2", "Blip2Config"),
+        ("blip_2_qformer", "Blip2QFormerConfig"),
+        ("bloom", "BloomConfig"),
+        ("bridgetower", "BridgeTowerConfig"),
+        ("bros", "BrosConfig"),
+        ("camembert", "CamembertConfig"),
+        ("canine", "CanineConfig"),
+        ("chameleon", "ChameleonConfig"),
+        ("chinese_clip", "ChineseCLIPConfig"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
+        ("clap", "ClapConfig"),
+        ("clip", "CLIPConfig"),
+        ("clip_text_model", "CLIPTextConfig"),
+        ("clip_vision_model", "CLIPVisionConfig"),
+        ("clipseg", "CLIPSegConfig"),
+        ("clvp", "ClvpConfig"),
+        ("code_llama", "LlamaConfig"),
+        ("codegen", "CodeGenConfig"),
+        ("cohere", "CohereConfig"),
+        ("cohere2", "Cohere2Config"),
+        ("cohere2_vision", "Cohere2VisionConfig"),
+        ("colpali", "ColPaliConfig"),
+        ("colqwen2", "ColQwen2Config"),
+        ("conditional_detr", "ConditionalDetrConfig"),
+        ("convbert", "ConvBertConfig"),
+        ("convnext", "ConvNextConfig"),
+        ("convnextv2", "ConvNextV2Config"),
+        ("cpmant", "CpmAntConfig"),
+        ("csm", "CsmConfig"),
         ("ctrl", "CTRLConfig"),
-        ("electra", "ElectraConfig"),
-        ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
-        ("encoder-decoder", "EncoderDecoderConfig"),
-        ("funnel", "FunnelConfig"),
-        ("lxmert", "LxmertConfig"),
-        ("dpr", "DPRConfig"),
-        ("layoutlm", "LayoutLMConfig"),
-        ("rag", "RagConfig"),
-        ("tapas", "TapasConfig"),
-        ("splinter", "SplinterConfig"),
-        ("sew-d", "SEWDConfig"),
-        ("sew", "SEWConfig"),
-        ("unispeech-sat", "UniSpeechSatConfig"),
-        ("unispeech", "UniSpeechConfig"),
-        ("wavlm", "WavLMConfig"),
+        ("cvt", "CvtConfig"),
+        ("d_fine", "DFineConfig"),
+        ("dab-detr", "DabDetrConfig"),
+        ("dac", "DacConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
         ("data2vec-text", "Data2VecTextConfig"),
+        ("data2vec-vision", "Data2VecVisionConfig"),
+        ("dbrx", "DbrxConfig"),
+        ("deberta", "DebertaConfig"),
+        ("deberta-v2", "DebertaV2Config"),
+        ("decision_transformer", "DecisionTransformerConfig"),
+        ("deepseek_v2", "DeepseekV2Config"),
+        ("deepseek_v3", "DeepseekV3Config"),
+        ("deepseek_vl", "DeepseekVLConfig"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
+        ("deformable_detr", "DeformableDetrConfig"),
+        ("deit", "DeiTConfig"),
+        ("depth_anything", "DepthAnythingConfig"),
+        ("depth_pro", "DepthProConfig"),
+        ("deta", "DetaConfig"),
+        ("detr", "DetrConfig"),
+        ("dia", "DiaConfig"),
+        ("diffllama", "DiffLlamaConfig"),
+        ("dinat", "DinatConfig"),
+        ("dinov2", "Dinov2Config"),
+        ("dinov2_with_registers", "Dinov2WithRegistersConfig"),
+        ("dinov3_convnext", "DINOv3ConvNextConfig"),
+        ("dinov3_vit", "DINOv3ViTConfig"),
+        ("distilbert", "DistilBertConfig"),
+        ("doge", "DogeConfig"),
+        ("donut-swin", "DonutSwinConfig"),
+        ("dots1", "Dots1Config"),
+        ("dpr", "DPRConfig"),
+        ("dpt", "DPTConfig"),
+        ("efficientformer", "EfficientFormerConfig"),
+        ("efficientloftr", "EfficientLoFTRConfig"),
+        ("efficientnet", "EfficientNetConfig"),
+        ("electra", "ElectraConfig"),
+        ("emu3", "Emu3Config"),
+        ("encodec", "EncodecConfig"),
+        ("encoder-decoder", "EncoderDecoderConfig"),
+        ("eomt", "EomtConfig"),
+        ("ernie", "ErnieConfig"),
+        ("ernie4_5", "Ernie4_5Config"),
+        ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
+        ("ernie_m", "ErnieMConfig"),
+        ("esm", "EsmConfig"),
+        ("evolla", "EvollaConfig"),
+        ("exaone4", "Exaone4Config"),
+        ("falcon", "FalconConfig"),
+        ("falcon_h1", "FalconH1Config"),
+        ("falcon_mamba", "FalconMambaConfig"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
+        ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGanConfig"),
+        ("flaubert", "FlaubertConfig"),
+        ("flava", "FlavaConfig"),
+        ("florence2", "Florence2Config"),
+        ("fnet", "FNetConfig"),
+        ("focalnet", "FocalNetConfig"),
+        ("fsmt", "FSMTConfig"),
+        ("funnel", "FunnelConfig"),
+        ("fuyu", "FuyuConfig"),
+        ("gemma", "GemmaConfig"),
+        ("gemma2", "Gemma2Config"),
+        ("gemma3", "Gemma3Config"),
+        ("gemma3_text", "Gemma3TextConfig"),
+        ("gemma3n", "Gemma3nConfig"),
+        ("gemma3n_audio", "Gemma3nAudioConfig"),
+        ("gemma3n_text", "Gemma3nTextConfig"),
+        ("gemma3n_vision", "Gemma3nVisionConfig"),
+        ("git", "GitConfig"),
+        ("glm", "GlmConfig"),
+        ("glm4", "Glm4Config"),
+        ("glm4_moe", "Glm4MoeConfig"),
+        ("glm4v", "Glm4vConfig"),
+        ("glm4v_moe", "Glm4vMoeConfig"),
+        ("glm4v_moe_text", "Glm4vMoeTextConfig"),
+        ("glm4v_text", "Glm4vTextConfig"),
+        ("glpn", "GLPNConfig"),
+        ("got_ocr2", "GotOcr2Config"),
+        ("gpt-sw3", "GPT2Config"),
+        ("gpt2", "GPT2Config"),
+        ("gpt_bigcode", "GPTBigCodeConfig"),
+        ("gpt_neo", "GPTNeoConfig"),
+        ("gpt_neox", "GPTNeoXConfig"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
+        ("gpt_oss", "GptOssConfig"),
+        ("gptj", "GPTJConfig"),
+        ("gptsan-japanese", "GPTSanJapaneseConfig"),
+        ("granite", "GraniteConfig"),
+        ("granite_speech", "GraniteSpeechConfig"),
+        ("granitemoe", "GraniteMoeConfig"),
+        ("granitemoehybrid", "GraniteMoeHybridConfig"),
+        ("granitemoeshared", "GraniteMoeSharedConfig"),
+        ("granitevision", "LlavaNextConfig"),
+        ("graphormer", "GraphormerConfig"),
+        ("grounding-dino", "GroundingDinoConfig"),
+        ("groupvit", "GroupViTConfig"),
+        ("helium", "HeliumConfig"),
+        ("hgnet_v2", "HGNetV2Config"),
+        ("hiera", "HieraConfig"),
+        ("hubert", "HubertConfig"),
+        ("ibert", "IBertConfig"),
+        ("idefics", "IdeficsConfig"),
+        ("idefics2", "Idefics2Config"),
+        ("idefics3", "Idefics3Config"),
+        ("idefics3_vision", "Idefics3VisionConfig"),
+        ("ijepa", "IJepaConfig"),
+        ("imagegpt", "ImageGPTConfig"),
+        ("informer", "InformerConfig"),
+        ("instructblip", "InstructBlipConfig"),
+        ("instructblipvideo", "InstructBlipVideoConfig"),
+        ("internvl", "InternVLConfig"),
+        ("internvl_vision", "InternVLVisionConfig"),
+        ("jamba", "JambaConfig"),
+        ("janus", "JanusConfig"),
+        ("jetmoe", "JetMoeConfig"),
+        ("jukebox", "JukeboxConfig"),
+        ("kosmos-2", "Kosmos2Config"),
+        ("kosmos-2.5", "Kosmos2_5Config"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
+        ("layoutlm", "LayoutLMConfig"),
+        ("layoutlmv2", "LayoutLMv2Config"),
+        ("layoutlmv3", "LayoutLMv3Config"),
+        ("led", "LEDConfig"),
+        ("levit", "LevitConfig"),
+        ("lfm2", "Lfm2Config"),
+        ("lightglue", "LightGlueConfig"),
+        ("lilt", "LiltConfig"),
+        ("llama", "LlamaConfig"),
+        ("llama4", "Llama4Config"),
+        ("llama4_text", "Llama4TextConfig"),
+        ("llava", "LlavaConfig"),
+        ("llava_next", "LlavaNextConfig"),
+        ("llava_next_video", "LlavaNextVideoConfig"),
+        ("llava_onevision", "LlavaOnevisionConfig"),
+        ("longformer", "LongformerConfig"),
+        ("longt5", "LongT5Config"),
+        ("luke", "LukeConfig"),
+        ("lxmert", "LxmertConfig"),
+        ("m2m_100", "M2M100Config"),
+        ("mamba", "MambaConfig"),
+        ("mamba2", "Mamba2Config"),
+        ("marian", "MarianConfig"),
+        ("markuplm", "MarkupLMConfig"),
+        ("mask2former", "Mask2FormerConfig"),
+        ("maskformer", "MaskFormerConfig"),
+        ("maskformer-swin", "MaskFormerSwinConfig"),
+        ("mbart", "MBartConfig"),
+        ("mctct", "MCTCTConfig"),
+        ("mega", "MegaConfig"),
+        ("megatron-bert", "MegatronBertConfig"),
+        ("metaclip_2", "MetaClip2Config"),
+        ("mgp-str", "MgpstrConfig"),
+        ("mimi", "MimiConfig"),
+        ("minimax", "MiniMaxConfig"),
+        ("mistral", "MistralConfig"),
+        ("mistral3", "Mistral3Config"),
+        ("mixtral", "MixtralConfig"),
+        ("mlcd", "MLCDVisionConfig"),
+        ("mllama", "MllamaConfig"),
+        ("mm-grounding-dino", "MMGroundingDinoConfig"),
+        ("mobilebert", "MobileBertConfig"),
+        ("mobilenet_v1", "MobileNetV1Config"),
+        ("mobilenet_v2", "MobileNetV2Config"),
+        ("mobilevit", "MobileViTConfig"),
+        ("mobilevitv2", "MobileViTV2Config"),
+        ("modernbert", "ModernBertConfig"),
+        ("modernbert-decoder", "ModernBertDecoderConfig"),
+        ("moonshine", "MoonshineConfig"),
+        ("moshi", "MoshiConfig"),
+        ("mpnet", "MPNetConfig"),
+        ("mpt", "MptConfig"),
+        ("mra", "MraConfig"),
+        ("mt5", "MT5Config"),
+        ("musicgen", "MusicgenConfig"),
+        ("musicgen_melody", "MusicgenMelodyConfig"),
+        ("mvp", "MvpConfig"),
+        ("nat", "NatConfig"),
+        ("nemotron", "NemotronConfig"),
+        ("nezha", "NezhaConfig"),
+        ("nllb-moe", "NllbMoeConfig"),
+        ("nougat", "VisionEncoderDecoderConfig"),
+        ("nystromformer", "NystromformerConfig"),
+        ("olmo", "OlmoConfig"),
+        ("olmo2", "Olmo2Config"),
+        ("olmoe", "OlmoeConfig"),
+        ("omdet-turbo", "OmDetTurboConfig"),
+        ("oneformer", "OneFormerConfig"),
+        ("open-llama", "OpenLlamaConfig"),
+        ("openai-gpt", "OpenAIGPTConfig"),
+        ("opt", "OPTConfig"),
+        ("ovis2", "Ovis2Config"),
+        ("owlv2", "Owlv2Config"),
+        ("owlvit", "OwlViTConfig"),
+        ("paligemma", "PaliGemmaConfig"),
+        ("patchtsmixer", "PatchTSMixerConfig"),
+        ("patchtst", "PatchTSTConfig"),
+        ("pegasus", "PegasusConfig"),
+        ("pegasus_x", "PegasusXConfig"),
+        ("perceiver", "PerceiverConfig"),
+        ("perception_encoder", "TimmWrapperConfig"),
+        ("perception_lm", "PerceptionLMConfig"),
+        ("persimmon", "PersimmonConfig"),
+        ("phi", "PhiConfig"),
+        ("phi3", "Phi3Config"),
+        ("phi4_multimodal", "Phi4MultimodalConfig"),
+        ("phimoe", "PhimoeConfig"),
+        ("pix2struct", "Pix2StructConfig"),
+        ("pixtral", "PixtralVisionConfig"),
+        ("plbart", "PLBartConfig"),
+        ("poolformer", "PoolFormerConfig"),
+        ("pop2piano", "Pop2PianoConfig"),
+        ("prompt_depth_anything", "PromptDepthAnythingConfig"),
+        ("prophetnet", "ProphetNetConfig"),
+        ("pvt", "PvtConfig"),
+        ("pvt_v2", "PvtV2Config"),
+        ("qdqbert", "QDQBertConfig"),
+        ("qwen2", "Qwen2Config"),
+        ("qwen2_5_omni", "Qwen2_5OmniConfig"),
+        ("qwen2_5_vl", "Qwen2_5_VLConfig"),
+        ("qwen2_5_vl_text", "Qwen2_5_VLTextConfig"),
+        ("qwen2_audio", "Qwen2AudioConfig"),
+        ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
+        ("qwen2_moe", "Qwen2MoeConfig"),
+        ("qwen2_vl", "Qwen2VLConfig"),
+        ("qwen2_vl_text", "Qwen2VLTextConfig"),
+        ("qwen3", "Qwen3Config"),
+        ("qwen3_moe", "Qwen3MoeConfig"),
+        ("rag", "RagConfig"),
+        ("realm", "RealmConfig"),
+        ("recurrent_gemma", "RecurrentGemmaConfig"),
+        ("reformer", "ReformerConfig"),
+        ("regnet", "RegNetConfig"),
+        ("rembert", "RemBertConfig"),
+        ("resnet", "ResNetConfig"),
+        ("retribert", "RetriBertConfig"),
+        ("roberta", "RobertaConfig"),
+        ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
+        ("roc_bert", "RoCBertConfig"),
+        ("roformer", "RoFormerConfig"),
+        ("rt_detr", "RTDetrConfig"),
+        ("rt_detr_resnet", "RTDetrResNetConfig"),
+        ("rt_detr_v2", "RTDetrV2Config"),
+        ("rwkv", "RwkvConfig"),
+        ("sam", "SamConfig"),
+        ("sam2", "Sam2Config"),
+        ("sam2_hiera_det_model", "Sam2HieraDetConfig"),
+        ("sam2_video", "Sam2VideoConfig"),
+        ("sam2_vision_model", "Sam2VisionConfig"),
+        ("sam_hq", "SamHQConfig"),
+        ("sam_hq_vision_model", "SamHQVisionConfig"),
+        ("sam_vision_model", "SamVisionConfig"),
+        ("seamless_m4t", "SeamlessM4TConfig"),
+        ("seamless_m4t_v2", "SeamlessM4Tv2Config"),
+        ("segformer", "SegformerConfig"),
+        ("seggpt", "SegGptConfig"),
+        ("sew", "SEWConfig"),
+        ("sew-d", "SEWDConfig"),
+        ("shieldgemma2", "ShieldGemma2Config"),
+        ("siglip", "SiglipConfig"),
+        ("siglip2", "Siglip2Config"),
+        ("siglip_vision_model", "SiglipVisionConfig"),
+        ("smollm3", "SmolLM3Config"),
+        ("smolvlm", "SmolVLMConfig"),
+        ("smolvlm_vision", "SmolVLMVisionConfig"),
+        ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
+        ("speech_to_text", "Speech2TextConfig"),
+        ("speech_to_text_2", "Speech2Text2Config"),
+        ("speecht5", "SpeechT5Config"),
+        ("splinter", "SplinterConfig"),
+        ("squeezebert", "SqueezeBertConfig"),
+        ("stablelm", "StableLmConfig"),
+        ("starcoder2", "Starcoder2Config"),
+        ("superglue", "SuperGlueConfig"),
+        ("superpoint", "SuperPointConfig"),
+        ("swiftformer", "SwiftFormerConfig"),
+        ("swin", "SwinConfig"),
+        ("swin2sr", "Swin2SRConfig"),
+        ("swinv2", "Swinv2Config"),
+        ("switch_transformers", "SwitchTransformersConfig"),
+        ("t5", "T5Config"),
+        ("t5gemma", "T5GemmaConfig"),
+        ("table-transformer", "TableTransformerConfig"),
+        ("tapas", "TapasConfig"),
+        ("textnet", "TextNetConfig"),
+        ("time_series_transformer", "TimeSeriesTransformerConfig"),
+        ("timesfm", "TimesFmConfig"),
+        ("timesformer", "TimesformerConfig"),
+        ("timm_backbone", "TimmBackboneConfig"),
+        ("timm_wrapper", "TimmWrapperConfig"),
+        ("trajectory_transformer", "TrajectoryTransformerConfig"),
+        ("transfo-xl", "TransfoXLConfig"),
+        ("trocr", "TrOCRConfig"),
+        ("tvlt", "TvltConfig"),
+        ("tvp", "TvpConfig"),
+        ("udop", "UdopConfig"),
+        ("umt5", "UMT5Config"),
+        ("unispeech", "UniSpeechConfig"),
+        ("unispeech-sat", "UniSpeechSatConfig"),
+        ("univnet", "UnivNetConfig"),
+        ("upernet", "UperNetConfig"),
+        ("van", "VanConfig"),
+        ("video_llava", "VideoLlavaConfig"),
+        ("videomae", "VideoMAEConfig"),
+        ("vilt", "ViltConfig"),
+        ("vipllava", "VipLlavaConfig"),
+        ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
+        ("visual_bert", "VisualBertConfig"),
+        ("vit", "ViTConfig"),
+        ("vit_hybrid", "ViTHybridConfig"),
+        ("vit_mae", "ViTMAEConfig"),
+        ("vit_msn", "ViTMSNConfig"),
+        ("vitdet", "VitDetConfig"),
+        ("vitmatte", "VitMatteConfig"),
+        ("vitpose", "VitPoseConfig"),
+        ("vitpose_backbone", "VitPoseBackboneConfig"),
+        ("vits", "VitsConfig"),
+        ("vivit", "VivitConfig"),
+        ("vjepa2", "VJEPA2Config"),
+        ("voxtral", "VoxtralConfig"),
+        ("voxtral_encoder", "VoxtralEncoderConfig"),
+        ("wav2vec2", "Wav2Vec2Config"),
+        ("wav2vec2-bert", "Wav2Vec2BertConfig"),
+        ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
+        ("wavlm", "WavLMConfig"),
+        ("whisper", "WhisperConfig"),
+        ("xclip", "XCLIPConfig"),
+        ("xcodec", "XcodecConfig"),
+        ("xglm", "XGLMConfig"),
+        ("xlm", "XLMConfig"),
+        ("xlm-prophetnet", "XLMProphetNetConfig"),
+        ("xlm-roberta", "XLMRobertaConfig"),
+        ("xlm-roberta-xl", "XLMRobertaXLConfig"),
+        ("xlnet", "XLNetConfig"),
+        ("xlstm", "xLSTMConfig"),
+        ("xmod", "XmodConfig"),
+        ("yolos", "YolosConfig"),
+        ("yoso", "YosoConfig"),
+        ("zamba", "ZambaConfig"),
+        ("zamba2", "Zamba2Config"),
+        ("zoedepth", "ZoeDepthConfig"),
     ]
 )
 
-CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
-    [
-        # Add archive maps here)
-        ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("xglm", "XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("perceiver", "PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("data2vec-vision", "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("clip", "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("bigbird_pegasus", "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("gpt_neo", "GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("big_bird", "BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("speech_to_text_2", "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("convbert", "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("led", "LED_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("blenderbot-small", "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("blenderbot", "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("ctrl", "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("data2vec-text", "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("data2vec-audio", "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("t5", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("xlm-roberta", "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("retribert", "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("lxmert", "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("layoutlm", "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("dpr", "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("deberta", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("deberta-v2", "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("squeezebert", "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("xlm-prophetnet", "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("splinter", "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-    ]
-)
 
-MODEL_NAMES_MAPPING = OrderedDict(
+MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
-        ("yolos", "YOLOS"),
-        ("tapex", "TAPEX"),
-        ("dpt", "DPT"),
-        ("decision_transformer", "Decision Transformer"),
-        ("glpn", "GLPN"),
-        ("maskformer", "MaskFormer"),
-        ("poolformer", "PoolFormer"),
-        ("convnext", "ConvNext"),
-        ("van", "VAN"),
-        ("resnet", "ResNet"),
-        ("regnet", "RegNet"),
-        ("yoso", "YOSO"),
-        ("swin", "Swin"),
-        ("vilt", "ViLT"),
-        ("vit_mae", "ViTMAE"),
-        ("realm", "Realm"),
-        ("nystromformer", "Nystromformer"),
-        ("xglm", "XGLM"),
-        ("imagegpt", "ImageGPT"),
-        ("qdqbert", "QDQBert"),
-        ("vision-encoder-decoder", "Vision Encoder decoder"),
-        ("trocr", "TrOCR"),
-        ("fnet", "FNet"),
-        ("segformer", "SegFormer"),
-        ("vision-text-dual-encoder", "VisionTextDualEncoder"),
-        ("perceiver", "Perceiver"),
-        ("gptj", "GPT-J"),
-        ("beit", "BEiT"),
-        ("plbart", "PLBart"),
-        ("rembert", "RemBERT"),
-        ("layoutlmv2", "LayoutLMv2"),
-        ("visual_bert", "VisualBert"),
-        ("canine", "Canine"),
-        ("roformer", "RoFormer"),
-        ("clip", "CLIP"),
-        ("bigbird_pegasus", "BigBirdPegasus"),
-        ("deit", "DeiT"),
-        ("luke", "LUKE"),
-        ("detr", "DETR"),
-        ("gpt_neo", "GPT Neo"),
-        ("big_bird", "BigBird"),
-        ("speech_to_text_2", "Speech2Text2"),
-        ("speech_to_text", "Speech2Text"),
-        ("vit", "ViT"),
-        ("wav2vec2", "Wav2Vec2"),
-        ("m2m_100", "M2M100"),
-        ("convbert", "ConvBERT"),
-        ("led", "LED"),
-        ("blenderbot-small", "BlenderbotSmall"),
-        ("retribert", "RetriBERT"),
-        ("ibert", "I-BERT"),
-        ("t5", "T5"),
-        ("mobilebert", "MobileBERT"),
-        ("distilbert", "DistilBERT"),
+        ("aimv2", "AIMv2"),
+        ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
-        ("bert-generation", "Bert Generation"),
-        ("camembert", "CamemBERT"),
-        ("xlm-roberta", "XLM-RoBERTa"),
-        ("xlm-roberta-xl", "XLM-RoBERTa-XL"),
-        ("pegasus", "Pegasus"),
-        ("blenderbot", "Blenderbot"),
-        ("marian", "Marian"),
-        ("mbart", "mBART"),
-        ("megatron-bert", "MegatronBert"),
+        ("align", "ALIGN"),
+        ("altclip", "AltCLIP"),
+        ("arcee", "Arcee"),
+        ("aria", "Aria"),
+        ("aria_text", "AriaText"),
+        ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
+        ("autoformer", "Autoformer"),
+        ("aya_vision", "AyaVision"),
+        ("bamba", "Bamba"),
+        ("bark", "Bark"),
         ("bart", "BART"),
-        ("reformer", "Reformer"),
-        ("longformer", "Longformer"),
-        ("roberta", "RoBERTa"),
-        ("flaubert", "FlauBERT"),
-        ("fsmt", "FairSeq Machine-Translation"),
-        ("squeezebert", "SqueezeBERT"),
-        ("bert", "BERT"),
-        ("openai-gpt", "OpenAI GPT"),
-        ("gpt2", "OpenAI GPT-2"),
-        ("transfo-xl", "Transformer-XL"),
-        ("xlnet", "XLNet"),
-        ("xlm", "XLM"),
-        ("ctrl", "CTRL"),
-        ("electra", "ELECTRA"),
-        ("encoder-decoder", "Encoder decoder"),
-        ("speech-encoder-decoder", "Speech Encoder decoder"),
-        ("vision-encoder-decoder", "Vision Encoder decoder"),
-        ("funnel", "Funnel Transformer"),
-        ("lxmert", "LXMERT"),
-        ("deberta-v2", "DeBERTa-v2"),
-        ("deberta", "DeBERTa"),
-        ("layoutlm", "LayoutLM"),
-        ("dpr", "DPR"),
-        ("rag", "RAG"),
-        ("xlm-prophetnet", "XLMProphetNet"),
-        ("prophetnet", "ProphetNet"),
-        ("mt5", "mT5"),
-        ("mpnet", "MPNet"),
-        ("tapas", "TAPAS"),
-        ("hubert", "Hubert"),
         ("barthez", "BARThez"),
-        ("phobert", "PhoBERT"),
         ("bartpho", "BARTpho"),
-        ("cpm", "CPM"),
-        ("bertweet", "Bertweet"),
+        ("beit", "BEiT"),
+        ("bert", "BERT"),
+        ("bert-generation", "Bert Generation"),
         ("bert-japanese", "BertJapanese"),
-        ("byt5", "ByT5"),
-        ("mbart50", "mBART-50"),
-        ("splinter", "Splinter"),
-        ("sew-d", "SEW-D"),
-        ("sew", "SEW"),
-        ("unispeech-sat", "UniSpeechSat"),
-        ("unispeech", "UniSpeech"),
-        ("wavlm", "WavLM"),
+        ("bertweet", "BERTweet"),
+        ("big_bird", "BigBird"),
+        ("bigbird_pegasus", "BigBird-Pegasus"),
+        ("biogpt", "BioGpt"),
+        ("bit", "BiT"),
+        ("bitnet", "BitNet"),
+        ("blenderbot", "Blenderbot"),
+        ("blenderbot-small", "BlenderbotSmall"),
+        ("blip", "BLIP"),
+        ("blip-2", "BLIP-2"),
+        ("blip_2_qformer", "BLIP-2 QFormer"),
+        ("bloom", "BLOOM"),
         ("bort", "BORT"),
-        ("dialogpt", "DialoGPT"),
-        ("xls_r", "XLS-R"),
-        ("t5v1.1", "T5v1.1"),
-        ("herbert", "HerBERT"),
-        ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
-        ("megatron_gpt2", "MegatronGPT2"),
-        ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
-        ("mluke", "mLUKE"),
-        ("layoutxlm", "LayoutXLM"),
+        ("bridgetower", "BridgeTower"),
+        ("bros", "BROS"),
+        ("byt5", "ByT5"),
+        ("camembert", "CamemBERT"),
+        ("canine", "CANINE"),
+        ("chameleon", "Chameleon"),
+        ("chinese_clip", "Chinese-CLIP"),
+        ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
+        ("clap", "CLAP"),
+        ("clip", "CLIP"),
+        ("clip_text_model", "CLIPTextModel"),
+        ("clip_vision_model", "CLIPVisionModel"),
+        ("clipseg", "CLIPSeg"),
+        ("clvp", "CLVP"),
+        ("code_llama", "CodeLlama"),
+        ("codegen", "CodeGen"),
+        ("cohere", "Cohere"),
+        ("cohere2", "Cohere2"),
+        ("cohere2_vision", "Cohere2Vision"),
+        ("colpali", "ColPali"),
+        ("colqwen2", "ColQwen2"),
+        ("conditional_detr", "Conditional DETR"),
+        ("convbert", "ConvBERT"),
+        ("convnext", "ConvNeXT"),
+        ("convnextv2", "ConvNeXTV2"),
+        ("cpm", "CPM"),
+        ("cpmant", "CPM-Ant"),
+        ("csm", "CSM"),
+        ("ctrl", "CTRL"),
+        ("cvt", "CvT"),
+        ("d_fine", "D-FINE"),
+        ("dab-detr", "DAB-DETR"),
+        ("dac", "DAC"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
         ("data2vec-vision", "Data2VecVision"),
+        ("dbrx", "DBRX"),
+        ("deberta", "DeBERTa"),
+        ("deberta-v2", "DeBERTa-v2"),
+        ("decision_transformer", "Decision Transformer"),
+        ("deepseek_v2", "DeepSeek-V2"),
+        ("deepseek_v3", "DeepSeek-V3"),
+        ("deepseek_vl", "DeepseekVL"),
+        ("deepseek_vl_hybrid", "DeepseekVLHybrid"),
+        ("deformable_detr", "Deformable DETR"),
+        ("deit", "DeiT"),
+        ("deplot", "DePlot"),
+        ("depth_anything", "Depth Anything"),
+        ("depth_anything_v2", "Depth Anything V2"),
+        ("depth_pro", "DepthPro"),
+        ("deta", "DETA"),
+        ("detr", "DETR"),
+        ("dia", "Dia"),
+        ("dialogpt", "DialoGPT"),
+        ("diffllama", "DiffLlama"),
+        ("dinat", "DiNAT"),
+        ("dinov2", "DINOv2"),
+        ("dinov2_with_registers", "DINOv2 with Registers"),
+        ("dinov3_convnext", "DINOv3 ConvNext"),
+        ("dinov3_vit", "DINOv3 ViT"),
+        ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("doge", "Doge"),
+        ("donut-swin", "DonutSwin"),
+        ("dots1", "dots1"),
+        ("dpr", "DPR"),
+        ("dpt", "DPT"),
+        ("efficientformer", "EfficientFormer"),
+        ("efficientloftr", "EfficientLoFTR"),
+        ("efficientnet", "EfficientNet"),
+        ("electra", "ELECTRA"),
+        ("emu3", "Emu3"),
+        ("encodec", "EnCodec"),
+        ("encoder-decoder", "Encoder decoder"),
+        ("eomt", "EoMT"),
+        ("ernie", "ERNIE"),
+        ("ernie4_5", "Ernie4_5"),
+        ("ernie4_5_moe", "Ernie4_5_MoE"),
+        ("ernie_m", "ErnieM"),
+        ("esm", "ESM"),
+        ("evolla", "Evolla"),
+        ("exaone4", "EXAONE-4.0"),
+        ("falcon", "Falcon"),
+        ("falcon3", "Falcon3"),
+        ("falcon_h1", "FalconH1"),
+        ("falcon_mamba", "FalconMamba"),
+        ("fastspeech2_conformer", "FastSpeech2Conformer"),
+        ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
+        ("flan-t5", "FLAN-T5"),
+        ("flan-ul2", "FLAN-UL2"),
+        ("flaubert", "FlauBERT"),
+        ("flava", "FLAVA"),
+        ("florence2", "Florence2"),
+        ("fnet", "FNet"),
+        ("focalnet", "FocalNet"),
+        ("fsmt", "FairSeq Machine-Translation"),
+        ("funnel", "Funnel Transformer"),
+        ("fuyu", "Fuyu"),
+        ("gemma", "Gemma"),
+        ("gemma2", "Gemma2"),
+        ("gemma3", "Gemma3ForConditionalGeneration"),
+        ("gemma3_text", "Gemma3ForCausalLM"),
+        ("gemma3n", "Gemma3nForConditionalGeneration"),
+        ("gemma3n_audio", "Gemma3nAudioEncoder"),
+        ("gemma3n_text", "Gemma3nForCausalLM"),
+        ("gemma3n_vision", "TimmWrapperModel"),
+        ("git", "GIT"),
+        ("glm", "GLM"),
+        ("glm4", "GLM4"),
+        ("glm4_moe", "Glm4MoE"),
+        ("glm4v", "GLM4V"),
+        ("glm4v_moe", "GLM4VMOE"),
+        ("glm4v_moe_text", "GLM4VMOE"),
+        ("glm4v_text", "GLM4V"),
+        ("glpn", "GLPN"),
+        ("got_ocr2", "GOT-OCR2"),
+        ("gpt-sw3", "GPT-Sw3"),
+        ("gpt2", "OpenAI GPT-2"),
+        ("gpt_bigcode", "GPTBigCode"),
+        ("gpt_neo", "GPT Neo"),
+        ("gpt_neox", "GPT NeoX"),
+        ("gpt_neox_japanese", "GPT NeoX Japanese"),
+        ("gpt_oss", "GptOss"),
+        ("gptj", "GPT-J"),
+        ("gptsan-japanese", "GPTSAN-japanese"),
+        ("granite", "Granite"),
+        ("granite_speech", "GraniteSpeech"),
+        ("granitemoe", "GraniteMoeMoe"),
+        ("granitemoehybrid", "GraniteMoeHybrid"),
+        ("granitemoeshared", "GraniteMoeSharedMoe"),
+        ("granitevision", "LLaVA-NeXT"),
+        ("graphormer", "Graphormer"),
+        ("grounding-dino", "Grounding DINO"),
+        ("groupvit", "GroupViT"),
+        ("helium", "Helium"),
+        ("herbert", "HerBERT"),
+        ("hgnet_v2", "HGNet-V2"),
+        ("hiera", "Hiera"),
+        ("hubert", "Hubert"),
+        ("ibert", "I-BERT"),
+        ("idefics", "IDEFICS"),
+        ("idefics2", "Idefics2"),
+        ("idefics3", "Idefics3"),
+        ("idefics3_vision", "Idefics3VisionTransformer"),
+        ("ijepa", "I-JEPA"),
+        ("imagegpt", "ImageGPT"),
+        ("informer", "Informer"),
+        ("instructblip", "InstructBLIP"),
+        ("instructblipvideo", "InstructBlipVideo"),
+        ("internvl", "InternVL"),
+        ("internvl_vision", "InternVLVision"),
+        ("jamba", "Jamba"),
+        ("janus", "Janus"),
+        ("jetmoe", "JetMoe"),
+        ("jukebox", "Jukebox"),
+        ("kosmos-2", "KOSMOS-2"),
+        ("kosmos-2.5", "KOSMOS-2.5"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToText"),
+        ("layoutlm", "LayoutLM"),
+        ("layoutlmv2", "LayoutLMv2"),
+        ("layoutlmv3", "LayoutLMv3"),
+        ("layoutxlm", "LayoutXLM"),
+        ("led", "LED"),
+        ("levit", "LeViT"),
+        ("lfm2", "Lfm2"),
+        ("lightglue", "LightGlue"),
+        ("lilt", "LiLT"),
+        ("llama", "LLaMA"),
+        ("llama2", "Llama2"),
+        ("llama3", "Llama3"),
+        ("llama4", "Llama4"),
+        ("llama4_text", "Llama4ForCausalLM"),
+        ("llava", "LLaVa"),
+        ("llava_next", "LLaVA-NeXT"),
+        ("llava_next_video", "LLaVa-NeXT-Video"),
+        ("llava_onevision", "LLaVA-Onevision"),
+        ("longformer", "Longformer"),
+        ("longt5", "LongT5"),
+        ("luke", "LUKE"),
+        ("lxmert", "LXMERT"),
+        ("m2m_100", "M2M100"),
+        ("madlad-400", "MADLAD-400"),
+        ("mamba", "Mamba"),
+        ("mamba2", "mamba2"),
+        ("marian", "Marian"),
+        ("markuplm", "MarkupLM"),
+        ("mask2former", "Mask2Former"),
+        ("maskformer", "MaskFormer"),
+        ("maskformer-swin", "MaskFormerSwin"),
+        ("matcha", "MatCha"),
+        ("mbart", "mBART"),
+        ("mbart50", "mBART-50"),
+        ("mctct", "M-CTC-T"),
+        ("mega", "MEGA"),
+        ("megatron-bert", "Megatron-BERT"),
+        ("megatron_gpt2", "Megatron-GPT2"),
+        ("metaclip_2", "MetaCLIP 2"),
+        ("mgp-str", "MGP-STR"),
+        ("mimi", "Mimi"),
+        ("minimax", "MiniMax"),
+        ("mistral", "Mistral"),
+        ("mistral3", "Mistral3"),
+        ("mixtral", "Mixtral"),
+        ("mlcd", "MLCD"),
+        ("mllama", "Mllama"),
+        ("mluke", "mLUKE"),
+        ("mm-grounding-dino", "MM Grounding DINO"),
+        ("mms", "MMS"),
+        ("mobilebert", "MobileBERT"),
+        ("mobilenet_v1", "MobileNetV1"),
+        ("mobilenet_v2", "MobileNetV2"),
+        ("mobilevit", "MobileViT"),
+        ("mobilevitv2", "MobileViTV2"),
+        ("modernbert", "ModernBERT"),
+        ("modernbert-decoder", "ModernBertDecoder"),
+        ("moonshine", "Moonshine"),
+        ("moshi", "Moshi"),
+        ("mpnet", "MPNet"),
+        ("mpt", "MPT"),
+        ("mra", "MRA"),
+        ("mt5", "MT5"),
+        ("musicgen", "MusicGen"),
+        ("musicgen_melody", "MusicGen Melody"),
+        ("mvp", "MVP"),
+        ("myt5", "myt5"),
+        ("nat", "NAT"),
+        ("nemotron", "Nemotron"),
+        ("nezha", "Nezha"),
+        ("nllb", "NLLB"),
+        ("nllb-moe", "NLLB-MOE"),
+        ("nougat", "Nougat"),
+        ("nystromformer", "Nyströmformer"),
+        ("olmo", "OLMo"),
+        ("olmo2", "OLMo2"),
+        ("olmoe", "OLMoE"),
+        ("omdet-turbo", "OmDet-Turbo"),
+        ("oneformer", "OneFormer"),
+        ("open-llama", "OpenLlama"),
+        ("openai-gpt", "OpenAI GPT"),
+        ("opt", "OPT"),
+        ("ovis2", "Ovis2"),
+        ("owlv2", "OWLv2"),
+        ("owlvit", "OWL-ViT"),
+        ("paligemma", "PaliGemma"),
+        ("patchtsmixer", "PatchTSMixer"),
+        ("patchtst", "PatchTST"),
+        ("pegasus", "Pegasus"),
+        ("pegasus_x", "PEGASUS-X"),
+        ("perceiver", "Perceiver"),
+        ("perception_encoder", "PerceptionEncoder"),
+        ("perception_lm", "PerceptionLM"),
+        ("persimmon", "Persimmon"),
+        ("phi", "Phi"),
+        ("phi3", "Phi3"),
+        ("phi4_multimodal", "Phi4Multimodal"),
+        ("phimoe", "Phimoe"),
+        ("phobert", "PhoBERT"),
+        ("pix2struct", "Pix2Struct"),
+        ("pixtral", "Pixtral"),
+        ("plbart", "PLBart"),
+        ("poolformer", "PoolFormer"),
+        ("pop2piano", "Pop2Piano"),
+        ("prompt_depth_anything", "PromptDepthAnything"),
+        ("prophetnet", "ProphetNet"),
+        ("pvt", "PVT"),
+        ("pvt_v2", "PVTv2"),
+        ("qdqbert", "QDQBert"),
+        ("qwen2", "Qwen2"),
+        ("qwen2_5_omni", "Qwen2_5Omni"),
+        ("qwen2_5_vl", "Qwen2_5_VL"),
+        ("qwen2_5_vl_text", "Qwen2_5_VL"),
+        ("qwen2_audio", "Qwen2Audio"),
+        ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
+        ("qwen2_moe", "Qwen2MoE"),
+        ("qwen2_vl", "Qwen2VL"),
+        ("qwen2_vl_text", "Qwen2VL"),
+        ("qwen3", "Qwen3"),
+        ("qwen3_moe", "Qwen3MoE"),
+        ("rag", "RAG"),
+        ("realm", "REALM"),
+        ("recurrent_gemma", "RecurrentGemma"),
+        ("reformer", "Reformer"),
+        ("regnet", "RegNet"),
+        ("rembert", "RemBERT"),
+        ("resnet", "ResNet"),
+        ("retribert", "RetriBERT"),
+        ("roberta", "RoBERTa"),
+        ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
+        ("roc_bert", "RoCBert"),
+        ("roformer", "RoFormer"),
+        ("rt_detr", "RT-DETR"),
+        ("rt_detr_resnet", "RT-DETR-ResNet"),
+        ("rt_detr_v2", "RT-DETRv2"),
+        ("rwkv", "RWKV"),
+        ("sam", "SAM"),
+        ("sam2", "SAM2"),
+        ("sam2_hiera_det_model", "Sam2HieraDetModel"),
+        ("sam2_video", "Sam2VideoModel"),
+        ("sam2_vision_model", "Sam2VisionModel"),
+        ("sam_hq", "SAM-HQ"),
+        ("sam_hq_vision_model", "SamHQVisionModel"),
+        ("sam_vision_model", "SamVisionModel"),
+        ("seamless_m4t", "SeamlessM4T"),
+        ("seamless_m4t_v2", "SeamlessM4Tv2"),
+        ("segformer", "SegFormer"),
+        ("seggpt", "SegGPT"),
+        ("sew", "SEW"),
+        ("sew-d", "SEW-D"),
+        ("shieldgemma2", "Shieldgemma2"),
+        ("siglip", "SigLIP"),
+        ("siglip2", "SigLIP2"),
+        ("siglip2_vision_model", "Siglip2VisionModel"),
+        ("siglip_vision_model", "SiglipVisionModel"),
+        ("smollm3", "SmolLM3"),
+        ("smolvlm", "SmolVLM"),
+        ("smolvlm_vision", "SmolVLMVisionTransformer"),
+        ("speech-encoder-decoder", "Speech Encoder decoder"),
+        ("speech_to_text", "Speech2Text"),
+        ("speech_to_text_2", "Speech2Text2"),
+        ("speecht5", "SpeechT5"),
+        ("splinter", "Splinter"),
+        ("squeezebert", "SqueezeBERT"),
+        ("stablelm", "StableLm"),
+        ("starcoder2", "Starcoder2"),
+        ("superglue", "SuperGlue"),
+        ("superpoint", "SuperPoint"),
+        ("swiftformer", "SwiftFormer"),
+        ("swin", "Swin Transformer"),
+        ("swin2sr", "Swin2SR"),
+        ("swinv2", "Swin Transformer V2"),
+        ("switch_transformers", "SwitchTransformers"),
+        ("t5", "T5"),
+        ("t5gemma", "T5Gemma"),
+        ("t5v1.1", "T5v1.1"),
+        ("table-transformer", "Table Transformer"),
+        ("tapas", "TAPAS"),
+        ("tapex", "TAPEX"),
+        ("textnet", "TextNet"),
+        ("time_series_transformer", "Time Series Transformer"),
+        ("timesfm", "TimesFm"),
+        ("timesformer", "TimeSformer"),
+        ("timm_backbone", "TimmBackbone"),
+        ("timm_wrapper", "TimmWrapperModel"),
+        ("trajectory_transformer", "Trajectory Transformer"),
+        ("transfo-xl", "Transformer-XL"),
+        ("trocr", "TrOCR"),
+        ("tvlt", "TVLT"),
+        ("tvp", "TVP"),
+        ("udop", "UDOP"),
+        ("ul2", "UL2"),
+        ("umt5", "UMT5"),
+        ("unispeech", "UniSpeech"),
+        ("unispeech-sat", "UniSpeechSat"),
+        ("univnet", "UnivNet"),
+        ("upernet", "UPerNet"),
+        ("van", "VAN"),
+        ("video_llava", "VideoLlava"),
+        ("videomae", "VideoMAE"),
+        ("vilt", "ViLT"),
+        ("vipllava", "VipLlava"),
+        ("vision-encoder-decoder", "Vision Encoder decoder"),
+        ("vision-text-dual-encoder", "VisionTextDualEncoder"),
+        ("visual_bert", "VisualBERT"),
+        ("vit", "ViT"),
+        ("vit_hybrid", "ViT Hybrid"),
+        ("vit_mae", "ViTMAE"),
+        ("vit_msn", "ViTMSN"),
+        ("vitdet", "VitDet"),
+        ("vitmatte", "ViTMatte"),
+        ("vitpose", "ViTPose"),
+        ("vitpose_backbone", "ViTPoseBackbone"),
+        ("vits", "VITS"),
+        ("vivit", "ViViT"),
+        ("vjepa2", "VJEPA2Model"),
+        ("voxtral", "Voxtral"),
+        ("voxtral_encoder", "Voxtral Encoder"),
+        ("wav2vec2", "Wav2Vec2"),
+        ("wav2vec2-bert", "Wav2Vec2-BERT"),
+        ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
+        ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
+        ("wavlm", "WavLM"),
+        ("whisper", "Whisper"),
+        ("xclip", "X-CLIP"),
+        ("xcodec", "X-CODEC"),
+        ("xglm", "XGLM"),
+        ("xlm", "XLM"),
+        ("xlm-prophetnet", "XLM-ProphetNet"),
+        ("xlm-roberta", "XLM-RoBERTa"),
+        ("xlm-roberta-xl", "XLM-RoBERTa-XL"),
+        ("xlm-v", "XLM-V"),
+        ("xlnet", "XLNet"),
+        ("xls_r", "XLS-R"),
+        ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
+        ("xlstm", "xLSTM"),
+        ("xmod", "X-MOD"),
+        ("yolos", "YOLOS"),
+        ("yoso", "YOSO"),
+        ("zamba", "Zamba"),
+        ("zamba2", "Zamba2"),
+        ("zoedepth", "ZoeDepth"),
     ]
 )
 
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
+# This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
+# `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
+DEPRECATED_MODELS = [
+    "bort",
+    "deta",
+    "efficientformer",
+    "ernie_m",
+    "gptsan_japanese",
+    "graphormer",
+    "jukebox",
+    "mctct",
+    "mega",
+    "mmbt",
+    "nat",
+    "nezha",
+    "open_llama",
+    "qdqbert",
+    "realm",
+    "retribert",
+    "speech_to_text_2",
+    "tapex",
+    "trajectory_transformer",
+    "transfo_xl",
+    "tvlt",
+    "van",
+    "vit_hybrid",
+    "xlm_prophetnet",
+]
+
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("openai-gpt", "openai"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
+        ("kosmos-2", "kosmos2"),
+        ("kosmos-2.5", "kosmos2_5"),
+        ("maskformer-swin", "maskformer"),
+        ("xclip", "x_clip"),
+        ("clip_vision_model", "clip"),
+        ("qwen2_audio_encoder", "qwen2_audio"),
+        ("voxtral_encoder", "voxtral"),
+        ("clip_text_model", "clip"),
+        ("aria_text", "aria"),
+        ("gemma3_text", "gemma3"),
+        ("gemma3n_audio", "gemma3n"),
+        ("gemma3n_text", "gemma3n"),
+        ("gemma3n_vision", "gemma3n"),
+        ("glm4v_text", "glm4v"),
+        ("glm4v_moe_text", "glm4v_moe"),
+        ("idefics3_vision", "idefics3"),
+        ("siglip_vision_model", "siglip"),
+        ("aimv2_vision_model", "aimv2"),
+        ("smolvlm_vision", "smolvlm"),
+        ("chinese_clip_vision_model", "chinese_clip"),
+        ("rt_detr_resnet", "rt_detr"),
+        ("granitevision", "llava_next"),
+        ("internvl_vision", "internvl"),
+        ("qwen2_5_vl_text", "qwen2_5_vl"),
+        ("qwen2_vl_text", "qwen2_vl"),
+        ("sam_vision_model", "sam"),
+        ("sam2_vision_model", "sam2"),
+        ("sam2_hiera_det_model", "sam2"),
+        ("sam_hq_vision_model", "sam_hq"),
+        ("llama4_text", "llama4"),
+        ("blip_2_qformer", "blip_2"),
+        ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("perception_encoder", "perception_lm"),
     ]
 )
 
 
-def model_type_to_module_name(key):
+def model_type_to_module_name(key) -> str:
     """Converts a config key to the corresponding module."""
     # Special treatment
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
-        return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
+        key = SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
 
-    return key.replace("-", "_")
+        if key in DEPRECATED_MODELS:
+            key = f"deprecated.{key}"
+        return key
+
+    key = key.replace("-", "_")
+    if key in DEPRECATED_MODELS:
+        key = f"deprecated.{key}"
+
+    return key
 
 
-def config_class_to_model_type(config):
+def config_class_to_model_type(config) -> Union[str, None]:
     """Converts a config class name to the corresponding model type"""
     for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
             return key
+    # if key not found check in extra content
+    for key, cls in CONFIG_MAPPING._extra_content.items():
+        if cls.__name__ == config:
+            return key
     return None
 
 
-class _LazyConfigMapping(OrderedDict):
+class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     """
     A dictionary that lazily load its values when they are requested.
     """
 
-    def __init__(self, mapping):
+    def __init__(self, mapping) -> None:
         self._mapping = mapping
         self._extra_content = {}
         self._modules = {}
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> type[PretrainedConfig]:
         if key in self._extra_content:
             return self._extra_content[key]
         if key not in self._mapping:
@@ -413,26 +1006,26 @@ class _LazyConfigMapping(OrderedDict):
         transformers_module = importlib.import_module("transformers")
         return getattr(transformers_module, value)
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
-    def values(self):
-        return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
+    def values(self) -> list[type[PretrainedConfig]]:
+        return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
-    def items(self):
-        return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
+    def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
+        return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
 
-    def __contains__(self, item):
+    def __contains__(self, item: object) -> bool:
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key, value):
+    def register(self, key: str, value: type[PretrainedConfig], exist_ok=False) -> None:
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys():
+        if key in self._mapping and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
@@ -440,7 +1033,7 @@ class _LazyConfigMapping(OrderedDict):
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
 
-class _LazyLoadAllMappings(OrderedDict):
+class _LazyLoadAllMappings(OrderedDict[str, str]):
     """
     A mapping that will load all pairs of key values at the first access (either by indexing, requestions keys, values,
     etc.)
@@ -457,11 +1050,6 @@ class _LazyLoadAllMappings(OrderedDict):
     def _initialize(self):
         if self._initialized:
             return
-        warnings.warn(
-            "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP is deprecated and will be removed in v5 of Transformers. "
-            "It does not contain all available model checkpoints, far from it. Checkout hf.co/models for that.",
-            FutureWarning,
-        )
 
         for model_type, map_name in self._mapping.items():
             module_name = model_type_to_module_name(model_type)
@@ -475,31 +1063,28 @@ class _LazyLoadAllMappings(OrderedDict):
         self._initialize()
         return self._data[key]
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         self._initialize()
         return self._data.keys()
 
-    def values(self):
+    def values(self) -> ValuesView[str]:
         self._initialize()
         return self._data.values()
 
-    def items(self):
+    def items(self) -> KeysView[str]:
         self._initialize()
         return self._data.keys()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         self._initialize()
         return iter(self._data)
 
-    def __contains__(self, item):
+    def __contains__(self, item: object) -> bool:
         self._initialize()
         return item in self._data
 
 
-ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
-
-
-def _get_class_name(model_class: Union[str, List[str]]):
+def _get_class_name(model_class: Union[str, list[str]]):
     if isinstance(model_class, (list, tuple)):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
@@ -531,15 +1116,21 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             config: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING_NAMES.items()
         }
         lines = [
-            f"{indent}- [`{config_name}`] configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
+            f"{indent}- [`{config_name}`] configuration class:"
+            f" {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
             for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
 
 
-def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
+def replace_list_option_in_docstrings(
+    config_to_class=None, use_model_types: bool = True
+) -> Callable[[_CallableT], _CallableT]:
     def docstring_decorator(fn):
         docstrings = fn.__doc__
+        if docstrings is None:
+            # Example: -OO
+            return fn
         lines = docstrings.split("\n")
         i = 0
         while i < len(lines) and re.search(r"^(\s*)List options\s*$", lines[i]) is None:
@@ -552,7 +1143,8 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             docstrings = "\n".join(lines)
         else:
             raise ValueError(
-                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current docstring is:\n{docstrings}"
+                f"The function {fn} should have an empty 'List options' in its docstring as placeholder, current"
+                f" docstring is:\n{docstrings}"
             )
         fn.__doc__ = docstrings
         return fn
@@ -568,14 +1160,14 @@ class AutoConfig:
     This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
-    def __init__(self):
-        raise EnvironmentError(
+    def __init__(self) -> None:
+        raise OSError(
             "AutoConfig is designed to be instantiated "
             "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
         )
 
     @classmethod
-    def for_model(cls, model_type: str, *args, **kwargs):
+    def for_model(cls, model_type: str, *args, **kwargs) -> PretrainedConfig:
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
@@ -585,7 +1177,7 @@ class AutoConfig:
 
     @classmethod
     @replace_list_option_in_docstrings()
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
@@ -599,8 +1191,7 @@ class AutoConfig:
                 Can be either:
 
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                      huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                      namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
@@ -612,10 +1203,10 @@ class AutoConfig:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
-            proxies (`Dict[str, str]`, *optional*):
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -643,7 +1234,7 @@ class AutoConfig:
         >>> from transformers import AutoConfig
 
         >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased")
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 
         >>> # Download configuration from huggingface.co (user-uploaded) and cache.
         >>> config = AutoConfig.from_pretrained("dbmdz/bert-base-german-cased")
@@ -655,49 +1246,77 @@ class AutoConfig:
         >>> config = AutoConfig.from_pretrained("./test/bert_saved_model/my_configuration.json")
 
         >>> # Change some config attributes when loading a pretrained config.
-        >>> config = AutoConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         >>> config.output_attentions
         True
 
         >>> config, unused_kwargs = AutoConfig.from_pretrained(
-        ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        ...     "google-bert/bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         ... )
         >>> config.output_attentions
         True
 
-        >>> config.unused_kwargs
+        >>> unused_kwargs
         {'foo': False}
-        ```"""
+        ```
+        """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
+            )
+            if kwargs.get("token") is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
-        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
-            if not trust_remote_code:
-                raise ValueError(
-                    f"Loading {pretrained_model_name_or_path} requires you to execute the configuration file in that repo "
-                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                    "the option `trust_remote_code=True` to remove this error."
-                )
-            if kwargs.get("revision", None) is None:
-                logger.warning(
-                    "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
-                    "ensure no malicious code has been contributed in a newer revision."
-                )
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
+
+        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
+        has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            module_file, class_name = class_ref.split(".")
-            config_class = get_class_from_dynamic_module(
-                pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
+
+        if has_remote_code and trust_remote_code:
+            config_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            config_class = CONFIG_MAPPING[config_dict["model_type"]]
-            return config_class.from_dict(config_dict, **kwargs)
+            try:
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            except KeyError:
+                raise ValueError(
+                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
+                    "but Transformers does not recognize this architecture. This could be because of an "
+                    "issue with the checkpoint, or because your version of Transformers is out of date.\n\n"
+                    "You can update Transformers with the command `pip install --upgrade transformers`. If this "
+                    "does not work, and the checkpoint is very new, then there may not be a release version "
+                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
+                    "Transformers from source with the command "
+                    "`pip install git+https://github.com/huggingface/transformers.git`"
+                )
+            return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.
-            for pattern, config_class in CONFIG_MAPPING.items():
+            # We go from longer names to shorter names to catch roberta before bert (for instance)
+            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
                 if pattern in str(pretrained_model_name_or_path):
-                    return config_class.from_dict(config_dict, **kwargs)
+                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
@@ -706,7 +1325,7 @@ class AutoConfig:
         )
 
     @staticmethod
-    def register(model_type, config):
+    def register(model_type, config, exist_ok=False) -> None:
         """
         Register a new configuration for this class.
 
@@ -720,4 +1339,7 @@ class AutoConfig:
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
                 "match!"
             )
-        CONFIG_MAPPING.register(model_type, config)
+        CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+
+
+__all__ = ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"]

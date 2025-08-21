@@ -17,15 +17,14 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import torch
+from filelock import FileLock
 from torch.utils.data import Dataset
 
-from filelock import FileLock
-
 from ...tokenization_utils_base import PreTrainedTokenizerBase
-from ...utils import logging
+from ...utils import check_torch_load_is_safe, logging
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
 
@@ -49,8 +48,10 @@ class GlueDataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -74,7 +75,7 @@ class GlueDataset(Dataset):
 
     args: GlueDataTrainingArguments
     output_mode: str
-    features: List[InputFeatures]
+    features: list[InputFeatures]
 
     def __init__(
         self,
@@ -119,10 +120,10 @@ class GlueDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.features = torch.load(cached_features_file)
+                check_torch_load_is_safe()
+                self.features = torch.load(cached_features_file, weights_only=True)
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )

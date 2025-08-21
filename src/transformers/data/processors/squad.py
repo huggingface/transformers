@@ -16,13 +16,15 @@ import json
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
+from multiprocessing.pool import ThreadPool
+from typing import Optional
 
 import numpy as np
 from tqdm import tqdm
 
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_tf_available, is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
 
 
@@ -57,7 +59,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
     """Check if this is the 'max context' doc span for the token."""
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span.start + doc_span.length - 1
         if position < doc_span.start:
             continue
@@ -79,7 +81,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     # return True
     best_score = None
     best_span_index = None
-    for (span_index, doc_span) in enumerate(doc_spans):
+    for span_index, doc_span in enumerate(doc_spans):
         end = doc_span["start"] + doc_span["length"] - 1
         if position < doc_span["start"]:
             continue
@@ -120,7 +122,7 @@ def squad_convert_example_to_features(
     tok_to_orig_index = []
     orig_to_tok_index = []
     all_doc_tokens = []
-    for (i, token) in enumerate(example.doc_tokens):
+    for i, token in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
         if tokenizer.__class__.__name__ in [
             "RobertaTokenizer",
@@ -166,7 +168,6 @@ def squad_convert_example_to_features(
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
-
         # Define the side we want to truncate / pad and the text/pair sorting
         if tokenizer.padding_side == "right":
             texts = truncated_query
@@ -250,7 +251,7 @@ def squad_convert_example_to_features(
         else:
             p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
 
-        pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
+        pad_token_indices = np.where(np.atleast_1d(span["input_ids"] == tokenizer.pad_token_id))
         special_token_indices = np.asarray(
             tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True)
         ).nonzero()
@@ -286,7 +287,6 @@ def squad_convert_example_to_features(
 
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
-
         features.append(
             SquadFeatures(
                 span["input_ids"],
@@ -361,11 +361,10 @@ def squad_convert_examples_to_features(
         is_training=not evaluate,
     )
     ```"""
-    # Defining helper methods
-    features = []
 
     threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    pool_cls = ThreadPool if is_torch_hpu_available() else Pool
+    with pool_cls(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
@@ -801,8 +800,8 @@ class SquadFeatures:
         start_position,
         end_position,
         is_impossible,
-        qas_id: str = None,
-        encoding: BatchEncoding = None,
+        qas_id: Optional[str] = None,
+        encoding: Optional[BatchEncoding] = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask

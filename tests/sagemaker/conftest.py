@@ -4,7 +4,6 @@
 import os
 
 import pytest
-
 from attr import dataclass
 
 
@@ -33,15 +32,15 @@ class SageMakerTestEnvironment:
     def metric_definitions(self) -> str:
         if self.framework == "pytorch":
             return [
-                {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-                {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-                {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
+                {"Name": "train_runtime", "Regex": r"train_runtime.*=\D*(.*?)$"},
+                {"Name": "eval_accuracy", "Regex": r"eval_accuracy.*=\D*(.*?)$"},
+                {"Name": "eval_loss", "Regex": r"eval_loss.*=\D*(.*?)$"},
             ]
         else:
             return [
-                {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-                {"Name": "eval_accuracy", "Regex": "loss.*=\D*(.*?)]?$"},
-                {"Name": "eval_loss", "Regex": "sparse_categorical_accuracy.*=\D*(.*?)]?$"},
+                {"Name": "train_runtime", "Regex": r"train_runtime.*=\D*(.*?)$"},
+                {"Name": "eval_accuracy", "Regex": r"loss.*=\D*(.*?)]?$"},
+                {"Name": "eval_loss", "Regex": r"sparse_categorical_accuracy.*=\D*(.*?)]?$"},
             ]
 
     @property

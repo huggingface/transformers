@@ -2,9 +2,6 @@
 from ..utils import requires_backends
 
 
-LAYOUTLM_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class LayoutLMv2Model:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["detectron2"])

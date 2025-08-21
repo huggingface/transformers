@@ -1,0 +1,57 @@
+defaults:
+  - benchmark # inheriting benchmark schema
+  - scenario: inference
+  - launcher: process
+  - backend: pytorch
+  - _self_ # for hydra 1.1 compatibility
+
+name: pytorch_generate
+
+launcher:
+  start_method: spawn
+  device_isolation: true
+  device_isolation_action: warn
+
+backend:
+  device: cuda
+  device_ids: 0
+  no_weights: true
+  model: meta-llama/Llama-2-7b-hf
+  cache_implementation: static
+  torch_compile: true
+  torch_dtype: float16
+  torch_compile_config:
+    backend: inductor
+    mode: reduce-overhead
+    fullgraph: true
+
+scenario:
+  input_shapes:
+    batch_size: 1
+    sequence_length: 7
+  generate_kwargs:
+    max_new_tokens: 128
+    min_new_tokens: 128
+    do_sample: false
+  memory: true
+  latency: true
+  iterations: 2
+  duration: 0
+
+
+# hydra/cli specific settings
+hydra:
+  run:
+    # where to store run results
+    dir: runs/${name}
+  job:
+    # change working directory to the run directory
+    chdir: true
+    env_set:
+      # set environment variable OVERRIDE_BENCHMARKS to 1
+      # to not skip benchmarks that have been run before
+      OVERRIDE_BENCHMARKS: 1
+      LOG_LEVEL: WARN
+  sweep:
+    dir: multirun
+    subdir: ${hydra.job.override_dirname}

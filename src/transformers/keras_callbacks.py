@@ -2,24 +2,22 @@ import logging
 import os
 from pathlib import Path
 from time import sleep
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import Repository, create_repo
 from packaging.version import parse
-from tensorflow.keras.callbacks import Callback
-
-from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
-from .utils import get_full_repo_name
+from .modeling_tf_utils import keras
 
 
 logger = logging.getLogger(__name__)
 
 
-class KerasMetricCallback(Callback):
+class KerasMetricCallback(keras.callbacks.Callback):
     """
     Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
     compilable by TF. It is particularly useful for common NLP metrics like BLEU and ROUGE that require string
@@ -56,15 +54,24 @@ class KerasMetricCallback(Callback):
             metric names to numerical values.
         eval_dataset (`tf.data.Dataset` or `dict` or `tuple` or `np.ndarray` or `tf.Tensor`):
             Validation data to be used to generate predictions for the `metric_fn`.
-        output_cols (`List[str], *optional*):
+        output_cols (`list[str], *optional*):
             A list of columns to be retained from the model output as the predictions. Defaults to all.
-        label_cols ('`List[str]`, *optional*'):
+        label_cols ('`list[str]`, *optional*'):
             A list of columns to be retained from the input dataset as the labels. Will be autodetected if this is not
             supplied.
         batch_size (`int`, *optional*):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
         predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
+        use_xla_generation (`bool`, *optional*, defaults to `False`):
+            If we're generating, whether to compile model generation with XLA. This can massively increase the speed of
+            generation (up to 100X speedup) but will require a new XLA compilation for each input shape. When using XLA
+            generation, it's a good idea to pad your inputs to the same size, or to use the `pad_to_multiple_of`
+            argument in your `tokenizer` or `DataCollator`, which will reduce the number of unique input shapes and
+            save a lot of compilation time. This option has no effect is `predict_with_generate` is `False`.
+        generate_kwargs (`dict`, *optional*):
+            Keyword arguments to pass to `model.generate()` when generating. Has no effect if `predict_with_generate`
+            is `False`.
 
     """
 
@@ -72,10 +79,12 @@ class KerasMetricCallback(Callback):
         self,
         metric_fn: Callable,
         eval_dataset: Union[tf.data.Dataset, np.ndarray, tf.Tensor, tuple, dict],
-        output_cols: Optional[List[str]] = None,
-        label_cols: Optional[List[str]] = None,
+        output_cols: Optional[list[str]] = None,
+        label_cols: Optional[list[str]] = None,
         batch_size: Optional[int] = None,
-        predict_with_generate: Optional[bool] = False,
+        predict_with_generate: bool = False,
+        use_xla_generation: bool = False,
+        generate_kwargs: Optional[dict] = None,
     ):
         super().__init__()
         self.metric_fn = metric_fn
@@ -126,10 +135,15 @@ class KerasMetricCallback(Callback):
         if parse(tf.__version__) < parse("2.7"):
             logging.warning("TF versions less than 2.7 may encounter issues with KerasMetricCallback!")
 
+        self.use_xla_generation = use_xla_generation
+        self.generate_kwargs = {} if generate_kwargs is None else generate_kwargs
+
+        self.generation_function = None
+
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
         # If all batches are unidimensional or same length, do a simple concatenation
-        if batches[0].ndim == 1 or all([batch.shape[1] == batches[0].shape[1] for batch in batches]):
+        if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
         # Welp, they're not the same length. Let's do some padding
@@ -147,13 +161,13 @@ class KerasMetricCallback(Callback):
 
     def _postprocess_predictions_or_labels(self, inputs):
         if isinstance(inputs[0], dict):
-            outputs = dict()
-            for key in inputs[0].keys():
+            outputs = {}
+            for key in inputs[0]:
                 outputs[key] = self._concatenate_batches([batch[key] for batch in inputs])
             # If it's a dict with only one key, just return the array
             if len(outputs) == 1:
                 outputs = list(outputs.values())[0]
-        elif isinstance(inputs[0], list) or isinstance(inputs[0], tuple):
+        elif isinstance(inputs[0], (tuple, list)):
             outputs = []
             for input_list in zip(*inputs):
                 outputs.append(self._concatenate_batches(input_list))
@@ -178,10 +192,16 @@ class KerasMetricCallback(Callback):
             # This dense conditional recognizes the case where we have an encoder-decoder model, but
             # avoids getting tangled up when we just have a model with a layer called 'encoder'
             if hasattr(self.model, "encoder") and hasattr(self.model.encoder, "main_input_name"):
-                if self.model.encoder.main_input_name != self.model.main_input_name:
-                    main_input_name = self.model.encoder.main_input_name
+                main_input_name = self.model.encoder.main_input_name
             else:
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
+
+            if self.use_xla_generation and self.generation_function is None:
+
+                def generation_function(inputs, attention_mask):
+                    return self.model.generate(inputs, attention_mask=attention_mask, **self.generate_kwargs)
+
+                self.generation_function = tf.function(generation_function, jit_compile=True)
 
         prediction_list = []
         label_list = []
@@ -199,24 +219,30 @@ class KerasMetricCallback(Callback):
                 else:
                     generation_inputs = batch
                     attention_mask = None
-
-                predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                if self.use_xla_generation:
+                    predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
+                else:
+                    predictions = self.model.generate(
+                        generation_inputs, attention_mask=attention_mask, **self.generate_kwargs
+                    )
             else:
-                predictions = self.model.predict(batch)
+                predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
                     predictions = dict(predictions)
-                if self.output_cols is not None:
-                    predictions = {key: predictions[key] for key in self.output_cols}
-                else:
-                    predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
+                    if self.output_cols is not None:
+                        predictions = {key: predictions[key] for key in self.output_cols}
+                    else:
+                        predictions = {
+                            key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]
+                        }
             prediction_list.append(predictions)
             if not self.use_keras_label:
                 labels = {key: batch[key].numpy() for key in self.label_cols}
             elif isinstance(labels, dict):
                 labels = {key: array.numpy() for key, array in labels.items()}
-            elif isinstance(labels, list) or isinstance(labels, tuple):
+            elif isinstance(labels, (list, tuple)):
                 labels = [array.numpy() for array in labels]
             elif isinstance(labels, tf.Tensor):
                 labels = labels.numpy()
@@ -239,7 +265,7 @@ class KerasMetricCallback(Callback):
         logs.update(metric_output)
 
 
-class PushToHubCallback(Callback):
+class PushToHubCallback(keras.callbacks.Callback):
     """
     Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
     be changed with the `save_strategy` argument. Pushed models can be accessed like any other model on the hub, such
@@ -277,10 +303,10 @@ class PushToHubCallback(Callback):
             for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
             `"organization_name/model"`.
 
-            Will default to to the name of `output_dir`.
+            Will default to the name of `output_dir`.
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
+            `hf auth login`.
         checkpoint (`bool`, *optional*, defaults to `False`):
             Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
             resumed. Only usable when `save_strategy` is `"epoch"`.
@@ -295,7 +321,7 @@ class PushToHubCallback(Callback):
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
         checkpoint: bool = False,
-        **model_card_args
+        **model_card_args,
     ):
         super().__init__()
         if checkpoint and save_strategy != "epoch":
@@ -307,18 +333,15 @@ class PushToHubCallback(Callback):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
         output_dir = Path(output_dir)
+
+        # Create repo and retrieve repo_id
         if hub_model_id is None:
             hub_model_id = output_dir.absolute().name
-        if "/" not in hub_model_id:
-            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
+        self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True, token=hub_token).repo_id
 
         self.output_dir = output_dir
-        self.hub_model_id = hub_model_id
-        self.repo = Repository(
-            str(self.output_dir),
-            clone_from=self.hub_model_id,
-            use_auth_token=hub_token if hub_token else True,
-        )
+        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
+
         self.tokenizer = tokenizer
         self.last_job = None
         self.checkpoint = checkpoint
@@ -369,17 +392,22 @@ class PushToHubCallback(Callback):
             )
 
     def on_train_end(self, logs=None):
+        # Makes sure the latest version of the model is uploaded
         if self.last_job is not None and not self.last_job.is_done:
-            self.last_job._process.terminate()  # Gotta go fast
+            logging.info("Pushing the last epoch to the Hub, this may take a while...")
             while not self.last_job.is_done:
                 sleep(1)
-        self.model.save_pretrained(self.output_dir)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(self.output_dir)
-        train_summary = TrainingSummary.from_keras(
-            model=self.model, model_name=self.hub_model_id, keras_history=self.training_history, **self.model_card_args
-        )
-        model_card = train_summary.to_model_card()
-        with (self.output_dir / "README.md").open("w") as f:
-            f.write(model_card)
-        self.repo.push_to_hub(commit_message="End of training", blocking=True)
+        else:
+            self.model.save_pretrained(self.output_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(self.output_dir)
+            train_summary = TrainingSummary.from_keras(
+                model=self.model,
+                model_name=self.hub_model_id,
+                keras_history=self.training_history,
+                **self.model_card_args,
+            )
+            model_card = train_summary.to_model_card()
+            with (self.output_dir / "README.md").open("w") as f:
+                f.write(model_card)
+            self.repo.push_to_hub(commit_message="End of training", blocking=True)

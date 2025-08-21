@@ -40,16 +40,18 @@ PYTHON_CODE = 50002
 @require_sentencepiece
 @require_tokenizers
 class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "uclanlp/plbart-base"
     tokenizer_class = PLBartTokenizer
     rust_tokenizer_class = None
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_base_tokenizer(self):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
@@ -129,7 +131,14 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         end = tokenizer.vocab_size
         language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 4, end)]
 
-        self.assertListEqual(language_tokens, ["java", "python", "en_XX", "<mask>"])
+        self.assertListEqual(language_tokens, ["__java__", "__python__", "__en_XX__", "<mask>"])
+
+        code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
+        input_ids = tokenizer(code).input_ids
+        self.assertEqual(
+            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
+            code,
+        )
 
     def test_full_multi_tokenizer(self):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
@@ -208,7 +217,15 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         end = tokenizer.vocab_size
         language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 7, end)]
 
-        self.assertListEqual(language_tokens, ["java", "python", "en_XX", "javascript", "php", "ruby", "go"])
+        self.assertListEqual(
+            language_tokens, ["__java__", "__python__", "__en_XX__", "__javascript__", "__php__", "__ruby__", "__go__"]
+        )
+        code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
+        input_ids = tokenizer(code).input_ids
+        self.assertEqual(
+            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
+            code,
+        )
 
 
 @require_torch
@@ -262,9 +279,9 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         return cls
 
     def check_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["java"], 50001)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["python"], 50002)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["en_XX"], 50003)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__java__"], 50001)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__python__"], 50002)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__en_XX__"], 50003)
 
     def test_python_en_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
@@ -288,7 +305,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         self.assertEqual(len(ids), desired_max_length)
 
     def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "java"]), [50004, 50001])
+        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "__java__"]), [50004, 50001])
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
@@ -299,33 +316,26 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch = self.tokenizer(self.src_text, padding=True)
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt")
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
+        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        self.assertEqual(batch.input_ids[1][-2:], [2, PYTHON_CODE])
+        self.assertEqual(batch.input_ids[1][-2:].tolist(), [2, PYTHON_CODE])
         self.assertEqual(batch.decoder_input_ids[1][0], EN_CODE)
         self.assertEqual(batch.decoder_input_ids[1][-1], 2)
-        self.assertEqual(labels[1][-2:].tolist(), [2, EN_CODE])
+        self.assertEqual(batch.labels[1][-2:].tolist(), [2, EN_CODE])
 
     @require_torch
     def test_python_en_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
-            self.src_text, padding=True, truncation=True, max_length=len(self.expected_src_tokens), return_tensors="pt"
+            self.src_text,
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=len(self.expected_src_tokens),
+            return_tensors="pt",
         )
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(
-                self.tgt_text,
-                padding=True,
-                truncation=True,
-                max_length=len(self.expected_src_tokens),
-                return_tensors="pt",
-            )
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -340,8 +350,9 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
 
     def test_seq2seq_max_length(self):
         batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt")
+        targets = self.tokenizer(
+            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+        )
         labels = targets["input_ids"]
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
 

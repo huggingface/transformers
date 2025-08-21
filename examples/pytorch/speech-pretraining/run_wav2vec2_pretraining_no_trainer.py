@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,27 +12,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio] >= 1.12.0",
+#     "torch >= 1.5",
+#     "torchaudio",
+#     "accelerate >= 0.12.0",
+#     "librosa",
+# ]
+# ///
+
+"""Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
 
 import argparse
 import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
+import aiohttp
 import datasets
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
+from huggingface_hub import HfApi
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from huggingface_hub import Repository
 from transformers import (
-    AdamW,
     SchedulerType,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
@@ -43,7 +53,7 @@ from transformers import (
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
-from transformers.utils import get_full_repo_name
+from transformers.utils import send_example_telemetry
 
 
 logger = get_logger(__name__)
@@ -70,6 +80,15 @@ def parse_args():
         type=str,
         required=True,
         help="The names of the training data set splits to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -219,7 +238,10 @@ def parse_args():
         "--pad_to_multiple_of",
         type=int,
         default=None,
-        help="If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).",
+        help=(
+            "If set will pad the sequence to a multiple of the provided value. This is especially useful to enable the"
+            " use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta)."
+        ),
     )
     parser.add_argument(
         "--adam_beta1",
@@ -244,6 +266,24 @@ def parse_args():
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--mask_time_prob",
+        type=float,
+        default=None,
+        help=(
+            "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked in the"
+            " contrastive task. If omitted, will pull value from model config."
+        ),
+    )
+    parser.add_argument(
+        "--mask_time_length",
+        type=int,
+        default=None,
+        help=(
+            "Length of each vector mask span to mask along the time axis in the contrastive task."
+            " If omitted, will pull value from model config."
+        ),
+    )
     args = parser.parse_args()
 
     if args.push_to_hub:
@@ -266,7 +306,7 @@ class DataCollatorForWav2Vec2Pretraining:
             The Wav2Vec2 model used for pretraining. The data collator needs to have access
             to config and ``_get_feat_extract_output_lengths`` function for correct padding.
         feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -282,14 +322,24 @@ class DataCollatorForWav2Vec2Pretraining:
             If set will pad the sequence to a multiple of the provided value.
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
+        mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
+            Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
+            The default value is taken from the original wav2vec 2.0 article (https://huggingface.co/papers/2006.11477),
+            and results in about 49 percent of each sequence being masked on average.
+        mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
+            Length of each vector mask span to mask along the time axis in the contrastive task. The default value
+            originates from the original wav2vec 2.0 article and corresponds to the ``M`` variable mentioned there.
     """
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
+    mask_time_prob: Optional[float] = 0.65
+    mask_time_length: Optional[int] = 10
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -317,8 +367,8 @@ class DataCollatorForWav2Vec2Pretraining:
         # sample randomly masked indices
         mask_time_indices = _compute_mask_indices(
             features_shape,
-            self.model.config.mask_time_prob,
-            self.model.config.mask_time_length,
+            self.mask_time_prob,
+            self.mask_time_length,
             attention_mask=batch.get("sub_attention_mask"),
         )
 
@@ -360,6 +410,10 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
     logger.info(accelerator.state, main_process_only=False)
@@ -383,17 +437,25 @@ def main():
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub and not args.preprocessing_only:
-            if args.hub_model_id is None:
-                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
-            else:
-                repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
     # 1. Download and create train, validation dataset
-    # We load all dataset configuration and datset split pairs passed in
+    # We load all dataset configuration and dataset split pairs passed in
     # ``args.dataset_config_names`` and ``args.dataset_split_names``
     datasets_splits = []
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
@@ -403,6 +465,8 @@ def main():
             dataset_config_name,
             split=train_split_name,
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
+            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=60 * 60)}},
         )
         datasets_splits.append(dataset_split)
 
@@ -440,7 +504,7 @@ def main():
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
         raise ValueError(
-            "Training is only supported for normalized inputs. " "Make sure ``feature_extractor.do_normalize == True``"
+            "Training is only supported for normalized inputs. Make sure ``feature_extractor.do_normalize == True``"
         )
 
     # set max & min audio length in number of samples
@@ -496,7 +560,8 @@ def main():
     # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and ``config.feat_extract_norm='layer'"
+            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+            " ``config.feat_extract_norm='layer'"
         )
 
     # initialize random model
@@ -507,8 +572,16 @@ def main():
         model.gradient_checkpointing_enable()
 
     # 4. Define data collator, optimizer and scheduler
+
+    mask_time_prob = config.mask_time_prob if args.mask_time_prob is None else args.mask_time_prob
+    mask_time_length = config.mask_time_length if args.mask_time_length is None else args.mask_time_length
+
     data_collator = DataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        pad_to_multiple_of=args.pad_to_multiple_of,
+        mask_time_prob=mask_time_prob,
+        mask_time_length=mask_time_length,
     )
     train_dataloader = DataLoader(
         vectorized_datasets["train"],
@@ -521,7 +594,7 @@ def main():
     )
 
     # Optimizer
-    optimizer = AdamW(
+    optimizer = torch.optim.AdamW(
         list(model.parameters()),
         lr=args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],
@@ -538,8 +611,6 @@ def main():
 
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-    else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
@@ -547,6 +618,9 @@ def main():
         num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.max_train_steps,
     )
+
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # 5. Train
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -587,7 +661,7 @@ def main():
             # make sure that `num_losses` is summed for distributed training
             # and average gradients over losses of all devices
             if accelerator.state.num_processes > 1:
-                num_losses = accelerator.gather(num_losses).sum()
+                num_losses = accelerator.gather_for_metrics(num_losses).sum()
                 gradient_multiplier = accelerator.state.num_processes / num_losses
                 multiply_grads(model.module.parameters(), gradient_multiplier)
             else:
@@ -595,7 +669,6 @@ def main():
 
             # update step
             if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-
                 # compute grad norm for monitoring
                 scale = (
                     accelerator.scaler._scale.item()
@@ -615,7 +688,7 @@ def main():
                     lr_scheduler.step()
                 elif accelerator.is_local_main_process:
                     progress_bar.write(
-                        "Gradients have overflown - skipping update step... " f"Updating gradient scale to {scale}..."
+                        f"Gradients have overflown - skipping update step... Updating gradient scale to {scale}..."
                     )
 
                 # update gumbel temperature
@@ -638,10 +711,10 @@ def main():
                 outputs.diversity_loss.detach()
 
                 if accelerator.state.num_processes > 1:
-                    loss = accelerator.gather(loss).sum()
-                    outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
-                    outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
-                    percent_masked = accelerator.gather(percent_masked).sum()
+                    loss = accelerator.gather_for_metrics(loss).sum()
+                    outputs.contrastive_loss = accelerator.gather_for_metrics(outputs.contrastive_loss).sum()
+                    outputs.diversity_loss = accelerator.gather_for_metrics(outputs.diversity_loss).sum()
+                    percent_masked = accelerator.gather_for_metrics(percent_masked).sum()
 
                 train_logs = {
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
@@ -655,7 +728,7 @@ def main():
                 }
                 log_str = ""
                 for k, v in train_logs.items():
-                    log_str += "| {}: {:.3e}".format(k, v.item())
+                    log_str += f"| {k}: {v.item():.3e}"
 
                 if accelerator.is_local_main_process:
                     progress_bar.write(log_str)
@@ -672,10 +745,12 @@ def main():
                     )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(
-                        commit_message=f"Training in progress step {completed_steps}",
-                        blocking=False,
-                        auto_lfs_prune=True,
+                    api.upload_folder(
+                        commit_message=f"Training in progress epoch {epoch}",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
                     )
 
             # if completed steps > `args.max_train_steps` stop
@@ -704,13 +779,13 @@ def main():
 
         # sum over devices in multi-processing
         if accelerator.num_processes > 1:
-            val_logs = {k: accelerator.gather(v).sum() for k, v in val_logs.items()}
+            val_logs = {k: accelerator.gather_for_metrics(v).sum() for k, v in val_logs.items()}
 
         val_logs = {k: v / val_logs["val_num_losses"] for k, v in val_logs.items()}
 
         log_str = ""
         for k, v in val_logs.items():
-            log_str += "| {}: {:.3e}".format(k, v.item())
+            log_str += f"| {k}: {v.item():.3e}"
 
         if accelerator.is_local_main_process:
             progress_bar.write(log_str)
@@ -725,7 +800,13 @@ def main():
             )
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                    api.upload_folder(
+                        commit_message="End of training",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
+                    )
 
 
 if __name__ == "__main__":

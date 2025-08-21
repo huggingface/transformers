@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Convert slow tokenizers checkpoints in fast (serialization format of the `tokenizers` library)"""
+"""Convert slow tokenizers checkpoints in fast (serialization format of the `tokenizers` library)"""
 
 import argparse
 import os
@@ -28,7 +27,11 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-TOKENIZER_CLASSES = {name: getattr(transformers, name + "Fast") for name in SLOW_TO_FAST_CONVERTERS}
+TOKENIZER_CLASSES = {
+    # Phi3 uses Llama tokenizer
+    name: getattr(transformers, "LlamaTokenizerFast" if name == "Phi3Tokenizer" else name + "Fast")
+    for name in SLOW_TO_FAST_CONVERTERS
+}
 
 
 def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, force_download):
@@ -105,8 +108,10 @@ if __name__ == "__main__":
         "--tokenizer_name",
         default=None,
         type=str,
-        help=f"Optional tokenizer type selected in the list of {list(TOKENIZER_CLASSES.keys())}. If not given, will "
-        "download and convert all the checkpoints from AWS.",
+        help=(
+            f"Optional tokenizer type selected in the list of {list(TOKENIZER_CLASSES.keys())}. If not given, will "
+            "download and convert all the checkpoints from AWS."
+        ),
     )
     parser.add_argument(
         "--checkpoint_name",

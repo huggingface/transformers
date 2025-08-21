@@ -12,11 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Funnel model."""
+"""TF 2.0 Funnel model."""
+
+from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -39,12 +40,12 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -58,46 +59,38 @@ from .configuration_funnel import FunnelConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
-_TOKENIZER_FOR_DOC = "FunnelTokenizer"
 
-TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
 
 INF = 1e6
 
 
-class TFFunnelEmbeddings(tf.keras.layers.Layer):
+class TFFunnelEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout)
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.d_model])
 
     def call(self, input_ids=None, inputs_embeds=None, training=False):
         """
@@ -110,6 +103,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is not None and inputs_embeds is not None)
 
         if input_ids is not None:
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = tf.gather(self.weight, input_ids)
 
         final_embeddings = self.LayerNorm(inputs=inputs_embeds)
@@ -134,8 +128,8 @@ class TFFunnelAttentionStructure:
         self.pool_q_only = config.pool_q_only
         self.pooling_type = config.pooling_type
 
-        self.sin_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.cos_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.sin_dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.cos_dropout = keras.layers.Dropout(config.hidden_dropout)
         # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
         # divided.
         self.pooling_mult = None
@@ -174,7 +168,7 @@ class TFFunnelAttentionStructure:
         For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
-        Paper link: https://arxiv.org/abs/2006.03236
+        Paper link: https://huggingface.co/papers/2006.03236
         """
         if self.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
@@ -240,6 +234,7 @@ class TFFunnelAttentionStructure:
                 # rel_pos = tf.broadcast_to(rel_pos, (rel_pos.shape[0], self.d_model))
                 rel_pos = tf.cast(rel_pos, dtype=zero_offset.dtype)
                 rel_pos = rel_pos + zero_offset
+                tf.debugging.assert_less(rel_pos, tf.shape(pos_embed)[0])
                 position_embeds_no_pooling = tf.gather(pos_embed, rel_pos, axis=0)
 
                 position_embeds_list.append([position_embeds_no_pooling, position_embeds_pooling])
@@ -379,7 +374,7 @@ def _relative_shift_gather(positional_attn, context_len, shift):
     return positional_attn
 
 
-class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
+class TFFunnelRelMultiheadAttention(keras.layers.Layer):
     def __init__(self, config, block_index, **kwargs):
         super().__init__(**kwargs)
         self.attention_type = config.attention_type
@@ -389,22 +384,22 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.block_index = block_index
 
-        self.hidden_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.hidden_dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.attention_dropout = keras.layers.Dropout(config.attention_dropout)
 
         initializer = get_initializer(config.initializer_range)
 
-        self.q_head = tf.keras.layers.Dense(
+        self.q_head = keras.layers.Dense(
             n_head * d_head, use_bias=False, kernel_initializer=initializer, name="q_head"
         )
-        self.k_head = tf.keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="k_head")
-        self.v_head = tf.keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="v_head")
+        self.k_head = keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="k_head")
+        self.v_head = keras.layers.Dense(n_head * d_head, kernel_initializer=initializer, name="v_head")
 
-        self.post_proj = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="post_proj")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.post_proj = keras.layers.Dense(d_model, kernel_initializer=initializer, name="post_proj")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.scale = 1.0 / (d_head**0.5)
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         n_head, d_head, d_model = self.n_head, self.d_head, self.d_model
         initializer = get_initializer(self.initializer_range)
 
@@ -423,13 +418,31 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         self.seg_embed = self.add_weight(
             shape=(2, n_head, d_head), initializer=initializer, trainable=True, name="seg_embed"
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_head", None) is not None:
+            with tf.name_scope(self.q_head.name):
+                self.q_head.build([None, None, d_model])
+        if getattr(self, "k_head", None) is not None:
+            with tf.name_scope(self.k_head.name):
+                self.k_head.build([None, None, d_model])
+        if getattr(self, "v_head", None) is not None:
+            with tf.name_scope(self.v_head.name):
+                self.v_head.build([None, None, d_model])
+        if getattr(self, "post_proj", None) is not None:
+            with tf.name_scope(self.post_proj.name):
+                self.post_proj.build([None, None, n_head * d_head])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, d_model])
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
         """Relative attention score for the positional encodings"""
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.attention_type == "factorized":
-            # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.2, final formula (https://huggingface.co/papers/2006.03236)
             # phi and pi have shape seq_len x d_model, psi and omega have shape context_len x d_model
             phi, pi, psi, omega = position_embeds
             # Shape n_head x d_head
@@ -447,7 +460,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
                 "bind,jd->bnij", q_r_attention_2, omega
             )
         else:
-            # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.1, final formula (https://huggingface.co/papers/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
             if shape_list(q_head)[1] != context_len:
                 shift = 2
@@ -544,16 +557,17 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         return (output, attn_prob) if output_attentions else (output,)
 
 
-class TFFunnelPositionwiseFFN(tf.keras.layers.Layer):
+class TFFunnelPositionwiseFFN(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.linear_1 = tf.keras.layers.Dense(config.d_inner, kernel_initializer=initializer, name="linear_1")
+        self.linear_1 = keras.layers.Dense(config.d_inner, kernel_initializer=initializer, name="linear_1")
         self.activation_function = get_tf_activation(config.hidden_act)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.linear_2 = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_2")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
+        self.linear_2 = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_2")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.config = config
 
     def call(self, hidden, training=False):
         h = self.linear_1(hidden)
@@ -563,8 +577,22 @@ class TFFunnelPositionwiseFFN(tf.keras.layers.Layer):
         h = self.dropout(h, training=training)
         return self.layer_norm(hidden + h)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "linear_1", None) is not None:
+            with tf.name_scope(self.linear_1.name):
+                self.linear_1.build([None, None, self.config.d_model])
+        if getattr(self, "linear_2", None) is not None:
+            with tf.name_scope(self.linear_2.name):
+                self.linear_2.build([None, None, self.config.d_inner])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
 
-class TFFunnelLayer(tf.keras.layers.Layer):
+
+class TFFunnelLayer(keras.layers.Layer):
     def __init__(self, config, block_index, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFFunnelRelMultiheadAttention(config, block_index, name="attention")
@@ -577,8 +605,19 @@ class TFFunnelLayer(tf.keras.layers.Layer):
         output = self.ffn(attn[0], training=training)
         return (output, attn[1]) if output_attentions else (output,)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "ffn", None) is not None:
+            with tf.name_scope(self.ffn.name):
+                self.ffn.build(None)
 
-class TFFunnelEncoder(tf.keras.layers.Layer):
+
+class TFFunnelEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.separate_cls = config.separate_cls
@@ -623,7 +662,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
                     hidden, attention_inputs
                 )
 
-            for (layer_index, layer) in enumerate(block):
+            for layer_index, layer in enumerate(block):
                 for repeat_index in range(self.block_repeats[block_index]):
                     do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
                     if do_pooling:
@@ -647,6 +686,15 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for block in self.blocks:
+            for layer in block:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
     """
@@ -668,7 +716,7 @@ def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
     return output
 
 
-class TFFunnelDecoder(tf.keras.layers.Layer):
+class TFFunnelDecoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.separate_cls = config.separate_cls
@@ -722,9 +770,18 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFFunnelBaseLayer(tf.keras.layers.Layer):
+class TFFunnelBaseLayer(keras.layers.Layer):
     """Base model without decoder"""
 
     config_class = FunnelConfig
@@ -762,7 +819,6 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -793,9 +849,20 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
         return encoder_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+
 
 @keras_serializable
-class TFFunnelMainLayer(tf.keras.layers.Layer):
+class TFFunnelMainLayer(keras.layers.Layer):
     """Base model with decoder"""
 
     config_class = FunnelConfig
@@ -893,16 +960,31 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             attentions=(encoder_outputs.attentions + decoder_outputs.attentions) if output_attentions else None,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
 
-class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
+
+class TFFunnelDiscriminatorPredictions(keras.layers.Layer):
     """Prediction module for the discriminator, made up of two dense layers."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.dense = tf.keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="dense")
+        self.dense = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="dense")
         self.activation_function = get_tf_activation(config.hidden_act)
-        self.dense_prediction = tf.keras.layers.Dense(1, kernel_initializer=initializer, name="dense_prediction")
+        self.dense_prediction = keras.layers.Dense(1, kernel_initializer=initializer, name="dense_prediction")
+        self.config = config
 
     def call(self, discriminator_hidden_states):
         hidden_states = self.dense(discriminator_hidden_states)
@@ -910,16 +992,27 @@ class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
         logits = tf.squeeze(self.dense_prediction(hidden_states))
         return logits
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.d_model])
+        if getattr(self, "dense_prediction", None) is not None:
+            with tf.name_scope(self.dense_prediction.name):
+                self.dense_prediction.build([None, None, self.config.d_model])
 
-class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
+
+class TFFunnelMaskedLMHead(keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
@@ -935,33 +1028,43 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
 
 
-class TFFunnelClassificationHead(tf.keras.layers.Layer):
+class TFFunnelClassificationHead(keras.layers.Layer):
     def __init__(self, config, n_labels, **kwargs):
         super().__init__(**kwargs)
         initializer = get_initializer(config.initializer_range)
-        self.linear_hidden = tf.keras.layers.Dense(
-            config.d_model, kernel_initializer=initializer, name="linear_hidden"
-        )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.linear_out = tf.keras.layers.Dense(n_labels, kernel_initializer=initializer, name="linear_out")
+        self.linear_hidden = keras.layers.Dense(config.d_model, kernel_initializer=initializer, name="linear_hidden")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.linear_out = keras.layers.Dense(n_labels, kernel_initializer=initializer, name="linear_out")
+        self.config = config
 
     def call(self, hidden, training=False):
         hidden = self.linear_hidden(hidden)
-        hidden = tf.keras.activations.tanh(hidden)
+        hidden = keras.activations.tanh(hidden)
         hidden = self.dropout(hidden, training=training)
         return self.linear_out(hidden)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "linear_hidden", None) is not None:
+            with tf.name_scope(self.linear_hidden.name):
+                self.linear_hidden.build([None, None, self.config.d_model])
+        if getattr(self, "linear_out", None) is not None:
+            with tf.name_scope(self.linear_out.name):
+                self.linear_out.build([None, None, self.config.d_model])
 
 
 class TFFunnelPreTrainedModel(TFPreTrainedModel):
@@ -972,6 +1075,11 @@ class TFFunnelPreTrainedModel(TFPreTrainedModel):
 
     config_class = FunnelConfig
     base_model_prefix = "funnel"
+
+    @property
+    def dummy_inputs(self):
+        # Funnel misbehaves with very small inputs, so we override and make them a bit bigger
+        return {"input_ids": tf.ones((1, 3), dtype=tf.int32)}
 
 
 @dataclass
@@ -995,42 +1103,47 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    logits: tf.Tensor | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 FUNNEL_START_DOCSTRING = r"""
 
     The Funnel Transformer model was proposed in [Funnel-Transformer: Filtering out Sequential Redundancy for Efficient
-    Language Processing](https://arxiv.org/abs/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+    Language Processing](https://huggingface.co/papers/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1045,7 +1158,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FunnelTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1099,7 +1212,6 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1107,15 +1219,15 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutput:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1127,12 +1239,22 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             training=training,
         )
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
 
 
 @add_start_docstrings(
@@ -1147,23 +1269,21 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
-
+    ) -> tuple[tf.Tensor] | TFBaseModelOutput:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1175,12 +1295,22 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             training=training,
         )
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
 
 
 @add_start_docstrings(
@@ -1201,31 +1331,35 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-        **kwargs
-    ) -> Union[Tuple[tf.Tensor], TFFunnelForPreTrainingOutput]:
+        **kwargs,
+    ) -> tuple[tf.Tensor] | TFFunnelForPreTrainingOutput:
         r"""
-        Returns:
+                        Returns:
 
-        Examples:
+                        Examples:
 
-        ```python
-        >>> from transformers import FunnelTokenizer, TFFunnelForPreTraining
-        >>> import torch
+                        ```python
+                        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
+                        >>> import torch
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+        from ...utils.deprecation import deprecate_kwarg
+                from ...utils.deprecation import deprecate_kwarg
 
-        >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
-        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
+                        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
+                        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> logits = model(inputs).logits
-        ```"""
+                        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+                        >>> logits = model(inputs).logits
+                        ```"""
         discriminator_hidden_states = self.funnel(
             input_ids,
             attention_mask,
@@ -1249,10 +1383,22 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         )
 
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFFunnelForPreTrainingOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
-        return TFFunnelForPreTrainingOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "discriminator_predictions", None) is not None:
+            with tf.name_scope(self.discriminator_predictions.name):
+                self.discriminator_predictions.build(None)
 
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
@@ -1273,23 +1419,22 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFMaskedLMOutput]:
+    ) -> tuple[tf.Tensor] | TFMaskedLMOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1322,12 +1467,21 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions)
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
 
 
 @add_start_docstrings(
@@ -1348,23 +1502,22 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutput]:
+    ) -> tuple[tf.Tensor] | TFSequenceClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1398,12 +1551,23 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFSequenceClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
 
 
 @add_start_docstrings(
@@ -1422,34 +1586,27 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.ones((3, 3, 4), dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
+    ) -> tuple[tf.Tensor] | TFMultipleChoiceModelOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1500,26 +1657,23 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             attentions=outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output=output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFMultipleChoiceModelOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
 
 
 @add_start_docstrings(
@@ -1535,31 +1689,31 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         self.num_labels = config.num_labels
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFTokenClassifierOutput]:
+    ) -> tuple[tf.Tensor] | TFTokenClassifierOutput:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1592,12 +1746,23 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFTokenClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1613,31 +1778,31 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         self.num_labels = config.num_labels
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        start_positions: np.ndarray | tf.Tensor | None = None,
+        end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
+    ) -> tuple[tf.Tensor] | TFQuestionAnsweringModelOutput:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1683,11 +1848,36 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "funnel", None) is not None:
+            with tf.name_scope(self.funnel.name):
+                self.funnel.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFFunnelBaseModel",
+    "TFFunnelForMaskedLM",
+    "TFFunnelForMultipleChoice",
+    "TFFunnelForPreTraining",
+    "TFFunnelForQuestionAnswering",
+    "TFFunnelForSequenceClassification",
+    "TFFunnelForTokenClassification",
+    "TFFunnelModel",
+    "TFFunnelPreTrainedModel",
+]

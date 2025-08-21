@@ -1,0 +1,25 @@
+tensorflow<2.16
+keras<2.16
+tensorboard
+scikit-learn
+seqeval
+psutil
+sacrebleu >= 1.4.12
+rouge-score
+tensorflow_datasets
+matplotlib
+git-python==1.0.3
+faiss-cpu
+streamlit
+elasticsearch
+nltk
+pandas
+datasets >= 1.13.3
+fire
+pytest<8.0.1
+conllu
+sentencepiece != 0.1.92
+protobuf
+jiwer
+librosa
+evaluate >= 0.2.0

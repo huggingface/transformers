@@ -23,8 +23,8 @@ This directory contains 2 scripts that showcase how to fine-tune any model suppo
 Try out the inference widget here: https://huggingface.co/google/vit-base-patch16-224
 
 Content:
-- [PyTorch version, Trainer](#pytorch-version-no-trainer)
-- [PyTorch version, no Trainer](#pytorch-version-trainer)
+- [PyTorch version, Trainer](#pytorch-version-trainer)
+- [PyTorch version, no Trainer](#pytorch-version-no-trainer)
 
 ## PyTorch version, Trainer
 
@@ -41,6 +41,7 @@ python run_image_classification.py \
     --dataset_name beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
+    --label_column_name labels \
     --do_train \
     --do_eval \
     --push_to_hub \
@@ -51,7 +52,7 @@ python run_image_classification.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
@@ -62,9 +63,11 @@ python run_image_classification.py \
 
 Note that you can replace the model and dataset by simply setting the `model_name_or_path` and `dataset_name` arguments respectively, with any model or dataset from the [hub](https://huggingface.co/). For an overview of all possible arguments, we refer to the [docs](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) of the `TrainingArguments`, which can be passed as flags.
 
+> If your model classification head dimensions do not fit the number of labels in the dataset, you can specify `--ignore_mismatched_sizes` to adapt it.
+
 ### Using your own data
 
-To use your own dataset, there are 2 ways: 
+To use your own dataset, there are 2 ways:
 - you can either provide your own folders as `--train_dir` and/or `--validation_dir` arguments
 - you can upload your dataset to the hub (possibly as a private repo, if you prefer so), and simply pass the `--dataset_name` argument.
 
@@ -111,10 +114,10 @@ from datasets import load_dataset
 # example 1: local folder
 dataset = load_dataset("imagefolder", data_dir="path_to_your_folder")
 
-# example 2: local files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+# example 2: local files (supported formats are tar, gzip, zip, xz, rar, zstd)
 dataset = load_dataset("imagefolder", data_files="path_to_zip_file")
 
-# example 3: remote files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+# example 3: remote files (supported formats are tar, gzip, zip, xz, rar, zstd)
 dataset = load_dataset("imagefolder", data_files="https://download.microsoft.com/download/3/E/1/3E1C3F21-ECDB-4869-8368-6DEBA77B919F/kagglecatsanddogs_3367a.zip")
 
 # example 4: providing several splits
@@ -126,7 +129,7 @@ dataset = load_dataset("imagefolder", data_files={"train": ["path/to/file1", "pa
 Next, push it to the hub!
 
 ```python
-# assuming you have ran the huggingface-cli login command in a terminal
+# assuming you have ran the hf auth login command in a terminal
 dataset.push_to_hub("name_of_your_dataset")
 
 # if you want to push to a private repo, simply pass private=True:
@@ -149,10 +152,10 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`:
+2. Log in with your HuggingFace account credentials using `hf`:
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 
@@ -195,7 +198,7 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch run_image_classification_trainer.py
+accelerate launch run_image_classification_no_trainer.py --image_column_name img
 ```
 
 This command is the same and will work for:

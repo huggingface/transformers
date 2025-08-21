@@ -1,7 +1,0 @@
-faiss-cpu >= 1.7.0
-datasets >= 1.6.2
-psutil >= 5.7.0
-torch >= 1.4.0
-pytorch-lightning
-nvidia-ml-py3 == 7.352.0
-ray >=  1.3.0

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import json
 import unittest
 
 from parameterized import parameterized
+
 from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow, torch_device
 from utils import calculate_bleu
 
 
 filename = get_tests_dir() + "/test_data/fsmt/fsmt_val_data.json"
-with io.open(filename, "r", encoding="utf-8") as f:
+with open(filename, encoding="utf-8") as f:
     bleu_data = json.load(f)
 
 

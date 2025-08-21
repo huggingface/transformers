@@ -7,11 +7,10 @@ from importlib import import_module
 
 import numpy as np
 import torch
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
-
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import TokenClassificationTask
 
 
@@ -26,7 +25,7 @@ class NERTransformer(BaseTransformer):
     mode = "token-classification"
 
     def __init__(self, hparams):
-        if type(hparams) == dict:
+        if isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         module = import_module("tasks")
         try:
@@ -64,7 +63,7 @@ class NERTransformer(BaseTransformer):
             cached_features_file = self._feature_file(mode)
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 logger.info("Loading features from cached file %s", cached_features_file)
-                features = torch.load(cached_features_file)
+                features = torch.load(cached_features_file, weights_only=True)
             else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
                 examples = self.token_classification_task.read_examples_from_file(args.data_dir, mode)
@@ -90,7 +89,7 @@ class NERTransformer(BaseTransformer):
         "Load datasets. Called after prepare data."
         cached_features_file = self._feature_file(mode)
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = torch.load(cached_features_file, weights_only=True)
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
         if features[0].token_type_ids is not None:
@@ -123,7 +122,7 @@ class NERTransformer(BaseTransformer):
         preds = np.argmax(preds, axis=2)
         out_label_ids = np.concatenate([x["target"] for x in outputs], axis=0)
 
-        label_map = {i: label for i, label in enumerate(self.labels)}
+        label_map = dict(enumerate(self.labels))
         out_label_list = [[] for _ in range(out_label_ids.shape[0])]
         preds_list = [[] for _ in range(out_label_ids.shape[0])]
 
@@ -141,7 +140,7 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-        ret = {k: v for k, v in results.items()}
+        ret = dict(results.items())
         ret["log"] = results
         return ret, preds_list, out_label_list
 
@@ -173,8 +172,10 @@ class NERTransformer(BaseTransformer):
             "--max_seq_length",
             default=128,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+            help=(
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            ),
         )
 
         parser.add_argument(
@@ -210,6 +211,6 @@ if __name__ == "__main__":
         # pl use this default format to create a checkpoint:
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L322
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True)))
+        checkpoints = sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True))
         model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

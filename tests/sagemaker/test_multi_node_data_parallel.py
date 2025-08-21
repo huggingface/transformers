@@ -5,7 +5,6 @@ import unittest
 from ast import literal_eval
 
 import pytest
-
 from parameterized import parameterized, parameterized_class
 
 from . import is_sagemaker_available
@@ -26,21 +25,21 @@ if is_sagemaker_available():
         {
             "framework": "pytorch",
             "script": "run_glue.py",
-            "model_name_or_path": "distilbert-base-cased",
+            "model_name_or_path": "distilbert/distilbert-base-cased",
             "instance_type": "ml.p3.16xlarge",
             "results": {"train_runtime": 650, "eval_accuracy": 0.7, "eval_loss": 0.6},
         },
         {
             "framework": "pytorch",
             "script": "run_ddp.py",
-            "model_name_or_path": "distilbert-base-cased",
+            "model_name_or_path": "distilbert/distilbert-base-cased",
             "instance_type": "ml.p3.16xlarge",
             "results": {"train_runtime": 600, "eval_accuracy": 0.7, "eval_loss": 0.6},
         },
         {
             "framework": "tensorflow",
             "script": "run_tf_dist.py",
-            "model_name_or_path": "distilbert-base-cased",
+            "model_name_or_path": "distilbert/distilbert-base-cased",
             "instance_type": "ml.p3.16xlarge",
             "results": {"train_runtime": 600, "eval_accuracy": 0.6, "eval_loss": 0.7},
         },

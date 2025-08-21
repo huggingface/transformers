@@ -29,7 +29,7 @@ class TestActivations(unittest.TestCase):
     def test_gelu_versions(self):
         x = torch.tensor([-100, -1, -0.1, 0, 0.1, 1.0, 100])
         torch_builtin = get_activation("gelu")
-        self.assertTrue(torch.allclose(gelu_python(x), torch_builtin(x)))
+        torch.testing.assert_close(gelu_python(x), torch_builtin(x))
         self.assertFalse(torch.allclose(gelu_python(x), gelu_new(x)))
 
     def test_gelu_10(self):
@@ -43,7 +43,7 @@ class TestActivations(unittest.TestCase):
         clipped_mask = torch.where(y_gelu_10 < 10.0, 1, 0)
 
         self.assertTrue(torch.max(y_gelu_10).item() == 10.0)
-        self.assertTrue(torch.allclose(y_gelu * clipped_mask, y_gelu_10 * clipped_mask))
+        torch.testing.assert_close(y_gelu * clipped_mask, y_gelu_10 * clipped_mask)
 
     def test_get_activation(self):
         get_activation("gelu")
@@ -51,6 +51,7 @@ class TestActivations(unittest.TestCase):
         get_activation("gelu_fast")
         get_activation("gelu_new")
         get_activation("gelu_python")
+        get_activation("gelu_pytorch_tanh")
         get_activation("linear")
         get_activation("mish")
         get_activation("quick_gelu")
@@ -63,3 +64,11 @@ class TestActivations(unittest.TestCase):
             get_activation("bogus")
         with self.assertRaises(KeyError):
             get_activation(None)
+
+    def test_activations_are_distinct_objects(self):
+        act1 = get_activation("gelu")
+        act1.a = 1
+        act2 = get_activation("gelu")
+        self.assertEqual(act1.a, 1)
+        with self.assertRaises(AttributeError):
+            _ = act2.a

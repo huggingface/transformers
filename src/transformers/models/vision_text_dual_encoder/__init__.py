@@ -1,8 +1,4 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,56 +13,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
-
-
-_import_structure = {
-    "configuration_vision_text_dual_encoder": ["VisionTextDualEncoderConfig"],
-    "processing_vision_text_dual_encoder": ["VisionTextDualEncoderProcessor"],
-}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_vision_text_dual_encoder"] = ["VisionTextDualEncoderModel"]
-
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_vision_text_dual_encoder"] = ["FlaxVisionTextDualEncoderModel"]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
-    from .processing_visiotn_text_dual_encoder import VisionTextDualEncoderProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_vision_text_dual_encoder import VisionTextDualEncoderModel
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
-
-
+    from .configuration_vision_text_dual_encoder import *
+    from .modeling_flax_vision_text_dual_encoder import *
+    from .modeling_tf_vision_text_dual_encoder import *
+    from .modeling_vision_text_dual_encoder import *
+    from .processing_vision_text_dual_encoder import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

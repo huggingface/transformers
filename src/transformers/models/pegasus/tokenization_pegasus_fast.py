@@ -12,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model PEGASUS."""
-
+"""Tokenization class for model PEGASUS."""
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -35,17 +34,6 @@ logger = logging.get_logger(__name__)
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"},
-    "tokenizer_file": {
-        "google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/tokenizer.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/pegasus-xsum": 512,
-}
 
 
 class PegasusTokenizerFast(PreTrainedTokenizerFast):
@@ -79,21 +67,20 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             The token used for masking single token values. This is the token used when training this model with masked
             language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
             It corresponds to *[MASK2]* in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
-            Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Summarization](https://huggingface.co/papers/1912.08777).
         mask_token_sent (`str`, *optional*, defaults to `"<mask_1>"`):
             The token used for masking whole target sentences. This is the token used when training this model with gap
             sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
             pretraining. It corresponds to *[MASK1]* in [PEGASUS: Pre-training with Extracted Gap-sentences for
-            Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Abstractive Summarization](https://huggingface.co/papers/1912.08777).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
             <unk_2, ..., unk_102> are used as additional special tokens corresponding to the [original PEGASUS
             tokenizer](https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66)
             that uses the tokens 2 - 104 only for pretraining
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -108,14 +95,15 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
-        **kwargs
+        **kwargs,
     ):
         self.offset = offset
 
         if additional_special_tokens is not None:
             if not isinstance(additional_special_tokens, list):
                 raise TypeError(
-                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                    f"additional_special_tokens should be of type {type(list)}, but is"
+                    f" {type(additional_special_tokens)}"
                 )
 
             additional_special_tokens_extended = (
@@ -130,12 +118,20 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
                 raise ValueError(
-                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                    "Please make sure that the provided additional_special_tokens do not contain an incorrectly"
+                    f" shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
+
+        # pegasus was design to support changing the index of the first tokens. If one of the padding/eos/unk/mask token
+        # is different from default, we must rebuild the vocab
+        from_slow = kwargs.pop("from_slow", None)
+        from_slow = from_slow or str(pad_token) != "<pad>" or str(eos_token) != "</s>" or str(unk_token) != "<unk>"
+
+        kwargs.pop("added_tokens_decoder", {})
 
         super().__init__(
             vocab_file,
@@ -147,10 +143,10 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             mask_token_sent=mask_token_sent,
             offset=offset,
             additional_special_tokens=additional_special_tokens,
+            from_slow=from_slow,
             **kwargs,
         )
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
@@ -158,14 +154,15 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
         if all_special_ids != set(range(len(self.additional_special_tokens) + 3)):
             raise ValueError(
-                f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+                "There should be 3 special tokens: mask_token, pad_token, and eos_token +"
+                f" {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
             )
 
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -174,7 +171,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """
         Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
 
@@ -195,7 +192,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -213,3 +210,6 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["PegasusTokenizerFast"]

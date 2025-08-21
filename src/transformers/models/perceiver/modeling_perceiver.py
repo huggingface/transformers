@@ -12,14 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Perceiver model."""
+"""PyTorch Perceiver model."""
 
 import abc
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -30,144 +31,95 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_perceiver import PerceiverConfig
 
 
 ModalitySizeType = Mapping[str, int]
-PreprocessorOutputType = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
+PreprocessorOutputType = tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
 PreprocessorType = Callable[..., PreprocessorOutputType]
 PostprocessorType = Callable[..., Any]
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
-_CONFIG_FOR_DOC = "PerceiverConfig"
-_TOKENIZER_FOR_DOC = "PerceiverTokenizer"
-
-PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "deepmind/language-perceiver",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-]
-
 
 @dataclass
-class PerceiverModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverModelOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
     """
 
-    logits: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class PerceiverDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver decoder outputs, with potential cross-attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
-            Output of the basic decoder.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverDecoderOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+        Output of the basic decoder.
     """
 
-    logits: torch.FloatTensor = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class PerceiverMaskedLMOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver's masked language model outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_latents,
-            num_latents)`. Attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverMaskedLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Masked language modeling (MLM) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class PerceiverClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
+    """
+)
+class PerceiverClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class PerceiverEmbeddings(nn.Module):
@@ -238,7 +190,7 @@ class PerceiverSelfAttention(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -383,7 +335,7 @@ class PerceiverAttention(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -462,7 +414,7 @@ class PerceiverLayer(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -551,7 +503,7 @@ class PerceiverEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
@@ -606,13 +558,9 @@ class PerceiverEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class PerceiverPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = PerceiverConfig
+    config: PerceiverConfig
     base_model_prefix = "perceiver"
     main_input_name = "inputs"
 
@@ -629,7 +577,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
         elif hasattr(module, "position_embeddings") and isinstance(module, PerceiverTrainablePositionEncoding):
             module.position_embeddings.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.ParameterDict):
-            for modality in module.keys():
+            for modality in module:
                 module[modality].data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -640,88 +588,35 @@ class PerceiverPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-PERCEIVER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+@auto_docstring(
+    custom_intro="""
+    The Perceiver: a scalable, fully attentional architecture.
 
-    Parameters:
-        config ([`PerceiverConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+    <Tip>
 
-PERCEIVER_MODEL_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+        Note that it's possible to fine-tune Perceiver on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
 
-    Parameters:
-        config ([`PerceiverConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        decoder (*DecoderType*, *optional*):
-            Optional decoder to use to decode the latent representation of the encoder. Examples include
-            *transformers.models.perceiver.modeling_perceiver.PerceiverBasicDecoder*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverClassificationDecoder*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder*.
-        input_preprocessor (*PreprocessorType*, *optional*):
-            Optional input preprocessor to use. Examples include
-            *transformers.models.perceiver.modeling_perceiver.PerceiverImagePreprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverAudioPreprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverTextPreprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor*.
-        output_postprocessor (*PostprocessorType*, *optional*):
-            Optional output postprocessor to use. Examples include
-            *transformers.models.perceiver.modeling_perceiver.PerceiverImagePostprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverAudioPostprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverClassificationPostprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverProjectionPostprocessor*,
-            *transformers.models.perceiver.modeling_perceiver.PerceiverMultimodalPostprocessor*.
-
-        Note that you can define your own decoders, preprocessors and/or postprocessors to fit your use-case.
-"""
-
-PERCEIVER_INPUTS_DOCSTRING = r"""
-    Args:
-        inputs (`torch.FloatTensor`):
-            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-        attention_mask (`torch.FloatTensor` of shape `{0}`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    """The Perceiver: a scalable, fully attentional architecture.""",
-    PERCEIVER_MODEL_START_DOCSTRING,
+    </Tip>
+    """
 )
 class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
         self,
         config,
-        decoder=None,
+        decoder: Optional["PerceiverAbstractDecoder"] = None,
         input_preprocessor: PreprocessorType = None,
         output_postprocessor: PostprocessorType = None,
     ):
+        r"""
+        decoder (`PerceiverDecoder`, *optional*):
+            Decoder module that transforms latent representations into task predictions.
+        input_preprocessor (`PreprocessorType`, *optional*):
+            Preprocessor that encodes raw inputs into tensors for the model.
+        output_postprocessor (`PostprocessorType`, *optional*):
+            Postprocessor that transforms model outputs into final predictions.
+        """
         super().__init__(config)
         self.config = config
 
@@ -750,25 +645,29 @@ class PerceiverModel(PerceiverPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=PerceiverModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: torch.FloatTensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        subsampled_output_points: Optional[Dict[str, torch.Tensor]] = None,
+        subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverModelOutput]:
+    ) -> Union[tuple, PerceiverModelOutput]:
         r"""
-        Returns:
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
+        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
+            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
+            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
         Examples:
 
         ```python
-        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverFeatureExtractor, PerceiverModel
+        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverImageProcessor, PerceiverModel
         >>> from transformers.models.perceiver.modeling_perceiver import (
         ...     PerceiverTextPreprocessor,
         ...     PerceiverImagePreprocessor,
@@ -801,6 +700,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> with torch.no_grad():
         ...     outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2]
 
         >>> # to train, one can train the model using standard cross-entropy:
         >>> criterion = torch.nn.CrossEntropyLoss()
@@ -810,6 +711,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         >>> # EXAMPLE 2: using the Perceiver to classify images
         >>> # - we define an ImagePreprocessor, which can be used to embed images
+        >>> config = PerceiverConfig(image_size=224)
         >>> preprocessor = PerceiverImagePreprocessor(
         ...     config,
         ...     prep_type="conv1x1",
@@ -836,14 +738,16 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ... )
 
         >>> # you can then do a forward pass as follows:
-        >>> feature_extractor = PerceiverFeatureExtractor()
+        >>> image_processor = PerceiverImageProcessor()
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = feature_extractor(image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(image, return_tensors="pt").pixel_values
 
         >>> with torch.no_grad():
         ...     outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2]
 
         >>> # to train, one can train the model using standard cross-entropy:
         >>> criterion = torch.nn.CrossEntropyLoss()
@@ -858,14 +762,16 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
-            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs)
+            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(
+                inputs, interpolate_pos_encoding=interpolate_pos_encoding
+            )
         else:
             modality_sizes = None
             inputs_without_pos = None
             if inputs.size()[-1] != self.config.d_model:
                 raise ValueError(
-                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model: {self.config.d_model}. "
-                    "Make sure to set config.d_model appropriately."
+                    f"Last dimension of the inputs: {inputs.size()[-1]} doesn't correspond to config.d_model:"
+                    f" {self.config.d_model}. Make sure to set config.d_model appropriately."
                 )
 
         batch_size, seq_length, _ = inputs.size()
@@ -873,7 +779,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+            attention_mask = torch.ones((batch_size, seq_length), device=device)
         # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
         extended_attention_mask = self.invert_attention_mask(attention_mask)
 
@@ -907,7 +813,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
                     "label": 1,
                 }
             else:
-                output_modality_sizes = None
+                output_modality_sizes = modality_sizes
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
@@ -946,16 +852,21 @@ class PerceiverModel(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for masked language modeling.""", PERCEIVER_START_DOCSTRING)
+@auto_docstring(
+    custom_intro="""
+    Example use of Perceiver for masked language modeling.
+    """
+)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         text_preprocessor = PerceiverTextPreprocessor(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(
-            num_channels=text_preprocessor.num_channels, index_dims=config.max_position_embeddings
-        )
+        trainable_position_encoding_kwargs_decoder = {
+            "num_channels": text_preprocessor.num_channels,
+            "index_dims": config.max_position_embeddings,
+        }
 
         self.perceiver = PerceiverModel(
             config,
@@ -978,8 +889,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -990,22 +900,22 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverMaskedLMOutput]:
+    ) -> Union[tuple, PerceiverMaskedLMOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
-        Returns:
-
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForMaskedLM
+        >>> from transformers import AutoTokenizer, PerceiverForMaskedLM
         >>> import torch
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
 
         >>> # training
@@ -1017,7 +927,12 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
+        >>> round(loss.item(), 2)
+        19.87
+
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2048, 262]
 
         >>> # inference
         >>> text = "This is an incomplete sentence where some words are missing."
@@ -1030,6 +945,8 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         >>> with torch.no_grad():
         ...     outputs = model(**encoding)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2048, 262]
 
         >>> masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
         >>> tokenizer.decode(masked_tokens_predictions)
@@ -1073,12 +990,16 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Example use of Perceiver for text classification.""", PERCEIVER_START_DOCSTRING)
+@auto_docstring(
+    custom_intro="""
+    Example use of Perceiver for text classification.
+    """
+)
 class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1095,8 +1016,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1107,27 +1027,29 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the classification/regression loss. Indices should be in `[0, ..., config.num_labels -
             1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If `config.num_labels >
             1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
-
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
+        >>> from transformers import AutoTokenizer, PerceiverForSequenceClassification
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForSequenceClassification.from_pretrained("deepmind/language-perceiver")
 
         >>> text = "hello world"
         >>> inputs = tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 2]
         ```"""
         if inputs is not None and input_ids is not None:
             raise ValueError("You cannot use both `inputs` and `input_ids`")
@@ -1183,26 +1105,25 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+    This model uses learned position embeddings. In other words, this model is not given any privileged information about
+    the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
+
+    [`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+    (with `prep_type="conv1x1"`) to preprocess the input images, and
+    [`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+    [`PerceiverModel`] into classification logits.
     """
-Example use of Perceiver for image classification, for tasks such as ImageNet.
-
-This model uses learned position embeddings. In other words, this model is not given any privileged information about
-the structure of images. As shown in the paper, this model can achieve a top-1 accuracy of 72.7 on ImageNet.
-
-[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
-(with `prep_type="conv1x1"`) to preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
-[`PerceiverModel`] into classification logits.
-""",
-    PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size**2)
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_preprocessor = {"num_channels": 256, "index_dims": config.image_size**2}
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1228,8 +1149,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1238,36 +1158,41 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
-
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationLearned
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-learned")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
         >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1282,6 +1207,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
@@ -1322,28 +1248,30 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+    This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
+    79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
+
+    [`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+    (with `prep_type="pixels"`) to preprocess the input images, and
+    [`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+    [`PerceiverModel`] into classification logits.
     """
-Example use of Perceiver for image classification, for tasks such as ImageNet.
-
-This model uses fixed 2D Fourier position embeddings. As shown in the paper, this model can achieve a top-1 accuracy of
-79.0 on ImageNet, and 84.5 when pre-trained on a large-scale dataset (i.e. JFT).
-
-[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
-(with `prep_type="pixels"`) to preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
-[`PerceiverModel`] into classification logits.
-""",
-    PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (224, 224),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1365,8 +1293,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1377,34 +1304,38 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
-
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationFourier
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-fourier")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
         >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1458,28 +1389,30 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+        Example use of Perceiver for image classification, for tasks such as ImageNet.
+
+    This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
+    of 82.1 on ImageNet.
+
+    [`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
+    (with `prep_type="conv"`) to preprocess the input images, and
+    [`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
+    [`PerceiverModel`] into classification logits.
     """
-Example use of Perceiver for image classification, for tasks such as ImageNet.
-
-This model uses a 2D conv+maxpool preprocessing network. As shown in the paper, this model can achieve a top-1 accuracy
-of 82.1 on ImageNet.
-
-[`PerceiverForImageClassificationLearned`] uses [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`]
-(with `prep_type="conv"`) to preprocess the input images, and
-[`~models.perceiver.modeling_perceiver.PerceiverClassificationDecoder`] to decode the latent representation of
-[`PerceiverModel`] into classification logits.
-""",
-    PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(56, 56), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (56, 56),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1502,8 +1435,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1514,34 +1446,38 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
-
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationConvProcessing
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-conv")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
         >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1595,33 +1531,35 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. [`PerceiverForOpticalFlow`] uses
-[`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with *prep_type="patches"*) to preprocess the
-input images, and [`~models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`] to decode the latent
-representation of [`PerceiverModel`].
+@auto_docstring(
+    custom_intro="""
+        Example use of Perceiver for optical flow, for tasks such as Sintel and KITTI. [`PerceiverForOpticalFlow`] uses
+    [`~models.perceiver.modeling_perceiver.PerceiverImagePreprocessor`] (with *prep_type="patches"*) to preprocess the
+    input images, and [`~models.perceiver.modeling_perceiver.PerceiverOpticalFlowDecoder`] to decode the latent
+    representation of [`PerceiverModel`].
 
-As input, one concatenates 2 subsequent frames along the channel dimension and extract a 3 x 3 patch around each pixel
-(leading to 3 x 3 x 3 x 2 = 54 values for each pixel). Fixed Fourier position encodings are used to encode the position
-of each pixel in the patch. Next, one applies the Perceiver encoder. To decode, one queries the latent representation
-using the same encoding used for the input.
-""",
-    PERCEIVER_START_DOCSTRING,
+    As input, one concatenates 2 subsequent frames along the channel dimension and extract a 3 x 3 patch around each pixel
+    (leading to 3 x 3 x 3 x 2 = 54 values for each pixel). Fixed Fourier position encodings are used to encode the position
+    of each pixel in the patch. Next, one applies the Perceiver encoder. To decode, one queries the latent representation
+    using the same encoding used for the input.
+    """
 )
 class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            num_bands=64,
-            max_resolution=config.train_size,
-            sine_only=False,
-            concat_pos=True,
-        )
-        fourier_position_encoding_kwargs_decoder = dict(
-            concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
-        )
+        fourier_position_encoding_kwargs_preprocessor = {
+            "num_bands": 64,
+            "max_resolution": config.train_size,
+            "sine_only": False,
+            "concat_pos": True,
+        }
+        fourier_position_encoding_kwargs_decoder = {
+            "concat_pos": True,
+            "max_resolution": config.train_size,
+            "num_bands": 64,
+            "sine_only": False,
+        }
 
         image_preprocessor = PerceiverImagePreprocessor(
             config,
@@ -1656,8 +1594,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1667,12 +1604,12 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the optical flow loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
-        Returns:
 
         Examples:
 
@@ -1689,8 +1626,14 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> patches = torch.randn(1, 2, 27, 368, 496)
         >>> outputs = model(inputs=patches)
         >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 368, 496, 2]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Optical flow training is not yet supported")
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1701,10 +1644,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Optical flow training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1719,38 +1658,37 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+        Example use of Perceiver for multimodal (video) autoencoding, for tasks such as Kinetics-700.
+
+    [`PerceiverForMultimodalAutoencoding`] uses [`~models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor`] to
+    preprocess the 3 modalities: images, audio and class labels. This preprocessor uses modality-specific preprocessors to
+    preprocess every modality separately, after which they are concatenated. Trainable position embeddings are used to pad
+    each modality to the same number of channels to make concatenation along the time dimension possible. Next, one applies
+    the Perceiver encoder.
+
+    [`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] is used to decode the latent representation of
+    [`PerceiverModel`]. This decoder uses each modality-specific decoder to construct queries. The decoder queries are
+    created based on the inputs after preprocessing. However, autoencoding an entire video in a single forward pass is
+    computationally infeasible, hence one only uses parts of the decoder queries to do cross-attention with the latent
+    representation. This is determined by the subsampled indices for each modality, which can be provided as additional
+    input to the forward pass of [`PerceiverForMultimodalAutoencoding`].
+
+    [`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] also pads the decoder queries of the different
+    modalities to the same number of channels, in order to concatenate them along the time dimension. Next, cross-attention
+    is performed with the latent representation of [`PerceiverModel`].
+
+    Finally, [`~models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor`] is used to turn this tensor into an
+    actual video. It first splits up the output into the different modalities, and then applies the respective
+    postprocessor for each modality.
+
+    Note that, by masking the classification label during evaluation (i.e. simply providing a tensor of zeros for the
+    "label" modality), this auto-encoding model becomes a Kinetics 700 video classifier.
     """
-Example use of Perceiver for multimodal (video) autoencoding, for tasks such as Kinetics-700.
-
-[`PerceiverForMultimodalAutoencoding`] uses [`~models.perceiver.modeling_perceiver.PerceiverMultimodalPreprocessor`] to
-preprocess the 3 modalities: images, audio and class labels. This preprocessor uses modality-specific preprocessors to
-preprocess every modality separately, after which they are concatenated. Trainable position embeddings are used to pad
-each modality to the same number of channels to make concatenation along the time dimension possible. Next, one applies
-the Perceiver encoder.
-
-[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] is used to decode the latent representation of
-[`PerceiverModel`]. This decoder uses each modality-specific decoder to construct queries. The decoder queries are
-created based on the inputs after preprocessing. However, autoencoding an entire video in a single forward pass is
-computationally infeasible, hence one only uses parts of the decoder queries to do cross-attention with the latent
-representation. This is determined by the subsampled indices for each modality, which can be provided as additional
-input to the forward pass of [`PerceiverForMultimodalAutoencoding`].
-
-[`~models.perceiver.modeling_perceiver.PerceiverMultimodalDecoder`] also pads the decoder queries of the different
-modalities to the same number of channels, in order to concatenate them along the time dimension. Next, cross-attention
-is performed with the latent representation of [`PerceiverModel`].
-
-Finally, [`~models.perceiver.modeling_perceiver.PerceiverMultiModalPostprocessor`] is used to turn this tensor into an
-actual video. It first splits up the output into the different modalities, and then applies the respective
-postprocessor for each modality.
-
-Note that, by masking the classification label during evaluation (i.e. simply providing a tensor of zeros for the
-"label" modality), this auto-encoding model becomes a Kinetics 700 video classifier.
-""",
-    PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
@@ -1761,24 +1699,24 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                 "audio": PerceiverAudioPreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     samples_per_patch=config.samples_per_patch,
                 ),
                 "image": PerceiverImagePreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=32,
-                        max_resolution=(config.num_frames, config.image_size, config.image_size),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 32,
+                        "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     spatial_downsample=4,
                     temporal_downsample=1,
@@ -1793,16 +1731,16 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
             output_shape=config.output_shape,
-            output_num_channels=512,
+            output_num_channels=config.output_num_channels,
             use_query_residual=False,
             position_encoding_only=True,
             position_encoding_type="fourier",
-            fourier_position_encoding_kwargs=dict(
-                num_bands=32,
-                max_resolution=(config.num_frames, config.image_size, config.image_size),
-                sine_only=False,
-                concat_pos=True,
-            ),
+            fourier_position_encoding_kwargs={
+                "num_bands": 32,
+                "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                "sine_only": False,
+                "concat_pos": True,
+            },
         )
 
         decoder = PerceiverMultimodalDecoder(
@@ -1817,16 +1755,16 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
                     output_index_dims=(n_audio_samples // config.samples_per_patch,),
-                    output_num_channels=512,
+                    output_num_channels=config.output_num_channels,
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                 ),
                 "image": image_decoder,
                 "label": PerceiverClassificationDecoder(
@@ -1836,22 +1774,22 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="trainable",
-                    trainable_position_encoding_kwargs=dict(
-                        num_channels=1024,
-                        index_dims=1,
-                    ),
+                    trainable_position_encoding_kwargs={
+                        "num_channels": config._label_trainable_num_channels,
+                        "index_dims": 1,
+                    },
                 ),
             },
             num_outputs=None,
-            output_num_channels=512,
+            output_num_channels=config.output_num_channels,
             use_query_residual=False,
         )
 
         output_postprocessor = PerceiverMultimodalPostprocessor(
             modalities={
-                "audio": PerceiverAudioPostprocessor(config, in_channels=512),
-                "image": PerceiverProjectionPostprocessor(in_channels=512, out_channels=3),
-                "label": PerceiverClassificationPostprocessor(config, in_channels=512),
+                "audio": PerceiverAudioPostprocessor(config, in_channels=config.output_num_channels),
+                "image": PerceiverProjectionPostprocessor(in_channels=config.output_num_channels, out_channels=3),
+                "label": PerceiverClassificationPostprocessor(config, in_channels=config.output_num_channels),
             }
         )
 
@@ -1865,26 +1803,28 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PERCEIVER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        subsampled_output_points: Optional[Dict[str, torch.Tensor]] = None,
+        subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
+        inputs (`torch.FloatTensor`):
+            Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
+        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
+            Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
+            representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 
@@ -1915,8 +1855,20 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
 
         >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)
         >>> logits = outputs.logits
+        >>> list(logits["audio"].shape)
+        [1, 240]
+
+        >>> list(logits["image"].shape)
+        [1, 6272, 3]
+
+        >>> list(logits["label"].shape)
+        [1, 700]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1928,10 +1880,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits if return_dict else outputs[0]
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1960,7 +1908,6 @@ def build_position_encoding(
     Builds the position encoding.
 
     Args:
-
     - out_channels: refers to the number of channels of the position encodings.
     - project_pos_dim: if specified, will project the position encodings to this dimension.
 
@@ -2089,7 +2036,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
         self.output_num_channels = output_num_channels
         # If `none`, the decoder will not construct any position encodings.
-        # You should construct your own when quering the decoder.
+        # You should construct your own when querying the decoder.
         self.output_position_encodings = None
         self.position_encoding_type = position_encoding_type
         self.position_encoding_kwargs = position_encoding_kwargs
@@ -2146,9 +2093,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            indices = list(
-                torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)
-            )
+            indices = [torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)]
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
@@ -2159,7 +2104,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
                 pos_emb = self.output_position_encodings(
-                    self.output_index_dims, batch_size=batch_size, device=inputs.device, pos=pos
+                    self.output_index_dims, batch_size=batch_size, device=inputs.device, dtype=inputs.dtype, pos=pos
                 )
 
             # Optionally project them to a target dimension.
@@ -2173,7 +2118,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if self.position_encoding_type == "trainable":
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
-                pos_emb = self.output_position_encodings(index_dims, batch_size, device=inputs.device)
+                pos_emb = self.output_position_encodings(
+                    index_dims, batch_size, device=inputs.device, dtype=inputs.dtype
+                )
 
             # Optionally project them to a target dimension.
             pos_emb = self.positions_projection(pos_emb)
@@ -2181,7 +2128,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if self.concat_preprocessed_input:
             if inputs_without_pos is None:
                 raise ValueError("Value is required for inputs_without_pos if concat_preprocessed_input is True")
-            pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
+            pos_emb = torch.cat([inputs_without_pos, pos_emb], dim=-1)
 
         return pos_emb
 
@@ -2305,14 +2252,14 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
     Args:
         config ([*PerceiverConfig*]):
             Model configuration.
-        output_shape (`List[int]`):
+        output_shape (`list[int]`):
             Shape of the output as (batch_size, num_frames, height, width), excluding the channel dimension.
         position_encoding_type (`str`):
             The type of position encoding to use. Can be either "trainable", "fourier", or "none".
     """
 
     def __init__(
-        self, config: PerceiverConfig, output_shape: List[int], position_encoding_type: str, **decoder_kwargs
+        self, config: PerceiverConfig, output_shape: list[int], position_encoding_type: str, **decoder_kwargs
     ) -> None:
         super().__init__()
         if len(output_shape) != 4:  # B, T, H, W
@@ -2386,7 +2333,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     Args:
         config ([*PerceiverConfig*]):
             Model configuration.
-        modalities (`Dict[str, PerceiverAbstractDecoder]`):
+        modalities (`dict[str, PerceiverAbstractDecoder]`):
             Dictionary mapping modality name to the decoder of that modality.
         num_outputs (`int`):
             The number of outputs of the decoder.
@@ -2395,7 +2342,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         min_padding_size (`int`, *optional*, defaults to 2):
             The minimum padding size for all modalities. The final output will have num_channels equal to the maximum
             channels across all modalities plus min_padding_size.
-        subsampled_index_dims (`Dict[str, PerceiverAbstractDecoder]`, *optional*):
+        subsampled_index_dims (`dict[str, PerceiverAbstractDecoder]`, *optional*):
             Dictionary mapping modality name to the subsampled index dimensions to use for the decoder query of that
             modality.
     """
@@ -2403,12 +2350,12 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def __init__(
         self,
         config: PerceiverConfig,
-        modalities: Dict[str, PerceiverAbstractDecoder],
+        modalities: dict[str, PerceiverAbstractDecoder],
         num_outputs: int,
         output_num_channels: int,
         min_padding_size: Optional[int] = 2,
-        subsampled_index_dims: Optional[Dict[str, PerceiverAbstractDecoder]] = None,
-        **decoder_kwargs
+        subsampled_index_dims: Optional[dict[str, PerceiverAbstractDecoder]] = None,
+        **decoder_kwargs,
     ) -> None:
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)
@@ -2442,9 +2389,9 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         inputs = restructure(modality_sizes, inputs)
 
         # Obtain modality-specific decoders' queries
-        subsampled_points = subsampled_points or dict()
+        subsampled_points = subsampled_points or {}
 
-        decoder_queries = dict()
+        decoder_queries = {}
         for modality, decoder in self.modalities.items():
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
@@ -2552,7 +2499,7 @@ class Conv2dSamePadding(nn.Conv2d):
     """
 
     def __init__(self, *args, **kwargs):
-        super(Conv2dSamePadding, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.zero_pad_2d = nn.ZeroPad2d(
             reduce(__add__, [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in self.kernel_size[::-1]])
         )
@@ -2608,7 +2555,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         The Tensor containing the position of n points in d dimensional space.
       num_bands (`int`):
         The number of frequency bands (K) to use.
-      max_resolution (`Tuple[int]`, *optional*, defaults to (224, 224)):
+      max_resolution (`tuple[int]`, *optional*, defaults to (224, 224)):
         The maximum resolution (i.e. the number of pixels per dim). A tuple representing resolution for each dimension.
       concat_pos (`bool`, *optional*, defaults to `True`):
         Whether to concatenate the input position encoding to the Fourier features.
@@ -2656,9 +2603,9 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
     Generate an array of position indices for an N-D input array.
 
     Args:
-      index_dims (`List[int]`):
+      index_dims (`list[int]`):
         The shape of the index dimensions of the input array.
-      output_range (`Tuple[float]`, *optional*, defaults to `(-1.0, 1.0)`):
+      output_range (`tuple[float]`, *optional*, defaults to `(-1.0, 1.0)`):
         The min and max values taken by each input index dimension.
 
     Returns:
@@ -2669,7 +2616,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         return torch.linspace(start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32)
 
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
-    array_index_grid = torch.meshgrid(*dim_ranges)
+    array_index_grid = meshgrid(*dim_ranges, indexing="ij")
 
     return torch.stack(array_index_grid, dim=-1)
 
@@ -2710,8 +2657,35 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
     def output_size(self, *args, **kwargs) -> int:
         return self._num_channels
 
-    def forward(self, batch_size: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        num_positions = position_embeddings.shape[0]
+        new_height = new_width = torch_int(num_positions**0.5)
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and height == new_height and width == new_width:
+            return position_embeddings
+
+        position_embeddings = position_embeddings.reshape(1, new_height, new_width, self._num_channels).permute(
+            0, 3, 1, 2
+        )
+
+        position_embeddings = nn.functional.interpolate(
+            position_embeddings,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+        position_embeddings = position_embeddings.reshape(1, self._num_channels, -1).permute(0, 2, 1).squeeze(0)
+        return position_embeddings
+
+    def forward(
+        self, batch_size: int, interpolate_pos_encoding: bool = False, input_size: torch.Size = None
+    ) -> torch.Tensor:
         position_embeddings = self.position_embeddings
+
+        if interpolate_pos_encoding:
+            height, width = input_size
+            position_embeddings = self.interpolate_pos_encoding(position_embeddings, height, width)
 
         if batch_size is not None:
             position_embeddings = position_embeddings.expand(batch_size, -1, -1)
@@ -2725,7 +2699,7 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     Args:
       pos (`torch.FloatTensor`):
         None, or an array of position features. If None, position features are built. Otherwise, their size is checked.
-      index_dims (`List[int]`):
+      index_dims (`list[int]`):
         An iterable giving the spatial/index size of the data to be featurized.
       batch_size (`int`):
         The batch size of the data to be featurized.
@@ -2735,7 +2709,9 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     """
     if pos is None:
         pos = build_linear_positions(index_dims)
-        pos = torch.broadcast_to(pos[None], (batch_size,) + pos.shape)
+        # equivalent to `torch.broadcast_to(pos[None], (batch_size,) + pos.shape)`
+        # but `torch.broadcast_to` cannot be converted to ONNX
+        pos = pos[None].expand((batch_size,) + pos.shape)
         pos = torch.reshape(pos, [batch_size, np.prod(index_dims), -1])
     else:
         # Just a warning label: you probably don't want your spatial features to
@@ -2772,7 +2748,12 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         return encoding_size
 
     def forward(
-        self, index_dims: List[int], batch_size: int, device, pos: torch.FloatTensor = None
+        self,
+        index_dims: list[int],
+        batch_size: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        pos: Optional[torch.FloatTensor] = None,
     ) -> torch.FloatTensor:
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
         fourier_pos_enc = generate_fourier_features(
@@ -2781,7 +2762,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
             max_resolution=self.max_resolution,
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
-        ).to(device)
+        ).to(device=device, dtype=dtype)
         return fourier_pos_enc
 
 
@@ -2813,14 +2794,20 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.d_model
 
-    def forward(self, inputs: torch.LongTensor) -> torch.FloatTensor:
-        embeddings = self.embeddings(inputs)
+    def forward(
+        self,
+        inputs: torch.LongTensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = False,
+    ):
+        embeddings_without_pos = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
         position_ids = torch.arange(0, seq_length, device=inputs.device)
-        embeddings = embeddings + self.position_embeddings(position_ids)
+        embeddings = embeddings_without_pos + self.position_embeddings(position_ids)
 
-        return embeddings, None, None
+        return embeddings, None, embeddings_without_pos
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
@@ -2840,7 +2827,8 @@ class PerceiverEmbeddingDecoder(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, embedding_layer: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, d_model = hidden_states.shape
-        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.T)  # Flatten batch dim
+        # Flatten batch dim
+        output = torch.matmul(hidden_states.reshape([-1, d_model]), embedding_layer.weight.transpose(0, 1))
         output = output + self.bias
 
         return output.reshape([batch_size, seq_len, self.vocab_size])
@@ -2852,7 +2840,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
     postprocessor.
 
     Args:
-          modalities (`Dict[str, PostprocessorType]`):
+          modalities (`Mapping[str, PostprocessorType]`):
             Dictionary mapping modality name to postprocessor class for that modality.
           input_is_dict (`bool`, *optional*, defaults to `False`):
             If True, input is assumed to be dictionary structured, and outputs keep the same dictionary shape. If
@@ -2923,7 +2911,6 @@ class PerceiverAudioPostprocessor(nn.Module):
         self.classifier = nn.Linear(in_channels, config.samples_per_patch)
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
-
         logits = self.classifier(inputs)
         return torch.reshape(logits, [inputs.shape[0], -1])
 
@@ -3093,7 +3080,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         return inp_dim + pos_dim
 
-    def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
+    def _build_network_inputs(
+        self, inputs: torch.Tensor, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = False
+    ):
         """
         Construct the final input, including position encoding.
 
@@ -3101,6 +3090,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         """
         batch_size = inputs.shape[0]
+        input_size = inputs.shape[1:3]
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
 
@@ -3110,9 +3100,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         # Construct the position encoding.
         if self.position_encoding_type == "trainable":
-            pos_enc = self.position_embeddings(batch_size)
+            pos_enc = self.position_embeddings(batch_size, interpolate_pos_encoding, input_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
@@ -3128,7 +3118,13 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs_with_pos = inputs + pos_enc
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = False,
+    ):
         if self.prep_type == "conv":
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
@@ -3166,13 +3162,13 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.prep_type != "patches":
             # move channels to last dimension, as the _build_network_inputs method below expects this
             if inputs.ndim == 4:
-                inputs = torch.moveaxis(inputs, 1, -1)
+                inputs = inputs.permute(0, 2, 3, 1)
             elif inputs.ndim == 5:
-                inputs = torch.moveaxis(inputs, 2, -1)
+                inputs = inputs.permute(0, 1, 3, 4, 2)
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 
-        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, network_input_is_1d, interpolate_pos_encoding)
         modality_sizes = None  # Size for each modality, only needed for multimodal
 
         return inputs, modality_sizes, inputs_without_pos
@@ -3271,7 +3267,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
             return pos_dim
         return self.samples_per_patch + pos_dim
 
-    def _build_network_inputs(self, inputs, pos):
+    def _build_network_inputs(self, inputs):
         """Construct the final input, including position encoding."""
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[1:-1]
@@ -3280,7 +3276,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
@@ -3292,10 +3288,16 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
 
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = False,
+    ):
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
-        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
+        inputs, inputs_without_pos = self._build_network_inputs(inputs)
         modality_sizes = None  # Size for each modality, only needed for multimodal
 
         return inputs, modality_sizes, inputs_without_pos
@@ -3309,9 +3311,9 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
     of channels.
 
     Args:
-        modalities (`Dict[str, PreprocessorType]`):
+        modalities (`Mapping[str, PreprocessorType]`):
             Dict mapping modality name to preprocessor.
-        mask_probs (`Dict[str, float]`):
+        mask_probs (`dict[str, float]`):
             Dict mapping modality name to masking probability of that modality.
         min_padding_size (`int`, *optional*, defaults to 2):
             The minimum padding size for all modalities. The final output will have num_channels equal to the maximum
@@ -3325,9 +3327,9 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         min_padding_size: int = 2,
     ):
         super().__init__()
-        self.modalities = modalities
+        self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
-        self.mask_probs = mask_probs if mask_probs is not None else dict()
+        self.mask_probs = mask_probs if mask_probs is not None else {}
         self.padding = nn.ParameterDict(
             {
                 modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
@@ -3345,7 +3347,11 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         return common_channel_size
 
     def forward(
-        self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True
+        self,
+        inputs: Mapping[str, torch.Tensor],
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = False,
     ) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}
@@ -3384,3 +3390,17 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         final_inputs = torch.cat(padded_ls, dim=1)
 
         return final_inputs, modality_sizes, inputs_without_pos
+
+
+__all__ = [
+    "PerceiverForImageClassificationConvProcessing",
+    "PerceiverForImageClassificationFourier",
+    "PerceiverForImageClassificationLearned",
+    "PerceiverForMaskedLM",
+    "PerceiverForMultimodalAutoencoding",
+    "PerceiverForOpticalFlow",
+    "PerceiverForSequenceClassification",
+    "PerceiverLayer",
+    "PerceiverModel",
+    "PerceiverPreTrainedModel",
+]

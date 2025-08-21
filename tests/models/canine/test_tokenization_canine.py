@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,31 +17,37 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.testing_utils import require_tokenizers, require_torch
 from transformers.tokenization_utils import AddedToken
 from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "nielsr/canine-s"
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = CanineTokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def canine_tokenizer(self):
         return CanineTokenizer.from_pretrained("google/canine-s")
 
-    def get_tokenizer(self, **kwargs) -> CanineTokenizer:
-        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> CanineTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        tokenizer = cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
         tokenizer._unicode_vocab_size = 1024
         return tokenizer
 
@@ -50,9 +55,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch_integration(self):
         tokenizer = self.canine_tokenizer
         src_text = ["Life is like a box of chocolates.", "You never know what you're gonna get."]
-        # fmt: off
-        expected_src_tokens = [57344, 76, 105, 102, 101, 32, 105, 115, 32, 108, 105, 107, 101, 32, 97, 32, 98, 111, 120, 32, 111, 102, 32, 99, 104, 111, 99, 111, 108, 97, 116, 101, 115, 46, 57345, 0, 0, 0, 0]
-        # fmt: on
+        expected_src_tokens = [57344, 76, 105, 102, 101, 32, 105, 115, 32, 108, 105, 107, 101, 32, 97, 32, 98, 111, 120, 32, 111, 102, 32, 99, 104, 111, 99, 111, 108, 97, 116, 101, 115, 46, 57345, 0, 0, 0, 0]  # fmt: skip
         batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -66,7 +69,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_encoding_keys(self):
         tokenizer = self.canine_tokenizer
-        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Tranformers."]
+        src_text = ["Once there was a man.", "He wrote a test in HuggingFace Transformers."]
         batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids, attention_mask and token_type_ids are returned
         self.assertIn("input_ids", batch)
@@ -80,11 +83,12 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "What's the weater?",
             "It's about 25 degrees.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt")
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt"
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -99,7 +103,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -115,14 +119,16 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
 
                 additional_special_tokens = tokenizer.additional_special_tokens
 
                 # We can add a new special token for Canine as follows:
                 new_additional_special_token = chr(0xE007)
                 additional_special_tokens.append(new_additional_special_token)
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -167,11 +173,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 SPECIAL_TOKEN_1 = chr(0xE005)
                 SPECIAL_TOKEN_2 = chr(0xE006)
-
-                # `add_tokens` method stores special tokens only in `tokenizer.unique_no_split_tokens`. (in tokenization_utils.py)
                 tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
-                # `add_special_tokens` method stores special tokens in `tokenizer.additional_special_tokens`,
-                # which also occur in `tokenizer.all_special_tokens`. (in tokenization_utils_base.py)
                 tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]})
 
                 token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
@@ -187,7 +189,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # a special token for Canine can be defined as follows:
                 NEW_TOKEN = 0xE006
                 new_token = chr(NEW_TOKEN)
@@ -261,7 +262,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 input = "hello world"
                 if self.space_between_special_tokens:
                     output = "[CLS] hello world [SEP]"
@@ -308,35 +308,32 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [additional_special_token])
         self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [additional_special_token_id])
 
-    # tokenizer has a fixed vocab_size (namely all possible unicode code points)
+    @unittest.skip(reason="tokenizer has a fixed vocab_size (namely all possible unicode code points)")
     def test_add_tokens_tokenizer(self):
         pass
 
     # CanineTokenizer does not support do_lower_case = True, as each character has its own Unicode code point
     # ("b" and "B" for example have different Unicode code points)
+    @unittest.skip(reason="CanineTokenizer does not support do_lower_case = True")
     def test_added_tokens_do_lower_case(self):
         pass
 
-    # CanineModel does not support the get_input_embeddings nor the get_vocab method
+    @unittest.skip(reason="CanineModel does not support the get_input_embeddings nor the get_vocab method")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
-    # CanineModel does not support the get_input_embeddings nor the get_vocab method
+    @unittest.skip(reason="CanineModel does not support the get_input_embeddings nor the get_vocab method")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
-
-    # tokenizer does not have vocabulary
+    @unittest.skip(reason="CanineTokenizer does not have vocabulary")
     def test_get_vocab(self):
         pass
 
-    # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
+    @unittest.skip(reason="inputs cannot be pretokenized since ids depend on whole input string")
     def test_pretokenized_inputs(self):
         pass
 
-    # tests all ids in vocab => vocab doesn't exist so unnecessary to test
+    @unittest.skip(reason="CanineTokenizer does not have vocabulary")
     def test_conversion_reversible(self):
         pass

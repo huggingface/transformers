@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Wav2Vec2 checkpoint."""
 
-
 import argparse
 import os
 from functools import reduce
@@ -66,7 +65,8 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 
     if hf_shape != value.shape:
         raise ValueError(
-            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be {value.shape} for {full_name}"
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+            f" {value.shape} for {full_name}"
         )
 
     if weight_type == "weight":
@@ -207,7 +207,7 @@ def convert_wav2vec2_checkpoint(
         hf_wav2vec = Data2VecAudioModel(config)
         data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        state_dict = torch.load(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, weights_only=True)
         state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
         state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
         converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
@@ -226,7 +226,7 @@ def convert_wav2vec2_checkpoint(
 
     processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
 
-    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     input_audio = [x["array"] for x in ds[:4]["audio"]]
 
     inputs = processor(input_audio, return_tensors="pt", padding=True)

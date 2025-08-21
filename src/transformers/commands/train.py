@@ -53,8 +53,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--train_data",
             type=str,
             required=True,
-            help="path to train (and optionally evaluation) dataset as a csv with "
-            "tab separated labels and sentences.",
+            help="path to train (and optionally evaluation) dataset as a csv with tab separated labels and sentences.",
         )
         train_parser.add_argument(
             "--column_label", type=int, default=0, help="Column of the dataset csv file with example labels."
@@ -74,7 +73,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--validation_split",
             type=float,
             default=0.1,
-            help="if validation dataset is not provided, fraction of train dataset " "to use as validation dataset.",
+            help="if validation dataset is not provided, fraction of train dataset to use as validation dataset.",
         )
 
         train_parser.add_argument("--output", type=str, default="./", help="path to saved the trained model.")
@@ -83,7 +82,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--task", type=str, default="text_classification", help="Task to train the model on."
         )
         train_parser.add_argument(
-            "--model", type=str, default="bert-base-uncased", help="Model's name or path to stored model."
+            "--model", type=str, default="google-bert/bert-base-uncased", help="Model's name or path to stored model."
         )
         train_parser.add_argument("--train_batch_size", type=int, default=32, help="Batch size for training.")
         train_parser.add_argument("--valid_batch_size", type=int, default=64, help="Batch size for validation.")
@@ -92,7 +91,7 @@ class TrainCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=train_command_factory)
 
     def __init__(self, args: Namespace):
-        self.logger = logging.get_logger("transformers-cli/training")
+        self.logger = logging.get_logger("transformers/training")
 
         self.framework = "tf" if is_tf_available() else "torch"
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,7 +18,6 @@ Fine-tuning the library models for language modeling on a text file (GPT, GPT-2,
 GPT, GPT-2 and CTRL are fine-tuned using a causal language modeling (CLM) loss. BERT and RoBERTa are fine-tuned
 using a masked language modeling (MLM) loss. XLNet is fine-tuned using a permutation language modeling (PLM) loss.
 """
-
 
 import logging
 import math
@@ -68,7 +66,10 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization. Leave None if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization. Leave None if you want to train a model from"
+                " scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -99,8 +100,10 @@ class DataTrainingArguments:
     train_data_files: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The input training data files (multiple files in glob format). "
-            "Very often splitting large files to smaller files can prevent tokenizer going out of memory"
+            "help": (
+                "The input training data files (multiple files in glob format). "
+                "Very often splitting large files to smaller files can prevent tokenizer going out of memory"
+            )
         },
     )
     eval_data_file: Optional[str] = field(
@@ -130,7 +133,10 @@ class DataTrainingArguments:
     plm_probability: float = field(
         default=1 / 6,
         metadata={
-            "help": "Ratio of length of a span of masked tokens to surrounding context length for permutation language modeling."
+            "help": (
+                "Ratio of length of a span of masked tokens to surrounding context length for permutation language"
+                " modeling."
+            )
         },
     )
     max_span_length: int = field(
@@ -140,9 +146,11 @@ class DataTrainingArguments:
     block_size: int = field(
         default=-1,
         metadata={
-            "help": "Optional input sequence length after tokenization."
-            "The training dataset will be truncated in block of this size for training."
-            "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            "help": (
+                "Optional input sequence length after tokenization. "
+                "The training dataset will be truncated in block of this size for training."
+                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -206,7 +214,8 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use"
+            " --overwrite_output_dir to overcome."
         )
 
     # Setup logging
@@ -253,8 +262,8 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
-            "and load it from here, using --tokenizer_name"
+            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another"
+            " script, save it,and load it from here, using --tokenizer_name"
         )
 
     if model_args.model_name_or_path:
@@ -272,7 +281,7 @@ def main():
 
     if config.model_type in ["bert", "roberta", "distilbert", "camembert"] and not data_args.mlm:
         raise ValueError(
-            "BERT and RoBERTa-like models do not have LM heads but masked LM heads. They must be run using the"
+            "BERT and RoBERTa-like models do not have LM heads but masked LM heads. They must be run using the "
             "--mlm flag (masked language modeling)."
         )
 
@@ -348,7 +357,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key in sorted(result.keys()):
                     logger.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
+                    writer.write("{} = {}\n".format(key, str(result[key])))
 
         results.update(result)
 

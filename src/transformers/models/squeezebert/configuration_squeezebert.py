@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SqueezeBERT model configuration"""
+"""SqueezeBERT model configuration"""
+
+from collections import OrderedDict
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "squeezebert/squeezebert-uncased": "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/config.json",
-    "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/config.json",
-    "squeezebert/squeezebert-mnli-headless": "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/config.json",
-}
 
 
 class SqueezeBertConfig(PretrainedConfig):
@@ -87,22 +85,19 @@ class SqueezeBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import SqueezeBertModel, SqueezeBertConfig
+    >>> from transformers import SqueezeBertConfig, SqueezeBertModel
 
     >>> # Initializing a SqueezeBERT configuration
     >>> configuration = SqueezeBertConfig()
 
-    >>> # Initializing a model from the configuration above
+    >>> # Initializing a model (with random weights) from the configuration above
     >>> model = SqueezeBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
-    pretrained_config_archive_map = SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+
     model_type = "squeezebert"
 
     def __init__(
@@ -127,7 +122,7 @@ class SqueezeBertConfig(PretrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -150,3 +145,23 @@ class SqueezeBertConfig(PretrainedConfig):
         self.post_attention_groups = post_attention_groups
         self.intermediate_groups = intermediate_groups
         self.output_groups = output_groups
+
+
+# # Copied from transformers.models.bert.configuration_bert.BertOnxxConfig with Bert->SqueezeBert
+class SqueezeBertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )
+
+
+__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]

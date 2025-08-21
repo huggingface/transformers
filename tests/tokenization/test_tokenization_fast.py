@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
@@ -33,36 +32,51 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     from_pretrained_vocab_key = "tokenizer_file"
 
-    def setUp(self):
-        self.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
-        super().setUp()
-        self.test_rust_tokenizer = True
+    @classmethod
+    def setUpClass(cls):
+        cls.test_rust_tokenizer = False  # because we don't have pretrained_vocab_files_map
+        super().setUpClass()
+        cls.test_rust_tokenizer = True
 
         model_paths = ["robot-test/dummy-tokenizer-fast", "robot-test/dummy-tokenizer-wordlevel"]
+        cls.bytelevel_bpe_model_name = "SaulLu/dummy-tokenizer-bytelevel-bpe"
 
         # Inclusion of 2 tokenizers to test different types of models (Unigram and WordLevel for the moment)
-        self.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
+        cls.tokenizers_list = [(PreTrainedTokenizerFast, model_path, {}) for model_path in model_paths]
 
         tokenizer = PreTrainedTokenizerFast.from_pretrained(model_paths[0])
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
     def test_tokenizer_mismatch_warning(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
-    def test_pretrained_model_lists(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_encode_decode_with_spaces(self):
         pass
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_added_tokens_serialization(self):
+        pass
+
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_additional_special_tokens_serialization(self):
+        pass
+
+    @unittest.skip(reason="PreTrainedTokenizerFast is the only tokenizer that is not linked to any model")
     def test_prepare_for_model(self):
-        # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
-        # model
         pass
 
+    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
-        # PreTrainedTokenizerFast doesn't have tokenizer_file in its signature
         pass
 
     def test_training_new_tokenizer(self):
@@ -99,11 +113,103 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
                     shutil.rmtree(self.tmpdirname)
                     self.tmpdirname = tmpdirname_orig
 
+    def test_training_new_tokenizer_with_bytelevel(self):
+        tokenizer = self.rust_tokenizer_class.from_pretrained(self.bytelevel_bpe_model_name)
+
+        toy_text_iterator = ("a" for _ in range(1000))
+        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        encoding_ids = new_tokenizer.encode("a🤗")
+        self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
+
+    def test_init_from_tokenizers_model(self):
+        from tokenizers import Tokenizer
+
+        sentences = ["Hello, y'all!", "How are you 😁 ? There should not be any issue right?"]
+
+        tokenizer = Tokenizer.from_pretrained("google-t5/t5-base")
+        # Enable padding
+        tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8)
+        self.assertEqual(
+            tokenizer.padding,
+            {
+                "length": 512,
+                "pad_to_multiple_of": 8,
+                "pad_id": 0,
+                "pad_token": "<pad>",
+                "pad_type_id": 0,
+                "direction": "right",
+            },
+        )
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.pad_token_id, 0)
+            self.assertEqual(tok.padding_side, "right")
+            self.assertEqual(tok.pad_token, "<pad>")
+            self.assertEqual(tok.init_kwargs["max_length"], 512)
+            self.assertEqual(tok.init_kwargs["pad_to_multiple_of"], 8)
+            self.assertEqual(tok(sentences, padding = True), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1, 0, 0, 0, 0,0, 0, 0, 0],[ 571, 33, 25, 3, 2, 3, 58, 290, 225, 59, 36, 136, 962, 269, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
+
+        tokenizer.enable_truncation(8, stride=0, strategy="longest_first", direction="right")
+        self.assertEqual(
+            tokenizer.truncation, {"max_length": 8, "stride": 0, "strategy": "longest_first", "direction": "right"}
+        )
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.truncation_side, "right")
+            self.assertEqual(tok.init_kwargs["truncation_strategy"], "longest_first")
+            self.assertEqual(tok.init_kwargs["max_length"], 8)
+            self.assertEqual(tok.init_kwargs["stride"], 0)
+            # NOTE even if the model has a default max_length, it is not used...
+            # thus tok(sentences, truncation = True) does nothing and does not warn either
+            self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
+
+    def test_class_after_save_and_reload(self):
+        # Model contains a `LlamaTokenizerFast` tokenizer with no slow fallback
+        model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            # Fast tokenizer will ignore `use_fast=False`
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            # Save tokenizer
+            tokenizer.save_pretrained(temp_dir)
+
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
+            # Verify post save and reload the fast tokenizer class did not change
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
+            # Verify post save and reload the fast tokenizer class did not change
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
+            )
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
         json_tokenizer = json.loads(tokenizer._tokenizer.to_str())
         json_tokenizer["model"]["vocab"]["huggingface"] = len(tokenizer)
 

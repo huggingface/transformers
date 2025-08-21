@@ -1,0 +1,121 @@
+name: model jobs
+
+on:
+  workflow_call:
+    inputs:
+      folder_slices:
+        required: true
+        type: string
+      slice_id:
+        required: true
+        type: number
+      runner:
+        required: true
+        type: string
+      machine_type:
+        required: true
+        type: string
+      report_name_prefix:
+        required: false
+        default: run_models_gpu
+        type: string
+
+env:
+  RUN_SLOW: yes
+  PT_HPU_LAZY_MODE: 0
+  TRANSFORMERS_IS_CI: yes
+  PT_ENABLE_INT64_SUPPORT: 1
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  HF_HOME: /mnt/cache/.cache/huggingface
+
+jobs:
+  run_models_gpu:
+    name: " "
+    strategy:
+      max-parallel: 8
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
+    runs-on:
+      group: ${{ inputs.runner }}
+    container:
+      image: vault.habana.ai/gaudi-docker/1.21.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+      options: --runtime=habana
+        -v /mnt/cache/.cache/huggingface:/mnt/cache/.cache/huggingface
+        --env OMPI_MCA_btl_vader_single_copy_mechanism=none
+        --env HABANA_VISIBLE_DEVICES
+        --env HABANA_VISIBLE_MODULES
+        --cap-add=sys_nice
+        --shm-size=64G
+    steps:
+      - name: Echo input and matrix info
+        shell: bash
+        run: |
+          echo "${{ inputs.folder_slices }}"
+          echo "${{ matrix.folders }}"
+          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        shell: bash
+        run: |
+          if [ "${{ inputs.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gpu
+          elif [ "${{ inputs.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ inputs.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run all tests on Gaudi
+        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/failures_short.txt
+
+      - name: Run test
+        shell: bash
+        run: |
+          mkdir -p reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports"
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          path: reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports

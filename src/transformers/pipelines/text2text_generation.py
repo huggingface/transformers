@@ -1,17 +1,20 @@
 import enum
+import warnings
+from typing import Any, Union
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -21,17 +24,41 @@ class ReturnType(enum.Enum):
     TEXT = 1
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="mrm8488/t5-base-finetuned-question-generation-ap")
+    >>> generator(
+    ...     "answer: Manuel context: Manuel has created RuPERTa-base with the support of HF-Transformers and Google"
+    ... )
+    [{'generated_text': 'question: Who created the RuPERTa-base?'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"text2text-generation"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation).
+    [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation). For a list of available
+    parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
     Usage:
 
@@ -40,6 +67,17 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
 
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+    # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=4,
+    )
+
     # Used in the return key of the pipeline.
     return_name = "generated"
 
@@ -47,9 +85,9 @@ class Text2TextGenerationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         self.check_model_type(
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
         )
 
     def _sanitize_parameters(
@@ -59,7 +97,8 @@ class Text2TextGenerationPipeline(Pipeline):
         return_type=None,
         clean_up_tokenization_spaces=None,
         truncation=None,
-        **generate_kwargs
+        stop_sequence=None,
+        **generate_kwargs,
     ):
         preprocess_params = {}
         if truncation is not None:
@@ -76,6 +115,21 @@ class Text2TextGenerationPipeline(Pipeline):
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
 
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                warnings.warn(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, postprocess_params
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
@@ -85,7 +139,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return True
 
     def _parse_and_tokenize(self, *args, truncation):
-        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+        prefix = self.prefix if self.prefix is not None else ""
         if isinstance(args[0], list):
             if self.tokenizer.pad_token_id is None:
                 raise ValueError("Please make sure that the tokenizer has a pad_token_id when using a batch input")
@@ -96,7 +150,7 @@ class Text2TextGenerationPipeline(Pipeline):
             args = (prefix + args[0],)
             padding = False
         else:
-            raise ValueError(
+            raise TypeError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
         inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
@@ -105,12 +159,12 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> list[dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Input text for the encoder.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -124,7 +178,7 @@ class Text2TextGenerationPipeline(Pipeline):
                 max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -153,9 +207,16 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
-        generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
-        generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
-        self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        self.check_inputs(
+            input_length,
+            generate_kwargs.get("min_length", self.generation_config.min_length),
+            generate_kwargs.get("max_length", self.generation_config.max_length),
+        )
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
@@ -181,7 +242,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return records
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class SummarizationPipeline(Text2TextGenerationPipeline):
     """
     Summarize news articles and other documents.
@@ -190,8 +251,15 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     `"summarization"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
-    currently, '*bart-large-cnn*', '*t5-small*', '*t5-base*', '*t5-large*', '*t5-3b*', '*t5-11b*'. See the up-to-date
-    list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization).
+    currently, '*bart-large-cnn*', '*google-t5/t5-small*', '*google-t5/t5-base*', '*google-t5/t5-large*', '*google-t5/t5-3b*', '*google-t5/t5-11b*'. See the up-to-date
+    list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization). For a list
+    of available parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 
@@ -201,7 +269,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
 
     # use t5 in tf
-    summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
+    summarizer = pipeline("summarization", model="google-t5/t5-base", tokenizer="google-t5/t5-base", framework="tf")
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     ```"""
 
@@ -213,7 +281,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Summarize the text(s) given as inputs.
 
         Args:
-            documents (*str* or `List[str]`):
+            documents (*str* or `list[str]`):
                 One or several articles (or one list of articles) to summarize.
             return_text (`bool`, *optional*, defaults to `True`):
                 Whether or not to include the decoded texts in the outputs
@@ -223,7 +291,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:
@@ -243,12 +311,13 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
         if input_length < max_length:
             logger.warning(
-                f"Your max_length is set to {max_length}, but you input_length is only {input_length}. You might "
-                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
+                f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
+                "a summarization task, where outputs shorter than the input are typically wanted, you might "
+                f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length // 2})"
             )
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TranslationPipeline(Text2TextGenerationPipeline):
     """
     Translates from one language to another.
@@ -258,6 +327,13 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
+    For a list of available parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 
@@ -306,7 +382,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         Translate the text(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
+            args (`str` or `list[str]`):
                 Texts to be translated.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to include the tensors of predictions (as token indices) in the outputs.
@@ -322,7 +398,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
                 for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./text_generation)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following keys:

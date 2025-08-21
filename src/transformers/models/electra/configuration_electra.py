@@ -13,10 +13,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ELECTRA model configuration"""
+"""ELECTRA model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -24,15 +24,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/config.json",
-    "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/config.json",
-    "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/config.json",
-    "google/electra-small-discriminator": "https://huggingface.co/google/electra-small-discriminator/resolve/main/config.json",
-    "google/electra-base-discriminator": "https://huggingface.co/google/electra-base-discriminator/resolve/main/config.json",
-    "google/electra-large-discriminator": "https://huggingface.co/google/electra-large-discriminator/resolve/main/config.json",
-}
 
 
 class ElectraConfig(PretrainedConfig):
@@ -101,9 +92,9 @@ class ElectraConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -113,17 +104,18 @@ class ElectraConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ElectraModel, ElectraConfig
+    >>> from transformers import ElectraConfig, ElectraModel
 
     >>> # Initializing a ELECTRA electra-base-uncased style configuration
     >>> configuration = ElectraConfig()
 
-    >>> # Initializing a model from the electra-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the electra-base-uncased style configuration
     >>> model = ElectraModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "electra"
 
     def __init__(
@@ -149,7 +141,7 @@ class ElectraConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -190,3 +182,6 @@ class ElectraOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["ElectraConfig", "ElectraOnnxConfig"]

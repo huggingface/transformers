@@ -16,8 +16,8 @@
 import argparse
 
 import torch
-
 from clip import load
+
 from transformers import CLIPConfig, CLIPModel
 
 
@@ -82,7 +82,7 @@ def copy_encoder(hf_encoder, pt_model):
 
 def copy_text_model_and_projection(hf_model, pt_model):
     # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
+    hf_model.text_projection.weight.data = pt_model.text_projection.data.T.contiguous()
 
     # copy text encoder
     copy_encoder(hf_model.text_model, pt_model)
@@ -90,7 +90,7 @@ def copy_text_model_and_projection(hf_model, pt_model):
 
 def copy_vison_model_and_projection(hf_model, pt_model):
     # copy projection
-    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
+    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T.contiguous()
 
     # copy layer norms
     copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
@@ -124,12 +124,20 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     copy_vison_model_and_projection(hf_model, pt_model)
     hf_model.logit_scale = pt_model.logit_scale
 
-    input_ids = torch.arange(0, 77).unsqueeze(0)
+    # Use `eos_token` so the example is more meaningful
+    input_ids = torch.tensor(
+        [
+            [config.text_config.bos_token_id]
+            + list(range(3, 77))
+            + [config.text_config.eos_token_id]
+            + [config.text_config.pad_token_id]
+        ]
+    )
     pixel_values = torch.randn(1, 3, 224, 224)
 
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
+    hf_outputs = hf_model(input_ids=input_ids, pixel_values=pixel_values, return_dict=True)
+    hf_logits_per_image = hf_outputs.logits_per_image
+    hf_logits_per_text = hf_outputs.logits_per_text
     pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
 
     assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
@@ -141,7 +149,7 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to OpenAI checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 

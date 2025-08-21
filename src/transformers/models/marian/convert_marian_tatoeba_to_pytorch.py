@@ -18,11 +18,10 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Tuple
-
-from tqdm import tqdm
 
 import yaml
+from tqdm import tqdm
+
 from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
     convert,
@@ -34,7 +33,6 @@ from transformers.models.marian.convert_marian_to_pytorch import (
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
-LANG_CODE_URL = "https://datahub.io/core/language-codes/r/language-codes-3b2.csv"
 ISO_URL = "https://cdn-datasets.huggingface.co/language_codes/iso-639-3.csv"
 ISO_PATH = "lang_code_data/iso-639-3.csv"
 LANG_CODE_PATH = "lang_code_data/language-codes-3b2.csv"
@@ -108,7 +106,7 @@ class TatoebaConverter:
             print(f"Three letter monolingual code: {code}")
             return [code]
 
-    def resolve_lang_code(self, src, tgt) -> Tuple[str, str]:
+    def resolve_lang_code(self, src, tgt) -> tuple[str, str]:
         src_tags = self.get_tags(src, self.tag2name[src])
         tgt_tags = self.get_tags(tgt, self.tag2name[tgt])
         return src_tags, tgt_tags
@@ -229,7 +227,7 @@ class TatoebaConverter:
         # combine with Tatoeba markdown
         readme_url = f"{TATOEBA_MODELS_URL}/{model_dict['_name']}/README.md"
         extra_markdown = f"""
-### {model_dict['_name']}
+### {model_dict["_name"]}
 
 * source language name: {self.tag2name[a3_src]}
 * target language name: {self.tag2name[a3_tgt]}
@@ -238,12 +236,12 @@ class TatoebaConverter:
 
         content = (
             f"""
-* model: {model_dict['modeltype']}
-* source language code{src_multilingual*'s'}: {', '.join(a2_src_tags)}
-* target language code{tgt_multilingual*'s'}: {', '.join(a2_tgt_tags)}
+* model: {model_dict["modeltype"]}
+* source language code{src_multilingual * "s"}: {", ".join(a2_src_tags)}
+* target language code{tgt_multilingual * "s"}: {", ".join(a2_tgt_tags)}
 * dataset: opus {backtranslated_data}
-* release date: {model_dict['release-date']}
-* pre-processing: {model_dict['pre-processing']}
+* release date: {model_dict["release-date"]}
+* pre-processing: {model_dict["pre-processing"]}
 """
             + multilingual_data
             + tuned
@@ -277,13 +275,17 @@ class TatoebaConverter:
             json.dump(metadata, writeobj)
 
     def download_lang_info(self):
+        global LANG_CODE_PATH
         Path(LANG_CODE_PATH).parent.mkdir(exist_ok=True)
         import wget
+        from huggingface_hub import hf_hub_download
 
         if not os.path.exists(ISO_PATH):
             wget.download(ISO_URL, ISO_PATH)
         if not os.path.exists(LANG_CODE_PATH):
-            wget.download(LANG_CODE_URL, LANG_CODE_PATH)
+            LANG_CODE_PATH = hf_hub_download(
+                repo_id="huggingface/language_codes_marianMT", filename="language-codes-3b2.csv", repo_type="dataset"
+            )
 
     def parse_metadata(self, model_name, repo_path=DEFAULT_MODEL_DIR, method="best"):
         p = Path(repo_path) / model_name

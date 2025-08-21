@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Microsoft Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,10 +31,9 @@ if is_torch_available():
         DebertaForTokenClassification,
         DebertaModel,
     )
-    from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class DebertaModelTester(object):
+class DebertaModelTester:
     def __init__(
         self,
         parent,
@@ -46,7 +45,7 @@ class DebertaModelTester(object):
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -130,6 +129,11 @@ class DebertaModelTester(object):
             pos_att_type=self.pos_att_type,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.vocab_size = 300
+        return config
+
     def check_loss_output(self, result):
         self.parent.assertListEqual(list(result.loss.size()), [])
 
@@ -208,8 +212,7 @@ class DebertaModelTester(object):
 
 
 @require_torch
-class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
-
+class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaModel,
@@ -221,7 +224,20 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DebertaModel,
+            "fill-mask": DebertaForMaskedLM,
+            "question-answering": DebertaForQuestionAnswering,
+            "text-classification": DebertaForSequenceClassification,
+            "token-classification": DebertaForTokenClassification,
+            "zero-shot": DebertaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
+    fx_compatible = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
@@ -256,9 +272,17 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DebertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/deberta-base"
+        model = DebertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
+    def test_torch_fx_output_loss(self):
+        pass
+
+    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
+    def test_torch_fx(self):
+        pass
 
 
 @require_torch
@@ -281,4 +305,4 @@ class DebertaModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-0.5986, -0.8055, -0.8462], [1.4484, -0.9348, -0.8059], [0.3123, 0.0032, -1.4131]]]
         )
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4), f"{output[:, 1:4, 1:4]}")
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)

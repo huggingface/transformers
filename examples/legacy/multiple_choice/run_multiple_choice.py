@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -13,15 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for multiple choice (Bert, Roberta, XLNet)."""
-
+"""Finetuning the library models for multiple choice (Bert, Roberta, XLNet)."""
 
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Optional
 
 import numpy as np
+from utils_multiple_choice import MultipleChoiceDataset, Split, processors
 
 import transformers
 from transformers import (
@@ -36,7 +35,6 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_multiple_choice import MultipleChoiceDataset, Split, processors
 
 
 logger = logging.getLogger(__name__)
@@ -78,8 +76,10 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -102,7 +102,8 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use"
+            " --overwrite_output_dir to overcome."
         )
 
     # Setup logging
@@ -185,7 +186,7 @@ def main():
         else None
     )
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
+    def compute_metrics(p: EvalPrediction) -> dict:
         preds = np.argmax(p.predictions, axis=1)
         return {"acc": simple_accuracy(preds, p.label_ids)}
 
@@ -226,7 +227,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
                 results.update(result)
 

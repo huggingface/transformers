@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert T5 checkpoint."""
 
-
 import argparse
 
 from transformers import T5Config, T5ForConditionalGeneration, load_tf_weights_in_t5
@@ -49,8 +48,9 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="The config json file corresponding to the pre-trained T5 model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "The config json file corresponding to the pre-trained T5 model. \nThis specifies the model architecture."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

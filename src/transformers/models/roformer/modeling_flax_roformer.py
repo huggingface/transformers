@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax RoFormer model."""
+"""Flax RoFormer model."""
 
-from typing import Callable, Optional, Tuple
-
-import numpy as np
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -43,17 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
-_TOKENIZER_FOR_DOC = "RoFormerTokenizer"
-
-FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_small",
-    "junnyu/roformer_chinese_base",
-    "junnyu/roformer_chinese_char_small",
-    "junnyu/roformer_chinese_char_base",
-    "junnyu/roformer_small_discriminator",
-    "junnyu/roformer_small_generator"
-    # See all RoFormer models at https://huggingface.co/models?filter=roformer
-]
 
 
 ROFORMER_START_DOCSTRING = r"""
@@ -61,9 +49,10 @@ ROFORMER_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -95,7 +84,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RoFormerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -180,8 +169,8 @@ class FlaxRoFormerSelfAttention(nn.Module):
     def setup(self) -> None:
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
-                    : {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads` "
+                "                   : {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -240,7 +229,7 @@ class FlaxRoFormerSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -273,7 +262,7 @@ class FlaxRoFormerSelfAttention(nn.Module):
 
     @staticmethod
     def apply_rotary_position_embeddings(sinusoidal_pos, query_layer, key_layer, value_layer=None):
-        sin, cos = sinusoidal_pos.split(2, axis=-1)
+        sin, cos = jnp.split(sinusoidal_pos, 2, axis=-1)
         sin_pos = jnp.stack([sin, sin], axis=-1).reshape(sinusoidal_pos.shape)
         cos_pos = jnp.stack([cos, cos], axis=-1).reshape(sinusoidal_pos.shape)
 
@@ -456,8 +445,8 @@ class FlaxRoFormerLayerCollection(nn.Module):
         if head_mask is not None:
             if head_mask.shape[0] != (len(self.layers)):
                 raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for \
-                        {head_mask.shape[0]}."
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for                  "
+                    f"       {head_mask.shape[0]}."
                 )
 
         for i, layer in enumerate(self.layers):
@@ -619,16 +608,16 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: RoFormerConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)
@@ -659,7 +648,7 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         head_mask=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -750,9 +739,7 @@ class FlaxRoFormerModel(FlaxRoFormerPreTrainedModel):
     module_class = FlaxRoFormerModule
 
 
-append_call_sample_docstring(
-    FlaxRoFormerModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxRoFormerForMaskedLMModule(nn.Module):
@@ -812,7 +799,6 @@ class FlaxRoFormerForMaskedLM(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForMaskedLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMaskedLMOutput,
     _CONFIG_FOR_DOC,
@@ -877,7 +863,6 @@ class FlaxRoFormerForSequenceClassification(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -956,7 +941,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxRoFormerForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1022,7 +1006,6 @@ class FlaxRoFormerForTokenClassification(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1063,7 +1046,7 @@ class FlaxRoFormerForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -1091,8 +1074,18 @@ class FlaxRoFormerForQuestionAnswering(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxRoFormerForMaskedLM",
+    "FlaxRoFormerForMultipleChoice",
+    "FlaxRoFormerForQuestionAnswering",
+    "FlaxRoFormerForSequenceClassification",
+    "FlaxRoFormerForTokenClassification",
+    "FlaxRoFormerModel",
+    "FlaxRoFormerPreTrainedModel",
+]

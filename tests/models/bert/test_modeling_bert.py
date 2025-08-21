@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,17 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import tempfile
 import unittest
 
-from transformers import BertConfig, is_torch_available
-from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+import pytest
+from packaging import version
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers.cache_utils import EncoderDecoderCache
+from transformers.models.auto import get_values
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_torch,
+    slow,
+    torch_device,
+)
+
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -39,8 +46,8 @@ if is_torch_available():
         BertForTokenClassification,
         BertLMHeadModel,
         BertModel,
+        logging,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
@@ -55,7 +62,7 @@ class BertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -426,8 +433,7 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BertModel,
@@ -443,8 +449,21 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BertModel,
+            "fill-mask": BertForMaskedLM,
+            "question-answering": BertForQuestionAnswering,
+            "text-classification": BertForSequenceClassification,
+            "text-generation": BertLMHeadModel,
+            "token-classification": BertForTokenClassification,
+            "zero-shot": BertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -477,12 +496,19 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_3d_mask_shapes(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        # manipulate input_mask
+        config_and_inputs = list(config_and_inputs)
+        batch_size, seq_length = config_and_inputs[3].shape
+        config_and_inputs[3] = random_attention_mask([batch_size, seq_length, seq_length])
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -496,6 +522,36 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         ) = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None
+
+        self.model_tester.create_and_check_model_as_decoder(
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
+
+    def test_model_as_decoder_with_3d_input_mask(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+
+        batch_size, seq_length = input_mask.shape
+        input_mask = random_attention_mask([batch_size, seq_length, seq_length])
+        batch_size, seq_length = encoder_attention_mask.shape
+        encoder_attention_mask = random_attention_mask([batch_size, seq_length, seq_length])
 
         self.model_tester.create_and_check_model_as_decoder(
             config,
@@ -525,6 +581,11 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs[0].position_embedding_type = "relative_key"
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
@@ -549,41 +610,44 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_for_warning_if_padding_and_no_attention_mask(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        # Set pad tokens in the input_ids
+        input_ids[0, 0] = config.pad_token_id
+
+        # Check for warnings if the attention_mask is missing.
+        logger = logging.get_logger("transformers.modeling_utils")
+        # clear cache so we can test the warning is emitted (from `warning_once`).
+        logger.warning_once.cache_clear()
+
+        with CaptureLogger(logger) as cl:
+            model = BertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
+        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-    @slow
-    @require_torch_gpu
-    def test_torchscript_device_change(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-
-            # BertForMultipleChoice behaves incorrectly in JIT environments.
-            if model_class == BertForMultipleChoice:
-                return
-
-            config.torchscript = True
-            model = model_class(config=config)
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            traced_model = torch.jit.trace(
-                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
-            )
-
-            with tempfile.TemporaryDirectory() as tmp:
-                torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
-                loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
-                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+        model_name = "google-bert/bert-base-uncased"
+        model = BertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertModel.from_pretrained("bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -592,7 +656,7 @@ class BertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
@@ -607,7 +671,7 @@ class BertModelIntegrationTest(unittest.TestCase):
             [[[0.0756, 0.3142, -0.5128], [0.3761, 0.3462, -0.5477], [0.2052, 0.3760, -0.1240]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
@@ -622,4 +686,80 @@ class BertModelIntegrationTest(unittest.TestCase):
             [[[0.6496, 0.3784, 0.8203], [0.8148, 0.5656, 0.2636], [-0.0681, 0.5597, 0.7045]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+    def test_sdpa_ignored_mask(self):
+        pkv = []
+
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="eager")
+        model_sdpa = BertModel.from_pretrained("hf-internal-testing/tiny-random-BertModel", attn_implementation="sdpa")
+
+        model = model.eval()
+        model_sdpa = model_sdpa.eval()
+
+        for _ in range(model.config.num_hidden_layers):
+            num_heads = model.config.num_attention_heads
+            head_dim = model.config.hidden_size // model.config.num_attention_heads
+            pkv.append([torch.rand(1, num_heads, 3, head_dim), torch.rand(1, num_heads, 3, head_dim)])
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        inp = tokenizer("I am in Paris and", return_tensors="pt")
+
+        del inp["attention_mask"]
+
+        with torch.no_grad():
+            res_eager = model(**inp)
+            res_sdpa = model_sdpa(**inp)
+            self.assertTrue(
+                torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
+            )
+
+            # Case where query length != kv_length. Note that model needs to be a decoder so we can use cache
+            model.config.is_decoder = True
+            model_sdpa.config.is_decoder = True
+            res_eager = model(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
+            res_sdpa = model_sdpa(**inp, past_key_values=EncoderDecoderCache.from_legacy_cache(pkv), use_cache=True)
+            self.assertTrue(
+                torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
+            )
+
+    @slow
+    @pytest.mark.torch_export_test
+    def test_export(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        bert_model = "google-bert/bert-base-uncased"
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 512
+
+        tokenizer = AutoTokenizer.from_pretrained(bert_model)
+        inputs = tokenizer(
+            "the man worked as a [MASK].",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = BertForMaskedLM.from_pretrained(
+            bert_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+            use_cache=True,
+        )
+
+        logits = model(**inputs).logits
+        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "barber", "mechanic", "salesman"])
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,13 +21,7 @@ The cross-attention will be randomly initialized.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from transformers import (
-    AutoConfig,
-    AutoFeatureExtractor,
-    AutoTokenizer,
-    FlaxVisionEncoderDecoderModel,
-    HfArgumentParser,
-)
+from transformers import AutoConfig, AutoImageProcessor, AutoTokenizer, FlaxVisionEncoderDecoderModel, HfArgumentParser
 
 
 @dataclass
@@ -42,14 +35,18 @@ class ModelArguments:
     )
     encoder_model_name_or_path: str = field(
         metadata={
-            "help": "The encoder model checkpoint for weights initialization."
-            "Don't set if you want to train an encoder model from scratch."
+            "help": (
+                "The encoder model checkpoint for weights initialization. "
+                "Don't set if you want to train an encoder model from scratch."
+            )
         },
     )
     decoder_model_name_or_path: str = field(
         metadata={
-            "help": "The decoder model checkpoint for weights initialization."
-            "Don't set if you want to train a decoder model from scratch."
+            "help": (
+                "The decoder model checkpoint for weights initialization. "
+                "Don't set if you want to train a decoder model from scratch."
+            )
         },
     )
     encoder_config_name: Optional[str] = field(
@@ -104,13 +101,13 @@ def main():
     model.config.decoder_start_token_id = decoder_start_token_id
     model.config.pad_token_id = pad_token_id
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.encoder_model_name_or_path)
+    image_processor = AutoImageProcessor.from_pretrained(model_args.encoder_model_name_or_path)
 
     tokenizer = AutoTokenizer.from_pretrained(model_args.decoder_model_name_or_path)
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 
     model.save_pretrained(model_args.output_dir)
-    feature_extractor.save_pretrained(model_args.output_dir)
+    image_processor.save_pretrained(model_args.output_dir)
     tokenizer.save_pretrained(model_args.output_dir)
 
 

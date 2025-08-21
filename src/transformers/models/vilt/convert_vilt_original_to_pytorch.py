@@ -14,24 +14,23 @@
 # limitations under the License.
 """Convert ViLT checkpoints from the original Github repository."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     BertTokenizer,
     ViltConfig,
-    ViltFeatureExtractor,
     ViltForImageAndTextRetrieval,
     ViltForImagesAndTextClassification,
     ViltForMaskedLM,
     ViltForQuestionAnswering,
+    ViltImageProcessor,
     ViltProcessor,
 )
 from transformers.utils import logging
@@ -180,9 +179,9 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if "vqa" in checkpoint_url:
         vqa_model = True
         config.num_labels = 3129
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "vqa2-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -223,15 +222,18 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model.load_state_dict(state_dict)
 
     # Define processor
-    feature_extractor = ViltFeatureExtractor(size=384)
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    processor = ViltProcessor(feature_extractor, tokenizer)
+    image_processor = ViltImageProcessor(size=384)
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    processor = ViltProcessor(image_processor, tokenizer)
 
     # Forward pass on example inputs (image + text)
     if nlvr_model:
         image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        text = "The left image contains twice the number of dogs as the right image, and at least two dogs in total are standing."
+        text = (
+            "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
+            " standing."
+        )
         encoding_1 = processor(image1, text, return_tensors="pt")
         encoding_2 = processor(image2, text, return_tensors="pt")
         outputs = model(

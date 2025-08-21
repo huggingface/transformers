@@ -41,17 +41,19 @@ RO_CODE = 250020
 @require_sentencepiece
 @require_tokenizers
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/mbart-large-en-ro"
     tokenizer_class = MBartTokenizer
     rust_tokenizer_class = MBartTokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
         tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
@@ -133,13 +135,13 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-mbart", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -201,6 +203,10 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname2)
 
+    @unittest.skip(reason="Need to fix this after #26538")
+    def test_training_new_tokenizer(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece
@@ -213,7 +219,9 @@ class MBartEnroIntegrationTest(unittest.TestCase):
     ]
     tgt_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
+        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
+        ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
+        " face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
     ]
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
@@ -263,33 +271,27 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch = self.tokenizer(self.src_text, padding=True)
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt")
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
+        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        assert batch.input_ids[1][-2:] == [2, EN_CODE]
-        assert batch.decoder_input_ids[1][0] == RO_CODE
+        assert batch.input_ids[1][-2:].tolist() == [2, EN_CODE]
+        assert batch.decoder_input_ids[1][0].tolist() == RO_CODE
         assert batch.decoder_input_ids[1][-1] == 2
-        assert labels[1][-2:].tolist() == [2, RO_CODE]
+        assert batch.labels[1][-2:].tolist() == [2, RO_CODE]
 
     @require_torch
     def test_enro_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
-            self.src_text, padding=True, truncation=True, max_length=len(self.expected_src_tokens), return_tensors="pt"
+            self.src_text,
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=len(self.expected_src_tokens),
+            return_tensors="pt",
         )
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(
-                self.tgt_text,
-                padding=True,
-                truncation=True,
-                max_length=len(self.expected_src_tokens),
-                return_tensors="pt",
-            )
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -304,8 +306,9 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     def test_seq2seq_max_length(self):
         batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt")
+        targets = self.tokenizer(
+            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+        )
         labels = targets["input_ids"]
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
 

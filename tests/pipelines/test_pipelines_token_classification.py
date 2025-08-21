@@ -27,31 +27,63 @@ from transformers import (
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
+    torch_device,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
 
 @is_pipeline_test
-class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
+    if not hasattr(model_mapping, "is_dummy"):
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if not hasattr(tf_model_mapping, "is_dummy"):
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        token_classifier = TokenClassificationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
     def run_pipeline_test(self, token_classifier, _):
         model = token_classifier.model
         tokenizer = token_classifier.tokenizer
+        if not tokenizer.is_fast:
+            return  # Slow tokenizers do not return offsets mappings, so this test will fail
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)
@@ -194,6 +226,177 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             )
         self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
 
+    @slow
+    @require_torch
+    def test_chunking(self):
+        NER_MODEL = "elastic/distilbert-base-uncased-finetuned-conll03-english"
+        model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
+        tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
+        tokenizer.model_max_length = 10
+        stride = 5
+        sentence = (
+            "Hugging Face, Inc. is a French company that develops tools for building applications using machine learning. "
+            "The company, based in New York City was founded in 2016 by French entrepreneurs Clément Delangue, Julien Chaumond, and Thomas Wolf."
+        )
+
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="simple", stride=stride
+        )
+        output = token_classifier(sentence)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
+            ],
+        )
+
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="first", stride=stride
+        )
+        output = token_classifier(sentence)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
+            ],
+        )
+
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="max", stride=stride
+        )
+        output = token_classifier(sentence)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
+            ],
+        )
+
+        token_classifier = TokenClassificationPipeline(
+            model=model, tokenizer=tokenizer, aggregation_strategy="average", stride=stride
+        )
+        output = token_classifier(sentence)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"entity_group": "ORG", "score": 0.978, "word": "hugging face, inc.", "start": 0, "end": 18},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 24, "end": 30},
+                {"entity_group": "LOC", "score": 0.997, "word": "new york city", "start": 131, "end": 144},
+                {"entity_group": "MISC", "score": 0.999, "word": "french", "start": 168, "end": 174},
+                {"entity_group": "PER", "score": 0.999, "word": "clement delangue", "start": 189, "end": 205},
+                {"entity_group": "PER", "score": 0.999, "word": "julien chaumond", "start": 207, "end": 222},
+                {"entity_group": "PER", "score": 0.999, "word": "thomas wolf", "start": 228, "end": 239},
+            ],
+        )
+
+    @require_torch
+    @slow
+    def test_is_split_into_words(self):
+        """
+        Tests the pipeline with pre-tokenized inputs (is_split_into_words=True)
+        and validates that the character offsets are correct.
+        """
+        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
+
+        # Input is a list of words
+        words = ["Hello", "Sarah", "lives", "in", "New", "York"]
+
+        # The reconstructed sentence will be "Hello Sarah lives in New York"
+        # - "Sarah": starts at index 6, ends at 11
+        # - "New York": starts at index 21, ends at 29
+
+        output = token_classifier(words, is_split_into_words=True)
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                ]
+            ],
+        )
+
+        # Also test batching with pre-tokenized inputs
+        words2 = ["My", "name", "is", "Wolfgang", "and", "I", "live", "in", "Berlin"]
+        batch_output = token_classifier([words, words2], is_split_into_words=True)
+
+        # Expected for second sentence ("My name is Wolfgang and I live in Berlin")
+        # - "Wolfgang": starts at 12, ends at 20
+        # - "Berlin": starts at 36, ends at 42
+
+        self.assertEqual(
+            nested_simplify(batch_output),
+            [
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                ],
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Wolfgang", "start": 11, "end": 19},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "Berlin", "start": 34, "end": 40},
+                ],
+            ],
+        )
+
+    @require_torch
+    def test_chunking_fast(self):
+        # Note: We cannot run the test on "conflicts" on the chunking.
+        # The problem is that the model is random, and thus the results do heavily
+        # depend on the chunking, so we cannot expect "abcd" and "bcd" to find
+        # the same entities. We defer to slow tests for this.
+        pipe = pipeline(model="hf-internal-testing/tiny-bert-for-token-classification")
+        sentence = "The company, based in New York City was founded in 2016 by French entrepreneurs"
+
+        results = pipe(sentence, aggregation_strategy="first")
+        # This is what this random model gives on the full sentence
+        self.assertEqual(
+            nested_simplify(results),
+            [
+                # This is 2 actual tokens
+                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+            ],
+        )
+
+        # This will force the tokenizer to split after "city was".
+        pipe.tokenizer.model_max_length = 12
+        self.assertEqual(
+            pipe.tokenizer.decode(pipe.tokenizer.encode(sentence, truncation=True)),
+            "[CLS] the company, based in new york city was [SEP]",
+        )
+
+        stride = 4
+        results = pipe(sentence, aggregation_strategy="first", stride=stride)
+        self.assertEqual(
+            nested_simplify(results),
+            [
+                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                # This is an extra entity found by this random model, but at least both original
+                # entities are there
+                {"end": 58, "entity_group": "MISC", "score": 0.115, "start": 56, "word": "by"},
+                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+            ],
+        )
+
     @require_torch
     @slow
     def test_spanish_bert(self):
@@ -258,13 +461,13 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             ],
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_gpu(self):
+    def test_accelerator(self):
         sentence = "This is dummy sentence"
         ner = pipeline(
             "token-classification",
-            device=0,
+            device=torch_device,
             aggregation_strategy=AggregationStrategy.SIMPLE,
         )
 
@@ -278,15 +481,15 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         NER_MODEL = "dbmdz/bert-large-cased-finetuned-conll03-english"
         model = AutoModelForTokenClassification.from_pretrained(NER_MODEL)
         tokenizer = AutoTokenizer.from_pretrained(NER_MODEL, use_fast=True)
-        sentence = """Enzo works at the the UN"""
+        sentence = """Enzo works at the UN"""
         token_classifier = pipeline("ner", model=model, tokenizer=tokenizer)
         output = token_classifier(sentence)
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity": "I-PER", "score": 0.997, "word": "En", "start": 0, "end": 2, "index": 1},
-                {"entity": "I-PER", "score": 0.996, "word": "##zo", "start": 2, "end": 4, "index": 2},
-                {"entity": "I-ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24, "index": 7},
+                {"entity": "I-PER", "score": 0.998, "word": "En", "start": 0, "end": 2, "index": 1},
+                {"entity": "I-PER", "score": 0.997, "word": "##zo", "start": 2, "end": 4, "index": 2},
+                {"entity": "I-ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20, "index": 6},
             ],
         )
 
@@ -295,8 +498,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -305,8 +508,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output[:3]),
             [
-                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.998, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -315,8 +518,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output[:3]),
             [
-                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.998, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -325,8 +528,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -334,7 +537,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @slow
     def test_aggregation_strategy_byte_level_tokenizer(self):
         sentence = "Groenlinks praat over Schiphol."
-        ner = pipeline("ner", model="xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
+        ner = pipeline("ner", model="FacebookAI/xlm-roberta-large-finetuned-conll02-dutch", aggregation_strategy="max")
         self.assertEqual(
             nested_simplify(ner(sentence)),
             [
@@ -352,8 +555,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -361,8 +563,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -370,9 +571,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,
@@ -408,8 +607,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -417,8 +615,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -426,9 +623,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0, ]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,
@@ -536,6 +731,20 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
+    @slow
+    def test_aggregation_strategy_offsets_with_leading_space(self):
+        sentence = "We're from New York"
+        model_name = "brandon25/deberta-base-finetuned-ner"
+        ner = pipeline("ner", model=model_name, ignore_labels=[], aggregation_strategy="max")
+        self.assertEqual(
+            nested_simplify(ner(sentence)),
+            [
+                {"entity_group": "O", "score": 1.0, "word": " We're from", "start": 0, "end": 10},
+                {"entity_group": "LOC", "score": 1.0, "word": " New York", "start": 10, "end": 19},
+            ],
+        )
+
+    @require_torch
     def test_gather_pre_entities(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
@@ -580,24 +789,39 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             ],
         )
 
-    @require_tf
-    def test_tf_only(self):
-        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
-        # We test that if we don't specificy framework='tf', it gets detected automatically
-        token_classifier = pipeline(task="ner", model=model_name)
-        self.assertEqual(token_classifier.framework, "tf")
+    @require_torch
+    def test_word_heuristic_leading_space(self):
+        model_name = "hf-internal-testing/tiny-random-deberta-v2"
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
 
-    @require_tf
-    def test_small_model_tf(self):
-        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
-        outputs = token_classifier("This is a test !")
+        sentence = "I play the theremin"
+
+        tokens = tokenizer(
+            sentence,
+            return_attention_mask=False,
+            return_tensors="pt",
+            return_special_tokens_mask=True,
+            return_offsets_mapping=True,
+        )
+        offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
+        special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
+        input_ids = tokens["input_ids"].numpy()[0]
+        scores = np.array([[1, 0] for _ in input_ids])  # values irrelevant for heuristic
+
+        pre_entities = token_classifier.gather_pre_entities(
+            sentence,
+            input_ids,
+            scores,
+            offset_mapping,
+            special_tokens_mask,
+            aggregation_strategy=AggregationStrategy.FIRST,
+        )
+
+        # ensure expected tokenization and correct is_subword values
         self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
+            [(entity["word"], entity["is_subword"]) for entity in pre_entities],
+            [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
         )
 
     @require_torch
@@ -667,6 +891,36 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
+    def test_small_model_pt_fp16(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.float16
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+        token_classifier = pipeline(
+            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.bfloat16
+        )
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
@@ -721,7 +975,6 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
 
-@is_pipeline_test
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def setUp(self):
         self.args_parser = TokenClassificationArgumentHandler()
@@ -729,19 +982,24 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def test_simple(self):
         string = "This is a simple input"
 
-        inputs, offset_mapping = self.args_parser(string)
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(string)
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser([string, string])
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser([string, string])
         self.assertEqual(inputs, [string, string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(
+            string, offset_mapping=[(0, 1), (1, 2)]
+        )
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
 
-        inputs, offset_mapping = self.args_parser(
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(
             [string, string], offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]]
         )
         self.assertEqual(inputs, [string, string])

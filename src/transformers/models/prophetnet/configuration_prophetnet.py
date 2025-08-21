@@ -12,18 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ProphetNet model configuration"""
+"""ProphetNet model configuration"""
 
+from typing import Callable, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json",
-}
 
 
 class ProphetNetConfig(PretrainedConfig):
@@ -83,10 +80,10 @@ class ProphetNetConfig(PretrainedConfig):
             token.
         num_buckets (`int`, *optional*, defaults to 32)
             The number of buckets to use for each attention layer. This is for relative position calculation. See the
-            [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         relative_max_distance (`int`, *optional*, defaults to 128)
             Relative distances greater than this number will be put into the last same bucket. This is for relative
-            position calculation. See the [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            position calculation. See the [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         disable_ngram_loss (`bool`, *optional*, defaults to `False`):
             Whether be trained predicting only the next first token.
         eps (`float`, *optional*, defaults to 0.0):
@@ -95,6 +92,7 @@ class ProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -103,33 +101,33 @@ class ProphetNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        activation_dropout=0.1,
-        activation_function="gelu",
-        vocab_size=30522,
-        hidden_size=1024,
-        encoder_ffn_dim=4096,
-        num_encoder_layers=12,
-        num_encoder_attention_heads=16,
-        decoder_ffn_dim=4096,
-        num_decoder_layers=12,
-        num_decoder_attention_heads=16,
-        attention_dropout=0.1,
-        dropout=0.1,
-        max_position_embeddings=512,
-        init_std=0.02,
-        is_encoder_decoder=True,
-        add_cross_attention=True,
-        decoder_start_token_id=0,
-        ngram=2,
-        num_buckets=32,
-        relative_max_distance=128,
-        disable_ngram_loss=False,
-        eps=0.0,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        **kwargs
+        activation_dropout: Optional[float] = 0.1,
+        activation_function: Optional[Union[str, Callable]] = "gelu",
+        vocab_size: Optional[int] = 30522,
+        hidden_size: Optional[int] = 1024,
+        encoder_ffn_dim: Optional[int] = 4096,
+        num_encoder_layers: Optional[int] = 12,
+        num_encoder_attention_heads: Optional[int] = 16,
+        decoder_ffn_dim: Optional[int] = 4096,
+        num_decoder_layers: Optional[int] = 12,
+        num_decoder_attention_heads: Optional[int] = 16,
+        attention_dropout: Optional[float] = 0.1,
+        dropout: Optional[float] = 0.1,
+        max_position_embeddings: Optional[int] = 512,
+        init_std: Optional[float] = 0.02,
+        is_encoder_decoder: Optional[bool] = True,
+        add_cross_attention: Optional[bool] = True,
+        decoder_start_token_id: Optional[int] = 0,
+        ngram: Optional[int] = 2,
+        num_buckets: Optional[int] = 32,
+        relative_max_distance: Optional[int] = 128,
+        disable_ngram_loss: Optional[bool] = False,
+        eps: Optional[float] = 0.0,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -169,10 +167,14 @@ class ProphetNetConfig(PretrainedConfig):
 
     @property
     def num_hidden_layers(self) -> int:
-        return self.num_encoder_layers + self.num_decoder_layers
+        return self.num_encoder_layers
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
         raise NotImplementedError(
-            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and `num_decoder_layers`."
+            "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and"
+            " `num_decoder_layers`."
         )
+
+
+__all__ = ["ProphetNetConfig"]

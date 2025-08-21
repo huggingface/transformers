@@ -14,30 +14,27 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"}
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/pegasus-xsum": 512,
-}
-
 
 logger = logging.get_logger(__name__)
 
 
+# TODO ArthurZ refactor this to only use the added_tokens_encoder
+
+
+@requires(backends=("sentencepiece",))
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -68,12 +65,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
             The token used for masking single token values. This is the token used when training this model with masked
             language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
             It corresponds to *[MASK2]* in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
-            Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Summarization](https://huggingface.co/papers/1912.08777).
         mask_token_sent (`str`, *optional*, defaults to `"<mask_1>"`):
             The token used for masking whole target sentences. This is the token used when training this model with gap
             sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
             pretraining. It corresponds to *[MASK1]* in [PEGASUS: Pre-training with Extracted Gap-sentences for
-            Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Abstractive Summarization](https://huggingface.co/papers/1912.08777).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
             <unk_2, ..., unk_102> are used as additional special tokens corresponding to the [original PEGASUS
@@ -95,11 +92,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
     """
-    vocab_files_names = VOCAB_FILES_NAMES
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -112,16 +106,16 @@ class PegasusTokenizer(PreTrainedTokenizer):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
             if not isinstance(additional_special_tokens, list):
                 raise TypeError(
-                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                    f"additional_special_tokens should be of type {type(list)}, but is"
+                    f" {type(additional_special_tokens)}"
                 )
-
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
                 if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
@@ -134,14 +128,36 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
                 raise ValueError(
-                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                    "Please make sure that the provided additional_special_tokens do not contain an incorrectly"
+                    f" shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
+            additional_special_tokens_extended = []
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.mask_token_sent = mask_token_sent
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
+        _added_tokens_decoder = {
+            0: AddedToken(str(pad_token), special=True),
+            1: AddedToken(str(eos_token), special=True),
+        }
+
+        if self.mask_token_sent is not None:
+            _added_tokens_decoder[2] = AddedToken(mask_token_sent, special=True)
+            _added_tokens_decoder[3] = AddedToken(str(mask_token), special=True)
+
+        for i in range(2, self.offset):
+            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(f"<unk_{i}>", special=True)
+
+        # Force update as we want to make sure vocab is enforced (same as fast)
+        self._added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        self._added_tokens_decoder.update(_added_tokens_decoder)
 
         super().__init__(
             eos_token=eos_token,
@@ -154,37 +170,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        self.mask_token_sent = mask_token_sent
-        self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
-        # add special tokens to encoder dict
-        self.encoder: Dict[int, str] = {
-            0: self.pad_token,
-            1: self.eos_token,
-        }
-
-        if self.mask_token_sent is not None:
-            self.encoder.update(
-                {
-                    2: self.mask_token_sent,
-                    3: self.mask_token,
-                }
-            )
-
-        if self.offset > 0:
-            # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
-            # mask_token_sent is already added to list -> so start at 1
-            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
-
-        self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
 
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
@@ -204,33 +195,35 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
-        if token in self.decoder:
-            return self.decoder[token]
-        elif token in self.added_tokens_decoder:
-            return self.added_tokens_decoder[token]
         sp_id = self.sp_model.piece_to_id(token)
         return sp_id + self.offset
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        if index in self.encoder:
-            return self.encoder[index]
-        elif index in self.added_tokens_encoder:
-            return self.added_tokens_encoder[index]
-        else:
-            token = self.sp_model.IdToPiece(index - self.offset)
+        if index < self.offset:
+            return self.sp_model.IdToPiece(index)
+        token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -243,8 +236,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -253,7 +246,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
         and adding special tokens. A PEGASUS sequence has the following format, where `X` represents the sequence:
@@ -278,7 +271,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -294,3 +287,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["PegasusTokenizer"]

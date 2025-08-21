@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -13,17 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003. """
+"""Fine-tuning the library models for named entity recognition on CoNLL-2003."""
+
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
+from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 import transformers
 from transformers import (
@@ -38,7 +39,6 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -87,8 +87,10 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -116,7 +118,8 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use"
+            " --overwrite_output_dir to overcome."
         )
 
     module = import_module("tasks")
@@ -155,7 +158,7 @@ def main():
 
     # Prepare CONLL-2003 task
     labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
+    label_map: dict[int, str] = dict(enumerate(labels))
     num_labels = len(labels)
 
     # Load pretrained model and tokenizer
@@ -213,7 +216,7 @@ def main():
         else None
     )
 
-    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
+    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> tuple[list[int], list[int]]:
         preds = np.argmax(predictions, axis=2)
 
         batch_size, seq_len = preds.shape
@@ -229,7 +232,7 @@ def main():
 
         return preds_list, out_label_list
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
+    def compute_metrics(p: EvalPrediction) -> dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
             "accuracy_score": accuracy_score(out_label_list, preds_list),
@@ -275,7 +278,7 @@ def main():
                 logger.info("***** Eval results *****")
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
             results.update(result)
 
@@ -300,13 +303,13 @@ def main():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    writer.write("{} = {}\n".format(key, value))
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
         if trainer.is_world_process_zero():
             with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
+                with open(os.path.join(data_args.data_dir, "test.txt")) as f:
                     token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
     return results

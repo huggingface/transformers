@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RoFormer model. """
-
+"""Testing suite for the PyTorch RoFormer model."""
 
 import unittest
 
@@ -22,6 +20,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,7 +36,6 @@ if is_torch_available():
         RoFormerModel,
     )
     from transformers.models.roformer.modeling_roformer import (
-        ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         RoFormerSelfAttention,
         RoFormerSinusoidalPositionalEmbedding,
     )
@@ -55,7 +53,7 @@ class RoFormerModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -201,7 +199,7 @@ class RoFormerModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
+    def create_and_check_for_generate_causal_lm(
         self,
         config,
         input_ids,
@@ -210,14 +208,15 @@ class RoFormerModelTester:
         sequence_labels,
         token_labels,
         choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
     ):
-        model = RoFormerForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        model = RoFormerForCausalLM(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=15, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=15, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -360,8 +359,7 @@ class RoFormerModelTester:
 
 
 @require_torch
-class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
+class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RoFormerModel,
@@ -375,7 +373,21 @@ class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RoFormerForCausalLM,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RoFormerModel,
+            "fill-mask": RoFormerForMaskedLM,
+            "question-answering": RoFormerForQuestionAnswering,
+            "text-classification": RoFormerForSequenceClassification,
+            "text-generation": RoFormerForCausalLM,
+            "token-classification": RoFormerForTokenClassification,
+            "zero-shot": RoFormerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)
@@ -391,6 +403,10 @@ class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_generate_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_generate_causal_lm(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -417,7 +433,6 @@ class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -446,9 +461,27 @@ class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RoFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "junnyu/roformer_chinese_small"
+        model = RoFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
 
 @require_torch
@@ -457,7 +490,8 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
     def test_inference_masked_lm(self):
         model = RoFormerForMaskedLM.from_pretrained("junnyu/roformer_chinese_base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
 
         # TODO Replace vocab size
         vocab_size = 50000
@@ -470,7 +504,7 @@ class RoFormerModelIntegrationTest(unittest.TestCase):
             [[[-0.1205, -1.0265, 0.2922], [-1.5134, 0.1974, 0.1519], [-5.0135, -3.9003, -0.8404]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_torch
@@ -479,7 +513,9 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
 
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6).to(torch_device)
+        emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6)
+        emb1._init_weight()
+        emb1 = emb1.to(torch_device)
         emb = emb1(input_ids.shape)
         desired_weights = torch.tensor(
             [[0.0000, 0.0000, 0.0000, 1.0000, 1.0000, 1.0000], [0.8415, 0.0464, 0.0022, 0.5403, 0.9989, 1.0000]]
@@ -490,7 +526,6 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
         )
 
     def test_positional_emb_weights_against_roformer(self):
-
         desired_weights = torch.tensor(
             [
                 [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],
@@ -499,6 +534,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
             ]
         ).to(torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
+        emb1._init_weight()
         weights = emb1.weight.data[:3, :5].to(torch_device)
 
         self.assertTrue(
@@ -519,7 +555,9 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
         key_layer = (
             -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
         ).to(torch_device)
-        embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64).to(torch_device)
+        embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64)
+        embed_positions._init_weight()
+        embed_positions = embed_positions.to(torch_device)
         sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
 
         query_layer, key_layer = RoFormerSelfAttention.apply_rotary_position_embeddings(

@@ -150,7 +150,7 @@ class QuantAct(nn.Module):
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(activation_bit={self.activation_bit}, "
-            f"quant_mode: {self.activation_bit}, Act_min: {self.x_min.item():.2f}, "
+            f"quant_mode: {self.quant_mode}, Act_min: {self.x_min.item():.2f}, "
             f"Act_max: {self.x_max.item():.2f})"
         )
 
@@ -163,7 +163,6 @@ class QuantAct(nn.Module):
         specified_min=None,
         specified_max=None,
     ):
-
         x_act = x if identity is None else identity + x
         # collect running stats if training
         if self.training:
@@ -172,9 +171,9 @@ class QuantAct(nn.Module):
             x_min = x_act.data.min()
             x_max = x_act.data.max()
 
-            assert (
-                x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
-            ), "NaN detected when computing min/max of the activation"
+            assert x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0, (
+                "NaN detected when computing min/max of the activation"
+            )
 
             # Initialization
             if self.x_min.min() > -1.1e-5 and self.x_max.max() < 1.1e-5:
@@ -652,7 +651,7 @@ class SymmetricQuantFunction(Function):
         Returns:
             `torch.Tensor`: Symmetric-quantized value of *input*.
         """
-        zero_point = torch.tensor(0.0).to(scale.device)
+        zero_point = torch.tensor(0.0, device=scale.device)
 
         n = 2 ** (k - 1) - 1
         new_quant_x = linear_quantize(x, scale, zero_point, inplace=False)
@@ -663,7 +662,6 @@ class SymmetricQuantFunction(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-
         scale = ctx.scale
         if len(grad_output.shape) == 4:
             scale = scale.view(-1, 1, 1, 1)
@@ -771,7 +769,6 @@ class FixedPointMul(Function):
         identity=None,
         identity_scaling_factor=None,
     ):
-
         if len(pre_act_scaling_factor.shape) == 3:
             reshape = lambda x: x  # noqa: E731
         else:

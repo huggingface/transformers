@@ -15,7 +15,20 @@
 import math
 
 import tensorflow as tf
-from packaging import version
+from packaging.version import parse
+
+
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 def _gelu(x):
@@ -23,7 +36,7 @@ def _gelu(x):
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
     0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) Also see
-    https://arxiv.org/abs/1606.08415
+    https://huggingface.co/papers/1606.08415
     """
     x = tf.convert_to_tensor(x)
     cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.sqrt(2.0), x.dtype)))
@@ -33,7 +46,7 @@ def _gelu(x):
 
 def _gelu_new(x):
     """
-    Gaussian Error Linear Unit. This is a smoother version of the GELU. Original paper: https://arxiv.org/abs/1606.0841
+    Gaussian Error Linear Unit. This is a smoother version of the GELU. Original paper: https://huggingface.co/papers/1606.0841
 
     Args:
         x: float Tensor to perform activation
@@ -73,19 +86,19 @@ def gelu_10(x):
     """
     Clip the range of possible GeLU outputs between [-10, 10]. This is especially useful for quantization purpose, as
     it allows mapping 2 negatives values in the GeLU spectrum. For more information on this trick, please refer to
-    https://arxiv.org/abs/2004.09602
+    https://huggingface.co/papers/2004.09602
 
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
     0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) Also see
-    https://arxiv.org/abs/1606.08415 :param x: :return:
+    https://huggingface.co/papers/1606.08415 :param x: :return:
     """
     return tf.clip_by_value(_gelu(x), -10, 10)
 
 
 def glu(x, axis=-1):
     """
-    Gated Linear Unit. Implementation as defined in the original paper (see https://arxiv.org/abs/1612.08083), where
+    Gated Linear Unit. Implementation as defined in the original paper (see https://huggingface.co/papers/1612.08083), where
     the input `x` is split in two halves across a dimension (`axis`), A and B, returning A * sigmoid(B).
 
     Args:
@@ -99,12 +112,12 @@ def glu(x, axis=-1):
     return a * tf.math.sigmoid(b)
 
 
-if version.parse(tf.version.VERSION) >= version.parse("2.4"):
+if parse(tf.version.VERSION) >= parse("2.4"):
 
     def approximate_gelu_wrap(x):
-        return tf.keras.activations.gelu(x, approximate=True)
+        return keras.activations.gelu(x, approximate=True)
 
-    gelu = tf.keras.activations.gelu
+    gelu = keras.activations.gelu
     gelu_new = approximate_gelu_wrap
 else:
     gelu = _gelu
@@ -119,11 +132,11 @@ ACT2FN = {
     "glu": glu,
     "mish": mish,
     "quick_gelu": quick_gelu,
-    "relu": tf.keras.activations.relu,
-    "sigmoid": tf.keras.activations.sigmoid,
-    "silu": tf.keras.activations.swish,
-    "swish": tf.keras.activations.swish,
-    "tanh": tf.keras.activations.tanh,
+    "relu": keras.activations.relu,
+    "sigmoid": keras.activations.sigmoid,
+    "silu": keras.activations.swish,
+    "swish": keras.activations.swish,
+    "tanh": keras.activations.tanh,
 }
 
 

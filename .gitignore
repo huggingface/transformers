@@ -164,3 +164,9 @@ tags
 
 # DS_Store (MacOS)
 .DS_Store
+
+# ruff
+.ruff_cache
+
+# modular conversion
+*.modular_backup

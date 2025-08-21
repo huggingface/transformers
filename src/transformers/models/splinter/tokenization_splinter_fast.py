@@ -15,7 +15,7 @@
 """Fast Tokenization classes for Splinter."""
 
 import json
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import normalizers
 
@@ -27,29 +27,6 @@ from .tokenization_splinter import SplinterTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "tau/splinter-base": "https://huggingface.co/tau/splinter-base/resolve/main/vocab.txt",
-        "tau/splinter-base-qass": "https://huggingface.co/tau/splinter-base-qass/resolve/main/vocab.txt",
-        "tau/splinter-large": "https://huggingface.co/tau/splinter-large/resolve/main/vocab.txt",
-        "tau/splinter-large-qass": "https://huggingface.co/tau/splinter-large-qass/resolve/main/vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "tau/splinter-base": 512,
-    "tau/splinter-base-qass": 512,
-    "tau/splinter-large": 512,
-    "tau/splinter-large-qass": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "tau/splinter-base": {"do_lower_case": False},
-    "tau/splinter-base-qass": {"do_lower_case": False},
-    "tau/splinter-large": {"do_lower_case": False},
-    "tau/splinter-large-qass": {"do_lower_case": False},
-}
 
 
 class SplinterTokenizerFast(PreTrainedTokenizerFast):
@@ -87,17 +64,14 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        wordpieces_prefix: (`str`, *optional*, defaults to `"##"`):
+        wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = SplinterTokenizer
 
     def __init__(
@@ -113,7 +87,7 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         question_token="[QUESTION]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -151,8 +125,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         return self.convert_tokens_to_ids(self.question_token)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a pair of sequence for question answering tasks by concatenating and adding special
         tokens. A Splinter sequence has the following format:
@@ -161,13 +135,13 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences for question answering: `[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 The question token IDs if pad_on_right, else context tokens IDs
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 The context token IDs if pad_on_right, else question token IDs
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -183,8 +157,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             return cls + token_ids_0 + sep + token_ids_1 + question_suffix + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create the token type IDs corresponding to the sequences passed. [What are token type
         IDs?](../glossary#token-type-ids)
@@ -192,11 +166,11 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         Should be overridden in a subclass if the model has a special way of building those.
 
         Args:
-            token_ids_0 (`List[int]`): The first tokenized sequence.
-            token_ids_1 (`List[int]`, *optional*): The second tokenized sequence.
+            token_ids_0 (`list[int]`): The first tokenized sequence.
+            token_ids_1 (`list[int]`, *optional*): The second tokenized sequence.
 
         Returns:
-            `List[int]`: The token type ids.
+            `list[int]`: The token type ids.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -211,6 +185,9 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             # Input is context-then-question
             return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["SplinterTokenizerFast"]
