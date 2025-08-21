@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Chat basics
 
-Chat models are conversational models which you communicate with by sending and receiving a series of messages, like an online chat. Most new language models from mid-2023 onwards are chat models, and models which are not trained for chat are usually referred to as "base" models, while models trained for chat are sometimes called "instruct" or "instruction-tuned". There are many chat models available to choose from; larger and newer models tend to be more capable, though there are plenty of exceptions to this rule!
+Chat models are conversational models you can send a message to and receive a response. Most language models from mid-2023 onwards are chat models and may be referred to as "instruct" or "instruction-tuned" models. Models that do not support chat are often referred to as "base" or "pretrained" models.
 
 Larger and newer models are generally more capable, but models specialized in certain domains (medical, legal text, non-English languages, etc.) can often outperform these larger models. Try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to help you identify the best model for your use case.
 
@@ -95,12 +95,12 @@ or you run out of memory.
 
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! You can reduce memory usage using the `torch_dtype="auto"` argument, which will generally use `bfloat16` for models that were trained with it. To go even lower, you can quantize the model to 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index).
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `torch_dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.
 
-To load in 8-bit precision, create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter. The example below quantizes a model to 8-bits.
+To lower memory usage even lower, you can quantize the model to 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index). Create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter. The example below quantizes a model to 8-bits.
 
 ```py
 from transformers import pipeline, BitsAndBytesConfig
@@ -110,10 +110,9 @@ pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-In
 ```
 
 In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because each active parameter must be read from memory for every generated token. 
-This turns out to be the bottleneck for generating text from an LLM, which means that the main options for improving generation speed are to either quantize a model or use hardware with higher memory bandwidth. Adding
-more compute power has surprisingly little effect!
+This is a bottleneck for LLM text generation and the main options for improving generation speed are to either quantize a model or use hardware with higher memory bandwidth. Adding more compute power doesn't meaningfully help.
 
 You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
-> MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt-oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.
+Mixture-of-Expert (MoE) models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt-oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.

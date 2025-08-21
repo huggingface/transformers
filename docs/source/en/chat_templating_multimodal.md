@@ -64,12 +64,11 @@ Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a s
 
 Aside from the gradual descent from pirate-speak into modern American English (it **is** only a 3B model, after all), this is correct!
 
-## Using `apply_chat_template` directly
+## Using `apply_chat_template`
 
-Similarly to [text-only models](./chat_templating.md), you can use the [`ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models. 
-This method handles the tokenization and formatting of the chat messages, including images and other media types. You can then pass the resulting inputs to the model for generation.
+Like [text-only models](./chat_templating), use the [`~ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models. 
+This method handles the tokenization and formatting of the chat messages, including images and other media types. The resulting inputs are passed to the model for generation.
 
-Let's see the example above, but using the low-level methods directly instead of a `pipeline`:
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -92,31 +91,27 @@ messages = [
 ]
 ```
 
-Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. Note that, unlike text models, the output of `apply_chat_template` will
-contain a `pixel_values` key with the preprocessed image data, in addition to the tokenized text.
+Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. Unlike text models, the output of `apply_chat_template`
+contains a `pixel_values` key with the preprocessed image data, in addition to the tokenized text.
 
 ```py
 processed_chat = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
 print(list(processed_chat.keys()))
 ```
 
-and you should see:
 
 ```
 ['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
 ```
 
-These inputs are now ready to be used in [`~GenerationMixin.generate`]:
+Pass these inputs to [`~GenerationMixin.generate`].
 
 ```python
 out = model.generate(**processed_chat.to(model.device), max_new_tokens=128)
 print(processor.decode(out[0]))
 ```
 
-If you try this, note that because we used lower-level methods the decoded output is the full conversation so far, including
-the user message and the placeholder tokens that contain the image information. As a result, I won't paste it all here,
-as it might blow up the document a bit! Just be aware that if you want to use the lower-level methods in practice,
-you may need to trim the previous conversation from the output before displaying it to the user.
+The decoded output contains the full conversation so far, including the user message and the placeholder tokens that contain the image information. You may need to trim the previous conversation from the output before displaying it to the user.
 
 
 ## Video inputs
