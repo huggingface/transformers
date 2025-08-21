@@ -3,9 +3,37 @@ import argparse
 import datasets
 import torch
 import json
+from typing import Optional
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+
+
+MODEL_ID = "meta-llama/Llama-3.2-3b-Instruct"
+
+
+def generate_simple(attn_implementation: str, simple_batch_inputs: list[int], generation_config: GenerationConfig) -> list[str]:
+    attn_implementation = {
+        "sdpa_paged": "sdpa",
+        "eager_paged": "eager",
+    }[attn_implementation]
+
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_ID,
+        torch_dtype=torch.bfloat16,
+        attn_implementation=attn_implementation,
+    ).cuda().eval()
+    
+    decoded_outputs = []
+    for input_ids in simple_batch_inputs:
+        input_ids = torch.tensor([input_ids]).to("cuda")
+        attention_mask = torch.ones_like(input_ids)
+        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
+        generated_tokens = outputs[0][input_ids.shape[1]:]
+        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        decoded_outputs.append(decoded_output)
+    
+    return decoded_outputs
 
 
 def batch_generate(
@@ -15,6 +43,7 @@ def batch_generate(
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0, # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: str = None,
+    expected_outputs: Optional[list[str]] = None,
 ) -> tuple[float, float]:
 
     # Actual batch generation
@@ -33,15 +62,20 @@ def batch_generate(
     token_count = 0
     data = []
     for i, request in enumerate(batch_outputs):
-        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=False)
+        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=True)
         data.append({"input": input_text})
+
+        # Try to decode the output
         try:
-            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
+            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=True)
             token_count += len(batch_outputs[request].generated_tokens[1:])
             data[-1]["output"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
             data[-1]["output"] = "__ERROR__"
+            continue
+
+        # Display sample if asked
         if i < displayed_samples:
             if len(output_text) > 0:
                 print("-" * 20)
@@ -51,6 +85,13 @@ def batch_generate(
                 print(f"{request} Input:  {input_text}")
                 print("[WARN]")
                 print(f"{request} Output was empty!")
+
+        # Compare with classic generate if asked
+        if expected_outputs is not None:
+            matches = output_text == expected_outputs[i]
+            data[-1]["ref"] = expected_outputs[i]
+            data[-1]["matches"] = matches
+            print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
     # If an output file is provided, save the reordered data to it
     data.sort(key=lambda x: x["input"])
@@ -80,8 +121,9 @@ if __name__ == "__main__":
     parser.add_argument("--use-cuda-graph", action="store_true", default=False)
 
     parser.add_argument("--samples", type=int, default=500)
-    parser.add_argument("--displayed", type=int, default=1, help="Number of samples to display")
+    parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
     parser.add_argument("--output-file", type=str, default=None)
+    parser.add_argument("--compare", action="store_true", default=False)
     args = parser.parse_args()
 
     # Set matmul precision
@@ -89,9 +131,8 @@ if __name__ == "__main__":
         torch.set_float32_matmul_precision(args.matmul_precision)
 
     # Prepare model
-    model_id = "meta-llama/Llama-3.2-3b-Instruct"
     model = AutoModelForCausalLM.from_pretrained(
-        model_id,
+        MODEL_ID,
         attn_implementation=args.attn,
         dtype=torch.bfloat16,
         torch_dtype=torch.bfloat16,
@@ -100,7 +141,7 @@ if __name__ == "__main__":
     # model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 
     # Prepare tokenizer and dataset
-    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
     dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
     dataset = dataset.select(range(args.samples))  # Use only 5 examples for the simple version
     tokenized_datasets = dataset.map(lambda x: tokenizer(x["question"]), batched=True)
@@ -116,6 +157,9 @@ if __name__ == "__main__":
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
+
+    # If we need to compare, we need to generate the reference outputs
+    expected_outputs = generate_simple(args.attn, simple_batch_inputs, generation_config) if args.compare else None
 
     # Run warmup batch generation
     batch_generate(
@@ -134,6 +178,7 @@ if __name__ == "__main__":
         tokenizer,
         displayed_samples=args.displayed,
         output_file=args.output_file,
+        expected_outputs=expected_outputs,
     )
 
 
@@ -149,3 +194,6 @@ if __name__ == "__main__":
 # Without changes to continuous_batching.py
 # Using calculated num_blocks=369, block_size=32, max concurrent requests 23
 # CB generation took: 79.58 seconds for 25813 tokens. 324.38tok/s
+
+
+# python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json
