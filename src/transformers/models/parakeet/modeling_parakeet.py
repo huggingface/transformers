@@ -281,23 +281,23 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
             kernel_size = conv_layer.kernel_size[0]
             stride = conv_layer.stride[0]
 
-            output_lenghts = (input_lengths + padding[0] + padding[1] - kernel_size) // stride + 1
-            return output_lenghts
+            output_lengths = (input_lengths + padding[0] + padding[1] - kernel_size) // stride + 1
+            return output_lengths
 
         return input_lengths
 
     def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor = None):
         hidden_states = input_features.unsqueeze(1)
-        current_lenghts = attention_mask.sum(-1)
+        current_lengths = attention_mask.sum(-1) if attention_mask is not None else None
 
         for layer in self.layers:
             hidden_states = layer(hidden_states)
 
             # mask the hidden states
             if isinstance(layer, nn.Conv2d) and attention_mask is not None:
-                current_lenghts = self._get_output_length(current_lenghts, layer)
+                current_lengths = self._get_output_length(current_lengths, layer)
                 current_seq_length = hidden_states.shape[2]
-                channel_mask = torch.arange(current_seq_length, device=attention_mask.device) < current_lenghts[:, None]
+                channel_mask = torch.arange(current_seq_length, device=attention_mask.device) < current_lengths[:, None]
                 hidden_states *= channel_mask[:, None, :, None]
 
         hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states.shape[0], hidden_states.shape[2], -1)

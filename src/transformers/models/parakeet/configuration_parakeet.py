@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Parakeet model configuration."""
+
+from typing import Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -22,7 +25,7 @@ logger = logging.get_logger(__name__)
 class ParakeetEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetEncoder`]. It is used to instantiate a
-    ParakeetEncoder model according to the specified arguments, defining the model architecture.
+    `ParakeetEncoder` model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -81,7 +84,7 @@ class ParakeetEncoderConfig(PretrainedConfig):
         ```python
         >>> from transformers import ParakeetEncoderModel, ParakeetEncoderConfig
 
-        >>> # Initializing a ParakeetEncoder configuration
+        >>> # Initializing a `ParakeetEncoder` configuration
         >>> configuration = ParakeetEncoderConfig()
 
         >>> # Initializing a model from the configuration
@@ -179,18 +182,18 @@ class ParakeetConfig(PretrainedConfig):
             The reduction method for CTC loss. Can be "mean", "sum", or "none".
         ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
             Whether to set infinite losses to zero in CTC loss computation.
-        encoder_config (`ParakeetEncoderConfig`, *optional*):
+        encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
             Configuration for the ParakeetEncoder encoder.
 
     Example:
         ```python
-        >>> from transformers import ParakeetCTC, ParakeetCTCConfig
+        >>> from transformers import ParakeetForCTC, ParakeetConfig
 
-        >>> # Initializing a ParakeetCTC configuration
-        >>> configuration = ParakeetCTCConfig()
+        >>> # Initializing a Parakeet configuration
+        >>> configuration = ParakeetConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = ParakeetCTC(configuration)
+        >>> model = ParakeetConfig(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
@@ -213,7 +216,7 @@ class ParakeetConfig(PretrainedConfig):
         eos_token_id=2,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config=None,
+        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
         **kwargs,
     ):
         super().__init__(
@@ -226,7 +229,16 @@ class ParakeetConfig(PretrainedConfig):
             encoder_config = {}
             logger.info("`encoder_config` is `None`. Initializing the `ParakeetEncoderConfig` with default values.")
 
-        self.encoder_config = ParakeetEncoderConfig(**encoder_config)
+        if encoder_config is None:
+            encoder_config = ParakeetEncoderConfig()
+        elif isinstance(encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
+        elif isinstance(encoder_config, ParakeetEncoderConfig):
+            self.encoder_config = encoder_config
+        else:
+            raise ValueError(
+                f"`encoder_config` must be a dictionary or an instance of `ParakeetEncoderConfig`, got {type(encoder_config)}"
+            )
         self.vocab_size = vocab_size
         self.blank_token_id = blank_token_id
         self.ctc_loss_reduction = ctc_loss_reduction

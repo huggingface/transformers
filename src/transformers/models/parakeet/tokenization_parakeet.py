@@ -19,6 +19,7 @@ Tokenization classes for Parakeet CTC.
 import json
 import re
 from typing import Optional, Union
+from itertools import groupby
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -57,15 +58,15 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     Example:
         ```python
-        >>> from transformers import ParakeetCTC, ParakeetCTCTokenizer, FastConformerFeatureExtractor
+        >>> from transformers import ParakeetForCTC, ParakeetCTCTokenizer, ParakeetFeatureExtractor
         >>>
         >>> # Load model, tokenizer, and feature extractor
-        >>> model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>> model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
         >>> tokenizer = ParakeetCTCTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
-        >>> feature_extractor = FastConformerFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        >>> feature_extractor = ParakeetFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
         >>>
         >>> # Process audio and generate token sequences (already CTC-decoded)
-        >>> inputs = feature_extractor(audio, sampling_rate=16000)
+        >>> inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate)
         >>> token_sequences = model.generate(**inputs)
         >>>
         >>> # Decode to text (no additional CTC decoding needed)
@@ -136,7 +137,7 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        return self.ids_to_tokens.get(index, self.unk_token)
+        return self.ids_to_tokens.get(int(index), self.unk_token)
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """
@@ -144,8 +145,14 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
 
         For CTC tokenizers, this handles SentencePiece-style token merging.
         """
+        # group same tokens into non-repeating tokens in CTC style decoding
+        grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
+
+        # filter self.pad_token which is used as CTC-blank token
+        filtered_tokens = list(filter(lambda token: token != self.pad_token and token != self.unk_token, grouped_tokens))
+
         # Join tokens and handle SentencePiece-style subwords
-        text = "".join(tokens)
+        text = "".join(filtered_tokens)
 
         # Handle SentencePiece-style tokens (starting with ▁)
         text = text.replace("▁", " ")
@@ -171,15 +178,11 @@ class ParakeetCTCTokenizer(PreTrainedTokenizer):
             skip_special_tokens: Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces: Whether or not to clean up the tokenization spaces.
         """
-        # Handle single integer
+
         if isinstance(token_ids, int):
             token_ids = [token_ids]
-
-        # Handle empty list
-        if not token_ids:
+        if len(token_ids) == 0:
             return ""
-
-        # Handle batch of sequences
         if isinstance(token_ids[0], list):
             return self.batch_decode(
                 token_ids,

@@ -13,13 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union, Unpack
+from typing import Unpack
 
 from ...audio_utils import AudioInput
 from ...processing_utils import ProcessorMixin, ProcessingKwargs
 from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import logging, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -51,11 +54,11 @@ class ParakeetProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor=None, tokenizer=None):
         super().__init__(feature_extractor, tokenizer)
+        self.sampling_rate = self.feature_extractor.sampling_rate
 
     def __call__(
         self,
         audio: AudioInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
         """
@@ -69,10 +72,6 @@ class ParakeetProcessor(ProcessorMixin):
             audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array or PyTorch
                 tensor.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -87,45 +86,48 @@ class ParakeetProcessor(ProcessorMixin):
             - **input_features** -- Audio features to be fed to a model. Returned when `audio` is not `None`.
             - **attention_mask** -- List of indices specifying which input features should be attended to by the model.
         """
-        if audio is None and text is None:
-            raise ValueError("You have to specify at least one of `audio` or `text`.")
-        
+
         output_kwargs = self._merge_kwargs(
             ParakeetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
         common_kwargs = output_kwargs["common_kwargs"]
-
-        data = {}
-        if audio is not None:
-            inputs = self.feature_extractor(audio, **audio_kwargs)
-            data.update(inputs)
-
-        if text is not None:
-            encodings = self.tokenizer(text, **text_kwargs)   
-            data.update(encodings)
-
+        data = self.feature_extractor(audio, **audio_kwargs)
         return BatchFeature(data=data, tensor_type=common_kwargs["return_tensors"])
     
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->ParakeetCTC
-    def batch_decode(self, *args, **kwargs):
+    def batch_decode(
+        self,
+        predicted_ids: "torch.Tensor",
+        **kwargs: Unpack[ParakeetProcessorKwargs],
+    ) -> list["torch.Tensor"]:
         """
-        This method forwards all its arguments to ParakeetCTCTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        Decodes a batch of ParakeetForCTC model outputs into text.
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->ParakeetCTC
-    def decode(self, *args, **kwargs):
+        Args:
+            predicted_ids (`torch.Tensor`):
+                The predicted token ids from the model output. This should be a tensor of shape `(batch_size, sequence_length)`.
         """
-        This method forwards all its arguments to ParakeetCTCTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
+        return self.tokenizer.batch_decode(predicted_ids, **kwargs)
+
+    def decode(
+        self, 
+        predicted_ids: "torch.Tensor",
+        **kwargs
+    ) -> "torch.Tensor":
         """
-        return self.tokenizer.decode(*args, **kwargs)
+        Decodes a single output from the ParakeetForCTC model into text.
+
+        Args:
+            predicted_ids (`torch.Tensor`):
+                The predicted token ids from the model output. This should be a tensor of shape `(1, sequence_length)`.
+        """
+        if predicted_ids.shape[0] != 1:
+            raise ValueError(
+                f"Expecting a single output to be decoded but received {predicted_ids.shape[0]} samples instead."
+            )
+        return self.tokenizer.decode(predicted_ids[0], **kwargs)
 
 
 __all__ = ["ParakeetProcessor"]
