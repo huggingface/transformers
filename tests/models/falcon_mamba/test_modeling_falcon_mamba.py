@@ -17,6 +17,8 @@ import math
 import unittest
 from unittest.util import safe_repr
 
+import pytest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -292,7 +294,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):
@@ -487,6 +489,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
+    @pytest.mark.torch_compile_test
     def test_generation_torch_compile(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model = torch.compile(model)

@@ -371,7 +371,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_patches, self.model_tester.embed_dim],
             )
 
-            if not model_class.__name__ == "HieraBackbone":
+            if model_class.__name__ != "HieraBackbone":
                 reshaped_hidden_states = outputs.reshaped_hidden_states
                 self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 

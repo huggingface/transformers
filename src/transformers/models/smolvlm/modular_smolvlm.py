@@ -20,6 +20,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -205,6 +206,7 @@ class SmolVLMModel(Idefics3Model):
                 The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
         pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
         # Remove padding images - padding images are full 0.
@@ -340,6 +342,7 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)
+        self.model.text_model.generation_config = GenerationConfig.from_model_config(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 

@@ -515,8 +515,8 @@ class AriaImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        split_image = images_kwargs.get("split_image", None) or self.split_image
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+        split_image = images_kwargs.get("split_image", self.split_image)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
 
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
         num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size

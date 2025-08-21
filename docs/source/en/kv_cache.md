@@ -87,7 +87,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 ckpt = "microsoft/Phi-3-mini-4k-instruct"
 tokenizer = AutoTokenizer.from_pretrained(ckpt)
-model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, device_map="auto")
 inputs = tokenizer("Fun fact: The shortest", return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, do_sample=False, max_new_tokens=23, cache_implementation="offloaded")
@@ -99,24 +99,26 @@ The example below shows how you can fallback on [`OffloadedCache`] if you run ou
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
 
 def resilient_generate(model, *args, **kwargs):
     oom = False
+    device = infer_device()
+    torch_device_module = getattr(torch, device, torch.cuda)
     try:
         return model.generate(*args, **kwargs)
-    except torch.cuda.OutOfMemoryError as e:
+    except torch.OutOfMemoryError as e:
         print(e)
         print("retrying with cache_implementation='offloaded'")
         oom = True
     if oom:
-        torch.cuda.empty_cache()
+        torch_device_module.empty_cache()
         kwargs["cache_implementation"] = "offloaded"
         return model.generate(*args, **kwargs)
 
 ckpt = "microsoft/Phi-3-mini-4k-instruct"
 tokenizer = AutoTokenizer.from_pretrained(ckpt)
-model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16, device_map="auto")
 prompt = ["okay "*1000 + "Fun fact: The most"]
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 beams = { "num_beams": 40, "num_beam_groups": 40, "num_return_sequences": 40, "diversity_penalty": 1.0, "max_new_tokens": 23, "early_stopping": True, }
@@ -312,7 +314,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Init StaticCache with big enough max-length (1024 tokens for the below example)
 # You can also init a DynamicCache, if that suits you better
-prompt_cache = StaticCache(config=model.config, max_batch_size=1, max_cache_len=1024, device=model.device.type, dtype=torch.bfloat16)
+prompt_cache = StaticCache(config=model.config, max_cache_len=1024)
 
 INITIAL_PROMPT = "You are a helpful assistant. "
 inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(model.device.type)
