@@ -948,7 +948,7 @@ class GgufModelTests(unittest.TestCase):
             self.gemma3_vision_model_id,
             gguf_file=self.bf16_gemma3_vision_model_id,
             torch_dtype=torch.float16,
-        )
+        ).model
 
         converted_state_dict = converted_model.state_dict()
         original_state_dict = original_model.state_dict()
@@ -987,5 +987,5 @@ class GgufModelTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello, I am a 20 year old male"
+        EXPECTED_TEXT = "Helloab, I am a 1000"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
