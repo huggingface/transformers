@@ -28,6 +28,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
 
     def __call__(
         self,
+        tokenizer: None,
         audios: Union[np.ndarray, List[np.ndarray], List[List[np.ndarray]]],
         audio_parts: Optional[list] = None,
         chunk_input: Optional[bool] = False,
@@ -55,7 +56,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
         # audio placeholder not dependent on audio_parts
         for audios in audios_list:
             if audios:
-                audio_ph_list.append([self.get_audio_placeholder(
+                audio_ph_list.append([self.get_audio_placeholder(tokenizer,
                     len(a), chunk_input, chunk_length) for a in audios])
             else:
                 audio_ph_list.append([])
@@ -122,7 +123,7 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
 
         return audio_features, audio_feature_lens_list, audio_ph_list
 
-    def get_audio_placeholder(self, audio_lens, chunk_input, chunk_length):
+    def get_audio_placeholder(self, tokenizer, audio_lens, chunk_input, chunk_length):
         pool_step = 2
         feature_lens = math.ceil(
             audio_lens / self.hop_length)
@@ -143,13 +144,13 @@ class MiniCPM_o_2_6FeatureExtractor(WhisperFeatureExtractor):
             for _ in range(num_audio_chunks):
                 unk_len = min(audio_embeds_in_chunk,
                               output_lens - total_unk_len)
-                place_holders += self.tokenizer.audio_start + \
-                    self.tokenizer.unk_token * unk_len + self.tokenizer.audio_end
+                place_holders += tokenizer.audio_start + \
+                    tokenizer.unk_token * unk_len + tokenizer.audio_end
                 total_unk_len += unk_len
             audio_placeholder = place_holders
         else:
-            audio_placeholder = self.tokenizer.audio_start + \
-                self.tokenizer.unk_token * output_lens + self.tokenizer.audio_end
+            audio_placeholder = tokenizer.audio_start + \
+                tokenizer.unk_token * output_lens + tokenizer.audio_end
 
         return audio_placeholder
 

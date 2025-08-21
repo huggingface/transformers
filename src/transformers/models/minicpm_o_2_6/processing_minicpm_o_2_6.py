@@ -150,13 +150,13 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "feature_extractor", "tokenizer"]
+    attributes = ["tokenizer", "image_processor", "feature_extractor"]
+    tokenizer_class = "AutoTokenizer"
     image_processor_class = "AutoImageProcessor"
     feature_extractor_class = "MiniCPM_o_2_6FeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None):
-        super().__init__(image_processor, feature_extractor, tokenizer)
+    def __init__(self, tokenizer=None, image_processor=None, feature_extractor=None):
+        super().__init__(tokenizer, image_processor, feature_extractor)
         self.version = image_processor.version
         self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
         self.image_tag = "(<image>./</image>)"
@@ -189,6 +189,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
         if audios:
             audio_features, audio_feature_lens, audio_phs = self.feature_extractor(
+                self.tokenizer,
                 audios,
                 audio_parts=audio_kwargs["audio_parts"],
                 chunk_input=audio_kwargs["chunk_input"],
@@ -437,7 +438,7 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
             for i, chunk in enumerate(text_chunks):
                 if chunk == self.image_tag:
                     image_placeholder = self.image_processor.get_slice_image_placeholder(
-                        image_sizes[index][image_id], image_id, max_slice_nums, use_image_id
+                        self.tokenizer, image_sizes[index][image_id], image_id, max_slice_nums, use_image_id
                     )
                     image_id += 1
                     text_chunks[i] = image_placeholder

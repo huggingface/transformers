@@ -135,12 +135,12 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
         return source_image, patches, best_grid
 
-    def get_grid_placeholder(self, grid):
+    def get_grid_placeholder(self, tokenizer, grid):
         if grid is None:
             return ""
         slice_image_placeholder = (
-            self.tokenizer.slice_start + self.tokenizer.unk_token *
-            self.image_feature_size + self.tokenizer.slice_end
+            tokenizer.slice_start + tokenizer.unk_token *
+            self.image_feature_size + tokenizer.slice_end
         )
 
         cols = grid[0]
@@ -155,8 +155,8 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
         slice_placeholder = "\n".join(slices)
         return slice_placeholder
 
-    def get_image_id_placeholder(self, idx=0):
-        return f"{self.tokenizer.im_id_start}{idx}{self.tokenizer.im_id_end}"
+    # def get_image_id_placeholder(self, idx=0):
+    #     return f"{self.tokenizer.im_id_start}{idx}{self.tokenizer.im_id_end}"
 
     def get_sliced_images(self, image, max_slice_nums=None):
         slice_images = []
@@ -211,26 +211,25 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
 
         return best_grid
 
-    def get_slice_image_placeholder(self, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
+    def get_slice_image_placeholder(self, tokenizer, image_size, image_idx=0, max_slice_nums=None, use_image_id=None):
         max_slice_nums = self.max_slice_nums if max_slice_nums is None else int(
             max_slice_nums)
         assert max_slice_nums > 0
         grid = self.get_sliced_grid(
             image_size=image_size, max_slice_nums=max_slice_nums)
 
-        image_placeholder = self.tokenizer.im_start + self.tokenizer.unk_token * \
-            self.image_feature_size + self.tokenizer.im_end
+        image_placeholder = tokenizer.im_start + tokenizer.unk_token * \
+            self.image_feature_size + tokenizer.im_end
         use_image_id = self.use_image_id if use_image_id is None else bool(
             use_image_id)
         if use_image_id:
-            final_placeholder = self.get_image_id_placeholder(
-                image_idx) + image_placeholder
+            final_placeholder = f"{tokenizer.im_id_start}{image_idx}{tokenizer.im_id_end}" + image_placeholder
         else:
             final_placeholder = image_placeholder
 
         if self.slice_mode:
             final_placeholder = final_placeholder + \
-                self.get_grid_placeholder(grid=grid)
+                self.get_grid_placeholder(tokenizer, grid=grid)
         return final_placeholder
 
     def reshape_by_patch(self, image):

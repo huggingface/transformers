@@ -542,14 +542,12 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
         assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
         self.tts = self.init_tts_module()
 
-        # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
+        self.processor = AutoProcessor.from_pretrained(self.config._name_or_path)
 
-        tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
-        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
-        image_processor.tokenizer = tokenizer
-        feature_extractor = MiniCPM_o_2_6FeatureExtractor.from_pretrained(config._name_or_path)
-        feature_extractor.tokenizer = tokenizer
-        self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
+        # tokenizer = AutoTokenizer.from_pretrained(config._name_or_path)
+        # image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
+        # feature_extractor = MiniCPM_o_2_6FeatureExtractor.from_pretrained(config._name_or_path)
+        # self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
@@ -3182,8 +3180,8 @@ class PatchLlamaModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # ! in transformers=4.53.1, this is create_causal_mask, but it is wrong in our case
-        # so copy _update_causal_mask from LlamaModel which transformers=4.44.2
+        # ! in transformers>=4.53.1, this is `create_causal_mask`, but it will be wrong in our case
+        # so copy `_update_causal_mask` from LlamaModel which transformers=4.44.2
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
