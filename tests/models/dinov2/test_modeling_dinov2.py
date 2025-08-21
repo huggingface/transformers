@@ -211,7 +211,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    test_torch_exportable = False  # broken by output recording refactor
+    test_torch_exportable = True
 
     all_model_classes = (
         (
