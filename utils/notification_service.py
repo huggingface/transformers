@@ -669,7 +669,7 @@ class Message:
                         "text": {
                             "type": "mrkdwn",
                             # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
-                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to this run*\n\n(compared to{' Nvidia CI ' if is_scheduled_ci_run else ' '}run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
@@ -1397,8 +1397,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
@@ -1406,13 +1406,13 @@ if __name__ == "__main__":
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
     # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
     #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
-    if is_amd_daily_ci_workflow:
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
         with open(event_payload_path) as fp:
             event_payload = json.load(fp)
-            # The event that triggers the `workflow_run` event.
+            # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 

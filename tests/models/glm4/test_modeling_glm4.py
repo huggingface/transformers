@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_large_accelerator,
     require_torch_large_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -171,7 +170,6 @@ class Glm4IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    @require_torch_sdpa
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = Expectations(
             {

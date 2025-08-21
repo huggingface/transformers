@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2021-02-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-           <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -138,9 +138,6 @@ print(f"Predicted label: {predicted_label}")
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
-
 ## DebertaV2Model
 
 [[autodoc]] DebertaV2Model
@@ -175,44 +172,3 @@ print(f"Predicted label: {predicted_label}")
 
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
-
-</pt>
-<tf>
-
-## TFDebertaV2Model
-
-[[autodoc]] TFDebertaV2Model
-    - call
-
-## TFDebertaV2PreTrainedModel
-
-[[autodoc]] TFDebertaV2PreTrainedModel
-    - call
-
-## TFDebertaV2ForMaskedLM
-
-[[autodoc]] TFDebertaV2ForMaskedLM
-    - call
-
-## TFDebertaV2ForSequenceClassification
-
-[[autodoc]] TFDebertaV2ForSequenceClassification
-    - call
-
-## TFDebertaV2ForTokenClassification
-
-[[autodoc]] TFDebertaV2ForTokenClassification
-    - call
-
-## TFDebertaV2ForQuestionAnswering
-
-[[autodoc]] TFDebertaV2ForQuestionAnswering
-    - call
-
-## TFDebertaV2ForMultipleChoice
-
-[[autodoc]] TFDebertaV2ForMultipleChoice
-    - call
-
-</tf>
-</frameworkcontent>

@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     require_read_token,
@@ -88,6 +90,7 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(
         "Lfm2 has a special cache format which is not compatible with compile as it has static address for conv cache"
     )
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

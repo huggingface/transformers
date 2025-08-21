@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-02-07 and added to Hugging Face Transformers on 2023-06-20.*
 
 # GPTSAN-japanese
 
@@ -30,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The GPTSAN-japanese model was released in the repository by Toshiyuki Sakamoto (tanreinama).
+The [GPTSAN-japanese](https://huggingface.co/Tanrei/GPTSAN-japanese) model was released in the repository by Toshiyuki Sakamoto (tanreinama).
 
 GPTSAN is a Japanese language model using Switch Transformer. It has the same structure as the model introduced as Prefix LM
 in the T5 paper, and support both Text Generation and Masked Language Modeling tasks. These basic tasks similarly can
@@ -41,14 +42,15 @@ fine-tune for translation or summarization.
 The `generate()` method can be used to generate text using GPTSAN-Japanese model.
 
 ```python
->>> from transformers import AutoModel, AutoTokenizer
+>>> from transformers import AutoModel, AutoTokenizer, infer_device
 >>> import torch
 
+>>> device = infer_device()
 >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
->>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").cuda()
+>>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
 >>> x_tok = tokenizer("は、", prefix_text="織田信長", return_tensors="pt")
 >>> torch.manual_seed(0)
->>> gen_tok = model.generate(x_tok.input_ids.cuda(), token_type_ids=x_tok.token_type_ids.cuda(), max_new_tokens=20)
+>>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(mdoel.device), max_new_tokens=20)
 >>> tokenizer.decode(gen_tok[0])
 '織田信長は、2004年に『戦国BASARA』のために、豊臣秀吉'
 ```

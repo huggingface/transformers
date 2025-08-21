@@ -917,7 +917,7 @@ class Trainer:
         if isinstance(self.processing_class, ProcessorMixin):
             tokenizer = self.processing_class.tokenizer
         else:
-            tokenizer = self.tokenizer
+            tokenizer = self.processing_class
         model_has_generation_config = (
             hasattr(self.model, "generation_config") and self.model.generation_config is not None
         )
@@ -927,7 +927,7 @@ class Trainer:
         # token.
         tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
         if model_has_generation_config:
-            # `generation_config.eos_token_id` is None: direct comparision
+            # `generation_config.eos_token_id` is None: direct comparison
             if self.model.generation_config.eos_token_id is None:
                 tokenizer_has_new_eos |= tokenizer.eos_token_id != self.model.generation_config.eos_token_id
             else:
@@ -943,7 +943,9 @@ class Trainer:
             # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
             # EOS tokens defined here will halt generation.
             if model_has_generation_config:
-                all_eos_tokens = [tokenizer.eos_token_id] + list(self.model.generation_config.eos_token_id)
+                all_eos_tokens = [tokenizer.eos_token_id]
+                if self.model.generation_config.eos_token_id is not None:
+                    all_eos_tokens += list(self.model.generation_config.eos_token_id)
                 self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
         # 2 - Align BOS
@@ -971,8 +973,9 @@ class Trainer:
         # 4 - Warn users about the changes
         if len(updated_tokens) > 0:
             logger.warning(
-                "The tokenizer has new special tokens that are also defined in the model configs. The model "
-                f"configs were aligned accordingly. Updated tokens: {updated_tokens}"
+                "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+                "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+                f"values. Updated tokens: {updated_tokens}."
             )
 
     def _set_signature_columns_if_needed(self):
@@ -1816,6 +1819,7 @@ class Trainer:
             if kahan_sum is not None:
                 kahan_sum = bool(kahan_sum)
 
+            adam_kwargs["weight_decay"] = args.weight_decay
             stable_adamw_kwargs = {
                 "decouple_lr": bool(optim_args.pop("decouple_lr", False)),
                 "max_lr": max_lr,
@@ -2233,7 +2237,9 @@ class Trainer:
         self.is_in_train = True
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
-        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)):
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
             self._align_special_tokens()
 
         # Attach NEFTune hooks if necessary
@@ -3893,7 +3899,7 @@ class Trainer:
 
         kwargs = {}
 
-        # For LOMO optimizers you need to explicitly use the learnign rate
+        # For LOMO optimizers you need to explicitly use the learning rate
         if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             kwargs["learning_rate"] = self._get_learning_rate()
 
@@ -3944,7 +3950,7 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
 
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
