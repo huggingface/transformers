@@ -2061,19 +2061,31 @@ class Mxfp4Config(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
+        dequantize (`bool`, *optional*, default to `False`):
+            Whetjer we dequantize the model to bf16 precision or not
+        swizzle (`bool`, *optional*, default to `True`):
+            Whether we swizzle the weights or not. For inference, you need to set it to True. Saving the model requires to set it to False.
+        : bool = True,
     """
 
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
         dequantize: bool = False,
+        swizzle: bool = True,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.MXFP4
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
+        self.swizzle = swizzle
 
     def get_loading_attributes(self):
-        return {
-            "dequantize": self.dequantize,
-        }
+        return {"dequantize": self.dequantize, "swizzle": self.swizzle}
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}

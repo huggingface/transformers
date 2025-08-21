@@ -229,7 +229,6 @@ class AutoHfQuantizer:
             )
             and quantization_config_from_args is not None
         ):
-            # special case for GPTQ / AWQ / FbgemmFp8 config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)

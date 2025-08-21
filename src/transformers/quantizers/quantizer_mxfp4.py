@@ -42,7 +42,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
     """
 
     requires_parameters_quantization = True
-    # to remove if we decide to allow quantizing weights with this method
     requires_calibration = False
 
     required_packages = ["accelerate"]
@@ -164,7 +163,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
         else:
             module, tensor_name = get_module_from_name(model, param_name)
-
         if isinstance(module, Mxfp4GptOssExperts) or (
             isinstance(module, GptOssExperts) and self.quantization_config.dequantize
         ):
@@ -188,38 +186,52 @@ class Mxfp4HfQuantizer(HfQuantizer):
             dequantize,
             load_and_swizzle_mxfp4,
             quantize_to_mxfp4,
+            swizzle_mxfp4,
         )
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
-        # this is either when loading bfloa16 into quantized model
-        # or when saving bfloat16 to quantized format (say after training)
         if not self.pre_quantized:
             triton_kernels_hub = self._lazy_import_kernels()
             module, _ = get_module_from_name(model, param_name)
             with torch.device(target_device):
-                if isinstance(module, Mxfp4GptOssExperts) or isinstance(module, GptOssExperts):
+                if isinstance(module, Mxfp4GptOssExperts):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
-                    # these wheights are not swizzled yet, because on load we swizzle them
-                    if "gate_up_proj" in param_name and "bias" not in param_name:
-                        module.gate_up_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.data.transpose(-1, -2).reshape(32, -1, 90, 16), requires_grad=False
+                    if self.quantization_config.swizzle:
+                        PrecisionConfig, FlexCtx, InFlexData = (
+                            triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                            triton_kernels_hub.matmul_ogs.FlexCtx,
+                            triton_kernels_hub.matmul_ogs.InFlexData,
                         )
-                        module.gate_up_proj_scales = torch.nn.Parameter(
-                            weight_scale.data.transpose(-1, -2), requires_grad=False
+                        triton_weight_tensor, weight_scale = swizzle_mxfp4(triton_weight_tensor, weight_scale)
+
+                        proj = "gate_up_proj" if "gate_up_proj" in param_name else "down_proj"
+                        setattr(module, proj, triton_weight_tensor)
+                        setattr(
+                            module,
+                            f"{proj}_precision_config",
+                            PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
                         )
-                        if hasattr(module, "gate_up_proj"):
-                            delattr(module, "gate_up_proj")
-                    elif "down_proj" in param_name and "bias" not in param_name:
-                        module.down_proj_blocks = torch.nn.Parameter(
-                            triton_weight_tensor.data.transpose(-1, -2).reshape(32, 2880, 90, -1), requires_grad=False
-                        )
-                        module.down_proj_scales = torch.nn.Parameter(
-                            weight_scale.data.transpose(-1, -2), requires_grad=False
-                        )
-                        if hasattr(module, "down_proj"):
-                            delattr(module, "down_proj")
-                    logger.debug(f"Created quantized weights for {param_name}")
-        # we take this path if already quantized but not in a compatible waddy
+
+                        delattr(module, f"{proj}_blocks")
+                        delattr(module, f"{proj}_scales")
+                    else:
+                        # path we take when we want to save the model
+                        if "gate_up_proj" in param_name and "bias" not in param_name:
+                            module.gate_up_proj_blocks = torch.nn.Parameter(
+                                triton_weight_tensor.data.transpose(-1, -2).reshape(32, -1, 90, 16),
+                                requires_grad=False,
+                            )
+                            module.gate_up_proj_scales = torch.nn.Parameter(
+                                weight_scale.data.transpose(-1, -2), requires_grad=False
+                            )
+                        elif "down_proj" in param_name and "bias" not in param_name:
+                            module.down_proj_blocks = torch.nn.Parameter(
+                                triton_weight_tensor.data.transpose(-1, -2).reshape(32, 2880, 90, -1),
+                                requires_grad=False,
+                            )
+                            module.down_proj_scales = torch.nn.Parameter(
+                                weight_scale.data.transpose(-1, -2), requires_grad=False
+                            )
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
             #  This is when loading a quantized model (blocks and scales exist)
@@ -258,6 +270,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         param_value,
                         target_device,
                         self._lazy_import_kernels(),
+                        self.quantization_config.swizzle,
                         **shard_kwargs,
                     )
 
@@ -281,6 +294,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 base = key[: -len("down_proj")]
                 new_expected_keys.append(base + "down_proj_blocks")
                 new_expected_keys.append(base + "down_proj_scales")
+            elif not self.pre_quantized:
+                # in this case, we are quantizing the model so we need to update the keys as we changed the layers
+                if key.endswith(".mlp.experts.down_proj_blocks"):
+                    base = key[: -len("down_proj_blocks")]
+                    new_expected_keys.append(base + "down_proj")
+                elif key.endswith(".mlp.experts.gate_up_proj_blocks"):
+                    base = key[: -len("gate_up_proj_blocks")]
+                    new_expected_keys.append(base + "gate_up_proj")
+                elif key.endswith("scales"):
+                    # we remove it the scales as the checkpoint don't contain them
+                    continue
+                else:
+                    new_expected_keys.append(key)
             else:
                 new_expected_keys.append(key)
         return new_expected_keys
@@ -350,10 +376,21 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("_blocks", "")
             elif "_scales" in param_name:
                 return param_name.replace("_scales", "")
+        elif not self.pre_quantized:
+            if param_name.endswith("gate_up_proj"):
+                return param_name.replace("gate_up_proj", "gate_up_proj_blocks")
+            if param_name.endswith("down_proj"):
+                return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
     def is_serializable(self, safe_serialization=None):
-        return True
+        if not self.quantization_config.swizzle:
+            return True
+        else:
+            logger.warning_once(
+                "In order to save the model, you need to pass `Mxfp4Config(swizzle=False)` when quantizing the model with `from_pretrained`."
+            )
+            return False
 
     @property
     def is_trainable(self) -> bool:
