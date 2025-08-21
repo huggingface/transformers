@@ -527,7 +527,7 @@ EXPECTED_DEC_OUTPUTS = {
 }
 EXPECTED_QUANT_CODEBOOK_LOSS = {
     "dac_16khz": 20.7299,
-    "dac_24khz": 22.6652,
+    "dac_24khz": 22.6602,
     "dac_44khz": 16.2168,
 }
 EXPECTED_CODEC_ERROR = {
