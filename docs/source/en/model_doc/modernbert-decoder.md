@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-07-15.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -77,7 +78,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(
@@ -103,7 +104,7 @@ classifier_model = AutoModelForSequenceClassification.from_pretrained(
 )
 
 text = "This movie is really great!"
-inputs = tokenizer(text, return_tensors="pt").to("cuda")
+inputs = tokenizer(text, return_tensors="pt").to(classifier_model.device)
 
 with torch.no_grad():
     outputs = classifier_model(**inputs)
@@ -135,7 +136,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(

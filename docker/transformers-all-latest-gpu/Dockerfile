@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.7.1'
+ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 # Disable kernel mapping for now until all tests pass
@@ -54,11 +54,6 @@ RUN python3 -m pip install --no-cache-dir quanto
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
 # (`deformable_detr`, `rwkv`, `mra`)
 RUN python3 -m pip uninstall -y ninja
-
-# For `dinat` model
-# The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
-RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein

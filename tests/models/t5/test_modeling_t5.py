@@ -19,10 +19,13 @@ import pickle
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import T5Config, is_torch_available
 from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_accelerate,
     require_sentencepiece,
@@ -1198,7 +1201,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -19.0845
+        EXPECTED_SCORE = Expectations(
+            {
+                (None, None): -19.0845,
+                ("rocm", (9, 4)): -19.0846,
+            }
+        ).get_expectation()
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -1610,6 +1618,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
@@ -1650,6 +1659,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache_encoder(self):
         prompts = [
             "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
@@ -1668,6 +1678,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         logits_compiled = model(**inputs)
         torch.testing.assert_close(logits[0][:, -3:, -3], logits_compiled[0][:, -3:, -3], rtol=1e-5, atol=1e-5)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_encoder(self):
         """Test exporting T5EncoderModel to torch export format."""
@@ -1704,6 +1715,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         # Verify outputs are close enough
         self.assertTrue(torch.allclose(original_output, exported_output, atol=1e-5))
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_decoder(self):
         """Test exporting T5 decoder with static cache to torch export format."""
@@ -1765,6 +1777,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             # Verify cache buffers are 3D
             self.assertEqual(buffer.shape[2], max_cache_len)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_t5_summarization(self):
         """Test composing exported T5 encoder and decoder for summarization."""

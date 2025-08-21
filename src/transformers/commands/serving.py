@@ -24,14 +24,14 @@ import tempfile
 import threading
 import time
 from argparse import ArgumentParser, Namespace
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass, field
 from io import BytesIO
 from threading import Thread
-from typing import Generator, Iterable, Optional, Union
+from typing import Optional, Union
 
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
-from PIL import Image
 
 import transformers
 from transformers.models.auto.modeling_auto import (
@@ -44,6 +44,7 @@ from transformers.utils.import_utils import (
     is_openai_available,
     is_pydantic_available,
     is_uvicorn_available,
+    is_vision_available,
 )
 
 from .. import (
@@ -53,7 +54,6 @@ from .. import (
     ProcessorMixin,
     TextIteratorStreamer,
 )
-from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 from ..utils import is_torch_available, logging
 from . import BaseTransformersCLICommand
 
@@ -68,8 +68,13 @@ if is_torch_available():
         PreTrainedModel,
     )
 
+    from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
+
 if is_librosa_available():
     import librosa
+
+if is_vision_available():
+    from PIL import Image
 
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
@@ -629,6 +634,13 @@ class ServeCommand(BaseTransformersCLICommand):
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
+            logger.warning_once(
+                "CORS allow origin is set to `*`. This is not recommended for production environments."
+            )
+        else:
+            logger.warning_once(
+                "Some apps may require CORS. Consider launching the server with `--enable-cors` if you see errors."
+            )
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: dict):
@@ -810,7 +822,7 @@ class ServeCommand(BaseTransformersCLICommand):
         return stream_chat_completion(inputs[0])
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel) -> Modality:
+    def get_model_modality(model: "PreTrainedModel") -> Modality:
         model_classname = model.__class__.__name__
         if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
             modality = Modality.VLM
@@ -829,13 +841,22 @@ class ServeCommand(BaseTransformersCLICommand):
             parsed_message = {"role": message["role"], "content": []}
 
             if modality == Modality.LLM:
-                # If we're working with LLMs, then "content" is a single string.
-                content = message["content"] if isinstance(message["content"], str) else message["content"]["text"]
-                parsed_message["content"] = content
+                # Input: `content` is a string or a list of dictionaries with a "text" key.
+                # Output: `content` is a string.
+                if isinstance(message["content"], str):
+                    parsed_content = message["content"]
+                elif isinstance(message["content"], list):
+                    parsed_content = []
+                    for content in message["content"]:
+                        if content["type"] == "text":
+                            parsed_content.append(content["text"])
+                    parsed_content = " ".join(parsed_content)
+                parsed_message["content"] = parsed_content
 
             elif modality == Modality.VLM:
-                # If we're working with VLMs, then "content" is a dictionary, containing a "type" key indicating
-                # which other key will be present and the type of the value of said key.
+                # Input: `content` is a string or a list of dictionaries with a "type" key (possible types: "text",
+                # "image_url").
+                # Output: `content` is a list of dictionaries with a "type" key
                 if isinstance(message["content"], str):
                     parsed_message["content"].append({"type": "text", "text": message["content"]})
                 else:
@@ -901,7 +922,7 @@ class ServeCommand(BaseTransformersCLICommand):
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
-            tools=req.get("tools", None),
+            tools=req.get("tools"),
             return_tensors="pt",
             return_dict=True,
             tokenize=True,
@@ -1535,7 +1556,9 @@ class ServeCommand(BaseTransformersCLICommand):
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_processor(
+        self, model_id_and_revision: str
+    ) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1560,7 +1583,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", ProcessorMixin]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 

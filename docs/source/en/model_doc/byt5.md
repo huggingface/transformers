@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-28 and added to Hugging Face Transformers on 2021-06-01.*
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat&logo=flax&logoColor=white">
   </div>
 </div>
 
@@ -64,7 +63,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     device_map="auto"
 )
 
-input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("summarize: Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -82,7 +81,7 @@ echo -e "translate English to French: Life is beautiful." | transformers-cli run
 
 ## Quantization
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends. 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
@@ -101,7 +100,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("google/byt5-xl")
-input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to("cuda")
+input_ids = tokenizer("translate English to French: The weather is nice today.", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -115,11 +114,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```python
     import torch
     from transformers import AutoModelForSeq2SeqLM
-    
+
     model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
-    
+
     num_special_tokens = 3
-    
+
     input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
     labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
     loss = model(input_ids, labels=labels).loss

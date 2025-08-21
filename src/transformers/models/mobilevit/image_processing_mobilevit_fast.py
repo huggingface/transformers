@@ -29,7 +29,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     is_torch_tensor,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -140,7 +139,9 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                     "do_rescale": False,
                     "do_flip_channel_order": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT
+                    if is_torchvision_v2_available()
+                    else F.InterpolationMode.NEAREST,
                 }
             )
 

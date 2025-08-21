@@ -748,7 +748,7 @@ def pad(
         elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], int):
             values = (values, values)
         elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], tuple):
-            values = values
+            pass
         else:
             raise ValueError(f"Unsupported format: {values}")
 
@@ -912,7 +912,7 @@ def group_images_by_shape(
             - A dictionary with shape as key and list of images with that shape as value
             - A dictionary mapping original indices to (shape, index) tuples
     """
-    # If disable grouping is not explicitely provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
+    # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
     if disable_grouping is None:
         device = images[0][0].device if is_nested else images[0].device
         disable_grouping = device == "cpu"
@@ -949,7 +949,7 @@ def reorder_images(
         grouped_images_index (dict[Union[int, tuple[int, int]], tuple[tuple[int, int], int]]):
             Dictionary mapping original indices to (shape, index) tuples.
         is_nested (bool, *optional*, defaults to False):
-            Whether the images are nested. Cannot be infered from the input, as some processing functions outputs nested images.
+            Whether the images are nested. Cannot be inferred from the input, as some processing functions outputs nested images.
             even with non nested images,e.g functions splitting images into patches. We thus can't deduce is_nested from the input.
 
 
