@@ -69,8 +69,8 @@ class Blip2Processor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         self.current_processor = image_processor
         if not hasattr(tokenizer, "image_token"):
-            self.image_token = "<image>"
-            tokenizer.add_tokens([AddedToken("<image>", normalized=False, special=True)], special_tokens=True)
+            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            tokenizer.add_tokens([self.image_token], special_tokens=True)
         else:
             self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
