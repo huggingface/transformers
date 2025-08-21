@@ -685,7 +685,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager", revision="refs/pr/17"
         )
-        processor = AutoProcessor.from_pretrained(repo)
+        processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = {
