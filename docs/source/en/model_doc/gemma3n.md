@@ -103,7 +103,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))

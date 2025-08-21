@@ -21,8 +21,9 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import LlamaConfig
-    from transformers.masking_utils import create_causal_mask, find_packed_sequence_indices
+    from transformers import DynamicCache, LlamaConfig
+    from transformers.cache_utils import DynamicSlidingWindowLayer
+    from transformers.masking_utils import create_causal_mask, create_chunked_causal_mask, find_packed_sequence_indices
 
 
 # fmt: off
@@ -135,3 +136,111 @@ class MaskTest(unittest.TestCase):
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
         EXPECTED_SEQUENCE_INDICES = torch.tensor([[0, 0, 0, 0, 1, 1, 2, 2, 2, 2], [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]])
         self.assertTrue((find_packed_sequence_indices(position_ids) == EXPECTED_SEQUENCE_INDICES).all())
+
+    def test_chunked_mask_with_left_padding_and_large_prefill(self):
+        # Make sur we have an attention_chunk_size in the config
+        config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")
+
+        batch_size = 2
+        sequence_length = 8
+        pad_tokens = 4
+
+        input_ids = torch.randint(100, 200, (batch_size, sequence_length))
+        attention_mask = torch.tensor(
+            [[0 if i < pad_tokens else 1 for i in range(sequence_length)], [1] * sequence_length]
+        )
+        inputs_embeds = torch.empty_like(input_ids, dtype=torch.float16)
+        cache_position = torch.arange(sequence_length)
+        position_ids = torch.empty(batch_size, sequence_length, dtype=cache_position.dtype)
+        position_ids[0, :pad_tokens] = 1
+        position_ids[0, pad_tokens:] = torch.arange(sequence_length - pad_tokens)
+        position_ids[1, :] = cache_position
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+            # Here, for the padded sequence, the chunk size should start correctly at index 4 (otherwise, with 4 padding
+            # tokens are chunk_size=3, the first chunk is from indices 0-2, then 3-6 if we don't account for the padding correctly)
+            [[[[False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False],
+                [False, False, False, False,  True,  True, False, False],
+                [False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False,  True]]],
+
+
+            [[[ True, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False],
+                [False, False, False,  True,  True, False, False, False],
+                [False, False, False,  True,  True,  True, False, False],
+                [False, False, False, False, False, False,  True, False],
+                [False, False, False, False, False, False,  True,  True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
+    def test_chunked_mask_with_left_padding_decoding(self):
+        # Make sur we have an attention_chunk_size in the config
+        config = LlamaConfig(attention_chunk_size=4, attn_implementation="sdpa", num_hidden_layers=1)
+
+        cache = DynamicCache(config=config)
+        # Sanity check
+        self.assertEqual(len(cache), 1)
+        self.assertTrue(isinstance(cache.layers[0], DynamicSlidingWindowLayer))
+
+        # Fill-in the Cache (sequence length is bigger than chunk size here)
+        batch_size = 2
+        prefill_size = 8
+        pad_tokens = 7
+        fake_kv = torch.rand(batch_size, 32, prefill_size, 32)
+        cache.update(fake_kv, fake_kv, 0, torch.arange(prefill_size))
+
+        # Create a new input after the prefill
+        input_ids = torch.randint(100, 200, (batch_size, 1))
+        attention_mask = torch.tensor(
+            [[0 if i < pad_tokens else 1 for i in range(prefill_size + 1)], [1] * (prefill_size + 1)]
+        )
+        inputs_embeds = torch.empty_like(input_ids, dtype=torch.float16)
+        cache_position = torch.tensor([prefill_size], dtype=int)
+        position_ids = torch.tensor([[prefill_size - pad_tokens], [prefill_size]])
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=cache,
+            position_ids=position_ids,
+        )
+
+        # To understand a bit more the following expected mask, here is the full 2d mask, where the "|" characters are the chunk
+        # separators (where the tokens should stop seeing each other)
+        # [0, 0, 0, 0, 0, 0, 0, | 1, 1],    -> due to left padding, the first chunk only starts after the padding tokens
+        # [| 1, 1, 1, 1, | 1, 1, 1, 1, | 1]])  -> easy case, each 4 tokens is a new chunk
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+            # Here, for the padded sequence, the chunk size should start correctly at index 7 (the first unpadded
+            # index), and so only indices 7 and 8 should be True
+            [[[[False, False,  True,  True]]],
+
+            # Here, for the unpadded sequence, the chunks start at index 0. Since we have 9 tokens in total, the last
+            # token (index 8) will only see itself (we have 2 full chunks before)
+            [[[False, False, False,  True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())

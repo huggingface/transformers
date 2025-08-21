@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -85,13 +84,6 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
 
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertModelOutput
-
-[[autodoc]] models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
-
 ## LxmertModel
 
 [[autodoc]] LxmertModel
@@ -106,19 +98,3 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLxmertModel
-
-[[autodoc]] TFLxmertModel
-    - call
-
-## TFLxmertForPreTraining
-
-[[autodoc]] TFLxmertForPreTraining
-    - call
-
-</tf>
-</frameworkcontent>

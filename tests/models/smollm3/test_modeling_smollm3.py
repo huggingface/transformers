@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -93,7 +92,6 @@ class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # flaky test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions
