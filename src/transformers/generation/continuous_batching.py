@@ -752,8 +752,6 @@ class ContinuousBatchProcessor:
         torch.cuda.synchronize()
         available_memory = PagedAttentionMemoryHandler.get_available_memory()
         print("Allocated static tensors,", available_memory, "bytes available")
-        # self.actual_tokens = T
-        # self.cache_used = max_token_budget
         self.actual_tokens = 0
         self.cache_used = 0
 
@@ -780,7 +778,7 @@ class ContinuousBatchProcessor:
         """Get model keyword arguments for the current batch."""
         # torch.set_printoptions(threshold=100000,linewidth=10000)
         t = self.actual_tokens
-        c = self.attention_mask.size(-1) # TODO: figure out why this does not work self.cache_used
+        c = self.cache_used
         return {
             "input_ids": self.input_ids[:, :t],
             "position_ids": self.position_ids[:, :t],
