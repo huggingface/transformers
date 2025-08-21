@@ -4120,8 +4120,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict_split = split_torch_state_dict_into_shards(
             state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
         )
-        print(state_dict.items())
-        # print(state_dict_split)
         # Save index if sharded
         index = None
         if state_dict_split.is_sharded:
