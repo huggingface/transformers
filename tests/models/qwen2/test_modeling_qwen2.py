@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -179,7 +178,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
     def test_model_450m_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window

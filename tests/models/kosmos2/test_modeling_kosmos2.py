@@ -30,7 +30,6 @@ from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     IS_XPU_SYSTEM,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -458,7 +457,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
