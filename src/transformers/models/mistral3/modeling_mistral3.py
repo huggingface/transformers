@@ -190,6 +190,11 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    _can_record_outputs = {
+        "hidden_states": "DecoderLayer",
+        "attentions": "Attention",
+    }
+
 
 @auto_docstring(
     custom_intro="""

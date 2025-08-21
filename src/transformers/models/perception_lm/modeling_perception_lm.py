@@ -99,6 +99,11 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
+    _can_record_outputs = {
+        "hidden_states": "DecoderLayer",
+        "attentions": "Attention",
+    }
+
 
 @dataclass
 @auto_docstring(
