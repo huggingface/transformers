@@ -1564,6 +1564,14 @@ class TrainingArguments:
         },
     )
 
+    # new argument field to compute mean token accuracy
+    compute_mean_token_accuracy: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to compute mean token accuracy during evaluation."
+        },
+    )
+
     def __post_init__(self):
         # Set default output_dir if not provided
         if self.output_dir is None:
