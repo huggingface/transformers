@@ -229,7 +229,7 @@ class AttentionMaskVisualizer:
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length
         side_border = "##"
-        print(f"\n{top_bottom_border}", flush=True)
+        print(f"\n{top_bottom_border}")
         print(
             "##"
             + f"  Attention visualization for \033[1m{self.config.model_type}:{self.repo_id}\033[0m {self.mapped_cls.__name__}".center(
@@ -237,9 +237,8 @@ class AttentionMaskVisualizer:
             )
             + "    "
             + side_border,
-            flush=True,
         )
-        print(f"{top_bottom_border}", flush=True)
+        print(f"{top_bottom_border}")
         f_string = generate_attention_matrix_from_mask(
             tokens,
             attention_mask,
@@ -248,5 +247,5 @@ class AttentionMaskVisualizer:
             token_type_ids=kwargs.get("token_type_ids"),
             image_seq_length=image_seq_length,
         )
-        print(f_string, flush=True)
-        print(f"{top_bottom_border}", flush=True)
+        print(f_string)
+        print(f"{top_bottom_border}")

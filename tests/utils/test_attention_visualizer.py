@@ -13,11 +13,23 @@
 # limitations under the License.
 
 import io
+import re
 import sys
 import unittest
 
 from transformers.testing_utils import require_read_token, require_torch
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _normalize(s: str) -> str:
+    # drop ANSI (colors may be disabled on CI), normalize line endings,
+    # and strip trailing spaces without touching alignment inside lines
+    s = ANSI_RE.sub("", s)
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(line.rstrip() for line in s.split("\n")).strip()
 
 
 @require_torch
@@ -66,7 +78,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 ##########################################################################################################################################################################################################################################
 """  # noqa
 
-        self.assertEqual(output.strip(), expected_output.strip())
+        self.assertEqual(_normalize(output), _normalize(expected_output))
 
     @require_read_token
     def test_llama_text_only_visualization(self):
@@ -103,4 +115,4 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 ##########################################################################################################################################################################################################
 """  # noqa
 
-        self.assertEqual(output.strip(), expected_output.strip())
+        self.assertEqual(_normalize(output), _normalize(expected_output))
