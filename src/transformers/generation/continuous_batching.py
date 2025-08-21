@@ -49,6 +49,7 @@ class RequestStatus(Enum):
 
 
 logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -386,6 +387,10 @@ class Scheduler(ABC):
 
 @attach_tracer()
 class FIFOScheduler(Scheduler):
+    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.1):
+        super().__init__(cache, retain_cache_on_finish)
+        self.safety_margin = safety_margin
+    
     @traced
     def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
         # 1. we check that the occupancy is less than the requested length
@@ -458,13 +463,19 @@ class FIFOScheduler(Scheduler):
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
+        safety_margins = self.safety_margin * self.cache.num_blocks
 
         for state in candidates:
+
+            # If we are out the safety margin, we only accept decoding requests or the first prefill request
+            num_free_blocks = self.cache.get_num_free_blocks()
+            outside_safety_margin = num_free_blocks < safety_margins
+            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+                break
+
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(
-                state, len(state.prompt_ids)
-            ):  # don't schedule if we can't allocate blocks
+            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):  # don't schedule if we can't allocate blocks
                 if len(self.cache._free_blocks) == 0:
                     break
                 continue
@@ -1234,7 +1245,7 @@ class ContinuousBatchingManager:
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
         else:
             next_tokens = torch.argmax(probs, dim=-1)
-        tokens = batch_processor.actual_tokens if self.slice_inputs else batch_processor.output_ids.size(1)
+        tokens = next_tokens.size(1)
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
@@ -1274,11 +1285,10 @@ class ContinuousBatchingManager:
                 self.manual_eviction,
             )
             self.batch_processor = batch_processor
-            is_first = True
+            self.current_batch = 0
             while (not self.stop_event.is_set()) or batch_processor.has_pending_requests():
-                self._inner_generation_loop(batch_processor, is_first)
-                if is_first:
-                    is_first = False
+                self._inner_generation_loop(batch_processor)
+                self.current_batch += 1
 
         except Exception as e:
             logger.error(f"Error in generation loop: {e}", exc_info=True)
@@ -1287,14 +1297,14 @@ class ContinuousBatchingManager:
             logger.info("Generation loop finished.")
 
     @traced(span_name="generation_loop")
-    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor, is_first: bool = False):
+    def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
         device, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
         logger.info(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
-            if is_first:
+            if self.current_batch == 0:
                 self.warmup(batch_processor)
             elif hasattr(self, "graph"):
                 try:
@@ -1406,6 +1416,9 @@ class ContinuousMixin:
         """
         if not inputs:
             return []
+        if logger.getEffectiveLevel() <= logging.INFO:
+            logger.warning("Progress bar is disabled when logger level is less than INFO")
+            progress_bar = False
 
         # Initialize manager with the batch inputs
         manager = self.init_continuous_batching(generation_config=generation_config)

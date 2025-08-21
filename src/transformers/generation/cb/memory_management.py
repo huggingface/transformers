@@ -13,8 +13,8 @@ class PagedAttentionMemoryHandler:
     _activation_dtype = torch.bfloat16
     _activation_safety_factor = 2
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 1024
-    _upper_bound_num_blocks = 1024
+    _upper_bound_max_batch_tokens = 2048
+    _upper_bound_num_blocks = 16384
 
     def __init__(
         self,
