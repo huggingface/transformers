@@ -19,13 +19,14 @@ Processor class for MiniCPMV.
 import re
 from typing import Optional, Union
 
+import numpy as np
 import torch
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType
-from .image_processing_minicpm import MiniCPMVBatchFeature
 
 
 class MiniCPMVImageKwargs(ImagesKwargs, total=False):
@@ -66,19 +67,106 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.version = image_processor.version
 
+    def reshape_by_patch(self, image_chw: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
+        """
+        convert patch (C, H, W) to (C, P, L)
+        P = patch_size, L = (H/P) * W
+        """
+        is_numpy = isinstance(image_chw, np.ndarray)
+        if is_numpy:
+            image_tensor = torch.from_numpy(image_chw)
+        else:
+            image_tensor = image_chw
+
+        patch_size = 14
+        c, h, w = image_tensor.shape
+
+        # (C, H, W) -> (C, H/P, P, W)
+        reshaped = image_tensor.view(c, h // patch_size, patch_size, w)
+        # (C, H/P, P, W) -> (C, P, H/P, W)
+        transposed = reshaped.permute(0, 2, 1, 3).contiguous()
+        # (C, P, H/P, W) -> (C, P, (H/P)*W)
+        final_reshaped = transposed.view(c, patch_size, -1)
+
+        if is_numpy:
+            return final_reshaped.numpy()
+        return final_reshaped
+
+    def unreshape_by_patch(self, patch_data: torch.Tensor, h: int, w: int) -> torch.Tensor:
+        """
+        convert (C, P, L) patch to (C, H, W).
+        """
+        patch_size = 14
+        c, p, _ = patch_data.shape
+
+        # (C, P, (H/P)*W) -> (C, P, H/P, W)
+        reshaped = patch_data.view(c, patch_size, h // patch_size, w)
+        # (C, P, H/P, W) -> (C, H/P, P, W)
+        transposed = reshaped.permute(0, 2, 1, 3).contiguous()
+        # (C, H/P, P, W) -> (C, H, W)
+        final_image = transposed.view(c, h, w)
+
+        return final_image
+
+    def _unpad_image_data(self, image_inputs: BatchFeature) -> dict:
+        if "num_patches_per_image" not in image_inputs:
+            return image_inputs.data
+
+        padded_pixel_values = image_inputs["pixel_values"]
+        num_patches_per_image = image_inputs["num_patches_per_image"]
+        image_sizes_tensor = image_inputs["image_sizes"]
+        original_patch_shapes = image_inputs["original_patch_shapes"]
+        original_tgt_sizes = image_inputs["original_tgt_sizes"]
+        padded_h, padded_w = image_inputs["padded_image_shape"]
+
+        unpadded_pixel_values = []
+
+        batch_size = len(image_sizes_tensor)
+        patch_offset = 0
+
+        for i in range(batch_size):
+            num_images_in_sample = len(image_sizes_tensor[i])
+            total_patches_in_sample = sum(num_patches_per_image[patch_offset : patch_offset + num_images_in_sample])
+
+            sample_pixel_values = []
+            for j in range(total_patches_in_sample):
+                padded_reshaped_patch = padded_pixel_values[i][j]
+                original_shape = original_patch_shapes[i][j]
+
+                if torch.is_tensor(original_shape):
+                    original_shape = original_shape.tolist()
+
+                _, original_h, original_w = original_shape
+
+                unreshaped_padded_patch = self.unreshape_by_patch(padded_reshaped_patch, padded_h, padded_w)
+                unpadded_patch_chw = unreshaped_padded_patch[:, :original_h, :original_w]
+                final_unpadded_patch = self.reshape_by_patch(unpadded_patch_chw)
+                sample_pixel_values.append(final_unpadded_patch)
+
+            unpadded_pixel_values.append(sample_pixel_values)
+            patch_offset += num_images_in_sample
+
+        unpadded_tgt_sizes = [torch.tensor(t) if not isinstance(t, (torch.Tensor, np.ndarray)) else t for t in original_tgt_sizes]
+
+        return {
+            "pixel_values": unpadded_pixel_values,
+            "image_sizes": [list(sample_sizes) for sample_sizes in image_sizes_tensor],
+            "tgt_sizes": unpadded_tgt_sizes,
+        }
+
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: ImageInput = None,
         **kwargs: Unpack[MiniCPM_V_4ProcessorKwargs],
-    ) -> MiniCPMVBatchFeature:
+    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             MiniCPM_V_4ProcessorKwargs, self.tokenizer.init_kwargs, **kwargs
         )
         image_kwargs = output_kwargs["images_kwargs"]
 
         if images is not None:
-            image_inputs = self.image_processor(images, **image_kwargs)
+            image_inputs = self._unpad_image_data(self.image_processor(images, **image_kwargs))
         return self._convert_images_texts_to_inputs(image_inputs, text, **kwargs)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
@@ -187,7 +275,7 @@ class MiniCPM_V_4Processor(ProcessorMixin):
         ):
         if images is None or not len(images):
             model_inputs = self.tokenizer(texts, return_tensors=return_tensors, truncation=truncation, max_length=max_length, **kwargs)
-            return MiniCPMVBatchFeature(data={**model_inputs})
+            return BatchFeature(data={**model_inputs})
 
         pattern = "(<image>./</image>)"
         images, image_sizes, tgt_sizes = images["pixel_values"], images["image_sizes"], images["tgt_sizes"]
@@ -222,7 +310,7 @@ class MiniCPM_V_4Processor(ProcessorMixin):
             image_bounds_list[i] = image_bounds_list[i] + length
             attention_mask[i, :length] = False
 
-        return MiniCPMVBatchFeature(data={
+        return BatchFeature(data={
             "input_ids": padded_input_ids,
             "attention_mask": attention_mask,
             "pixel_values": images,

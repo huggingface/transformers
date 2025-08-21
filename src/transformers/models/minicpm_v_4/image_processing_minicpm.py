@@ -14,19 +14,18 @@
 # limitations under the License.
 
 import math
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 from PIL import Image
 
-from transformers.utils import TensorType, is_torch_device, is_torch_dtype, requires_backends
+from transformers.utils import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
-    infer_channel_dimension_format,
     is_torch_tensor,
     make_nested_list_of_images,
     to_numpy_array,
@@ -42,74 +41,6 @@ def recursive_converter(converter, value):
         return new_value
     else:
         return converter(value)
-
-
-class MiniCPMVBatchFeature(BatchFeature):
-    r"""
-    Extend from BatchFeature for supporting various image size
-    """
-    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
-        super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
-
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
-        if tensor_type is None:
-            return self
-
-        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
-
-        def converter(value):
-            try:
-                if not is_tensor(value):
-                    tensor = as_tensor(value)
-                    return tensor
-                return value
-            except:  # noqa E722
-                if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
-
-
-        for key, value in self.items():
-            self[key] = recursive_converter(converter, value)
-        return self
-
-    def to(self, *args, **kwargs) -> "MiniCPMVBatchFeature":
-        requires_backends(self, ["torch"])
-        import torch
-
-        def cast_tensor(v):
-            # check if v is a floating point
-            if torch.is_floating_point(v):
-                # cast and send to device
-                return v.to(*args, **kwargs)
-            elif device is not None:
-                return v.to(device=device)
-            else:
-                return v
-
-        new_data = {}
-        device = kwargs.get("device")
-        # Check if the args are a device or a dtype
-        if device is None and len(args) > 0:
-            # device should be always the first argument
-            arg = args[0]
-            if is_torch_dtype(arg):
-                # The first argument is a dtype
-                pass
-            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                device = arg
-            else:
-                # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            new_data[k] = recursive_converter(cast_tensor, v)
-        self.data = new_data
-        return self
 
 
 class MiniCPMVImageProcessor(BaseImageProcessor):
@@ -320,49 +251,91 @@ class MiniCPMVImageProcessor(BaseImageProcessor):
             max_slice_nums: Optional[int] = None,
             return_tensors: Optional[Union[str, TensorType]] = None,
             **kwargs
-        ) -> MiniCPMVBatchFeature:
+        ) -> BatchFeature:
         images_list = make_nested_list_of_images(images)
 
-        new_images_list = []
+        global_max_h, global_max_w = 0, 0
+        all_unpadded_patches_in_batch = []
+        all_original_shapes_in_batch = []
+        all_original_tgt_sizes_in_batch = []
         image_sizes_list = []
-        tgt_sizes_list = []
+        num_patches_per_image = []
 
         for _images in images_list:
             if not valid_images(_images):
-                raise ValueError(
-                    "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                    "torch.Tensor, tf.Tensor or jax.ndarray."
-                )
+                raise ValueError("Invalid image type...")
 
             _images = [self.to_pil_image(image).convert("RGB") for image in _images]
-            input_data_format = infer_channel_dimension_format(np.array(_images[0]))
+            image_sizes_list.append([image.size for image in _images])
 
-            new_images = []
-            image_sizes = [image.size for image in _images]
-            tgt_sizes = []
+            patches_for_sample, shapes_for_sample, tgt_sizes_for_sample = [], [], []
             for image in _images:
                 image_patches = self.get_sliced_images(image, max_slice_nums)
-                image_patches = [to_numpy_array(image).astype(np.float32) / 255 for image in image_patches]
-                image_patches = [
-                    self.normalize(image=image, mean=self.mean, std=self.std, input_data_format=input_data_format)
-                        for image in image_patches
-                ]
-                image_patches = [
-                    to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-                        for image in image_patches
-                ]
-                for slice_image in image_patches:
-                    new_images.append(self.reshape_by_patch(slice_image))
-                    tgt_sizes.append(np.array((slice_image.shape[1] // self.patch_size, slice_image.shape[2] // self.patch_size)))
+                num_patches_per_image.append(len(image_patches))
 
-            if tgt_sizes:
-                tgt_sizes = np.vstack(tgt_sizes)
+                for patch in image_patches:
+                    patch_np = to_numpy_array(patch).astype(np.float32) / 255
+                    normalized_patch = self.normalize(image=patch_np, mean=self.mean, std=self.std)
+                    chw_patch = to_channel_dimension_format(normalized_patch, ChannelDimension.FIRST)
 
-            new_images_list.append(new_images)
-            image_sizes_list.append(image_sizes)
-            tgt_sizes_list.append(tgt_sizes)
-        return MiniCPMVBatchFeature(
-            data={"pixel_values": new_images_list, "image_sizes": image_sizes_list, "tgt_sizes": tgt_sizes_list}, tensor_type=return_tensors
-        )
+                    _, h, w = chw_patch.shape
+                    if h > global_max_h:
+                        global_max_h = h
+                    if w > global_max_w:
+                        global_max_w = w
+
+                    patches_for_sample.append(chw_patch)
+                    shapes_for_sample.append(chw_patch.shape)
+
+                    tgt_size = np.array((h // self.patch_size, w // self.patch_size))
+                    tgt_sizes_for_sample.append(tgt_size)
+
+            all_unpadded_patches_in_batch.append(patches_for_sample)
+            all_original_shapes_in_batch.append(shapes_for_sample)
+            all_original_tgt_sizes_in_batch.append(np.array(tgt_sizes_for_sample) if tgt_sizes_for_sample else np.empty((0, 2)))
+
+        padded_patches_list = []
+        for patches_for_sample in all_unpadded_patches_in_batch:
+            sample_padded_and_reshaped = []
+            for unpadded_patch in patches_for_sample:
+                c, h, w = unpadded_patch.shape
+                pad_h = global_max_h - h
+                pad_w = global_max_w - w
+
+                padded_patch = np.pad(unpadded_patch, ((0, 0), (0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
+
+                reshaped_patch = self.reshape_by_patch(padded_patch)
+                sample_padded_and_reshaped.append(reshaped_patch)
+
+            padded_patches_list.append(sample_padded_and_reshaped)
+
+        max_patches_in_batch = max(len(p) for p in padded_patches_list) if padded_patches_list else 0
+
+        if max_patches_in_batch > 0:
+            first_valid_patch = next((p[0] for p in padded_patches_list if p), None)
+            if first_valid_patch is not None:
+                patch_shape = first_valid_patch.shape
+                patch_dtype = first_valid_patch.dtype
+                dummy_patch = np.zeros(patch_shape, dtype=patch_dtype)
+                dummy_shape = (-1, -1, -1)
+                dummy_tgt_size = np.array([-1, -1])
+
+                for i in range(len(padded_patches_list)):
+                    num_to_pad = max_patches_in_batch - len(padded_patches_list[i])
+                    if num_to_pad > 0:
+                        padded_patches_list[i].extend([dummy_patch] * num_to_pad)
+                        all_original_shapes_in_batch[i].extend([dummy_shape] * num_to_pad)
+                        all_original_tgt_sizes_in_batch[i] = np.vstack([all_original_tgt_sizes_in_batch[i], np.tile(dummy_tgt_size, (num_to_pad, 1))])
+
+        data = {
+            "pixel_values": padded_patches_list,
+            "image_sizes": image_sizes_list,
+            "num_patches_per_image": num_patches_per_image,
+            "original_patch_shapes": all_original_shapes_in_batch,
+            "original_tgt_sizes": all_original_tgt_sizes_in_batch,
+            "padded_image_shape": (global_max_h, global_max_w),
+        }
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 __all__ = ["MiniCPMVImageProcessor"]
