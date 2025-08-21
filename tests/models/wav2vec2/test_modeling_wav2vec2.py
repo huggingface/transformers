@@ -1954,7 +1954,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset("fixie-ai/common_voice_17_0", lang, split="train", streaming=True)
+            ds = load_dataset("fixie-ai/common_voice_17_0", lang, split="test", streaming=True)
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]
@@ -1979,10 +1979,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             return transcription
 
         TRANSCRIPTIONS = {
-            "it": "un esempio di civiltà palaziale è la civiltà minoica caratteristica dell'isola di creta",
-            "es": "el relievio de la región es bastante diverso",
-            "fr": "l'économie de la communauté repose principalement sur l'agriculture",
-            "en": "it was also confirmed that maclanon is still a member of the band",
+            "it": "viaggiarono in italia dove lavorarono con hamilton",
+            "es": "el resto de los equipos se mantienen en su sede",
+            "fr": "il a obtenu son batchelor of lows",
+            "en": "joe keton disapproved of films and buster also had reservations about the media",
         }
 
         for lang in LANG_MAP:
