@@ -31,6 +31,7 @@ from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    import torchaudio
 
     from .generation_higgs_audio import _ceil_to_nearest, build_delay_pattern_mask, revert_delay_pattern
 
@@ -580,6 +581,27 @@ class HiggsAudioSampleProcessor:
         )
 
 
+def audio_extraction(self, raw_audio, original_sr=None, target_sr=None):
+    # Convert from librosa to torch
+    if not isinstance(raw_audio, torch.Tensor):
+        audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=self.device)
+    else:
+        audio_signal = raw_audio.float()
+
+    if audio_signal.ndim == 1:
+        audio_signal = audio_signal.unsqueeze(0)  # [1, time]
+
+    if (original_sr is not None and target_sr is not None) and original_sr != target_sr:
+        resampler = torchaudio.transforms.Resample(orig_freq=original_sr, new_freq=target_sr)
+        audio_signal = resampler(audio_signal)
+
+    # Add batch dimension
+    if audio_signal.ndim == 2:
+        audio_signal = audio_signal.unsqueeze(0)  # [batch, channel, time]
+
+    return audio_signal
+
+
 class HiggsAudioProcessor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`WhisperFeatureExtractor`], a [`AutoTokenizer`],
@@ -724,7 +746,7 @@ class HiggsAudioProcessor(ProcessorMixin):
 
                 # Generate audio tokens if tokenizer available
                 if hasattr(self, "audio_tokenizer"):
-                    input_values = self.audio_tokenizer.audio_extraction(
+                    input_values = audio_extraction(
                         processed_audio,
                         original_sr=original_sr[i] if original_sr is not None else None,
                         target_sr=target_sr,

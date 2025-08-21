@@ -616,26 +616,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
         if hasattr(decoder, "tanh") and isinstance(decoder.tanh, nn.Tanh):
             decoder.tanh = nn.Identity()
 
-    def audio_extraction(self, raw_audio, original_sr=None, target_sr=None):
-        # Convert from librosa to torch
-        if not isinstance(raw_audio, torch.Tensor):
-            audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=self.device)
-        else:
-            audio_signal = raw_audio.float()
-
-        if audio_signal.ndim == 1:
-            audio_signal = audio_signal.unsqueeze(0)  # [1, time]
-
-        if (original_sr is not None and target_sr is not None) and original_sr != target_sr:
-            resampler = torchaudio.transforms.Resample(orig_freq=original_sr, new_freq=target_sr)
-            audio_signal = resampler(audio_signal)
-
-        # Add batch dimension
-        if audio_signal.ndim == 2:
-            audio_signal = audio_signal.unsqueeze(0)  # [batch, channel, time]
-
-        return audio_signal
-
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
         input_values = torchaudio.functional.resample(input_values, self.sampling_rate, self.semantic_sample_rate)
         input_values = input_values[:, 0, :]

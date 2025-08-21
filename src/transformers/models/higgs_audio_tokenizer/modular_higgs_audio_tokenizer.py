@@ -23,11 +23,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
-from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from ..auto.modeling_auto import AutoModel
 from ..dac.modeling_dac import DacDecoder, DacEncoder
-from ..xcodec.modeling_xcodec import SemanticDecoder, SemanticEncoder, XcodecEuclideanCodebook
+from ..xcodec.modeling_xcodec import (
+    SemanticDecoder,
+    SemanticEncoder,
+    XcodecEuclideanCodebook,
+    XcodecPreTrainedModel,
+    XcodecResidualVectorQuantization,
+)
 from .configuration_higgs_audio_tokenizer import HiggsAudioTokenizerConfig
 
 
@@ -49,10 +54,6 @@ class HiggsAudioTokenizerOutput(ModelOutput):
 @auto_docstring
 class HiggsAudioTokenizerEncoderOutput(ModelOutput):
     r"""
-    semantic_reconstruction_loss (`torch.Tensor`, *optional*):
-        Loss from semantic feature reconstruction.
-    commit_loss (`torch.Tensor`, *optional*):
-        Commitment loss from vector quantization.
     audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
         Codebook indices for each codebook (quantized discrete representation of input).
     """
@@ -118,120 +119,20 @@ class HiggsAudioTokenizerVectorQuantization(nn.Module):
         return quantize
 
 
-class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
-    """
-    Residual vector quantization implementation.
-    """
-
-    def __init__(self, config: HiggsAudioTokenizerConfig):
-        super().__init__()
-        self.quantizers = nn.ModuleList(
-            [HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)]
-        )
-        self.frame_rate = config.frame_rate
-        self.codebook_size = config.codebook_size
-        self.num_quantizers = config.num_quantizers
-
-    def get_bandwidth_per_quantizer(self):
-        """Return bandwidth per quantizer."""
-        return math.log2(self.codebook_size) * self.frame_rate / 1000
-
-    def get_num_quantizers_for_bandwidth(self, bandwidth=None) -> int:
-        """Return num_quantizers based on specified target bandwidth."""
-        bw_per_q = self.get_bandwidth_per_quantizer()
-        num_quantizers = self.num_quantizers
-        if bandwidth is not None and bandwidth > 0.0:
-            num_quantizers = int(max(1, math.floor(bandwidth / bw_per_q)))
-        return num_quantizers
-
-    def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
-        """
-        Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
-        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
-        """
-        num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
-        residual = embeddings
-        all_indices = []
-        for quantizer in self.quantizers[:num_quantizers]:
-            indices = quantizer.encode(residual)
-            quantized = quantizer.decode(indices)
-            residual = residual - quantized
-            all_indices.append(indices)
-        out_indices = torch.stack(all_indices)
-        return out_indices
-
-    def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        """Decode the given codes to their quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
-        for i, indices in enumerate(codes):
-            quantizer = self.quantizers[i]
-            quantized = quantizer.decode(indices)
-            quantized_out = quantized_out + quantized
-        return quantized_out
+# Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
+class HiggsAudioTokenizerResidualVectorQuantization(XcodecResidualVectorQuantization):
+    pass
 
 
 @auto_docstring
-class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
+class HiggsAudioTokenizerPreTrainedModel(XcodecPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = HiggsAudioTokenizerConfig
-    base_model_prefix = "model"
-    main_input_name = "input_values"
-    supports_gradient_checkpointing = False
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
-
-    def apply_weight_norm(self):
-        """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
-        weight_norm = torch.nn.utils.weight_norm
-        if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-            weight_norm = torch.nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.acoustic_encoder.conv1)
-        weight_norm(self.acoustic_encoder.conv2)
-
-        for block in self.acoustic_encoder.block:
-            weight_norm(block.conv1)
-            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
-                weight_norm(res_unit.conv1)
-                weight_norm(res_unit.conv2)
-
-        weight_norm(self.acoustic_decoder.conv1, name="weight")
-        weight_norm(self.acoustic_decoder.conv2, name="weight")
-
-        for block in self.acoustic_decoder.block:
-            weight_norm(block.conv_t1, name="weight")
-            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
-                weight_norm(res_unit.conv1, name="weight")
-                weight_norm(res_unit.conv2, name="weight")
-
-    def remove_weight_norm(self):
-        """Remove the weight norm from the acoustic encoder and decoder."""
-        for module in (self.acoustic_encoder, self.acoustic_decoder):
-            for m in module.modules():
-                try:
-                    torch.nn.utils.remove_weight_norm(m, name="weight")
-                except (ValueError, AttributeError):
-                    pass
-                if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
-                    torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
+    base_model_prefix = "higgs_audio_tokenizer"
 
 
 @auto_docstring(custom_intro="""The Higgs Audio neural audio codec model.""")
@@ -262,6 +163,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 kernel_size=config.semantic_downsample_factor, stride=config.semantic_downsample_factor
             )
 
+    # Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
         r"""
@@ -275,26 +177,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 module.output_padding = (stride % 2,)
         if hasattr(decoder, "tanh") and isinstance(decoder.tanh, nn.Tanh):
             decoder.tanh = nn.Identity()
-
-    def audio_extraction(self, raw_audio, original_sr=None, target_sr=None):
-        # Convert from librosa to torch
-        if not isinstance(raw_audio, torch.Tensor):
-            audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=self.device)
-        else:
-            audio_signal = raw_audio.float()
-
-        if audio_signal.ndim == 1:
-            audio_signal = audio_signal.unsqueeze(0)  # [1, time]
-
-        if (original_sr is not None and target_sr is not None) and original_sr != target_sr:
-            resampler = torchaudio.transforms.Resample(orig_freq=original_sr, new_freq=target_sr)
-            audio_signal = resampler(audio_signal)
-
-        # Add batch dimension
-        if audio_signal.ndim == 2:
-            audio_signal = audio_signal.unsqueeze(0)  # [batch, channel, time]
-
-        return audio_signal
 
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
         input_values = torchaudio.functional.resample(input_values, self.sampling_rate, self.semantic_sample_rate)

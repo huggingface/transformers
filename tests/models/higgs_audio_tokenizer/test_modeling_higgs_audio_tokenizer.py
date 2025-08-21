@@ -423,8 +423,13 @@ def normalize(arr):
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
-    arr1_normalized = normalize(arr1)
-    arr2_normalized = normalize(arr2)
+    arr1_np = arr1.cpu().numpy().squeeze()
+    arr2_np = arr2.cpu().numpy().squeeze()
+    max_length = min(arr1.shape[-1], arr2.shape[-1])
+    arr1_np = arr1_np[..., :max_length]
+    arr2_np = arr2_np[..., :max_length]
+    arr1_normalized = normalize(arr1_np)
+    arr2_normalized = normalize(arr2_np)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
