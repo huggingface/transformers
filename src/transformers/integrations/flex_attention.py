@@ -290,6 +290,9 @@ def flex_attention_forward(
         enable_gqa = False
 
     kernel_options = kwargs.get("kernel_options")
+    # dynamically set return_lse to True if output_attentions is True
+    return_lse = module.config.output_attentions
+    
     attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
@@ -301,7 +304,7 @@ def flex_attention_forward(
         kernel_options=kernel_options,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
         # For simplification, we thus always return it as no additional computations are introduced.
-        return_lse=True,
+        return_lse=return_lse,
         training=module.training,
     )
     # lse is returned in float32
