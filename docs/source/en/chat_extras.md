@@ -53,10 +53,10 @@ def get_current_wind_speed(location: str):
 tools = [get_current_temperature, get_current_wind_speed]
 ```
 
-You may, if you wish, add a `Returns:` block to the docstring and a return type to the function header, but most models
-will not use this information. The parser will also ignore any of the actual code inside your function! What really
-matters is the function name, the argument names, the argument types, and the docstring describing the function's purpose
-and the purpose of its arguments. These create the "signature" that the model will use to decide whether to call the tool.
+You can optionally add a `Returns:` block to the docstring and a return type to the function header, but most models won't use this information. The parser will also ignore the actual code inside the function!
+
+What really matters is the function name, argument names, argument types, and docstring describing the function's purpose
+and the purpose of its arguments. These create the "signature" the model will use to decide whether to call the tool.
 
 ## A tool-calling example
 
@@ -132,7 +132,7 @@ The temperature in Paris, France right now is 22°C.<|im_end|>
 > significantly more complex process, as you need to handle multiple tool responses at once and disambiguate them, often using tool call IDs. Please refer to the model card to see exactly what format a model expects for tool calls.
 
 
-## Advanced: Manually writing JSON Schemas
+## JSON schemas
 
 Another way to define tools is by passing a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step).
 
