@@ -33,6 +33,7 @@ from ...utils import (
     logging
 )
 from ..auto import AutoModel
+from ...modeling_outputs import BaseModelOutput
 from ..qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
 from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
                                           InternVLVisionRMSNorm,
@@ -46,7 +47,6 @@ from ..internvl.modeling_internvl import (InternVLPreTrainedModel,
                                           InternVLVisionEmbeddings,
                                           InternVLCausalLMOutputWithPast,
                                           InternVLVisionLayer,
-                                          InternVLVisionEncoder,
                                           InternVLForConditionalGeneration,
                                           InternVLVisionModel,
                                           InternVLModel)
@@ -157,8 +157,9 @@ class InternS1VisionLayer(InternVLVisionLayer):
         return layer_output, attention_weights
 
 
-class InternS1VisionEncoder(InternVLVisionEncoder):
+class InternS1VisionEncoder(nn.Module):
     def __init__(self, config: InternS1VisionConfig) -> None:
+        super().__init__()
         self.config = config
         dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
         dpr_configs = []
@@ -169,6 +170,36 @@ class InternS1VisionEncoder(InternVLVisionEncoder):
         self.layer = nn.ModuleList([
             InternS1VisionLayer(dpr_configs[idx]) for idx in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
+
+    @can_return_tuple
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> Union[tuple, BaseModelOutput]:
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(hidden_states, output_attentions)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 @auto_docstring

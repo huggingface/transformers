@@ -450,6 +450,7 @@ class InternS1VisionLayer(GradientCheckpointingLayer):
 
 class InternS1VisionEncoder(nn.Module):
     def __init__(self, config: InternS1VisionConfig) -> None:
+        super().__init__()
         self.config = config
         dpr = np.linspace(0.0, float(config.drop_path_rate), int(config.num_hidden_layers))
         dpr_configs = []
