@@ -450,7 +450,6 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": Dinov2WithRegistersLayer,
         "attentions": Dinov2WithRegistersSelfAttention,
     }
 
@@ -518,13 +517,16 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -538,7 +540,9 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
-        encoder_outputs = self.encoder(embedding_output, head_mask=head_mask)
+        encoder_outputs: BaseModelOutput = self.encoder(
+            embedding_output, head_mask=head_mask, output_hidden_states=output_hidden_states
+        )
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, 0, :]
@@ -546,6 +550,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -632,15 +637,6 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         return self.embeddings.patch_embeddings
 
     @check_model_inputs
-    def _forward_with_additional_outputs(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutput:
-        """Additional forward to capture intermediate outputs by `check_model_inputs` decorator"""
-        embedding_output = self.embeddings(pixel_values)
-        output = self.encoder(embedding_output)
-        return output
-
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

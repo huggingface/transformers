@@ -30,11 +30,10 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import check_model_inputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
 
@@ -341,11 +340,19 @@ class VitPoseBackboneEncoder(nn.Module):
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutput:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(hidden_states, dataset_index, layer_head_mask)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
+        )
 
 
 @auto_docstring
@@ -358,7 +365,6 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _can_record_outputs = {
-        "hidden_states": VitPoseBackboneLayer,
         "attentions": VitPoseBackboneSelfAttention,
     }
 
@@ -403,25 +409,14 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         self.post_init()
 
     @check_model_inputs
-    def _forward_with_additional_outputs(
-        self,
-        pixel_values: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        """Additional forward to capture intermediate outputs by `check_model_inputs` decorator"""
-        embedding_output = self.embeddings(pixel_values)
-        return self.encoder(embedding_output, dataset_index=dataset_index, head_mask=head_mask)
-
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
@@ -442,7 +437,9 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-        output_hidden_states = kwargs.get("output_hidden_states", False) or self.config.output_hidden_states
+
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -451,22 +448,21 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        kwargs["output_hidden_states"] = True  # for backbone we need intermediate hidden states
-        outputs = self._forward_with_additional_outputs(
-            pixel_values, dataset_index=dataset_index, head_mask=head_mask, **kwargs
+        embedding_output = self.embeddings(pixel_values)
+        outputs: BaseModelOutput = self.encoder(
+            embedding_output, dataset_index=dataset_index, head_mask=head_mask, output_hidden_states=True
         )
         hidden_states = outputs.hidden_states
 
-        feature_maps = ()
+        feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = self.layernorm(hidden_state)
-                feature_maps += (hidden_state,)
+                feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=feature_maps,
+            feature_maps=tuple(feature_maps),
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
         )
 
 
