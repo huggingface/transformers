@@ -1409,7 +1409,7 @@ class EncoderDecoderCache(Cache):
 class OffloadedCache(DynamicCache):
     def __init__(self) -> None:
         logger.warning_once(
-            "`OffloadedCache` is deprecated and will be removed in version v4.60 "
+            "`OffloadedCache` is deprecated and will be removed in version v4.59 "
             "Use `DynamicCache(offloading=True)` instead"
         )
         super().__init__(offloading=True)

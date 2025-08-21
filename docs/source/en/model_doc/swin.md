@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -92,9 +91,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] SwinConfig
 
-<frameworkcontent>
-<pt>
-
 ## SwinModel
 
 [[autodoc]] SwinModel
@@ -109,24 +105,3 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] transformers.SwinForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFSwinModel
-
-[[autodoc]] TFSwinModel
-    - call
-
-## TFSwinForMaskedImageModeling
-
-[[autodoc]] TFSwinForMaskedImageModeling
-    - call
-
-## TFSwinForImageClassification
-
-[[autodoc]] transformers.TFSwinForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>
