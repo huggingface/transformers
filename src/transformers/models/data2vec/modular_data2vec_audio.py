@@ -114,7 +114,7 @@ class Data2VecAudioPositionalConvEmbedding(nn.Module):
 
 class Data2VecAudioFeatureEncoder(Wav2Vec2FeatureEncoder, nn.Module):
     def __init__(self, config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.conv_layers = nn.ModuleList(
             [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         )

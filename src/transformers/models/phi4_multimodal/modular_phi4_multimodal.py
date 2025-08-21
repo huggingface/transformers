@@ -584,7 +584,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
 
 class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings, nn.Module):
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.patch_size = config.patch_size
         self.num_patches_per_side = config.image_size // self.patch_size
@@ -1449,7 +1449,7 @@ class Phi4MultimodalRotaryEmbedding(Phi3RotaryEmbedding):
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     def _init_weights(self, module):
-        Phi3PreTrainedModel._init_weights(module)
+        Phi3PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
             module.global_img_feature_extensor.data.zero_()
             module.sub_img_feature_extensor.data.zero_()

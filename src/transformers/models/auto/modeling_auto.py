@@ -1183,6 +1183,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForSequenceClassification"),
         ("deberta-v2", "DebertaV2ForSequenceClassification"),
         ("deepseek_v2", "DeepseekV2ForSequenceClassification"),
+        ("deepseek_v3", "DeepseekV3ForSequenceClassification"),
         ("diffllama", "DiffLlamaForSequenceClassification"),
         ("distilbert", "DistilBertForSequenceClassification"),
         ("doge", "DogeForSequenceClassification"),

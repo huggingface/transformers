@@ -195,16 +195,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-            image_grid_thw,
-            video_grid_thw,
-            video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
-            position_id_per_seconds=position_id_per_seconds,
-            seconds_per_chunk=seconds_per_chunk,
-        )
+        if images is not None or videos is not None or audio is not None:
+            text = self.replace_multimodal_special_tokens(
+                text,
+                audio_lengths,
+                image_grid_thw,
+                video_grid_thw,
+                video_second_per_grid=video_second_per_grid,
+                use_audio_in_video=use_audio_in_video,
+                position_id_per_seconds=position_id_per_seconds,
+                seconds_per_chunk=seconds_per_chunk,
+            )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 

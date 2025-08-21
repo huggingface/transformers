@@ -576,7 +576,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()

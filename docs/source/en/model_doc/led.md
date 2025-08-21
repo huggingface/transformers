@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-            <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -173,15 +172,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
 
-[[autodoc]] models.led.modeling_tf_led.TFLEDEncoderBaseModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqModelOutput
-
-[[autodoc]] models.led.modeling_tf_led.TFLEDSeq2SeqLMOutput
-
-<frameworkcontent>
-<pt>
-
 ## LEDModel
 
 [[autodoc]] LEDModel
@@ -201,22 +191,3 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] LEDForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLEDModel
-
-[[autodoc]] TFLEDModel
-    - call
-
-## TFLEDForConditionalGeneration
-
-[[autodoc]] TFLEDForConditionalGeneration
-    - call
-
-</tf>
-</frameworkcontent>
-
-
-

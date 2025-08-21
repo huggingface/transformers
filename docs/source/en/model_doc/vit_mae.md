@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -30,7 +29,7 @@ rendered properly in your Markdown viewer.
 [ViTMAE](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that is pretrained by masking large portions of an image (~75%). An encoder processes the visible image patches and a decoder reconstructs the missing pixels from the encoded patches and mask tokens. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
 
 <img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 You can find all the original ViTMAE checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=vit-mae) organization.
 
@@ -79,9 +78,6 @@ reconstruction = outputs.logits
 
 [[autodoc]] ViTMAEConfig
 
-<frameworkcontent>
-<pt>
-
 ## ViTMAEModel
 
 [[autodoc]] ViTMAEModel
@@ -91,19 +87,3 @@ reconstruction = outputs.logits
 
 [[autodoc]] transformers.ViTMAEForPreTraining
     - forward
-
-</pt>
-<tf>
-
-## TFViTMAEModel
-
-[[autodoc]] TFViTMAEModel
-    - call
-
-## TFViTMAEForPreTraining
-
-[[autodoc]] transformers.TFViTMAEForPreTraining
-    - call
-
-</tf>
-</frameworkcontent>

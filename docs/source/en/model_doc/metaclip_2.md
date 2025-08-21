@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-07-31.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-20.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -129,6 +129,3 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 
 [[autodoc]] MetaClip2ForImageClassification
     - forward
-
-</pt>
-<tf>

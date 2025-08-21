@@ -32,7 +32,7 @@ alt="drawing" width="600"/>
 
 <small> LayoutLMv3 architecture. Taken from the <a href="https://huggingface.co/papers/2204.08387">original paper</a>. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [chriskoo](https://huggingface.co/chriskoo), [tokec](https://huggingface.co/tokec), and [lre](https://huggingface.co/lre). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
 
 ## Usage tips
 
@@ -110,9 +110,6 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 [[autodoc]] LayoutLMv3Processor
     - __call__
 
-<frameworkcontent>
-<pt>
-
 ## LayoutLMv3Model
 
 [[autodoc]] LayoutLMv3Model
@@ -132,29 +129,3 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 
 [[autodoc]] LayoutLMv3ForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLayoutLMv3Model
-
-[[autodoc]] TFLayoutLMv3Model
-    - call
-
-## TFLayoutLMv3ForSequenceClassification
-
-[[autodoc]] TFLayoutLMv3ForSequenceClassification
-    - call
-
-## TFLayoutLMv3ForTokenClassification
-
-[[autodoc]] TFLayoutLMv3ForTokenClassification
-    - call
-
-## TFLayoutLMv3ForQuestionAnswering
-
-[[autodoc]] TFLayoutLMv3ForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

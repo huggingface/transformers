@@ -130,11 +130,10 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]
             new_imports.extend(get_relative_imports(f))
 
         module_path = Path(module_file).parent
-        new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
+        new_import_files = [f"{str(module_path / m)}.py" for m in new_imports]
+        files_to_check = [f for f in new_import_files if f not in all_relative_imports]
 
-        no_change = len(new_import_files) == 0
+        no_change = len(files_to_check) == 0
         all_relative_imports.extend(files_to_check)
 
     return all_relative_imports

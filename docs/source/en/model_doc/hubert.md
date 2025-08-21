@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -125,9 +124,6 @@ print(transcription[0])
 [[autodoc]] HubertConfig
     - all
 
-<frameworkcontent>
-<pt>
-
 ## HubertModel
 
 [[autodoc]] HubertModel
@@ -142,19 +138,3 @@ print(transcription[0])
 
 [[autodoc]] HubertForSequenceClassification
     - forward
-
-</pt>
-<tf>
-
-## TFHubertModel
-
-[[autodoc]] TFHubertModel
-    - call
-
-## TFHubertForCTC
-
-[[autodoc]] TFHubertForCTC
-    - call
-
-</tf>
-</frameworkcontent>

@@ -291,7 +291,7 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_flex_attn = False
 
     def _init_weights(self, module):
-        LlavaPreTrainedModel._init_weights(module)
+        LlavaPreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
