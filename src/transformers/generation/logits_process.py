@@ -21,6 +21,10 @@ from typing import TYPE_CHECKING, Callable, Optional, Union
 import numpy as np
 import torch
 
+import json
+from typing import Dict, List, Union, Any, Optional
+
+from .logits_processor_base import LogitsProcessor, LogitsProcessorList
 from ..pytorch_utils import isin_mps_friendly
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
@@ -3239,3 +3243,132 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         self.delay_pattern -= self.active_batches[:, None].int()
 
         return scores
+
+class LogitProcessorRegistry:
+    """Registry for LogitProcessor classes to enable configuration-based instantiation."""
+    
+    _registry = {}
+    
+    @classmethod
+    def register(cls, processor_class: type):
+        """Register a LogitProcessor class."""
+        cls._registry[processor_class.__name__] = processor_class
+        return processor_class
+    
+    @classmethod
+    def get_processor_class(cls, name: str) -> type:
+        """Get a LogitProcessor class by name."""
+        if name not in cls._registry:
+            # Try to get from globals in this module
+            import sys
+            current_module = sys.modules[__name__]
+            if hasattr(current_module, name):
+                processor_class = getattr(current_module, name)
+                if isinstance(processor_class, type) and issubclass(processor_class, LogitsProcessor):
+                    cls.register(processor_class)
+                    return processor_class
+            raise ValueError(f"LogitProcessor '{name}' not found in registry. Available: {list(cls._registry.keys())}")
+        return cls._registry[name]
+    
+    @classmethod
+    def list_processors(cls) -> List[str]:
+        """List all registered processor names."""
+        return list(cls._registry.keys())
+    
+    @classmethod
+    def create_processor(cls, config: Dict[str, Any]) -> LogitsProcessor:
+        """Create a LogitProcessor instance from configuration."""
+        if "type" not in config:
+            raise ValueError("LogitProcessor config must contain 'type' field")
+        
+        processor_type = config["type"]
+        processor_class = cls.get_processor_class(processor_type)
+        
+        # Extract arguments (everything except 'type')
+        args = {k: v for k, v in config.items() if k != "type"}
+        
+        try:
+            return processor_class(**args)
+        except TypeError as e:
+            raise ValueError(f"Invalid arguments for {processor_type}: {e}")
+
+
+# Register built-in processors
+# Register the actual built-in processors (not placeholder classes)
+# These are the real implementations defined earlier in the file
+LogitProcessorRegistry.register(TemperatureLogitsWarper)
+LogitProcessorRegistry.register(TopKLogitsWarper)
+LogitProcessorRegistry.register(TopPLogitsWarper)
+LogitProcessorRegistry.register(RepetitionPenaltyLogitsProcessor)
+LogitProcessorRegistry.register(NoRepeatNGramLogitsProcessor)
+LogitProcessorRegistry.register(MinLengthLogitsProcessor)
+LogitProcessorRegistry.register(MinNewTokensLengthLogitsProcessor)
+LogitProcessorRegistry.register(MinPLogitsWarper)
+LogitProcessorRegistry.register(TypicalLogitsWarper)
+LogitProcessorRegistry.register(EpsilonLogitsWarper)
+LogitProcessorRegistry.register(EtaLogitsWarper)
+LogitProcessorRegistry.register(EncoderRepetitionPenaltyLogitsProcessor)
+LogitProcessorRegistry.register(EncoderNoRepeatNGramLogitsProcessor)
+LogitProcessorRegistry.register(SequenceBiasLogitsProcessor)
+LogitProcessorRegistry.register(NoBadWordsLogitsProcessor)
+LogitProcessorRegistry.register(PrefixConstrainedLogitsProcessor)
+LogitProcessorRegistry.register(HammingDiversityLogitsProcessor)
+LogitProcessorRegistry.register(ForcedBOSTokenLogitsProcessor)
+LogitProcessorRegistry.register(ForcedEOSTokenLogitsProcessor)
+LogitProcessorRegistry.register(InfNanRemoveLogitsProcessor)
+LogitProcessorRegistry.register(ExponentialDecayLengthPenalty)
+LogitProcessorRegistry.register(LogitNormalization)
+LogitProcessorRegistry.register(SuppressTokensAtBeginLogitsProcessor)
+LogitProcessorRegistry.register(SuppressTokensLogitsProcessor)
+LogitProcessorRegistry.register(WhisperTimeStampLogitsProcessor)
+LogitProcessorRegistry.register(WhisperNoSpeechDetection)
+LogitProcessorRegistry.register(ClassifierFreeGuidanceLogitsProcessor)
+LogitProcessorRegistry.register(AlternatingCodebooksLogitsProcessor)
+LogitProcessorRegistry.register(UnbatchedClassifierFreeGuidanceLogitsProcessor)
+LogitProcessorRegistry.register(BarkEosPrioritizerLogitsProcessor)
+LogitProcessorRegistry.register(WatermarkLogitsProcessor)
+LogitProcessorRegistry.register(SynthIDTextWatermarkLogitsProcessor)
+LogitProcessorRegistry.register(DiaClassifierFreeGuidanceLogitsProcessor)
+LogitProcessorRegistry.register(DiaEOSChannelFilterLogitsProcessor)
+LogitProcessorRegistry.register(DiaEOSDelayPatternLogitsProcessor)
+
+
+# Enhanced LogitsProcessorList
+class ConfigurableLogitsProcessorList(LogitsProcessorList):
+    """Extended LogitsProcessorList that supports configuration-based construction."""
+    
+    @classmethod
+    def from_config(cls, config: Union[str, List[Dict[str, Any]]]) -> 'ConfigurableLogitsProcessorList':
+        """Create LogitsProcessorList from JSON config or list of dicts."""
+        if isinstance(config, str):
+            try:
+                config = json.loads(config)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON in logit_processors config: {e}")
+        
+        if not isinstance(config, list):
+            raise ValueError("logit_processors config must be a list of processor configurations")
+        
+        processors = []
+        for proc_config in config:
+            if not isinstance(proc_config, dict):
+                raise ValueError("Each processor configuration must be a dictionary")
+            processors.append(LogitProcessorRegistry.create_processor(proc_config))
+        
+        return cls(processors)
+    
+    def to_config(self) -> List[Dict[str, Any]]:
+        """Convert LogitsProcessorList to configuration format."""
+        config = []
+        for processor in self:
+            proc_config = {"type": processor.__class__.__name__}
+            
+            for attr in dir(processor):
+                if not attr.startswith('_') and not callable(getattr(processor, attr)):
+                    value = getattr(processor, attr)
+                    if isinstance(value, (int, float, str, bool, list, dict)):
+                        proc_config[attr] = value
+            
+            config.append(proc_config)
+        
+        return config

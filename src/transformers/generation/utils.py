@@ -1308,6 +1308,26 @@ class GenerationMixin(ContinuousMixin):
                 )
             )
 
+        # Add configured processors from GenerationConfig
+        configured_processors = generation_config.get_logit_processors()
+        if configured_processors is not None:
+            # Check for duplicates and warn
+            existing_types = {type(p).__name__ for p in processors}
+            config_types = {type(p).__name__ for p in configured_processors}
+            duplicates = existing_types & config_types
+            
+            if duplicates:
+                warnings.warn(
+                    f"Duplicate LogitProcessors detected: {duplicates}. "
+                    f"Configured processors will be added after standard ones."
+                )
+            
+            processors.extend(configured_processors)
+        
+        # Add any directly passed processors last
+        if logits_processor is not None:
+            processors.extend(logits_processor)
+
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
