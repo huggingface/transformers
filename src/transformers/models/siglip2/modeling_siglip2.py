@@ -773,7 +773,6 @@ class Siglip2PreTrainedModel(PreTrainedModel):
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config: Siglip2TextConfig
-    # _supports_flash_attn = False
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)

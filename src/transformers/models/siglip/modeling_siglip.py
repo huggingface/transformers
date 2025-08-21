@@ -684,7 +684,6 @@ class SiglipTextTransformer(nn.Module):
 )
 class SiglipTextModel(SiglipPreTrainedModel):
     config: SiglipTextConfig
-    #_supports_flash_attn = False
 
     def __init__(self, config: SiglipTextConfig):
         super().__init__(config)

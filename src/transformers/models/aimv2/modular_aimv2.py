@@ -614,6 +614,8 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
 
 @auto_docstring
 class Aimv2Model(CLIPModel, nn.Module):
+    _supports_flash_attn = True
+
     def __init__(self, config: Aimv2Config):
         nn.Module().__init__(config)
 
