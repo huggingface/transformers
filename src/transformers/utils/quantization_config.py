@@ -1014,7 +1014,7 @@ class AwqConfig(QuantizationConfigMixin):
                     except ImportError:
                         # This shouldn't happen since is_auto_awq_available() returned True
                         pass
-                    
+
             if not awq_version_supports_non_conversion:
                 raise ValueError(
                     f"You current version of `autoawq` does not support module quantization skipping, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
