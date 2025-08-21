@@ -38,7 +38,7 @@ import supervision as sv
 from PIL import Image
 from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation, infer_device
 
-device =infer_device()
+device = infer_device()
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
