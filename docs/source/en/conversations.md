@@ -53,8 +53,8 @@ The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooli
 
 [`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
-Chat models accept a chat history as input, which is a list of messages. Each message is a dictionary with `role` and `content` keys.
-To start the chat, you can just have a single `user` message. You can also optionally include a `system` message to give the model directions on how to behave.
+Chat models accept a list of messages (the chat history) as the input. Each message is a dictionary with `role` and `content` keys.
+To start the chat, add a single `user` message. You can also optionally include a `system` message to give the model directions on how to behave.
 
 ```py
 chat = [
