@@ -79,7 +79,7 @@ you need to update the chat history with the model's response. You can do this e
 to `chat` (use the `assistant` role), or by reading `response[0]["generated_text"]`, which contains
 the full chat history, including the most recent response.
 
-Once you have the model's response, you can continue the conversation by appending a new `user` message to the chat history, like so:
+Once you have the model's response, you can continue the conversation by appending a new `user` message to the chat history.
 
 ```py
 chat = response[0]["generated_text"]
