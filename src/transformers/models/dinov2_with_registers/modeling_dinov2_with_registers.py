@@ -649,7 +649,8 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
     def forward(
         self,
         pixel_values: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -675,12 +676,11 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
-        output_hidden_states = kwargs.pop("output_hidden_states", False) or self.config.output_hidden_states
-
-        output: BaseModelOutput = self._forward_with_additional_outputs(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        embedding_output = self.embeddings(pixel_values)
+        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -689,7 +689,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, self.num_register_tokens + 1 :]
+                    hidden_state = hidden_state[:, 1 + self.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
@@ -700,8 +700,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=output.hidden_states if output_hidden_states else None,
-            attentions=output.attentions,
+            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
