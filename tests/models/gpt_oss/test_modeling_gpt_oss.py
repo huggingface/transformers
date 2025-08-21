@@ -478,7 +478,7 @@ if __name__ == "__main__":
 
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation=attn_impl,
             use_kernels=kernels,

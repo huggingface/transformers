@@ -114,7 +114,7 @@ class HfQuantizer(ABC):
 
         Args:
             dtype (`torch.dtype`, *optional*):
-                The torch_dtype that is used to compute the device_map.
+                The dtype that is used to compute the device_map.
         """
         return dtype
 
