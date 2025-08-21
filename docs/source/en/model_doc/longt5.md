@@ -75,7 +75,7 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 >>> dataset = load_dataset("scientific_papers", "pubmed", split="validation")
 >>> model = (
 ...     LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
-...     .to("cuda")
+...     .to("auto")
 ...     .half()
 ... )
 >>> tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
@@ -85,8 +85,8 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 ...     inputs_dict = tokenizer(
 ...         batch["article"], max_length=16384, padding="max_length", truncation=True, return_tensors="pt"
 ...     )
-...     input_ids = inputs_dict.input_ids.to("cuda")
-...     attention_mask = inputs_dict.attention_mask.to("cuda")
+...     input_ids = inputs_dict.input_ids.to(model.device)
+...     attention_mask = inputs_dict.attention_mask.to(model.device)
 ...     output_ids = model.generate(input_ids, attention_mask=attention_mask, max_length=512, num_beams=2)
 ...     batch["predicted_abstract"] = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 ...     return batch

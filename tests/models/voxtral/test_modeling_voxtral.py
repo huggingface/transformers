@@ -25,7 +25,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -190,7 +189,6 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
         if not self.has_attentions:

@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -301,7 +300,6 @@ class Exaone4IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_sdpa
     def test_model_generation_bf16_sdpa(self):
         EXPECTED_TEXT = "Tell me about the Miracle on the Han river.\n\nThe Miracle on the Han River is a story about the miracle of the Korean War Armistice.\n\nThe Korean War broke out in 35 years ago in 1950. The war was the result of the ideological conflict between the communist north and the capitalist south. The war was brought to a halt in 1953. There was to be peace talks but no peace treaty. As a result of the stalemate the Korean people have neither a peace treaty nor a reunification nor a democratization of Korea. The stalemate of 35 years has produced a people of 70 million"
         prompt = "Tell me about the Miracle on the Han river."
@@ -336,7 +334,6 @@ class Exaone4IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_torch_sdpa
     def test_model_generation_beyond_sliding_window(self):
         EXPECTED_TEXT_COMPLETION = (
             " but I'm not sure if I'm going to be able to see it. I really enjoy the scenery, but I'm not sure if I"
