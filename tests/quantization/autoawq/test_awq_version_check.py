@@ -1,7 +1,6 @@
-import sys
-import pytest
 import importlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+import pytest
 
 
 class TestAwqVersionCheck:
