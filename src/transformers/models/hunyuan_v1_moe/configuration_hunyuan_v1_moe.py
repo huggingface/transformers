@@ -99,8 +99,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         num_experts (`int` or `List`, *optional*, defaults to 1):
             The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
         moe_topk (int or List, *optional*, defaults to 1):
             Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
         head_dim (`int`, *optional*, defaults to 128):
@@ -135,7 +133,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         num_experts: Union[int, list] = 1,
-        norm_topk_prob=True,
         moe_topk: Union[int, list] = 1,
         head_dim=None,
         **kwargs,
@@ -147,7 +144,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
         self.moe_topk = moe_topk
 
         self.head_dim = head_dim

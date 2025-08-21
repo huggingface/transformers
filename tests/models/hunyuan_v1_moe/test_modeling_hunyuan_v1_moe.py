@@ -113,8 +113,8 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         # we will compele this when model file change over
         # pass
-        EXPECTED_ANSWER = "\nRegular exercise offers numerous physical, mental, and emotional benefits. It improves cardiovascular health, strengthens muscles and bones, boosts metabolism, and helps"
-        prompt = "Write a short summary of the benefits of regular exercise "
+        EXPECTED_ANSWER = "\nOkay, I need to write a short summary about the benefits of regular exercise. Let me start by recalling what I know. First,"
+        prompt = "Write a short summary of the benefits of regular exercise"
         tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
         model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
         messages = [
@@ -125,9 +125,8 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
             tokenize=True,
             add_generation_prompt=True,
             return_tensors="pt",
-            enable_thinking=False,  # Toggle thinking mode (default: True)
         )
         generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=30, top_k=1)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        answer = text.split("<answer>")[1]
-        self.assertEqual(EXPECTED_ANSWER, answer)
+        text = tokenizer.decode(generated_ids[0])
+        output = text.split("<think>")[1]
+        self.assertEqual(EXPECTED_ANSWER, output)

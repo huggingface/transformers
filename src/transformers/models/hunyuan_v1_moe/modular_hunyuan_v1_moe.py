@@ -137,7 +137,6 @@ class HunYuanMoEV1Moe(nn.Module):
         self.layer_idx = layer_idx
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
         self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
-        self.norm_topk_prob = config.norm_topk_prob
         self.gate = HunYuanMoEV1Gate(config, layer_idx=layer_idx)
         # self.wg = nn.Linear(config.hidden_size, config.num_experts, bias=False, dtype=torch.float32)
         self.experts = nn.ModuleList(
@@ -155,8 +154,7 @@ class HunYuanMoEV1Moe(nn.Module):
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
 
