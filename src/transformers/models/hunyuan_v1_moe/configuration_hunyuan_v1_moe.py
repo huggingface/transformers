@@ -101,10 +101,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
             The number of experts for moe. If it is a list, it will be used as the number of experts for each layer.
         moe_topk (int or List, *optional*, defaults to 1):
             Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
-        moe_drop_tokens (bool, *optional*, defaults to `False`):
-            Whether to drop tokens exceeding expert capacity instead of padding.
-        moe_random_routing_dropped_token (bool, *optional*, defaults to `False`):
-            If True, randomly routes dropped tokens to available experts.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
     """
@@ -138,9 +134,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         attention_dropout=0.0,
         num_experts: Union[int, list] = 1,
         moe_topk: Union[int, list] = 1,
-        # capacity_factor: Union[int, List]=1.0,
-        moe_drop_tokens=False,
-        moe_random_routing_dropped_token=False,
         head_dim=None,
         **kwargs,
     ):
@@ -152,9 +145,6 @@ class HunYuanMoEV1Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
         self.moe_topk = moe_topk
-        # self.capacity_factor = capacity_factor
-        self.moe_drop_tokens = moe_drop_tokens
-        self.moe_random_routing_dropped_token = moe_random_routing_dropped_token
 
         self.head_dim = head_dim
         # for backward compatibility
