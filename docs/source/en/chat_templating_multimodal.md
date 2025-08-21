@@ -16,22 +16,19 @@ rendered properly in your Markdown viewer.
 
 # Multimodal chat templates
 
-Multimodal chat models are similar to normal chat models, but they can also accept non-text inputs like images, audio or video.
+Multimodal chat models accept inputs like images, audio or video, in addition to text. The `content` key in a multimodal chat history is a list containing multiple items of different types. This is unlike text-only chat models whose `content` key is a single string.
 
-Chatting with multimodal models is very similar to chatting with text-only models, with the key difference being the `content` key of the messages. Instead of a single string,
-as it is for text-only models, `content` should be a list containing multiple items of different types.
 
-In the same way that the [Tokenizer](./tokenizer_summary.md) class handles chat templates and tokenization for text-only models, 
-the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Methods like [`ProcessorMixin.apply_chat_template`] are almost identical.
+In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models, 
+the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Their [`~ProcessorMixin.apply_chat_template`] methods are almost identical.
 
-This guide will show you how to chat with multimodal models, first at a high level using the [`ImageTextToTextPipeline`] and then at a lower level using the [`ProcessorMixin.apply_chat_template`] and [`GenerationMixin.generate`] methods.
+This guide will show you how to chat with multimodal models with the high-level [`ImageTextToTextPipeline`] and at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods.
 
 ## ImageTextToTextPipeline
 
-[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format). You can think of this pipeline
-as the equivalent of the [`TextGenerationPipeline`] for multimodal vision-language models (VLMs).
+[`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
-We can see this pipeline in action by building a sample chat. Note how `content` is a list here!
+Add image and text blocks to the `content` key in the chat history.
 
 ```py
 messages = [
@@ -49,7 +46,7 @@ messages = [
 ]
 ```
 
-Next, we create an [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Setting the data type to [auto](./models#model-data-type) also helps save memory and improve speed.
+Create an [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Setting the data type to [auto](./models#model-data-type) also helps save memory and improve speed.
 
 ```python
 import torch
@@ -60,7 +57,6 @@ out = pipe(text=messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
-And we get:
 
 ```
 Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
