@@ -611,7 +611,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         )  # fmt: skip
 
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-        
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
