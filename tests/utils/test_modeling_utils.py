@@ -78,7 +78,6 @@ from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_torch_npu_available,
-    is_torch_sdpa_available,
 )
 
 
@@ -693,9 +692,7 @@ class ModelUtilsTest(TestCasePlus):
         # test that the model can be instantiated with attn_implementation of either
         # 1. explicit from_pretrained's attn_implementation argument
         # 2. explicit from_pretrained's attn_implementation argument with a config argument
-        attn_implementation_available = ["eager"]
-        if is_torch_sdpa_available():
-            attn_implementation_available.append("sdpa")
+        attn_implementation_available = ["eager", "sdpa"]
 
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
@@ -720,9 +717,7 @@ class ModelUtilsTest(TestCasePlus):
         # 1. config created with explicit attn_implementatation and from_config
         # 2. explicit from_config's attn_implementation argument with a config argument
         # 3. config created with explicit attn_implementatation and from_config overriding with explicit attn_implementation argument
-        attn_implementation_available = ["eager"]
-        if is_torch_sdpa_available():
-            attn_implementation_available.append("sdpa")
+        attn_implementation_available = ["eager", "sdpa"]
 
         if is_flash_attn_available():
             attn_implementation_available.append("flash_attention_2")
@@ -2756,17 +2751,6 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
-
-    def test_not_available_sdpa(self):
-        if is_torch_sdpa_available():
-            self.skipTest(reason="This test requires torch<=2.0")
-
-        with self.assertRaises(ImportError) as cm:
-            _ = AutoModel.from_pretrained(
-                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="sdpa"
-            )
-
-        self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
 @require_torch

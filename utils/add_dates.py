@@ -220,7 +220,7 @@ def insert_dates(model_card_list: list[str]):
 
         # If the dates info line does not exist, add it
         else:
-            paper_link = get_paper_link(path=file_path)
+            paper_link = get_paper_link(model_card=model_card, path=file_path)
             release_date = ""
 
             if not (paper_link == "No_paper" or paper_link == "blog"):

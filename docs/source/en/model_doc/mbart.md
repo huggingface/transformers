@@ -72,7 +72,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-m
 tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
 tokenizer.src_lang = "en_XX"
-encoded_hi = tokenizer(article_en, return_tensors="pt").to("cuda")
+encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
 generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```

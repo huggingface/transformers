@@ -32,13 +32,13 @@ class CLIPProcessor(ProcessorMixin):
     Args:
         image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`], *optional*):
+        tokenizer ([`AutoTokenizer`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
