@@ -198,6 +198,7 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: dict[str, str] = {}
     base_model_tp_plan: Optional[dict[str, Any]] = None
     base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
+    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -370,7 +371,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @output_attentions.setter
     def output_attentions(self, value: bool):
-        # If we set `output_attentions` explictily before the attn implementation, dispatch eager
+        # If we set `output_attentions` explicitly before the attn implementation, dispatch eager
         if value and self._attn_implementation is None:
             self._attn_implementation = "eager"
         if value and self._attn_implementation != "eager":
@@ -410,15 +411,17 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value: Optional[Union[str, dict]]):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
-        attn_implementation = value if not isinstance(value, dict) else value.get("", self._attn_implementation)
+        current_attn = getattr(self, "_attn_implementation", None)
+        attn_implementation = value if not isinstance(value, dict) else value.get("", current_attn)
         self._attn_implementation_internal = attn_implementation
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
             subconfig = getattr(self, subconfig_key, None)
             if subconfig is not None:
+                current_subconfig_attn = getattr(subconfig, "_attn_implementation", None)
                 sub_implementation = (
-                    value if not isinstance(value, dict) else value.get(subconfig_key, subconfig._attn_implementation)
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
 

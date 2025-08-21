@@ -21,6 +21,7 @@ import warnings
 from copy import deepcopy
 
 import numpy as np
+import pytest
 from packaging import version
 
 from transformers import AutoVideoProcessor
@@ -168,6 +169,7 @@ class VideoProcessingTestMixin:
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")

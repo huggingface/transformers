@@ -246,6 +246,7 @@ class Gemma2TensorProcessor(TensorProcessor):
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
+    "qwen3moe": Qwen2MoeTensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -295,6 +296,8 @@ def get_gguf_hf_weights_map(
         model_type = "command-r"
     elif model_type == "qwen2_moe":
         model_type = "qwen2moe"
+    elif model_type == "qwen3_moe":
+        model_type = "qwen3moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
     arch = None
@@ -316,8 +319,8 @@ def get_gguf_hf_weights_map(
     gguf_to_hf_name_map = {}
     state_dict = hf_model.state_dict()
     for hf_name in state_dict:
-        # An exception for qwen2moe model, where the expert layers are packed
-        if model_type == "qwen2moe" and "mlp.experts." in hf_name:
+        # An exception for qwen2moe/qwen3moe model, where the expert layers are packed
+        if model_type in ("qwen2moe", "qwen3moe") and "mlp.experts." in hf_name:
             hf_name = re.sub(r"mlp.experts.\d+.", "mlp.experts.", hf_name)
 
         name, suffix = hf_name, ""
@@ -391,6 +394,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
     if "qwen2moe" in architecture:
         updated_architecture = "qwen2_moe"
+    elif "qwen3moe" in architecture:
+        updated_architecture = "qwen3_moe"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors

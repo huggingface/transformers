@@ -51,11 +51,9 @@ The simplest way to try out inference with a model supporting depth estimation i
 Instantiate a pipeline from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?pipeline_tag=depth-estimation&sort=downloads):
 
 ```py
->>> from transformers import pipeline
+>>> from transformers import pipeline, infer_device
 >>> import torch
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> device = infer_device()
 >>> checkpoint = "depth-anything/Depth-Anything-V2-base-hf"
 >>> pipe = pipeline("depth-estimation", model=checkpoint, device=device)
 ```

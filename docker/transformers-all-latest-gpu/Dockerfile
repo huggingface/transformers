@@ -55,11 +55,6 @@ RUN python3 -m pip install --no-cache-dir quanto
 # (`deformable_detr`, `rwkv`, `mra`)
 RUN python3 -m pip uninstall -y ninja
 
-# For `dinat` model
-# The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
-RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
-
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
 

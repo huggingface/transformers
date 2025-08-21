@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GptOss model."""
 
+import difflib
 import inspect
 import json
 import os
@@ -48,6 +49,7 @@ if is_torch_available():
 
     from transformers import (
         GptOssForCausalLM,
+        GptOssForSequenceClassification,
         GptOssModel,
     )
 
@@ -59,10 +61,12 @@ class GptOssModelTester(CausalLMModelTester):
         config_class = GptOssConfig
         base_model_class = GptOssModel
         causal_lm_class = GptOssForCausalLM
+        sequence_class = GptOssForSequenceClassification
 
     pipeline_model_mapping = (
         {
             "feature-extraction": GptOssModel,
+            "text-classification": GptOssForSequenceClassification,
             "text-generation": GptOssForCausalLM,
         }
         if is_torch_available()
@@ -72,10 +76,13 @@ class GptOssModelTester(CausalLMModelTester):
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (GptOssModel, GptOssForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": GptOssModel,
+            "text-classification": GptOssForSequenceClassification,
             "text-generation": GptOssForCausalLM,
         }
         if is_torch_available()
@@ -188,6 +195,10 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.testing_utils import torch_device
 
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+
     input_text = [
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
@@ -198,7 +209,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     kernels = kernels.lower() == "true"
 
     # Distributed model loading
-    model_id = f"/fsx/vb/new-oai/gpt-oss-{model_size}-trfs"
+    model_id = f"openai/gpt-oss-{model_size}"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype="auto",
@@ -213,26 +224,54 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
     output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
 
-    # Only rank 0 writes results
+    # Only rank 0 writes results and validates against expected outputs
     if int(os.environ.get("RANK", "0")) == 0:
-        result_entry = {
-            "quantized": quantized,
-            "model": model_size,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
+        # Generate key to look up expected outputs
+        key = generate_config_key(quantized, model_size, kernels, attn_impl, mode)
 
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
-        else:
-            results = []
-        results.append(result_entry)
+                expected_results = json.load(f)
 
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+
+                # Compare actual outputs with expected outputs
+                assert len(output_texts) == len(expected_outputs), f"Output length mismatch for {key}"
+
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    actual_stripped = actual.strip()
+                    expected_stripped = expected.strip()
+
+                    # Make lengths match by taking minimum length to be resilient to generation differences
+                    min_length = min(len(actual_stripped), len(expected_stripped))
+                    actual_truncated = actual_stripped[:min_length]
+                    expected_truncated = expected_stripped[:min_length]
+
+                    if actual_truncated != expected_truncated:
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        raise AssertionError(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
+
+                print(f"✓ Outputs match expected results for {key}")
+            else:
+                print(f"Warning: No expected results found for configuration: {key}")
+        else:
+            print(f"Warning: Results file {RESULTS_PATH} not found")
 
 
 @slow
@@ -242,6 +281,11 @@ class GptOssIntegrationTest(unittest.TestCase):
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
     ]
+
+    @staticmethod
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -265,7 +309,7 @@ class GptOssIntegrationTest(unittest.TestCase):
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         return output_text
 
     # ------------------------
@@ -314,38 +358,38 @@ if __name__ == "__main__":
     # Shared parameterization
     # ------------------------
     PARAMETERS = [
-        (False, "120b", False, "eager", "eval"),
-        (False, "120b", False, "eager", "train"),
-        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (False, "120b", True, "eager", "eval"),
-        (False, "120b", True, "eager", "train"),
-        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (True, "120b", False, "eager", "eval"),
-        (True, "120b", False, "eager", "train"),
-        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (True, "120b", True, "eager", "eval"),
-        (True, "120b", True, "eager", "train"),
-        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
         (False, "20b", False, "eager", "eval"),
         (False, "20b", False, "eager", "train"),
-        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
         (False, "20b", True, "eager", "eval"),
         (False, "20b", True, "eager", "train"),
-        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
         (True, "20b", False, "eager", "eval"),
         (True, "20b", False, "eager", "train"),
-        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
         (True, "20b", True, "eager", "eval"),
         (True, "20b", True, "eager", "train"),
-        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", False, "eager", "eval"),
+        (False, "120b", False, "eager", "train"),
+        (False, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", True, "eager", "eval"),
+        (False, "120b", True, "eager", "train"),
+        (False, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", False, "eager", "eval"),
+        (True, "120b", False, "eager", "train"),
+        (True, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", True, "eager", "eval"),
+        (True, "120b", True, "eager", "train"),
+        (True, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
     ]
 
     # ------------------------
@@ -354,7 +398,7 @@ if __name__ == "__main__":
     @parameterized.expand(PARAMETERS)
     @require_read_token
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
-        model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+        model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
             attn_impl,
@@ -362,23 +406,50 @@ if __name__ == "__main__":
             use_kernels=kernels,
         )
 
-        result_entry = {
-            "quantized": quantized,
-            "model": model,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
+        # Generate key to look up expected outputs
+        key = self.generate_config_key(quantized, model, kernels, attn_impl, mode)
 
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
-        else:
-            results = []
-        results.append(result_entry)
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+                expected_results = json.load(f)
+
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+
+                # Compare actual outputs with expected outputs
+                self.assertEqual(len(output_texts), len(expected_outputs), f"Output length mismatch for {key}")
+
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    actual_stripped = actual.strip()
+                    expected_stripped = expected.strip()
+
+                    # Make lengths match by taking minimum length to be resilient to generation differences
+                    min_length = min(len(actual_stripped), len(expected_stripped))
+                    actual_truncated = actual_stripped[:min_length]
+                    expected_truncated = expected_stripped[:min_length]
+
+                    if actual_truncated != expected_truncated:
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        self.fail(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
+            else:
+                # If no expected results exist, this is a new configuration
+                # We could optionally add it to the results file here
+                print(f"Warning: No expected results found for configuration: {key}")
 
         self.assertIsInstance(output_texts, list)
         self.assertTrue(all(isinstance(x, str) for x in output_texts))
@@ -390,6 +461,51 @@ if __name__ == "__main__":
     @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
+
+    # ------------------------
+    # Training test
+    # ------------------------
+    @parameterized.expand(PARAMETERS)
+    @require_read_token
+    def test_training_step(self, quantized, model, kernels, attn_impl, mode):
+        if mode != "train":
+            self.skipTest("This test is only for training mode.")
+
+        if quantized:
+            self.skipTest("Training test for quantized models is not supported.")
+
+        model_id = f"openai/gpt-oss-{model}"
+
+        model_obj = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation=attn_impl,
+            use_kernels=kernels,
+        )
+        model_obj.train()
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(model_obj.device)
+        inputs["labels"] = inputs["input_ids"].clone()
+
+        outputs = model_obj(**inputs)
+        loss = outputs.loss
+        self.assertIsNotNone(loss)
+
+        loss.backward()
+
+        # Check that gradients were computed for all parameters that have a grad field
+        for name, param in model_obj.named_parameters():
+            if param.requires_grad:
+                self.assertIsNotNone(param.grad, f"Parameter '{name}' did not receive a gradient.")
+                # Check that gradients are not all zero
+                self.assertTrue(
+                    torch.sum(torch.abs(param.grad)).item() > 0, f"Gradient for parameter '{name}' is all zeros."
+                )
 
     def test_model_matches_original_20b(self):
         input_text = "Roses are red, violets"
@@ -420,7 +536,7 @@ if __name__ == "__main__":
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
+        model_id = "openai/gpt-oss-20b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -486,7 +602,7 @@ I am a language model, not a human being"""
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
+        model_id = "openai/gpt-oss-120b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
