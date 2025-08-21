@@ -991,13 +991,36 @@ class AwqConfig(QuantizationConfigMixin):
                     f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
-        if self.modules_to_not_convert is not None:
+        if self.modules_to_not_convert:
             awq_version_supports_non_conversion = False
             MIN_AWQ_VERSION = "0.1.8"
+
             if is_auto_awq_available():
-                awq_version_supports_non_conversion = version.parse(
-                    importlib.metadata.version("autoawq")
-                ) >= version.parse(MIN_AWQ_VERSION)
+                try:
+                    # Primary method: use package metadata (official approach)
+                    current_version = importlib.metadata.version("autoawq")
+                    awq_version_supports_non_conversion = version.parse(current_version) >= version.parse(
+                        MIN_AWQ_VERSION
+                    )
+                except (importlib.metadata.PackageNotFoundError, Exception):
+                    # Fallback method: try to check module version directly
+                    try:
+                        import awq
+
+                        module_version = getattr(awq, "__version__", None) or getattr(awq, "version", None)
+                        if module_version:
+                            awq_version_supports_non_conversion = version.parse(module_version) >= version.parse(
+                                MIN_AWQ_VERSION
+                            )
+                        else:
+                            # If no version found but module imports successfully, assume recent enough
+                            awq_version_supports_non_conversion = True
+                            logger.warning(
+                                "AutoAWQ version could not be determined, assuming it supports module quantization skipping"
+                            )
+                    except ImportError:
+                        # This shouldn't happen since is_auto_awq_available() returned True
+                        pass
 
             if not awq_version_supports_non_conversion:
                 raise ValueError(
