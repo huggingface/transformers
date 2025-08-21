@@ -224,7 +224,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        MixtralPreTrainedModel._init_weights(module)
+        MixtralPreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):
             module.e_score_correction_bias.data.zero_()
 
