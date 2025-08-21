@@ -411,7 +411,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
 
         rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"mrope_section"})
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):

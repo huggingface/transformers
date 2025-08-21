@@ -370,7 +370,7 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -379,6 +379,7 @@ class EfficientLoFTRAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+        self.is_cross_attention = is_cross_attention
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -407,26 +408,24 @@ class EfficientLoFTRAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(batch_size, seq_len, -1, dim)
 
-        is_cross_attention = encoder_hidden_states is not None
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is None:
-            cos, sin = self.rotary_emb(hidden_states)
-            cos = cos.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
-            sin = sin.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
-            print(cos.shape, hidden_states.shape)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0."
-            )
-            cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
+        if not self.is_cross_attention:
+            if position_embeddings is None:
+                cos, sin = self.rotary_emb(hidden_states)
+                cos = cos.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
+                sin = sin.expand(batch_size, -1, -1, -1).reshape(batch_size, -1, dim)
+            else:
+                logger.warning_once(
+                    "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
+                    "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
+                    "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
+                    "removed in v4.60.0."
+                )
+                cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
         query_states = query_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
         key_states = key_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
@@ -470,12 +469,12 @@ class EfficientLoFTRMLP(nn.Module):
 
 
 class EfficientLoFTRAggregatedAttention(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int, is_cross_attention: bool = False):
         super().__init__()
 
         self.q_aggregation_kernel_size = config.q_aggregation_kernel_size
         self.aggregation = EfficientLoFTRAggregationLayer(config)
-        self.attention = EfficientLoFTRAttention(config, layer_idx)
+        self.attention = EfficientLoFTRAttention(config, layer_idx, is_cross_attention=is_cross_attention)
         self.mlp = EfficientLoFTRMLP(config)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
@@ -526,7 +525,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         super().__init__()
 
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
-        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
+        self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx, is_cross_attention=True)
 
     @deprecate_kwarg("position_embeddings", version="4.60.0")
     def forward(

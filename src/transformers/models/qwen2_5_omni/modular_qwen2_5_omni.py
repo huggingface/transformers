@@ -444,7 +444,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
 
         rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"mrope_section"})
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -3870,6 +3870,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         # Compute positional encodings
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        position_ids = position_ids[None, :].repeat(batch_size, 1)
         position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 

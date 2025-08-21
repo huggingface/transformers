@@ -392,16 +392,16 @@ class Llama4TextConfig(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 500000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
+        chunked_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
         if rope_scaling is not None:
             if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
                 full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
+                chunked_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
             else:
                 full_attention_rope.update(**rope_scaling)
 
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
+        rope_scaling = {"full_attention": full_attention_rope, "chunked_attention": chunked_attention_rope}
         self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
         rope_config_validation(self)
 
