@@ -27,17 +27,17 @@ The original implementation can be found in [NVIDIA NeMo](https://github.com/NVI
 
 ```python
 import torch
-from transformers import ParakeetCTC, AutoFeatureExtractor, AutoTokenizer
+from transformers import ParakeetForCTC, AutoFeatureExtractor, AutoTokenizer
 from datasets import load_dataset, Audio
 
 # Load complete CTC model
-model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
 feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Load test audio
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 
 # Convert numpy array to tensor efficiently
 audio_array = ds[0]['audio']['array']
@@ -46,7 +46,7 @@ raw_audio = torch.from_numpy(audio_array)
 # Extract mel-spectrogram features (automatic padding)
 inputs = feature_extractor(
     raw_audio, 
-    sampling_rate=16000
+    sampling_rate=feature_extractor.sampling_rate
 )
 
 # Get CTC outputs
@@ -54,7 +54,6 @@ with torch.no_grad():
     outputs = model(
         input_features=inputs.input_features,
         attention_mask=inputs.attention_mask,
-        input_lengths=inputs.input_lengths
     )
 
 # CTC logits for each time step
@@ -64,7 +63,6 @@ ctc_logits = outputs.logits  # Shape: (batch, time, vocab_size)
 decoded_sequences = model.generate(
     input_features=inputs.input_features,
     attention_mask=inputs.attention_mask,
-    input_lengths=inputs.input_lengths,
 )
 
 # Decode to text using CTC-aware tokenizer
@@ -74,21 +72,21 @@ print("Transcription:", text)
 
 ### Using AutoModel for Speech Recognition
 
-You can also use the AutoModel API which automatically loads ParakeetCTC for speech recognition tasks:
+You can also use the `AutoModel` API which automatically loads `ParakeetForCTC` for speech recognition tasks:
 
 ```python
 import torch
 from transformers import AutoModel, AutoFeatureExtractor, AutoTokenizer
 from datasets import load_dataset, Audio
 
-# Load using AutoModel (automatically detects ParakeetCTC)
+# Load using AutoModel (automatically detects `ParakeetForCTC`)
 model = AutoModel.from_pretrained("nvidia/parakeet-ctc-1.1b")
 feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Load test audio
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 
 # Convert numpy array to tensor efficiently
 audio_array = ds[0]['audio']['array']
@@ -97,7 +95,7 @@ raw_audio = torch.from_numpy(audio_array)
 # Extract features (automatic length inference and padding)
 inputs = feature_extractor(
     raw_audio, 
-    sampling_rate=16000
+    sampling_rate=feature_extractor.sampling_rate
 )
 
 # Forward pass
@@ -105,14 +103,12 @@ with torch.no_grad():
     outputs = model(
         input_features=inputs.input_features,
         attention_mask=inputs.attention_mask,
-        input_lengths=inputs.input_lengths
     )
 
 # Generate transcription
 decoded_sequences = model.generate(
     input_features=inputs.input_features,
     attention_mask=inputs.attention_mask,
-    input_lengths=inputs.input_lengths,
 )
 
 text = tokenizer.decode(decoded_sequences[0])
@@ -121,20 +117,20 @@ print("Transcription:", text)
 
 ### Batch Processing
 
-ParakeetCTC efficiently handles batches of audio samples with different lengths when passed as a list. The feature extractor automatically handles padding and length computation:
+`ParakeetForCTC` efficiently handles batches of audio samples with different lengths when passed as a list. The feature extractor automatically handles padding and length computation:
 
 ```python
 import torch
-from transformers import ParakeetCTC, AutoFeatureExtractor, AutoTokenizer
+from transformers import ParakeetForCTC, AutoFeatureExtractor, AutoTokenizer
 from datasets import load_dataset, Audio
 
-model = ParakeetCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
+model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b")
 feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
 
 # Load test audio samples
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 
 # Example with two audio samples of different lengths
 audio1 = torch.from_numpy(ds[0]['audio']['array'])  # First sample
@@ -144,7 +140,7 @@ batch_audio = [audio1, audio2]  # Simply pass as list for automatic padding
 
 inputs = feature_extractor(
     batch_audio,
-    sampling_rate=16000
+    sampling_rate=feature_extractor.sampling_rate
 )
 
 # Process through model
@@ -152,14 +148,12 @@ with torch.no_grad():
     outputs = model(
         input_features=inputs.input_features,
         attention_mask=inputs.attention_mask,
-        input_lengths=inputs.input_lengths
     )
 
 # Batch CTC decoding
 decoded_sequences = model.generate(
     input_features=inputs.input_features,
     attention_mask=inputs.attention_mask,
-    input_lengths=inputs.input_lengths,
 )
 
 # Decode batch to text
@@ -206,7 +200,7 @@ ParakeetCTC follows an encoder-decoder architecture specifically designed for CT
 
 ## Conversion from NeMo
 
-ParakeetCTC models can be converted from NVIDIA NeMo CTC model checkpoints with full feature parity and numerical equivalence:
+`ParakeetForCTC` models can be converted from NVIDIA NeMo CTC model checkpoints with full feature parity and numerical equivalence:
 
 ```bash
 python src/transformers/models/parakeet_ctc/convert_nemo_to_parakeet_ctc.py \
