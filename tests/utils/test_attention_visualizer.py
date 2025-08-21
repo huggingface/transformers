@@ -27,7 +27,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
     @require_read_token
     def test_paligemma_multimodal_visualization(self):
         """Test AttentionMaskVisualizer with PaliGemma multimodal model"""
-        model_name = "google/paligemma-3b-pt-224"
+        model_name = "hf-internal-testing/namespace_google_repo_name_paligemma-3b-pt-224"
         input_text = "<img> What is in this image?"
 
         # capture the output, can be messy
@@ -71,7 +71,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
     @require_read_token
     def test_llama_text_only_visualization(self):
         """Test AttentionMaskVisualizer with Llama text-only model"""
-        model_name = "meta-llama/Llama-2-7b-hf"
+        model_name = "hf-internal-testing/namespace_meta-llama_repo_name_Llama-2-7b-hf"
         input_text = "Plants create energy through a process known as"
 
         captured_output = io.StringIO()
