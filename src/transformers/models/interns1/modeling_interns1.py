@@ -555,8 +555,7 @@ class InternS1PreTrainedModel(PreTrainedModel):
 
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 

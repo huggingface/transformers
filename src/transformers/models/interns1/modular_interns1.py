@@ -204,7 +204,7 @@ class InternS1VisionModel(InternVLVisionModel):
 
 
 class InternS1PreTrainedModel(InternVLPreTrainedModel):
-    pass
+    _can_compile_fullgraph = False
 
 
 class InternS1MultiModalProjector(InternVLMultiModalProjector):
