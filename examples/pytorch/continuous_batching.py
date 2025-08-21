@@ -93,12 +93,6 @@ def batch_generate(
             data[-1]["matches"] = matches
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
-    # If an output file is provided, save the reordered data to it
-    data.sort(key=lambda x: x["input"])
-    if output_file is not None:
-        with open(output_file, "w") as f:
-            json.dump(data, f, indent=4)
-
     # Compute stats and maybe print them
     gen_time = end_time_simple - start_time_simple
     tok_per_sec = token_count / gen_time
@@ -106,6 +100,21 @@ def batch_generate(
         print("-" * 20)
         print("--- Finished CB Generation Example ---\n")
         print(f"CB generation took: {gen_time:.2f} seconds for {token_count} tokens. {tok_per_sec:.2f}tok/s")
+    stats = {
+        "num_blocks": generation_config.num_blocks,
+        "max_batch_tokens": generation_config.max_batch_tokens,
+        "gen_time": gen_time,
+        "token_count": token_count,
+        "tok_per_sec": tok_per_sec,
+    }
+
+    # If an output file is provided, save the reordered data to it
+    data.sort(key=lambda x: x["input"])
+    data = [stats] + data
+    if output_file is not None:
+        with open(output_file, "w") as f:
+            json.dump(data, f, indent=4)
+
     return gen_time, tok_per_sec
 
 
@@ -113,8 +122,8 @@ if __name__ == "__main__":
 
     # Parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num-blocks", type=int, default=None)
-    parser.add_argument("--max-batch-tokens", type=int, default=None)
+    parser.add_argument("--num-blocks", "-n", type=int, default=None)
+    parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
     parser.add_argument("--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high") # set to "none" to disable
@@ -160,6 +169,10 @@ if __name__ == "__main__":
 
     # If we need to compare, we need to generate the reference outputs
     expected_outputs = generate_simple(args.attn, simple_batch_inputs, generation_config) if args.compare else None
+
+    # If no output file is provided, we pick a name based on the args
+    if args.output_file is None:
+        args.output_file = f"cb_{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}_.json"
 
     # Run warmup batch generation
     batch_generate(
