@@ -53,11 +53,11 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
+from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2_VLProcessor,
     Qwen2_VLProcessorKwargs,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
