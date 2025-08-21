@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import builtins
 import io
 import re
-import sys
 import unittest
 
 from transformers.testing_utils import require_read_token, require_torch
@@ -42,16 +42,20 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
         model_name = "hf-internal-testing/namespace_google_repo_name_paligemma-3b-pt-224"
         input_text = "<img> What is in this image?"
 
-        # capture the output, can be messy
-        captured_output = io.StringIO()
-        original_stdout = sys.stdout
-        sys.stdout = captured_output
+        buf = io.StringIO()
+        orig_print = builtins.print
 
-        visualizer = AttentionMaskVisualizer(model_name)
-        visualizer(input_text)
+        def _print(*args, **kwargs):
+            kwargs.setdefault("file", buf)
+            orig_print(*args, **kwargs)
 
-        sys.stdout = original_stdout
-        output = captured_output.getvalue()
+        try:
+            builtins.print = _print
+            visualizer = AttentionMaskVisualizer(model_name)
+            visualizer(input_text)
+        finally:
+            builtins.print = orig_print
+        output = buf.getvalue()
 
         expected_output = """
 ##########################################################################################################################################################################################################################################
@@ -86,15 +90,20 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
         model_name = "hf-internal-testing/namespace_meta-llama_repo_name_Llama-2-7b-hf"
         input_text = "Plants create energy through a process known as"
 
-        captured_output = io.StringIO()
-        original_stdout = sys.stdout
-        sys.stdout = captured_output
+        buf = io.StringIO()
+        orig_print = builtins.print
 
-        visualizer = AttentionMaskVisualizer(model_name)
-        visualizer(input_text)
+        def _print(*args, **kwargs):
+            kwargs.setdefault("file", buf)
+            orig_print(*args, **kwargs)
 
-        sys.stdout = original_stdout
-        output = captured_output.getvalue()
+        try:
+            builtins.print = _print
+            visualizer = AttentionMaskVisualizer(model_name)
+            visualizer(input_text)
+        finally:
+            builtins.print = orig_print
+        output = buf.getvalue()
 
         expected_output = """
 ##########################################################################################################################################################################################################
