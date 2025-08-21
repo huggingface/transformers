@@ -3913,6 +3913,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        if hf_quantizer is not None:
+            state_dict = hf_quantizer.get_state_dict(self)
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
@@ -4118,6 +4120,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict_split = split_torch_state_dict_into_shards(
             state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
         )
+        print(state_dict.items())
+        # print(state_dict_split)
         # Save index if sharded
         index = None
         if state_dict_split.is_sharded:

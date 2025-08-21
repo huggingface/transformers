@@ -196,7 +196,6 @@ class Mxfp4GptOssExperts(nn.Module):
                 precision_config=self.down_proj_precision_config,
                 gammas=routing_data.gate_scal,
             )
-
         return intermediate_cache3
 
 
@@ -335,7 +334,7 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, scales_attr)
 
 
-def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, swizzle, **kwargs):
+def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """
@@ -366,43 +365,40 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
     scales_attr = f"{proj}_scales"
     blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
     scales = getattr(module, scales_attr)
-    if swizzle:
-        # Check if both blocks and scales both not on meta device
-        if blocks.device.type != "meta" and scales.device.type != "meta":
-            local_experts = blocks.size(0)
-            if proj == "gate_up_proj":
-                blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
-            else:
-                blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-            if getattr(target_device, "type", target_device) == "cpu":
-                target_device = "cuda"
-            blocks = blocks.to(target_device).contiguous()
-            scales = scales.to(target_device).contiguous()
-            with torch.cuda.device(target_device):
-                triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                    blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
-                )
-
-            # need to overwrite the shapes for the kernels
-            if proj == "gate_up_proj":
-                triton_weight_tensor.shape = torch.Size(
-                    [local_experts, module.hidden_size, module.intermediate_size * 2]
-                )
-            else:
-                triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
-
-            # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
-            setattr(module, proj, triton_weight_tensor)
-            setattr(
-                module,
-                f"{proj}_precision_config",
-                PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+    # Check if both blocks and scales both not on meta device
+    if blocks.device.type != "meta" and scales.device.type != "meta":
+        local_experts = blocks.size(0)
+        if proj == "gate_up_proj":
+            blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
+        else:
+            blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
+        if getattr(target_device, "type", target_device) == "cpu":
+            target_device = "cuda"
+        blocks = blocks.to(target_device).contiguous()
+        scales = scales.to(target_device).contiguous()
+        with torch.cuda.device(target_device):
+            triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
             )
 
-            # delete blocks and scales
-            delattr(module, scales_attr)
-            delattr(module, blocks_attr)
-            del blocks
+        # need to overwrite the shapes for the kernels
+        if proj == "gate_up_proj":
+            triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+        else:
+            triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
+
+        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It is like a subtensor
+        setattr(module, proj, triton_weight_tensor)
+        setattr(
+            module,
+            f"{proj}_precision_config",
+            PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+        )
+
+        # delete blocks and scales
+        delattr(module, scales_attr)
+        delattr(module, blocks_attr)
+        del blocks
 
 
 def _replace_with_mxfp4_linear(

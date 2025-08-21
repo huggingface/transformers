@@ -196,42 +196,26 @@ class Mxfp4HfQuantizer(HfQuantizer):
             with torch.device(target_device):
                 if isinstance(module, Mxfp4GptOssExperts):
                     triton_weight_tensor, weight_scale = quantize_to_mxfp4(param_value, triton_kernels_hub)
-                    if self.quantization_config.swizzle:
-                        PrecisionConfig, FlexCtx, InFlexData = (
-                            triton_kernels_hub.matmul_ogs.PrecisionConfig,
-                            triton_kernels_hub.matmul_ogs.FlexCtx,
-                            triton_kernels_hub.matmul_ogs.InFlexData,
-                        )
-                        triton_weight_tensor, weight_scale = swizzle_mxfp4(triton_weight_tensor, weight_scale)
+                    PrecisionConfig, FlexCtx, InFlexData = (
+                        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                        triton_kernels_hub.matmul_ogs.FlexCtx,
+                        triton_kernels_hub.matmul_ogs.InFlexData,
+                    )
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                        triton_weight_tensor, weight_scale, triton_kernels_hub
+                    )
 
-                        proj = "gate_up_proj" if "gate_up_proj" in param_name else "down_proj"
-                        setattr(module, proj, triton_weight_tensor)
-                        setattr(
-                            module,
-                            f"{proj}_precision_config",
-                            PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
-                        )
+                    proj = "gate_up_proj" if "gate_up_proj" in param_name else "down_proj"
+                    setattr(module, proj, triton_weight_tensor)
+                    setattr(
+                        module,
+                        f"{proj}_precision_config",
+                        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                    )
 
-                        delattr(module, f"{proj}_blocks")
-                        delattr(module, f"{proj}_scales")
-                    else:
-                        # path we take when we want to save the model
-                        if "gate_up_proj" in param_name and "bias" not in param_name:
-                            module.gate_up_proj_blocks = torch.nn.Parameter(
-                                triton_weight_tensor.data.transpose(-1, -2).reshape(32, -1, 90, 16),
-                                requires_grad=False,
-                            )
-                            module.gate_up_proj_scales = torch.nn.Parameter(
-                                weight_scale.data.transpose(-1, -2), requires_grad=False
-                            )
-                        elif "down_proj" in param_name and "bias" not in param_name:
-                            module.down_proj_blocks = torch.nn.Parameter(
-                                triton_weight_tensor.data.transpose(-1, -2).reshape(32, 2880, 90, -1),
-                                requires_grad=False,
-                            )
-                            module.down_proj_scales = torch.nn.Parameter(
-                                weight_scale.data.transpose(-1, -2), requires_grad=False
-                            )
+                    delattr(module, f"{proj}_blocks")
+                    delattr(module, f"{proj}_scales")
+
         # The params going here are either gate_up_proj_blocks, or down_proj_blocks, or gate_up_proj_scales, or down_proj_scales
         else:
             #  This is when loading a quantized model (blocks and scales exist)
@@ -270,7 +254,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         param_value,
                         target_device,
                         self._lazy_import_kernels(),
-                        self.quantization_config.swizzle,
                         **shard_kwargs,
                     )
 
@@ -383,14 +366,42 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return param_name.replace("down_proj", "down_proj_blocks")
         return param_name
 
+    def get_state_dict(self, model):
+        from ..integrations import Mxfp4GptOssExperts
+
+        state_dict = model.state_dict()
+
+        for name, module in model.named_modules():
+            if (
+                isinstance(module, Mxfp4GptOssExperts)
+                and hasattr(module, "gate_up_proj")
+                and hasattr(module, "down_proj")
+            ):
+                state_dict[f"{name}.gate_up_proj_blocks"] = (
+                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(32, -1, 90, 16)
+                )
+                state_dict[f"{name}.gate_up_proj_scales"] = (
+                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.gate_up_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+                state_dict[f"{name}.down_proj_blocks"] = (
+                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(32, 2880, 90, -1)
+                )
+                state_dict[f"{name}.down_proj_scales"] = (
+                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.down_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+
+        return state_dict
+
     def is_serializable(self, safe_serialization=None):
-        if not self.quantization_config.swizzle:
-            return True
-        else:
-            logger.warning_once(
-                "In order to save the model, you need to pass `Mxfp4Config(swizzle=False)` when quantizing the model with `from_pretrained`."
-            )
-            return False
+        return True
 
     @property
     def is_trainable(self) -> bool:

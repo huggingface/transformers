@@ -455,10 +455,8 @@ class Mxfp4ModelTest(unittest.TestCase):
     def test_save_mxfp4(self):
         """Test saving quantized OpenAI MoE model with device_map"""
 
-        quantization_config = Mxfp4Config(swizzle=False)
         model = GptOssForCausalLM.from_pretrained(
             self.model_name,
-            quantization_config=quantization_config,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -488,11 +486,10 @@ class Mxfp4ModelTest(unittest.TestCase):
     def test_save_mxfp4_non_quantized(self):
         """Test saving dequantized OpenAI MoE model with mxfp4 quantization and device_map"""
         non_quantized_model_name = "hf-internal-testing/gpt-oss-20b-bf16"
-
         tokenizer = AutoTokenizer.from_pretrained(non_quantized_model_name)
         loaded_model = GptOssForCausalLM.from_pretrained(
             non_quantized_model_name,
-            quantization_config=Mxfp4Config(swizzle=False),
+            quantization_config=Mxfp4Config(),
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -501,7 +498,7 @@ class Mxfp4ModelTest(unittest.TestCase):
             loaded_model.save_pretrained(tmp)
             torch.cuda.empty_cache()
             gc.collect()
-            # load it back to check with everything works as expected but without specifying swizzle
+            # load it back to check with everything works as expected
             loaded_model = GptOssForCausalLM.from_pretrained(
                 tmp,
                 torch_dtype=torch.bfloat16,
