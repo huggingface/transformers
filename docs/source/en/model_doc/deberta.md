@@ -71,7 +71,7 @@ inputs = tokenizer(
     "A soccer game with multiple people playing.",
     "Some people are playing a sport.",
     return_tensors="pt"
-).to("cuda")
+).to(model.device)
 
 with torch.no_grad():
     logits = model(**inputs).logits
