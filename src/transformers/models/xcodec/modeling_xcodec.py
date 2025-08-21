@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
@@ -316,7 +316,7 @@ class XcodecResidualVectorQuantization(nn.Module):
 
 
 @auto_docstring
-class XcodecPreTrainedModel(PreTrainedModel):
+class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -325,7 +325,6 @@ class XcodecPreTrainedModel(PreTrainedModel):
     config_class = XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
-    supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -427,7 +426,6 @@ class XcodecModel(XcodecPreTrainedModel):
         input_values: torch.Tensor,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[torch.Tensor, XcodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete audio codes.
@@ -446,15 +444,9 @@ class XcodecModel(XcodecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if input_values.ndim != 3:
-            raise ValueError(
-                f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}"
-            )
-
-        _, channels, self._input_length = input_values.shape
-
-        if channels not in (1, 2):
-            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+        _, channels, _ = input_values.shape
+        if channels != 1:
+            raise ValueError(f"Audio must be mono, but got {channels}")
 
         if bandwidth is None:
             bandwidth = self.config.target_bandwidths[-1]
@@ -483,7 +475,9 @@ class XcodecModel(XcodecPreTrainedModel):
 
     @auto_docstring
     def decode(
-        self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs
+        self,
+        audio_codes: torch.Tensor,
+        return_dict: Optional[bool] = None,
     ) -> Union[torch.Tensor, XcodecDecoderOutput]:
         """
         Decode the given discrete codes into an output audio waveform.
@@ -493,12 +487,12 @@ class XcodecModel(XcodecPreTrainedModel):
         Args:
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
                 Discrete code indices computed using `model.encode`.
-
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`]
 
         Returns:
-            Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of Xcodec.
+            Decoded audio values of shape `(batch_size, channels, num_samples)` obtained using the decoder part of
+            Xcodec.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -506,13 +500,6 @@ class XcodecModel(XcodecPreTrainedModel):
         quantized = self.quantizer.decode(audio_codes)
         quantized_acoustic = self.fc2(quantized.transpose(1, 2)).transpose(1, 2)
         audio_values = self.acoustic_decoder(quantized_acoustic)
-
-        if getattr(self, "_input_length", None) is not None:
-            output_length = audio_values.shape[-1]
-            if self._input_length != output_length:
-                extra = output_length - self._input_length
-                start = extra // 2
-                audio_values = audio_values[..., start : start + self._input_length]
 
         if not return_dict:
             return audio_values
@@ -526,10 +513,10 @@ class XcodecModel(XcodecPreTrainedModel):
         audio_codes: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
         """
-        Encodes and quantizes the input audio into discrete codes, then decodes those codes back into an audio waveform.
+        Encodes and quantizes the input audio into discrete codes, then decodes those codes back into an audio
+        waveform.
 
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
@@ -537,7 +524,8 @@ class XcodecModel(XcodecPreTrainedModel):
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
                 Discrete code indices computed using `model.encode`.
             bandwidth (`float`, *optional*):
-                Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
+                Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available
+                bandwidth.
             return_dict (`bool`, *optional*):
                 Whether to return a [`XcodecOutput`] instead of a plain tuple.
 
@@ -568,11 +556,12 @@ class XcodecModel(XcodecPreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        length = input_values.shape[-1]
 
         if audio_codes is None:
             audio_codes = self.encode(input_values, bandwidth, return_dict=False)
 
-        audio_values = self.decode(audio_codes, return_dict=return_dict)[0]
+        audio_values = self.decode(audio_codes, return_dict=return_dict)[0][..., :length]
 
         if not return_dict:
             return (audio_codes, audio_values)
