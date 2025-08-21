@@ -306,16 +306,17 @@ class ConfigTestUtils(unittest.TestCase):
         # 1. model with only text input -> returns the original config instance
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         self.assertEqual(config.get_text_config(), config)
+        self.assertEqual(config.get_text_config(decoder=True), config)
 
         # 2. composite model (VLM) -> returns the text component
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
         self.assertEqual(config.get_text_config(), config.text_config)
         self.assertEqual(config.get_text_config(decoder=True), config.text_config)
 
-        # 3. old composite model -> may remove componented based on the `decoder` or `encoder` argument
+        # 3. old composite model -> may remove components based on the `decoder` or `encoder` argument
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(config.get_text_config(), config)
-        # there is both encoder_layers and decoder_layers
+        # both encoder_layers and decoder_layers exist
         self.assertTrue(getattr(config, "encoder_layers", None) is not None)
         self.assertTrue(getattr(config, "decoder_layers", None) is not None)
         decoder_config = config.get_text_config(decoder=True)
