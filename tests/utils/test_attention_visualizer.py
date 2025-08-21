@@ -43,7 +43,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         expected_output = """
 ##########################################################################################################################################################################################################################################
-##                                                                          Attention visualization for \033[1mpaligemma:google/paligemma-3b-pt-224\033[0m PaliGemmaModel                                                                             ##
+##                                                      Attention visualization for \033[1mpaligemma:hf-internal-testing/namespace_google_repo_name_paligemma-3b-pt-224\033[0m PaliGemmaModel                                                         ##
 ##########################################################################################################################################################################################################################################
  \033[92m■\033[0m: i == j (diagonal)   \033[93m■\033[0m: token_type_ids
               Attention Matrix  
@@ -86,7 +86,7 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         expected_output = """
 ##########################################################################################################################################################################################################
-##                                                               Attention visualization for \033[1mllama:meta-llama/Llama-2-7b-hf\033[0m LlamaModel                                                                  ##
+##                                           Attention visualization for \033[1mllama:hf-internal-testing/namespace_meta-llama_repo_name_Llama-2-7b-hf\033[0m LlamaModel                                              ##
 ##########################################################################################################################################################################################################
  \033[92m■\033[0m: i == j (diagonal)   \033[93m■\033[0m: token_type_ids
                Attention Matrix
