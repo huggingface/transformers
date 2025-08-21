@@ -102,10 +102,10 @@ def transform_state_encoder_block(state, checkpoint_info, modes):
     auxiliary_prefix = 'params/auxiliary_encoder/transformers_stack/x_layers'
     unimodal_prefix = 'params/text_encoder/unimodal_transformer/x_layers'
     #?                 params/text_encoder/unimodal_transformer/x_layers/layer_norm/scale
-    spatial = 'spatial_encoder.layer'
-    temporal = 'temporal_encoder.layer'
+    spatial = 'spatial_encoder.layer' if checkpoint_info['model_type'] == 'backbone' else 'backbone.spatial_encoder.layer'
+    temporal = 'temporal_encoder.layer' if checkpoint_info['model_type'] == 'backbone' else 'backbone.temporal_encoder.layer'
     auxiliary = 'auxiliary_encoder.layer'
-    unimodal = 'text_encoder.unimodal_encoder'
+    unimodal = 'text_encoder.unimodal_encoder.layer'
 
     hidden_size = checkpoint_info['config']['hidden_size']
 
@@ -159,19 +159,21 @@ def  transform_state(state, checkpoint_info):
     new_state = OrderedDict()
     if checkpoint_info['model_type'] == 'backbone':
         extra = ""
+        backbone = ""
     elif checkpoint_info['model_type'] == 'lvt':
         extra = "/vision_encoder"
+        backbone = "backbone."
     #? patch embeds
-    new_state['spatial_embeddings.patch_embeddings.projection.weight'] = state[f'params{extra}/patch_projection/linear/kernel'].T.reshape(hidden_size, 1, 18, 18, 3).transpose(0, 4, 1, 2, 3)  #? [972, 768] -> [768, 3, 1, 18, 18]
-    new_state['spatial_embeddings.patch_embeddings.projection.bias'] = state[f'params{extra}/patch_projection/linear/bias'] #? [768]
+    new_state[f'{backbone}spatial_embeddings.patch_embeddings.projection.weight'] = state[f'params{extra}/patch_projection/linear/kernel'].T.reshape(hidden_size, 1, 18, 18, 3).transpose(0, 4, 1, 2, 3)  #? [972, 768] -> [768, 3, 1, 18, 18]
+    new_state[f'{backbone}spatial_embeddings.patch_embeddings.projection.bias'] = state[f'params{extra}/patch_projection/linear/bias'] #? [768]
     #? Spatial/temporal pos embeds
-    new_state['spatial_embeddings.spatial_pos_emb'] = np.expand_dims(state[f'params{extra}/spatial_pos_emb/emb_var'],axis=0) #? [256, 768] -> [1, 256, 768]
-    new_state['temporal_embeddings.temporal_pos_emb'] = np.expand_dims(state[f'params{extra}/temporal_pos_emb/emb_var'],axis=0) #? [256, 768] -> [1, 256, 768]
+    new_state[f'{backbone}spatial_embeddings.spatial_pos_emb'] = np.expand_dims(state[f'params{extra}/spatial_pos_emb/emb_var'],axis=0) #? [256, 768] -> [1, 256, 768]
+    new_state[f'{backbone}temporal_embeddings.temporal_pos_emb'] = np.expand_dims(state[f'params{extra}/temporal_pos_emb/emb_var'],axis=0) #? [256, 768] -> [1, 256, 768]
     #? 'pre' layernorm
-    new_state['layernorm1.weight'] = state[f'params{extra}/spatial_ln/scale'] #? all 768 
-    new_state['layernorm1.bias'] = state[f'params{extra}/spatial_ln/bias']
-    new_state['layernorm2.weight'] = state[f'params{extra}/temporal_ln/scale']
-    new_state['layernorm2.bias'] = state[f'params{extra}/temporal_ln/bias']
+    new_state[f'{backbone}layernorm1.weight'] = state[f'params{extra}/spatial_ln/scale'] #? all 768 
+    new_state[f'{backbone}layernorm1.bias'] = state[f'params{extra}/spatial_ln/bias']
+    new_state[f'{backbone}layernorm2.weight'] = state[f'params{extra}/temporal_ln/scale']
+    new_state[f'{backbone}layernorm2.bias'] = state[f'params{extra}/temporal_ln/bias']
 
     new_state.update(transform_state_encoder_block(state, checkpoint_info, ["spatial", "temporal"]))
 
@@ -304,9 +306,10 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
         #     for i in range(len(shape)):
         #         new_shape += (shape[i]-1,)
         #     print(f"Key: {k}, Value shape: {shape}, values: {v[new_shape]} ")
+        # print(state_dict["params/text_encoder/token_emb/emb_var"][:5,:5])
     
         # first = state_dict["params/patch_projection/linear/bias"]
-        transform_state(state_dict, checkpoint_info)
+        # transform_state(state_dict, checkpoint_info)
 
     if upload:
         api = HfApi()
@@ -321,16 +324,23 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
     if load_model:
         config = VideoPrismConfig(**checkpoint_info['config'])
         model = VideoPrismModel(config) if checkpoint_info['model_type'] == 'backbone' else VideoPrismClip(config)
-        state_dict = load_file(path)
+        
+        try:
+            state_dict = load_file(path)
+        except:
+            hf_hub_download(repo_id="MHRDYN7/videoprism-base", filename=path, local_dir="./")
+            state_dict = load_file(path)
+
         # for k, v in state_dict.items():
         #     shape = v.shape
         #     new_shape = ()
         #     for i in range(len(shape)):
         #         new_shape += (shape[i]-1,)
         #     print(f"Key: {k}, Value shape: {shape}, values: {v[new_shape]} ")
+        # print(state_dict["text_encoder.token_embeddings.weight"][:5,:5])
 
-        # model.load_state_dict(state_dict)
-        # print("all good")
+        model.load_state_dict(state_dict)
+        print("all good")
 
     
     if load_video:
@@ -359,7 +369,7 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
     if inference:
         with torch.no_grad():
             if checkpoint_info['model_type'] == 'backbone':
-                outputs = model(inputs, output_hidden_states=True, output_attentions=True)
+                outputs = model(input_vid, output_hidden_states=True, output_attentions=True)
                 backbone_base_expected_tensor = torch.tensor([
                     [0.11648951, 0.4568253, 0.19288044],
                     [0.28420594, -0.04224018, 0.377879],
@@ -385,15 +395,16 @@ def convert(model_type='backbone', model_size='base', convert=False, upload=Fals
                     [262, 266, 768, 267, 1376, 289, 10691, 259],
                     [262, 266, 768, 267, 4605, 259]
                 ]
-                input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=None)
+                input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
                 mask = ids_to_attention_mask(input_ids)
                 # print(input_ids)
                 # print(mask)
+                print(input_vid[0, -1, 0, :3, :3])
                 outputs = model(input_vid, input_ids, mask, return_dict=True)
                 print(outputs[0].shape)
-                #print(outputs[0][:, :3])
+                print(outputs[0][:, :])
                 print(outputs[1].shape)
-                print(outputs[1][:, :3])
+                print(outputs[1][:, :])
 
 
 if __name__ == "__main__":
