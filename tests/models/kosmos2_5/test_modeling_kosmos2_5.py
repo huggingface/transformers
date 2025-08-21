@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -549,7 +548,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     # TODO: ydshieh
-    @require_torch_sdpa
+
     @require_torch_gpu
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")

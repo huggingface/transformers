@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -508,7 +507,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -945,7 +943,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_cpu_offload(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
