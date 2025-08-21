@@ -53,9 +53,7 @@ pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
-
-device = infer_device()
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
