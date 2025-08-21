@@ -407,7 +407,6 @@ class Dinov2Layer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Dinov2
 class Dinov2Encoder(nn.Module):
     def __init__(self, config: Dinov2Config):
         super().__init__()
@@ -415,8 +414,9 @@ class Dinov2Encoder(nn.Module):
         self.layer = nn.ModuleList([Dinov2Layer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    # Ignore copy
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_hidden_states: bool = False) -> BaseModelOutput:
+    def forward(
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_hidden_states: bool = False
+    ) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -426,7 +426,7 @@ class Dinov2Encoder(nn.Module):
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
 

@@ -430,7 +430,6 @@ class Dinov2WithRegistersEncoder(nn.Module):
         self.layer = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    # Ignore copy
     def forward(
         self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_hidden_states: bool = False
     ) -> BaseModelOutput:
@@ -442,7 +441,8 @@ class Dinov2WithRegistersEncoder(nn.Module):
                 all_hidden_states.append(hidden_states)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=tuple(all_hidden_states) if all_hidden_states else None
+            last_hidden_state=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
 

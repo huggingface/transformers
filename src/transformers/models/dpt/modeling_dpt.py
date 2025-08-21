@@ -32,9 +32,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import load_backbone
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dpt import DPTConfig
@@ -142,7 +141,9 @@ class DPTViTHybridEmbeddings(nn.Module):
 
         return posemb
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(
+        self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False
+    ) -> BaseModelOutputWithIntermediateActivations:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -462,7 +463,7 @@ class DPTViTLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViTConfig->DPTConfig, ViTLayer->DPTViTLayer, ViTEncoder->DPTViTEncoder
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT
 class DPTViTEncoder(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -470,12 +471,20 @@ class DPTViTEncoder(nn.Module):
         self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_hidden_states: bool = False
+    ) -> BaseModelOutput:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(hidden_states, layer_head_mask)
+            if all_hidden_states:
+                all_hidden_states.append(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
+        )
 
 
 class DPTReassembleStage(nn.Module):
@@ -744,7 +753,6 @@ class DPTPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": DPTViTLayer,
         "attentions": DPTSelfAttention,
     }
 
@@ -807,8 +815,12 @@ class DPTModel(DPTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -816,12 +828,14 @@ class DPTModel(DPTPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output: BaseModelOutputWithIntermediateActivations = self.embeddings(pixel_values)
         embedding_last_hidden_states = embedding_output.last_hidden_states
 
-        encoder_outputs = self.encoder(embedding_last_hidden_states, head_mask=head_mask)
-
+        encoder_outputs: BaseModelOutput = self.encoder(
+            embedding_last_hidden_states, head_mask=head_mask, output_hidden_states=output_hidden_states
+        )
         sequence_output = encoder_outputs.last_hidden_state
+
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
@@ -829,6 +843,7 @@ class DPTModel(DPTPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             intermediate_activations=embedding_output.intermediate_activations,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -977,7 +992,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> DepthEstimatorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1016,18 +1032,18 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
 
-        output_hidden_states = kwargs.get("output_hidden_states", False) or self.config.output_hidden_states
-        kwargs["output_hidden_states"] = True  # we need the intermediate hidden states
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, head_mask=head_mask, **kwargs)
+            outputs = self.dpt(pixel_values, head_mask=head_mask, output_hidden_states=True, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1126,7 +1142,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1150,13 +1167,15 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = kwargs.get("output_hidden_states", False) or self.config.output_hidden_states
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        kwargs["output_hidden_states"] = True  # we need the intermediate hidden states
-        outputs = self.dpt(pixel_values, head_mask=head_mask, **kwargs)
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
+            pixel_values, head_mask=head_mask, output_hidden_states=True, **kwargs
+        )
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices
