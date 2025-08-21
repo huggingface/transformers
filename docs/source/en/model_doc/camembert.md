@@ -153,3 +153,7 @@ print(f"The predicted token is: {predicted_token}")
 ## CamembertForTokenClassification
 
 [[autodoc]] CamembertForTokenClassification
+
+## CamembertForQuestionAnswering
+
+[[autodoc]] CamembertForQuestionAnswering
