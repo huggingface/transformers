@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -58,7 +58,16 @@ ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMP
 
 
 if is_torch_available():
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+    from ..cache_utils import (
+        HQQQuantizedCache,
+        HybridCache,
+        HybridChunkedCache,
+        OffloadedHybridCache,
+        OffloadedStaticCache,
+        QuantoQuantizedCache,
+        SlidingWindowCache,
+        StaticCache,
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -442,6 +451,9 @@ class GenerationConfig(PushToHubMixin):
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
         self.dola_layers = kwargs.pop("dola_layers", None)
 
+        # Logit_processors parameter
+        self.logit_processors = kwargs.pop("logit_processors", None)
+
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
         self._from_model_config = kwargs.pop("_from_model_config", False)
@@ -540,6 +552,9 @@ class GenerationConfig(PushToHubMixin):
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
         return generation_mode
+
+
+
 
     def validate(self, strict=False):
         """
@@ -1018,6 +1033,21 @@ class GenerationConfig(PushToHubMixin):
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config
 
+    def get_logit_processors(self):
+        """Get LogitsProcessorList from configuration."""
+        if self.logit_processors is None:
+            return None
+        
+        # Import here to avoid circular imports
+        from transformers.generation.logits_process import ConfigurableLogitsProcessorList, LogitsProcessorList
+        
+        # If it's already a processor list, return it
+        if isinstance(self.logit_processors, LogitsProcessorList):
+            return self.logit_processors
+        
+        # Otherwise, create from config
+        return ConfigurableLogitsProcessorList.from_config(self.logit_processors)
+    
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
         with open(json_file, "r", encoding="utf-8") as reader:
@@ -1109,6 +1139,12 @@ class GenerationConfig(PushToHubMixin):
             del output["_original_object_hash"]
         if "compile_config" in output:
             del output["compile_config"]
+
+        # Special handling for logit_processors - serialize to JSON string
+        if "logit_processors" in output and output["logit_processors"] is not None:
+            if not isinstance(output["logit_processors"], str):
+                # Convert to JSON string
+                output["logit_processors"] = json.dumps(output["logit_processors"])
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
