@@ -230,16 +230,16 @@ class PagedAttentionCache:
         # Add the infered attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
-        logger.warning(f"Using calculated {self.num_blocks = }, {self.block_size = }, {self.max_batch_tokens = }")
-        logger.warning(f"Using {self.num_key_value_heads = }, {self.head_dim = }, {self.num_hidden_layers = }")
+        logger.info(
+            f"After init, {self.num_blocks = }, {self.block_size = }, {self.max_batch_tokens = } "
+            f"{self.num_key_value_heads = }, {self.head_dim = }, {self.num_hidden_layers = }"
+        )
 
         # Initialize the cache
         self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         for idx in range(config.num_hidden_layers):
-            available_memory = memory_handler.get_available_memory() // 1024
-            logger.warning(f"Initializing cache for layer {idx}, available memory: {available_memory} kb")
             layer_device = layer_device_map[idx] if layer_device_map is not None else device
             new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
@@ -687,6 +687,7 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         streaming: bool = False,
         manual_eviction: bool = False,
+        slice_inputs: bool = True, # TODO: remove this once parity is ensured
     ):
         """Initialize the continuous batch processor.
 
@@ -711,6 +712,7 @@ class ContinuousBatchProcessor:
         self.scheduler = scheduler
         self.streaming = streaming
         self.manual_eviction = manual_eviction
+        self.slice_inputs = slice_inputs
 
         self.requests_in_batch: list[RequestState] = []
 
@@ -728,30 +730,24 @@ class ContinuousBatchProcessor:
         T = self.max_batch_tokens
         max_token_budget = self.cache.num_blocks * self.cache.block_size
         tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
-
-        available_memory = PagedAttentionMemoryHandler.get_available_memory()
-        print(f"Setting up static tensors with {T = }, {max_token_budget = }, {available_memory} bytes available")
-
+        # Prepare empty tensors
         self.tensor_metadata = tensor_metadata
-        self.input_ids = torch.zeros((1, T), **tensor_metadata)
-        self.position_ids = torch.zeros((1, T), **tensor_metadata)
-        self.attention_mask = torch.full(
-            (1, 1, T, max_token_budget),
-            torch.finfo(self.model_dtype).min,
-            dtype=self.model_dtype,
-            device=self.model_device
-        )
-        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
-        self.write_index = torch.full((T,), -1, **tensor_metadata)
-        self.read_index = torch.full((max_token_budget,), -1, **tensor_metadata)
-        self.logits_indices = torch.full((T,), -1, **tensor_metadata)
+        self.input_ids = torch.empty((1, T), **tensor_metadata)
+        self.position_ids = torch.empty((1, T), **tensor_metadata)
+        self.attention_mask = torch.empty((1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device)
+        self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
+        self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
+        self.write_index = torch.empty((T,), **tensor_metadata)
+        self.read_index = torch.empty((max_token_budget,), **tensor_metadata)
+        self.logits_indices = torch.empty((T,), **tensor_metadata)
         self.max_seqlen_q = 0
         self.max_seqlen_k = 0
-        self.output_ids = torch.full((1, T), -1, **tensor_metadata)
-        torch.cuda.synchronize()
-        available_memory = PagedAttentionMemoryHandler.get_available_memory()
-        print("Allocated static tensors,", available_memory, "bytes available")
+        self.output_ids = torch.empty((1, T), **tensor_metadata)
+        # Initialize the tensors by pretending they are in full use
+        self.actual_tokens = T
+        self.cache_used = max_token_budget
+        self.reset_static_tensors()
+        # Reset stats to 0
         self.actual_tokens = 0
         self.cache_used = 0
 
@@ -759,8 +755,10 @@ class ContinuousBatchProcessor:
     @torch.no_grad()
     def reset_static_tensors(self):
         """Reset static tensors for the next batch."""
-        t = self.actual_tokens
-        c = self.cache_used
+        # Compute the slice to reset
+        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
+        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        # Reset the tensors
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
         self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
@@ -776,9 +774,10 @@ class ContinuousBatchProcessor:
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
-        # torch.set_printoptions(threshold=100000,linewidth=10000)
-        t = self.actual_tokens
-        c = self.cache_used
+        # Compute the slice to return 
+        t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
+        c = self.cache_used if self.slice_inputs else self.read_index.size(0)
+        # Return  the tensors
         return {
             "input_ids": self.input_ids[:, :t],
             "position_ids": self.position_ids[:, :t],
@@ -1235,7 +1234,7 @@ class ContinuousBatchingManager:
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(1)
         else:
             next_tokens = torch.argmax(probs, dim=-1)
-        tokens = batch_processor.actual_tokens
+        tokens = batch_processor.actual_tokens if self.slice_inputs else batch_processor.output_ids.size(1)
         batch_processor.output_ids[:, :tokens].copy_(next_tokens)
 
     def _run_generation_loop(self):
