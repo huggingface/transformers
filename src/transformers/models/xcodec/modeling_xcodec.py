@@ -444,7 +444,7 @@ class XcodecModel(XcodecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        _, channels, _ = input_values.shape
+        channels = input_values.shape[1]
         if channels != 1:
             raise ValueError(f"Audio must be mono, but got {channels}")
 
