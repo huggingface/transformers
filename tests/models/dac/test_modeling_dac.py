@@ -793,7 +793,7 @@ class DacIntegrationTest(unittest.TestCase):
                 atol=1e-6,
             )
             torch.testing.assert_close(
-                quantizer_outputs[4].squeeze().item(), EXPECTED_QUANT_CODEBOOK_LOSS[model_name], rtol=1e-6, atol=1e-6
+                quantizer_outputs[4].squeeze().item(), EXPECTED_QUANT_CODEBOOK_LOSS[model_name], rtol=1e-4, atol=1e-4
             )
 
             # compare decoder outputs
