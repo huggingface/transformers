@@ -122,7 +122,7 @@ processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
     torch_dtype=torch.float16,
-    device_map="cuda:0"
+    device_map="auto"
 )
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -137,7 +137,7 @@ conversation = [
     },
 ]
 inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
-inputs = inputs.to("cuda:0", torch.float16)
+inputs = inputs.to(model.device, torch.float16)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
@@ -216,10 +216,12 @@ LLaVa-OneVision also can perform inference with videos as input, where video fra
 ```python
 from huggingface_hub import hf_hub_download
 import torch
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
+
+device = f"{infer_device()}:0"
 
 # Load the model in half-precision
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map=device)
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")

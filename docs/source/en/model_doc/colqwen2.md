@@ -107,10 +107,10 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
-
+from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor, infer_device
 
 model_name = "vidore/colqwen2-v1.0-hf"
+device = infer_device()
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
@@ -123,7 +123,7 @@ bnb_config = BitsAndBytesConfig(
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda",
+    device_map=device,
 ).eval()
 
 processor = ColQwen2Processor.from_pretrained(model_name)
