@@ -1017,7 +1017,6 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InternS1CausalLMOutputWithPast]:
         r"""
@@ -1088,7 +1087,6 @@ class InternS1ForConditionalGeneration(InternS1PreTrainedModel, GenerationMixin)
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            image_sizes=image_sizes,
             **kwargs,
         )
 
