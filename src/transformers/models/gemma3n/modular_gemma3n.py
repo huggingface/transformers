@@ -1780,9 +1780,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the cached keys/values from the previous layer.
-        # During prefill, cache_position is a full range [0, 1, ..., max_cache_len-1], but in autoregressive mode it's a single position [last_token_idx].
-        # For sliding window layers, we must clamp or slice indices to the cache's max length to avoid out-of-bounds access.
+        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
         if self.is_kv_shared_layer and self.kv_shared_layer_index is not None and past_key_values is not None:
             key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
