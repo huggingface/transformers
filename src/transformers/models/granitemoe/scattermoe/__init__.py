@@ -4,9 +4,9 @@
 
 import torch
 
-from transformers.kernels.scattermoe.group_backward_kernel import group_bwd_W
-from transformers.kernels.scattermoe.group_kernel import group
-from transformers.kernels.scattermoe.scatter_kernel import scatter2scatter
+from .group_backward_kernel import group_bwd_W
+from .group_kernel import group
+from .scatter_kernel import scatter2scatter
 
 
 class _ScatteredExperts(torch.autograd.Function):

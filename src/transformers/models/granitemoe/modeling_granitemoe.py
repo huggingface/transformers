@@ -29,7 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...kernels.scattermoe import scattered_experts
+from .scattermoe import scattered_experts
 from .configuration_granitemoe import GraniteMoeConfig
 
 
