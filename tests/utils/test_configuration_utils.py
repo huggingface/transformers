@@ -24,7 +24,7 @@ from pathlib import Path
 from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
-from transformers import AutoConfig, BertConfig, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test
 
@@ -313,7 +313,12 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(config.get_text_config(), config.text_config)
         self.assertEqual(config.get_text_config(decoder=True), config.text_config)
 
-        # 3. old composite model -> may remove components based on the `decoder` or `encoder` argument
+        # 3. ! corner case! : composite model whose sub-config is an old composite model (should behave as above)
+        config = Florence2Config()
+        self.assertEqual(config.get_text_config(), config.text_config)
+        self.assertEqual(config.get_text_config(decoder=True), config.text_config)
+
+        # 4. old composite model -> may remove components based on the `decoder` or `encoder` argument
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(config.get_text_config(), config)
         # both encoder_layers and decoder_layers exist
