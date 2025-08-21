@@ -59,6 +59,8 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         requires_backends(self, "timm")
         super().__init__(architecture=architecture)
 
+        # mobilenetv5 models require timm >= 0.9.10
+
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
