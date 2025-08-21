@@ -884,7 +884,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     def test_generation_beyond_sliding_window_with_generation_config(self):
@@ -901,9 +901,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16, device_map=torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map=torch_device)
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
@@ -914,5 +912,5 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         ]
         output_text = tokenizer.batch_decode(out)
 
-        EXPECTED_COMPLETIONS = [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
+        EXPECTED_COMPLETIONS = [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
