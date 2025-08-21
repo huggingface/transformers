@@ -1804,14 +1804,14 @@ class Gemma3nTextAttention(Gemma3Attention):
                 "cache_position": cache_position,
                 "sliding_window": self.sliding_window,
             }
-            if self.store_full_length_kv:
-                if not hasattr(past_key_values, "shared_layers"):
-                    past_key_values.shared_layers = {}
-                past_key_values.shared_layers[self.layer_idx] = key_states, value_states
             if not self.is_kv_shared_layer:
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
+            if self.store_full_length_kv:
+                if not hasattr(past_key_values, "shared_layers"):
+                    past_key_values.shared_layers = {}
+                past_key_values.shared_layers[self.layer_idx] = key_states, value_states
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
