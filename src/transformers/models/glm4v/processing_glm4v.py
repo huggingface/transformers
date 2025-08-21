@@ -41,13 +41,13 @@ class Glm4vImagesKwargs(ImagesKwargs):
 
 class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": False,
         },
     }
+    videos_kwargs: Glm4vVideosProcessorKwargs
 
 
 class Glm4vProcessor(ProcessorMixin):
@@ -66,7 +66,6 @@ class Glm4vProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
 
