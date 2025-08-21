@@ -41,7 +41,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_sdpa,
     require_torchaudio,
     slow,
     torch_device,
@@ -1033,7 +1032,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="MusicgenMelody doesn't use the MusicgenMelodyFlashAttention2 class method.")
 
-    @require_torch_sdpa
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -1171,7 +1169,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")

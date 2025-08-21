@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     cleanup,
     is_flaky,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -399,7 +398,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         pass
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="SmolVLM doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
