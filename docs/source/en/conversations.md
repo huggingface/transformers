@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Chat models are conversational models which you communicate with by sending and receiving a series of messages, like an online chat. Most new language models from mid-2023 onwards are chat models, and models which are not trained for chat are usually referred to as "base" models, while models trained for chat are sometimes called "instruct" or "instruction-tuned". There are many chat models available to choose from; larger and newer models tend to be more capable, though there are plenty of exceptions to this rule!
 
-If you're just looking for a general chat model, try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to help you identify the top performers. Be careful, though! Models that are specialized in certain domains (medical/legal text, non-English languages, etc.) can often outperform larger general purpose models, so the top leaderboard models may not be the best at your particular task.
+Larger and newer models are generally more capable, but models specialized in certain domains (medical, legal text, non-English languages, etc.) can often outperform these larger models. Try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to help you identify the best model for your use case.
 
 This guide shows you how to quickly load chat models in Transformers from the command line, how to build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
