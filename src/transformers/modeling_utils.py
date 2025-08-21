@@ -54,7 +54,7 @@ from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -124,7 +124,6 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    strtobool,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -180,15 +179,6 @@ _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
 
 
 def is_local_dist_rank_0():
@@ -2286,7 +2276,87 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_pp_plan", None):
+                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+    @property
+    def tp_plan(self) -> dict[str, str]:
+        """
+        The full tp plan for the model's modules
+        """
+        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+            return self._ep_plan
+        return self._tp_plan
+
+    @property
+    def pp_plan(self) -> dict[str, tuple[str, str]]:
+        return self._pp_plan
+
+    @tp_plan.setter
+    def tp_plan(self, plan: dict[str, str]):
+        if plan is not None:
+            # Validate that all parallel styles in the plan are supported
+            from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+
+            for layer_pattern, parallel_style in plan.items():
+                if parallel_style not in ALL_PARALLEL_STYLES:
+                    raise ValueError(
+                        f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
+                        f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                    )
+
+            # Validate that the layer patterns match existing model structure
+            # We check this by getting all parameter names and seeing if any match the patterns
+            if hasattr(self, "named_parameters"):
+                model_param_names = [name for name, _ in self.named_parameters()]
+                if model_param_names:  # Only validate if model has parameters
+                    import re
+
+                    for layer_pattern in plan.keys():
+                        # Convert pattern to regex (replace * with .*)
+                        regex_pattern = layer_pattern.replace("*", r"\d+")
+                        pattern_matched = False
+                        for param_name in model_param_names:
+                            if re.match(regex_pattern, param_name):
+                                pattern_matched = True
+                                break
+                        if not pattern_matched:
+                            # Try more flexible matching - check if pattern components exist
+                            pattern_parts = layer_pattern.split(".")
+                            flexible_matched = False
+                            for param_name in model_param_names:
+                                param_parts = param_name.split(".")
+                                if len(pattern_parts) <= len(param_parts):
+                                    match_count = 0
+                                    for i, pattern_part in enumerate(pattern_parts):
+                                        if pattern_part == "*":
+                                            match_count += 1
+                                        elif i < len(param_parts) and pattern_part == param_parts[i]:
+                                            match_count += 1
+                                    if match_count == len(pattern_parts):
+                                        flexible_matched = True
+                                        break
+                            if not flexible_matched:
+                                import warnings
+
+                                warnings.warn(
+                                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
+                                    f"This rule may not be applied during tensor parallelization."
+                                )
+
+        self._tp_plan = plan if plan is not None else {}
+
+    @pp_plan.setter
+    def pp_plan(self, plan: dict[str, tuple[str, str]]):
+        self._pp_plan = plan
 
     def dequantize(self):
         """

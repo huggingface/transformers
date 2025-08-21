@@ -43,34 +43,22 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-STATIC_CACHE_CLASSES_MAPPING = {}
-QUANT_BACKEND_CLASSES_MAPPING = {}
-ALL_CACHE_IMPLEMENTATIONS = []
+STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "offloaded", "quantized")
+# All the following are redundant and deprecated, but kept for BC
+DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
+    "sliding_window",
+    "hybrid",
+    "hybrid_chunked",
+    "offloaded_hybrid",
+    "offloaded_hybrid_chunked",
+)
+ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS
+ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
+
 
 if is_torch_available():
-    from ..cache_utils import (
-        HQQQuantizedCache,
-        HybridCache,
-        HybridChunkedCache,
-        OffloadedHybridCache,
-        OffloadedStaticCache,
-        QuantoQuantizedCache,
-        SlidingWindowCache,
-        StaticCache,
-    )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
-
-    STATIC_CACHE_CLASSES_MAPPING = {
-        "static": StaticCache,
-        "offloaded_static": OffloadedStaticCache,
-        "sliding_window": SlidingWindowCache,
-        "hybrid": HybridCache,
-        "hybrid_chunked": HybridChunkedCache,
-        "offloaded_hybrid": OffloadedHybridCache,
-        "offloaded_hybrid_chunked": OffloadedHybridCache,
-    }
-    QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(STATIC_CACHE_CLASSES_MAPPING.keys()) + ["offloaded", "dynamic", "quantized"]
 
 
 class GenerationMode(ExplicitEnum):
@@ -173,9 +161,8 @@ class GenerationConfig(PushToHubMixin):
 
             - `"dynamic"`: [`DynamicCache`]
             - `"static"`: [`StaticCache`]
-            - `"offloaded_static"`: [`OffloadedStaticCache`]
-            - `"sliding_window"`: [`SlidingWindowCache`]
-            - `"hybrid"`: [`HybridCache`]
+            - `"offloaded"`: [`DynamicCache(offloaded=True)`]
+            - `"offloaded_static"`: [`StaticCache(offloaded=True)`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See

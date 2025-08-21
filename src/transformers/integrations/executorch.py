@@ -15,7 +15,13 @@ from typing import Callable, Optional
 
 import torch
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache, HybridCache, StaticCache
+from ..cache_utils import (
+    DynamicCache,
+    DynamicLayer,
+    DynamicSlidingWindowLayer,
+    EncoderDecoderCache,
+    StaticCache,
+)
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
@@ -24,10 +30,11 @@ from ..masking_utils import (
     prepare_padding_mask,
 )
 from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
-
-
-# Add this to src/transformers/integrations/executorch.py
+from ..pytorch_utils import (
+    is_torch_greater_or_equal,
+    is_torch_greater_or_equal_than_2_3,
+    is_torch_greater_or_equal_than_2_6,
+)
 
 
 class TorchExportableModuleForVLM:
@@ -117,11 +124,7 @@ class TorchExportableModuleForVLM:
         """Export the text decoder component."""
 
         # Create text decoder exportable wrapper
-        self.exportable_text_decoder = TorchExportableModuleForDecoderOnlyLM(
-            model=self.text_decoder,
-            max_batch_size=self.max_batch_size,
-            max_cache_len=self.max_cache_len,
-        )
+        self.exportable_text_decoder = TorchExportableModuleForDecoderOnlyLM(model=self.text_decoder)
 
         # Use the existing text decoder exportable wrapper
         seq_length = 3
@@ -200,7 +203,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         model: PreTrainedModel,
     ):
         """
-        Initializes the exportable module with `HybridCache`.
+        Initializes the exportable module.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
@@ -629,7 +632,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
-    specifically for decoder-only LM to `HybridCache`. This module ensures that the
+    specifically for decoder-only LM to hybrid `StaticCache`. This module ensures that the
     exported model is compatible with further lowering and execution in `ExecuTorch`.
     """
 
@@ -638,13 +641,13 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         model: PreTrainedModel,
     ):
         """
-        Initializes the exportable module with `HybridCache`.
+        Initializes the exportable module.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
 
         Raises:
-            AssertionError: If the model doesn't have the expected configuration for HybridCache.
+            AssertionError: If the model doesn't have the expected configuration for an hybrid StaticCache.
         """
         super().__init__()
         self.model = model
@@ -669,8 +672,8 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         if not config.use_cache:
             raise AssertionError("Model must have caching enabled.")
 
-        # Initialize the HybridCache
-        self.cache = HybridCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        # Initialize the cache
+        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         max_batch_size = generation_config.cache_config.get("batch_size")
@@ -823,6 +826,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, "cpu")
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
+
+        register_dynamic_cache_export_support()
 
         # Register cache buffers to make them exportable
         for i in range(len(self.static_cache)):
@@ -996,6 +1001,8 @@ def export_with_dynamic_cache(
     ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
     model.config._attn_implementation = "sdpa_without_vmap"
 
+    register_dynamic_cache_export_support()
+
     with torch.no_grad():
         exported_program = torch.export.export(
             model,
@@ -1009,6 +1016,59 @@ def export_with_dynamic_cache(
             strict=False,
         )
         return exported_program
+
+
+def register_dynamic_cache_export_support():
+    """
+    Utilities for `DynamicCache` <> torch.export support
+    """
+
+    try:
+        torch.utils._pytree.register_pytree_node(
+            DynamicCache,
+            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_get_cache_dict(dynamic_cache)),
+            _unflatten_dynamic_cache,
+            serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+            flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
+                _get_cache_dict(dynamic_cache)
+            ),
+        )
+        # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
+        torch.fx._pytree.register_pytree_flatten_spec(
+            DynamicCache,
+            lambda cache, spec: torch.fx._pytree._dict_flatten_spec(_get_cache_dict(cache), spec),
+        )
+    # Catching this in case there are multiple runs for some test runs
+    except ValueError as e:
+        if "already registered as pytree node" not in str(e):
+            raise
+
+
+def _get_cache_dict(cache: DynamicCache):
+    """Convert cache to dictionary format for pytree operations."""
+    if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
+        raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
+
+    if not is_torch_greater_or_equal_than_2_6:
+        logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
+
+    return {
+        "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
+        "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
+    }
+
+
+def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
+    dictionary = torch.utils._pytree._dict_unflatten(values, context)
+    cache = DynamicCache()
+    # Reconstruct layers from keys and values lists
+    key_list = dictionary.get("key_cache", [])
+    value_list = dictionary.get("value_cache", [])
+    for idx in range(max(len(key_list), len(value_list))):
+        key = key_list[idx] if idx < len(key_list) else None
+        value = value_list[idx] if idx < len(value_list) else None
+        cache.update(key, value, idx)
+    return cache
 
 
 def sdpa_mask_without_vmap(

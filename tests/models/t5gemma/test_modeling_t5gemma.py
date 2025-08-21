@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     torch_device,
 )
 
@@ -829,7 +828,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
     # Add decoder_input_ids and adjust hidden states.
-    @require_torch_sdpa
+
     @require_torch_accelerator
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:
