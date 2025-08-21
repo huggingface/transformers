@@ -578,7 +578,9 @@ def read_video_torchcodec(
     decoder = VideoDecoder(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
-        seek_mode="approximate",
+        seek_mode="exact",
+        # Allow FFmpeg decide on the number of threads for efficiency
+        num_ffmpeg_threads=0,
         device=kwargs.get("device"),
     )
     metadata = VideoMetadata(
@@ -591,7 +593,7 @@ def read_video_torchcodec(
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
-    video = decoder.get_frames_at(indices=indices.tolist()).data.contiguous()
+    video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
     return video, metadata
 
