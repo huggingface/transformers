@@ -37,7 +37,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -335,7 +334,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -411,7 +409,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="Idefics2 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"

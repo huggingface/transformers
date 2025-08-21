@@ -13,13 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2018-06-11 and added to Hugging Face Transformers on 2023-06-20.*
 
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style=flat&logo=data:image/png;base64,...">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
   </div>
@@ -29,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 # GPT
 
-[GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
+[GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) ([blog post](https://openai.com/index/language-unsupervised/)) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
 
 GPT can generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification.
 
@@ -114,23 +113,3 @@ echo -e "The future of AI is" | transformers run --task text-generation --model 
 ## OpenAIGPTTokenizerFast
 
 [[autodoc]] OpenAIGPTTokenizerFast
-
-## TFOpenAIGPTModel
-
-[[autodoc]] TFOpenAIGPTModel
-- call
-
-## TFOpenAIGPTLMHeadModel
-
-[[autodoc]] TFOpenAIGPTLMHeadModel
-- call
-
-## TFOpenAIGPTDoubleHeadsModel
-
-[[autodoc]] TFOpenAIGPTDoubleHeadsModel
-- call
-
-## TFOpenAIGPTForSequenceClassification
-
-[[autodoc]] TFOpenAIGPTForSequenceClassification
-- call

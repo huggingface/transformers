@@ -16,6 +16,7 @@
 import unittest
 
 import accelerate
+import pytest
 
 from transformers import (
     AutoProcessor,
@@ -207,6 +208,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     )
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

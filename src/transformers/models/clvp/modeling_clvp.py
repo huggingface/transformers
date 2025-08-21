@@ -1069,14 +1069,14 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1154,9 +1154,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -1303,7 +1300,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 
         # Check if conditioning_embeds are provided or not, if yes then concatenate the bos_token_id at the end of the conditioning_embeds.
         # Then we must subtract the positional_ids because during the forward pass it will be added anyways, so we must cancel them out here.
-        conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
+        conditioning_embeds = model_kwargs.get("conditioning_embeds")
 
         if conditioning_embeds is not None:
             mel_start_token_embedding = self.model.decoder.input_embeds_layer(

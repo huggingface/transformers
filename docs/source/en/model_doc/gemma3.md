@@ -14,6 +14,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-03-25 and added to Hugging Face Transformers on 2025-03-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # Gemma 3
 
-[Gemma 3](https://goo.gle/Gemma3Report) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
+[Gemma 3](https://huggingface.co/papers/2503.19786) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are alternating 5 local sliding window self-attention layers for every global self-attention layer, support for a longer context length of 128K tokens, and a [SigLip](./siglip) encoder that can "pan & scan" high-resolution images to prevent information from disappearing in high resolution images or images with non-square aspect ratios.
 
 The instruction-tuned variant was post-trained with knowledge distillation and reinforcement learning.
 
@@ -92,7 +93,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -149,7 +150,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -206,7 +207,7 @@ visualizer("<img>What is shown in this image?")
         return_tensors="pt",
         add_generation_prompt=True,
     +   do_pan_and_scan=True,
-        ).to("cuda")
+        ).to(model.device)
     ```
 - For Gemma-3 1B checkpoint trained in text-only mode, use [`AutoModelForCausalLM`] instead.
 
@@ -223,7 +224,7 @@ visualizer("<img>What is shown in this image?")
         device_map="auto",
         attn_implementation="sdpa"
     )
-    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+    input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))

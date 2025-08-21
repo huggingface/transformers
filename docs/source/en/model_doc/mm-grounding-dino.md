@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-01-04 and added to Hugging Face Transformers on 2025-08-01.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # MM Grounding DINO
 
-[MM Grounding DINO](https://arxiv.org/abs/2401.02361) model was proposed in [An Open and Comprehensive Pipeline for Unified Object Grounding and Detection](https://arxiv.org/abs/2401.02361) by Xiangyu Zhao, Yicheng Chen, Shilin Xu, Xiangtai Li, Xinjiang Wang, Yining Li, Haian Huang>.
+[MM Grounding DINO](https://huggingface.co/papers/2401.02361) model was proposed in [An Open and Comprehensive Pipeline for Unified Object Grounding and Detection](https://huggingface.co/papers/2401.02361) by Xiangyu Zhao, Yicheng Chen, Shilin Xu, Xiangtai Li, Xinjiang Wang, Yining Li, Haian Huang>.
 
 MM Grounding DINO improves upon the [Grounding DINO](https://huggingface.co/docs/transformers/model_doc/grounding-dino) by improving the contrastive class head and removing the parameter sharing in the decoder, improving zero-shot detection performance on both COCO (50.6(+2.2) AP) and LVIS (31.9(+11.8) val AP and 41.4(+12.6) minival AP).
 
@@ -38,13 +39,13 @@ The example below demonstrates how to generate text based on an image with the [
 
 ```py
 import torch
-from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, infer_device
 from transformers.image_utils import load_image
 
 
 # Prepare processor and model
 model_id = "openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = infer_device()
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 

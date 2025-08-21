@@ -451,25 +451,14 @@ def get_torch_major_and_minor_version() -> str:
 
 
 def is_torch_sdpa_available():
-    if not is_torch_available():
+    # Mostly retained for backward compatibility in remote code, since sdpa works correctly on all torch versions >= 2.2
+    if not is_torch_available() or _torch_version == "N/A":
         return False
-    elif _torch_version == "N/A":
-        return False
-
-    # NOTE: MLU is OK with non-contiguous inputs.
-    if is_torch_mlu_available():
-        return True
-    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
-    if is_torch_npu_available():
-        return True
-    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
-    return version.parse(_torch_version) >= version.parse("2.1.1")
+    return True
 
 
 def is_torch_flex_attn_available():
-    if not is_torch_available():
-        return False
-    elif _torch_version == "N/A":
+    if not is_torch_available() or _torch_version == "N/A":
         return False
 
     # TODO check if some bugs cause push backs on the exact version
@@ -1088,7 +1077,7 @@ def is_ninja_available():
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output("ninja --version".split())
+        subprocess.check_output(["ninja", "--version"])
     except Exception:
         return False
     else:
@@ -1290,7 +1279,7 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False):
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("optimum-quanto"):
+    if not _is_package_available("optimum.quanto"):
         return False
 
     if accept_dev:
@@ -2773,7 +2762,7 @@ def spread_import_structure(nested_import_structure):
 
                     else:
                         # If k is not a frozenset, it means that the dictionary is not "level": some keys (top-level)
-                        # are frozensets, whereas some are not -> frozenset keys are at an unkown depth-level of the
+                        # are frozensets, whereas some are not -> frozenset keys are at an unknown depth-level of the
                         # dictionary.
                         #
                         # We recursively propagate the frozenset for this specific dictionary so that the frozensets
