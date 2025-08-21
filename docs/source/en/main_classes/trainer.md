@@ -29,6 +29,7 @@ when used with other models. When using it with your own model, make sure:
 - your model can compute the loss if a `labels` argument is provided and that loss is returned as the first
   element of the tuple (if your model returns tuples)
 - your model can accept multiple label arguments (use `label_names` in [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`
+
 </Tip>
 
 ## Trainer[[api-reference]]
