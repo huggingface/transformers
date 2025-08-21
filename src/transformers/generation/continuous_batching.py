@@ -664,8 +664,8 @@ class PagedAttentionArgs:
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     position_ids: torch.Tensor
-    cumulative_seqlens_q: torch.Tensor
-    cumulative_seqlens_k: torch.Tensor
+    cu_seq_lens_q: torch.Tensor
+    cu_seq_lens_k: torch.Tensor
     max_seqlen_q: int
     max_seqlen_k: int
     write_index: torch.Tensor
@@ -677,28 +677,28 @@ class PagedAttentionArgs:
 
 
 @traced
-def create_document_mask(cumulative_seqlens_q, cumulative_seqlens_k):
+def create_document_mask(cu_seq_lens_q, cu_seq_lens_k):
     # Number of documents
-    valid_docs_q = cumulative_seqlens_q[1:] > cumulative_seqlens_q[:-1]
-    valid_docs_k = cumulative_seqlens_k[1:] > cumulative_seqlens_k[:-1]
+    valid_docs_q = cu_seq_lens_q[1:] > cu_seq_lens_q[:-1]
+    valid_docs_k = cu_seq_lens_k[1:] > cu_seq_lens_k[:-1]
     num_valid_docs = min(valid_docs_q.sum(), valid_docs_k.sum())
 
     # Trim to valid docs
-    cumulative_seqlens_q = cumulative_seqlens_q[: num_valid_docs + 1]
-    cumulative_seqlens_k = cumulative_seqlens_k[: num_valid_docs + 1]
+    cu_seq_lens_q = cu_seq_lens_q[: num_valid_docs + 1]
+    cu_seq_lens_k = cu_seq_lens_k[: num_valid_docs + 1]
 
-    total_q = cumulative_seqlens_q[-1]
-    total_k = cumulative_seqlens_k[-1]
+    total_q = cu_seq_lens_q[-1]
+    total_k = cu_seq_lens_k[-1]
 
-    q_indices = torch.arange(total_q, device=cumulative_seqlens_q.device)
-    k_indices = torch.arange(total_k, device=cumulative_seqlens_k.device)
+    q_indices = torch.arange(total_q, device=cu_seq_lens_q.device)
+    k_indices = torch.arange(total_k, device=cu_seq_lens_k.device)
 
-    q_doc_ids = torch.bucketize(q_indices, cumulative_seqlens_q[1:], right=True)
-    k_doc_ids = torch.bucketize(k_indices, cumulative_seqlens_k[1:], right=False)
+    q_doc_ids = torch.bucketize(q_indices, cu_seq_lens_q[1:], right=True)
+    k_doc_ids = torch.bucketize(k_indices, cu_seq_lens_k[1:], right=False)
     doc_mask = q_doc_ids[:, None] == k_doc_ids[None, :]
     # apply causal mask where no decoding (same nb of q than k)
 
-    is_causal = ~(cumulative_seqlens_q[1:] - cumulative_seqlens_q[:-1] == 1) * cumulative_seqlens_q[1:]
+    is_causal = ~(cu_seq_lens_q[1:] - cu_seq_lens_q[:-1] == 1) * cu_seq_lens_q[1:]
     apply_causal = torch.bucketize(q_indices, is_causal, right=True)[:, None] == k_doc_ids
     # TODO don't apply on prefill splitting
     causal_mask = torch.triu(torch.ones(total_q, total_k, device=q_doc_ids.device), diagonal=1).bool()
@@ -769,8 +769,8 @@ class ContinuousBatchProcessor:
         self.attention_mask = torch.zeros(
             (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
         )
-        self.cumulative_seqlens_q = torch.zeros((T + 1,), **tensor_metadata)
-        self.cumulative_seqlens_k = torch.zeros((T + 1,), **tensor_metadata)
+        self.cu_seq_lens_q = torch.zeros((T + 1,), **tensor_metadata)
+        self.cu_seq_lens_k = torch.zeros((T + 1,), **tensor_metadata)
         self.write_index = torch.zeros((T,), **tensor_metadata)
         self.read_index = torch.zeros((max_token_budget,), **tensor_metadata)
         self.logits_indices = torch.full((T,), -1, **tensor_metadata)
@@ -785,8 +785,8 @@ class ContinuousBatchProcessor:
         self.input_ids.zero_()
         self.position_ids.zero_()
         self.attention_mask.fill_(torch.finfo(self.model_dtype).min)
-        self.cumulative_seqlens_q.zero_()
-        self.cumulative_seqlens_k.zero_()
+        self.cu_seq_lens_q.zero_()
+        self.cu_seq_lens_k.zero_()
         self.write_index.fill_(-1)
         self.read_index.fill_(-1)
         self.logits_indices.fill_(-1)
@@ -801,8 +801,8 @@ class ContinuousBatchProcessor:
             "input_ids": self.input_ids,
             "position_ids": self.position_ids,
             "attention_mask": self.attention_mask,
-            "cumulative_seqlens_q": self.cumulative_seqlens_q,
-            "cumulative_seqlens_k": self.cumulative_seqlens_k,
+            "cu_seq_lens_q": self.cu_seq_lens_q,
+            "cu_seq_lens_k": self.cu_seq_lens_k,
             "write_index": self.write_index,
             "read_index": self.read_index,
             "logits_indices": self.logits_indices,
@@ -872,8 +872,8 @@ class ContinuousBatchProcessor:
         input_ids = []
         read_index = []
         write_index = []
-        cumulative_seqlens_q = [0]
-        cumulative_seqlens_k = [0]
+        cu_seq_lens_q = [0]
+        cu_seq_lens_k = [0]
         logits_indices = []
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
@@ -892,24 +892,24 @@ class ContinuousBatchProcessor:
             position_ids.extend(positions_to_add)
             read_index.extend(read_indices)
             write_index.extend(write_indices)
-            cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
-            cumulative_seqlens_k.append(cumulative_seqlens_k[-1] + key_length)
+            cu_seq_lens_q.append(cu_seq_lens_q[-1] + query_length)
+            cu_seq_lens_k.append(cu_seq_lens_k[-1] + key_length)
             if len(state.remaining_prompt_ids) == 0:
-                logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                logits_indices.append(cu_seq_lens_q[-1] - 1)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
             self.max_seqlen_k = max(self.max_seqlen_k, key_length)
             state.position_offset += query_length
 
         logger.info(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cu_seq_lens_q[-1]}. cum KV: {cu_seq_lens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
             position_ids,
             read_index,
             write_index,
-            cumulative_seqlens_q,
-            cumulative_seqlens_k,
+            cu_seq_lens_q,
+            cu_seq_lens_k,
             logits_indices,
         )
 
@@ -922,8 +922,8 @@ class ContinuousBatchProcessor:
         position_ids,
         read_index,
         write_index,
-        cumulative_seqlens_q,
-        cumulative_seqlens_k,
+        cu_seq_lens_q,
+        cu_seq_lens_k,
         logits_indices,
     ):
         to_tensor = partial(torch.tensor, **self.tensor_metadata)
@@ -931,25 +931,25 @@ class ContinuousBatchProcessor:
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
         self.write_index[: len(write_index)] = to_tensor(write_index)
         self.read_index[: len(read_index)] = to_tensor(read_index)
-        self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.cumulative_seqlens_k[: len(cumulative_seqlens_k)] = to_tensor(cumulative_seqlens_k)
+        self.cu_seq_lens_q[: len(cu_seq_lens_q)] = to_tensor(cu_seq_lens_q)
+        self.cu_seq_lens_k[: len(cu_seq_lens_k)] = to_tensor(cu_seq_lens_k)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         min_value = torch.finfo(self.model_dtype).min
         if self.config._attn_implementation != "paged_attention":  # we set `is_causal` to True in paged call`
-            for i in range(len(cumulative_seqlens_q) - 1):
+            for i in range(len(cu_seq_lens_q) - 1):
                 if (
-                    cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
-                    < cumulative_seqlens_k[i + 1] - cumulative_seqlens_k[i]
-                    and cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i] >= 1
+                    cu_seq_lens_q[i + 1] - cu_seq_lens_q[i]
+                    < cu_seq_lens_k[i + 1] - cu_seq_lens_k[i]
+                    and cu_seq_lens_q[i + 1] - cu_seq_lens_q[i] >= 1
                 ):
                     diagonal = (
-                        cumulative_seqlens_k[i + 1] - (cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]) + 1
+                        cu_seq_lens_k[i + 1] - (cu_seq_lens_q[i + 1] - cu_seq_lens_q[i]) + 1
                     )
-                    diagonal = diagonal - cumulative_seqlens_k[i]
+                    diagonal = diagonal - cu_seq_lens_k[i]
                 else:
                     diagonal = 1
-                query_range = slice(cumulative_seqlens_q[i], cumulative_seqlens_q[i + 1])
-                key_range = slice(cumulative_seqlens_k[i], cumulative_seqlens_k[i + 1])
+                query_range = slice(cu_seq_lens_q[i], cu_seq_lens_q[i + 1])
+                key_range = slice(cu_seq_lens_k[i], cu_seq_lens_k[i + 1])
 
                 mask = torch.triu(
                     torch.full(
@@ -1238,7 +1238,7 @@ class ContinuousBatchingManager:
         # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
         if hasattr(self.logit_processor, "set_continuous_batching_context"):
             self.logit_processor.set_continuous_batching_context(
-                batch_data["logits_indices"], batch_data["cumulative_seqlens_q"]
+                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
             )
         return self.logit_processor(batch_data["input_ids"], logits)
 
