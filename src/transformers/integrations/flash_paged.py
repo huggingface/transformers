@@ -48,7 +48,7 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
-    k, v = cache.update(k, v, module.layer_idx, cu_seq_lens_k=cu_seq_lens_k, **kwargs)
+    k, v = cache.update(k, v, module.layer_idx, **kwargs)
 
     sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window, 0)
     if implementation is not None:
