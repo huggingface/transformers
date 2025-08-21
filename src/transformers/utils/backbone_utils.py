@@ -139,6 +139,9 @@ def get_aligned_output_features_output_indices(
 
 class BackboneMixin:
     backbone_type: Optional[BackboneType] = None
+
+    # Attribute to indicate if the backbone has attention and can return attention outputs.
+    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
     has_attentions: bool = True
 
     def _init_timm_backbone(self, config) -> None:
