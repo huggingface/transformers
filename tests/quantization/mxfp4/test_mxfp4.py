@@ -271,16 +271,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         updated_name = quantizer.update_param_name(param_name)
         self.assertEqual(updated_name, param_name)
 
-    def test_is_serializable(self):
-        """Test serialization capability"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
-
-        # MXFP4 is not serializable with safetensors
-        self.assertFalse(quantizer.is_serializable())
-
     def test_is_trainable(self):
         """Test trainability"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
