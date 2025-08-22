@@ -18,10 +18,10 @@ from parameterized import parameterized
 
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
+    require_deterministic_for_xpu,
     require_gguf,
     require_read_token,
     require_torch_accelerator,
-    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
