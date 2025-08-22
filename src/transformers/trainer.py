@@ -3869,7 +3869,7 @@ class Trainer:
                    the context parallelism wrapper or a no-op context
         """
         if (
-            getattr(self.accelerator, "parallelism_config") is not None
+            getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
             if hasattr(model, "config"):
