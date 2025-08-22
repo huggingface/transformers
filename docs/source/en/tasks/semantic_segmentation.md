@@ -289,7 +289,7 @@ You could also create and use your own dataset if you prefer to train with the [
           }
      )
 
-     # step 3: push to Hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+     # step 3: push to Hub (assumes you have ran the hf auth login command in a terminal/notebook)
      dataset.push_to_hub("your-name/dataset-repo")
 
      # optionally, you can push to a private repo on the Hub
@@ -689,9 +689,8 @@ Reload the dataset and load an image for inference.
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
->>> from accelerate.test_utils.testing import get_backend
-# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> device, _, _ = get_backend()
+>>> from transformers import infer_device
+>>> device = infer_device()
 >>> encoding = image_processor(image, return_tensors="pt")
 >>> pixel_values = encoding.pixel_values.to(device)
 ```

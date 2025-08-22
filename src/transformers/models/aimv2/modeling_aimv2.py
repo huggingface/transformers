@@ -448,24 +448,12 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.vision_config.initializer_range
-            if hasattr(self.config, "vision_config")
-            else self.config.initializer_range
-        )
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, Aimv2RMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif hasattr(module, "logit_scale"):
+        super()._init_weights(module)
+        if hasattr(module, "logit_scale"):
             if isinstance(module.logit_scale, nn.Parameter):
                 module.logit_scale.data.fill_(math.log(1 / 0.07))
         elif isinstance(module, Aimv2AttentionPoolingHead):
-            module.cls_token.data.normal_(mean=0.0, std=std)
+            module.cls_token.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring(
@@ -642,6 +630,7 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 class Aimv2Model(Aimv2PreTrainedModel):
     config: Aimv2Config
     _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
+    _supports_flash_attn = True
 
     def __init__(self, config: Aimv2Config):
         super().__init__(config)

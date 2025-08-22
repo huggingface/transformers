@@ -18,6 +18,7 @@ try:
     from kernels import (
         Device,
         LayerRepository,
+        Mode,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
@@ -44,13 +45,38 @@ try:
                 repo_id="kernels-community/liger_kernels",
                 layer_name="LigerRMSNorm",
                 # revision="pure-layer-test",
-            )
+            ),
+            "rocm": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/liger_kernels",
+                    layer_name="LigerRMSNorm",
+                    # revision="pure-layer-test",
+                )
+            },
         },
         "MLP": {
             "cuda": LayerRepository(
                 repo_id="medmekk/triton-llama-mlp",
                 layer_name="TritonLlamaMLP",
             )
+        },
+        "MegaBlocksMoeMLP": {
+            "cuda": {
+                Mode.TRAINING: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                ),
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                ),
+            },
+            "rocm": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="ahadnagy/megablocks",
+                    layer_name="MegaBlocksMoeMLP",
+                )
+            },
         },
     }
 

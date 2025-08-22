@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-27 and added to Hugging Face Transformers on 2025-03-28.*
 
 # DeepSeek-V3
 
@@ -181,4 +182,9 @@ error, it means NCCL was probably not loaded.
 ## DeepseekV3ForCausalLM
 
 [[autodoc]] DeepseekV3ForCausalLM
+    - forward
+
+## DeepseekV3ForSequenceClassification
+
+[[autodoc]] DeepseekV3ForSequenceClassification
     - forward

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-11-28 and added to Hugging Face Transformers on 2023-07-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -69,7 +70,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa",
 )
 
-input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -109,7 +110,7 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=quantization_config,
 )
 
-inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to("cuda")
+inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

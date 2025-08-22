@@ -129,6 +129,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "deberta",
     "deberta-v2",
     "dinov2",
+    "dinov3_convnext",
+    "dinov3_vit",
     "distilbert",
     "donut-swin",
     "electra",
@@ -749,9 +751,7 @@ def create_wrapper(
             tracer = found_proxies[0].tracer
             if op_type == "call_function":
                 target = function
-            elif op_type == "call_method":
-                target = function.__name__
-            elif op_type == "get_attr":
+            elif op_type == "call_method" or op_type == "get_attr":
                 target = function.__name__
             else:
                 raise ValueError(f"op_type {op_type} not supported.")
@@ -815,7 +815,6 @@ def _proxies_to_metas(v):
 
 def create_cache_proxy_factory_fn(orig_cache_cls: type[Cache]) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
-        global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
             raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
         cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)

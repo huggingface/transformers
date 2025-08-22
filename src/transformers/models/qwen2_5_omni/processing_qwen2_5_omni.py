@@ -172,7 +172,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             audio_lengths = iter([])
 
         if images is not None:
-            images_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = iter(images_inputs["image_grid_thw"])
         else:
             images_inputs = {}
@@ -180,7 +180,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         if videos is not None:
             videos = make_batched_videos(videos)
-            videos_inputs = self.video_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             fps = [fps] * len(videos)
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
@@ -195,16 +195,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-            image_grid_thw,
-            video_grid_thw,
-            video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
-            position_id_per_seconds=position_id_per_seconds,
-            seconds_per_chunk=seconds_per_chunk,
-        )
+        if images is not None or videos is not None or audio is not None:
+            text = self.replace_multimodal_special_tokens(
+                text,
+                audio_lengths,
+                image_grid_thw,
+                video_grid_thw,
+                video_second_per_grid=video_second_per_grid,
+                use_audio_in_video=use_audio_in_video,
+                position_id_per_seconds=position_id_per_seconds,
+                seconds_per_chunk=seconds_per_chunk,
+            )
 
         texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 

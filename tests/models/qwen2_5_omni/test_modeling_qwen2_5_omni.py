@@ -21,6 +21,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
+import pytest
 import requests
 
 from transformers import (
@@ -37,7 +38,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -259,6 +259,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     test_pruning = False
     test_head_masking = False
     _is_composite = True
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = Qwen2_5OmniThinkerForConditionalGenerationTester(self)
@@ -281,6 +282,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
         pass
 
     @unittest.skip(reason="Compile not yet supported because in QwenOmniThinker models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -292,7 +294,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_model_outputs_equivalence(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -332,6 +333,91 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        max_new_tokens = 30
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.float16]:
+                dummy_input = dummy_input.to(torch.bfloat16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                # flatten
+                padfree_inputs_dict = {
+                    "input_features": inputs_dict["input_features"],
+                    "feature_attention_mask": inputs_dict["feature_attention_mask"],
+                    "pixel_values": inputs_dict["pixel_values"],
+                    "image_grid_thw": inputs_dict["image_grid_thw"],
+                    "input_ids": inputs_dict["input_ids"][dummy_attention_mask.bool()].unsqueeze(0),
+                }
+
+                # add position_ids
+                vision_position_ids, deltas = model.get_rope_index(
+                    input_ids=inputs_dict["input_ids"],
+                    image_grid_thw=inputs_dict["image_grid_thw"],
+                    attention_mask=inputs_dict["attention_mask"],
+                    audio_seqlens=torch.sum(inputs_dict["feature_attention_mask"], dim=1),
+                )  # [3, bs, padded-seq-len]
+                vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
+                    3, -1
+                )  # [3, bs*padfree-len]
+                text_padfree_positions = torch.cat(
+                    [torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()]
+                )  # [1, bs*padfree-len]
+                text_padfree_positions = text_padfree_positions.long().unsqueeze(0).to(torch_device)
+                padfree_inputs_dict["position_ids"] = torch.cat([text_padfree_positions, vision_padfree_positions])[
+                    :, None, :
+                ]
+
+                if fa_kwargs:
+                    cu_seq_lens = [0] + dummy_attention_mask.sum(1).tolist()
+                    cu_seq_lens = torch.tensor(cu_seq_lens, device=torch_device)
+                    max_length = cu_seq_lens.diff().max().item()
+                    padfree_inputs_dict.update(
+                        {
+                            "cu_seq_lens_q": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
+                            "cu_seq_lens_k": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
+                            "max_length_q": max_length,
+                            "max_length_k": max_length,
+                        }
+                    )
+
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
     @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
     def test_contrastive_generate(self):
         pass
@@ -359,7 +445,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     # TODO (joao, raushan): there are multiple standardization issues in this model that prevent this test from
     # passing, fix me
     @unittest.skip("Cannot handle 4D attention mask")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     @unittest.skip("Cannot handle 4D attention mask")
@@ -612,7 +699,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
-            text=text * 2,
+            text=[text] * 2,
             audio=[self.raw_audio, self.raw_audio],
             images=[self.raw_image, self.raw_image],
             return_tensors="pt",
@@ -630,6 +717,10 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
                 ],
                 ("cuda", 8): [
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+                ],
+                ("rocm", None): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                 ],
@@ -728,7 +819,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXTS = Expectations(
             {
                 ("cuda", 7): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can try. But it's not always that accurate. I might be able to make",
-                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can't really guess your age and gender just from your voice. There are are a",
+                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can't really guess your age and gender just from your voice. There are so many",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()

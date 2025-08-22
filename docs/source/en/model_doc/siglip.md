@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-03-27 and added to Hugging Face Transformers on 2024-01-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -66,7 +67,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -97,7 +98,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

@@ -25,7 +25,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     torch_device,
 )
@@ -317,7 +316,10 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_generate_with_static_cache(self):
         pass
 
-    @pytest.mark.generate
-    @is_flaky
-    def test_generate_compile_model_forward(self):
-        super().test_generate_compile_model_forward()
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass

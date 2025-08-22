@@ -61,7 +61,7 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         tf_tokenizer = TFGPT2Tokenizer.from_tokenizer(tokenizer)
         ```
         """
-        merges = [" ".join(m) for m in tokenizer.bpe_ranks.keys()]
+        merges = [" ".join(m) for m in tokenizer.bpe_ranks]
         vocab = tokenizer.get_vocab()
         return cls(vocab, merges, *args, **kwargs)
 

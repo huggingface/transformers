@@ -13,73 +13,89 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DeBERTa
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
+[DeBERTa](https://huggingface.co/papers/2006.03654) improves the pretraining efficiency of BERT and RoBERTa with two key ideas, disentangled attention and an enhanced mask decoder. Instead of mixing everything together like BERT, DeBERTa separates a word's *content* from its *position* and processes them independently. This gives it a clearer sense of what's being said and where in the sentence it's happening.
 
-## Overview
+The enhanced mask decoder replaces the traditional softmax decoder to make better predictions.
 
-The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://huggingface.co/papers/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen It is based on Google's
-BERT model released in 2018 and Facebook's RoBERTa model released in 2019.
+Even with less training data than RoBERTa, DeBERTa manages to outperform it on several benchmarks.
 
-It builds on RoBERTa with disentangled attention and enhanced mask decoder training with half of the data used in
-RoBERTa.
-
-The abstract from the paper is the following:
-
-*Recent progress in pre-trained neural language models has significantly improved the performance of many natural
-language processing (NLP) tasks. In this paper we propose a new model architecture DeBERTa (Decoding-enhanced BERT with
-disentangled attention) that improves the BERT and RoBERTa models using two novel techniques. The first is the
-disentangled attention mechanism, where each word is represented using two vectors that encode its content and
-position, respectively, and the attention weights among words are computed using disentangled matrices on their
-contents and relative positions. Second, an enhanced mask decoder is used to replace the output softmax layer to
-predict the masked tokens for model pretraining. We show that these two techniques significantly improve the efficiency
-of model pretraining and performance of downstream tasks. Compared to RoBERTa-Large, a DeBERTa model trained on half of
-the training data performs consistently better on a wide range of NLP tasks, achieving improvements on MNLI by +0.9%
-(90.2% vs. 91.1%), on SQuAD v2.0 by +2.3% (88.4% vs. 90.7%) and RACE by +3.6% (83.2% vs. 86.8%). The DeBERTa code and
-pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
+You can find all the original DeBERTa checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta) organization.
 
 
-This model was contributed by [DeBERTa](https://huggingface.co/DeBERTa). This model TF 2.0 implementation was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj) . The original code can be found [here](https://github.com/microsoft/DeBERTa).
+> [!TIP]
+> Click on the DeBERTa models in the right sidebar for more examples of how to apply DeBERTa to different language tasks.
 
-## Resources
+The example below demonstrates how to classify text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DeBERTa. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<PipelineTag pipeline="text-classification"/>
+```py
+import torch
+from transformers import pipeline
 
-- A blog post on how to [Accelerate Large Model Training using DeepSpeed](https://huggingface.co/blog/accelerate-deepspeed) with DeBERTa.
-- A blog post on [Supercharged Customer Service with Machine Learning](https://huggingface.co/blog/supercharge-customer-service-with-machine-learning) with DeBERTa.
-- [`DebertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
-- [`TFDebertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
-- [Text classification task guide](../tasks/sequence_classification)
+classifier = pipeline(
+    task="text-classification",
+    model="microsoft/deberta-base-mnli",
+    device=0,
+)
 
-<PipelineTag pipeline="token-classification" />
+classifier({
+    "text": "A soccer game with multiple people playing.",
+    "text_pair": "Some people are playing a sport."
+})
+```
 
-- [`DebertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [`TFDebertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Byte-Pair Encoding tokenization](https://huggingface.co/course/chapter6/5?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Token classification task guide](../tasks/token_classification)
+</hfoption>
+<hfoption id="AutoModel">
 
-<PipelineTag pipeline="fill-mask"/>
+```py
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-- [`DebertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFDebertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
+model_name = "microsoft/deberta-base-mnli"
+tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-base-mnli")
+model = AutoModelForSequenceClassification.from_pretrained("microsoft/deberta-base-mnli", device_map="auto")
 
-<PipelineTag pipeline="question-answering"/>
+inputs = tokenizer(
+    "A soccer game with multiple people playing.",
+    "Some people are playing a sport.",
+    return_tensors="pt"
+).to(model.device)
 
-- [`DebertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [`TFDebertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Question answering task guide](../tasks/question_answering)
+with torch.no_grad():
+    logits = model(**inputs).logits
+    predicted_class = logits.argmax().item()
+
+labels = ["contradiction", "neutral", "entailment"]
+print(f"The predicted relation is: {labels[predicted_class]}")
+
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers run --task text-classification --model microsoft/deberta-base-mnli --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+- DeBERTa uses **relative position embeddings**, so it does not require **right-padding** like BERT.
+- For best results, use DeBERTa on sentence-level or sentence-pair classification tasks like MNLI, RTE, or SST-2.
+- If you're using DeBERTa for token-level tasks like masked language modeling, make sure to load a checkpoint specifically pretrained or fine-tuned for token-level tasks.
 
 ## DebertaConfig
 
@@ -98,9 +114,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] DebertaTokenizerFast
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
-
-<frameworkcontent>
-<pt>
 
 ## DebertaModel
 
@@ -130,40 +143,3 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] DebertaForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFDebertaModel
-
-[[autodoc]] TFDebertaModel
-    - call
-
-## TFDebertaPreTrainedModel
-
-[[autodoc]] TFDebertaPreTrainedModel
-    - call
-
-## TFDebertaForMaskedLM
-
-[[autodoc]] TFDebertaForMaskedLM
-    - call
-
-## TFDebertaForSequenceClassification
-
-[[autodoc]] TFDebertaForSequenceClassification
-    - call
-
-## TFDebertaForTokenClassification
-
-[[autodoc]] TFDebertaForTokenClassification
-    - call
-
-## TFDebertaForQuestionAnswering
-
-[[autodoc]] TFDebertaForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
-

@@ -327,7 +327,7 @@ python examples/pytorch/summarization/run_summarization.py
 Tous les scripts peuvent télécharger votre modèle final sur le Model Hub. Assurez-vous que vous êtes connecté à Hugging Face avant de commencer :
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Ensuite, ajoutez l'argument `push_to_hub` au script. Cet argument créera un dépôt avec votre nom d'utilisateur Hugging Face et le nom du dossier spécifié dans `output_dir`.
