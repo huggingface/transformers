@@ -65,8 +65,6 @@ def build_position_encoding(config):
 
 
 
-    
-
 class PlainDetrFrozenBatchNorm2d(DeformableDetrFrozenBatchNorm2d):
     pass
 
