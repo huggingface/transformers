@@ -2237,7 +2237,9 @@ class Trainer:
         self.is_in_train = True
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
-        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)):
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
+            self.model, "config"
+        ):
             self._align_special_tokens()
 
         # Attach NEFTune hooks if necessary

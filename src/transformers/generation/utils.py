@@ -1844,12 +1844,19 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            cache_kwargs = {"config": self.config, "max_cache_len": max_cache_len, "offloading": offload_cache}
-            self._cache = StaticCache(**cache_kwargs)
+            self_attention_cache_kwargs = {
+                "config": self.config.get_text_config(decoder=True),
+                "max_cache_len": max_cache_len,
+                "offloading": offload_cache,
+            }
+            self._cache = StaticCache(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
-                encoder_kwargs = cache_kwargs.copy()
-                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = EncoderDecoderCache(self._cache, StaticCache(**encoder_kwargs))
+                cross_attention_cache_kwargs = {
+                    "config": self.config.get_text_config(encoder=True),
+                    "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
+                    "offloading": offload_cache,
+                }
+                self._cache = EncoderDecoderCache(self._cache, StaticCache(**cross_attention_cache_kwargs))
         else:
             self._cache.reset()
         return self._cache

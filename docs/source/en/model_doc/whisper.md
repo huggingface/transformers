@@ -71,7 +71,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
     torch_dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
-).to("cuda")
+)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio_sample = ds[0]["audio"]
@@ -81,7 +81,7 @@ input_features = processor(
     sampling_rate=audio_sample["sampling_rate"],
     return_tensors="pt"
 ).input_features
-input_features = input_features.to("cuda", dtype=torch.float16)
+input_features = input_features.to(model.device, dtype=torch.float16)
 
 predicted_ids = model.generate(input_features, cache_implementation="static")
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)

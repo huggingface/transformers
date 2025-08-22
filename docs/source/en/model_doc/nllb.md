@@ -89,7 +89,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B"
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
 
 article = "UN Chief says there is no military solution in Syria"
-inputs = tokenizer(article, return_tensors="pt").to("cuda")
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
 translated_tokens = model.generate(
     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30,
 )

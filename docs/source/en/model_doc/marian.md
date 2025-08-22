@@ -69,7 +69,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de", torch_dtype=torch.float16, attn_implementation="sdpa", device_map="auto")
 
-inputs = tokenizer("Hello, how are you?", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
