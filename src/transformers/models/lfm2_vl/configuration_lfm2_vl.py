@@ -20,7 +20,7 @@ from ...configuration_utils import PretrainedConfig
 from ...models.lfm2.configuration_lfm2 import Lfm2Config
 from ...models.siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ...utils import logging
-from .. import AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -123,17 +123,19 @@ class Lfm2VlConfig(PretrainedConfig):
         self.torch_dtype = torch_dtype
 
         if isinstance(vision_config, dict):
-            vision_config = Siglip2VisionConfig(**vision_config)
+            vision_config["model_type"] = vision_config.get("model_type", "siglip2")
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            vision_config = Siglip2VisionConfig()
+            vision_config = CONFIG_MAPPING["siglip2_vision_model"]()
         self.vision_config = vision_config
 
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config = Lfm2Config(**text_config)
+            text_config["model_type"] = text_config.get("model_type", "lfm2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = Lfm2Config()
+            text_config = CONFIG_MAPPING["lfm2"]()
 
         self.text_config = text_config
 
