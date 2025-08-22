@@ -302,10 +302,12 @@ def flex_attention_forward(
         enable_gqa=enable_gqa,
         scale=scaling,
         kernel_options=kernel_options,
+        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
+        # For simplification, we thus always return it as no additional computations are introduced.
         return_lse=return_lse,
         training=module.training,
     )
-
+    # lse is returned in float32
     if return_lse:
         attention_output, lse = flex_attention_output  # type: ignore[misc]
         lse = lse.to(value.dtype)
