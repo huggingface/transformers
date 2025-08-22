@@ -22,11 +22,11 @@ A KV *cache* stores these calculations so they can be reused without recomputing
 
 Transformers offers several [`Cache`] classes that implement different caching mechanisms. Some of these [`Cache`] classes are optimized to save memory while others are designed to maximize generation speed. Refer to the table below to compare cache types and use it to help you select the best cache for your use case.
 
-| Cache Type             | Supports sliding layers  | Supports offloading | Supports torch.compile() |
-|------------------------|--------------------------|---------------------|--------------------------|
-| Dynamic Cache          |           Yes            |          Yes        |           No             |
-| Static Cache           |           Yes            |          Yes        |           Yes            |
-| Quantized Cache        |           No             |          No         |           No             |
+| Cache Type             | Supports sliding layers  | Supports offloading | Supports torch.compile() | Expected memory usage |
+|------------------------|--------------------------|---------------------|--------------------------|-----------------------|
+| Dynamic Cache          |           Yes            |          Yes        |           No             |         Medium        |
+| Static Cache           |           Yes            |          Yes        |           Yes            |         High          |
+| Quantized Cache        |           No             |          No         |           No             |         Low           |
 
 This guide introduces you to the different [`Cache`] classes and shows you how to use them for generation.
 
@@ -49,7 +49,7 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
 ```
 
-Cache classes can also be initialized first before calling and passing it to the models [past_key_values](https://hf.co/docs/transformers/internal/generation_utils#transformers.generation.GenerateDecoderOnlyOutput.past_key_values) parameter.
+Cache classes can also be initialized first before calling and passing it to the models [past_key_values](https://hf.co/docs/transformers/internal/generation_utils#transformers.generation.GenerateDecoderOnlyOutput.past_key_values) parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
 
 In most cases, it's easier to define the cache strategy in the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
 
@@ -69,7 +69,7 @@ out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_valu
 
 The default [`DynamicCache`] prevents you from taking advantage of most just-in-time (JIT) optimizations because the cache size isn't fixed. JIT optimizations enable you to maximize latency at the expense of memory usage. All of the following cache types are compatible with JIT optimizations like [torch.compile](./llm_optims#static-kv-cache-and-torchcompile) to accelerate generation. 
 
-A fixed-size cache ([`StaticCache`]) pre-allocates a specific maximum cache size for the kv pairs. You can generate up to the maximum cache size without needing to modify it. However, having a fixed (usually large) size for the key/value states means that while generating, a lot of tokens will actually be masked as they should not take part in the attention. So this trick allows to easily `compile` the decoding stage, but it incurs a waste of tokens in the attention computation. As all things, it's then a trade-off which should be very good if you generate with several sequence of more or less the same lengths, but may be sub-optimal if you have for example 1 very large sequence, and then only short sequences (as the fix cache size would be large, a lot would be wasted for the short sequences).
+A fixed-size cache ([`StaticCache`]) pre-allocates a specific maximum cache size for the kv pairs. You can generate up to the maximum cache size without needing to modify it. However, having a fixed (usually large) size for the key/value states means that while generating, a lot of tokens will actually be masked as they should not take part in the attention. So this trick allows to easily `compile` the decoding stage, but it incurs a waste of tokens in the attention computation. As all things, it's then a trade-off which should be very good if you generate with several sequence of more or less the same lengths, but may be sub-optimal if you have for example 1 very large sequence, and then only short sequences (as the fix cache size would be large, a lot would be wasted for the short sequences). Make sure you understand the impact if you use it!
 
 As for [`DynamicCache`], note that for models using sliding window attention (Mistral, Gemma2,...) or chunked attention (Llama4), the cache will never be larger than the sliding window/chunk size on layers using these types of attention, even if the maximum length specified is larger.
 
@@ -205,7 +205,7 @@ This cache type doesn't require any setup. It is a simple wrapper around 2 [`Cac
 
 Some models have a unique way of storing past kv pairs or states that is not compatible with any other cache classes.
 
-Mamba models, such as [Mamba](./model_doc/mamba), require a specific cache because the model doesn't have an attention mechanism or kv states. Thus, they are compatible with the above [`Cache`] classes.
+Mamba models, such as [Mamba](./model_doc/mamba), require a specific cache because the model doesn't have an attention mechanism or kv states. Thus, they are not compatible with the above [`Cache`] classes.
 
 # Iterative generation
 
