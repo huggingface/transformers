@@ -368,8 +368,6 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
 
     """
 
-    _defaults = {}
-
     common_kwargs: CommonKwargs = {
         **CommonKwargs.__annotations__,
     }

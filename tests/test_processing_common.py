@@ -169,7 +169,6 @@ class ProcessorTesterMixin:
             return video_input
         return [video_input] * batch_size
 
-    @require_vision
     def prepare_audio_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of numpy audio."""
         raw_speech = floats_list((1, 1000))
