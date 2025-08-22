@@ -229,7 +229,8 @@ class Qwen2_5_VLVisionAttention(nn.Module):
 
         if self.config._attn_implementation == "flash_attention_2":
             # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            # TODO: Fix this passing from static args https://github.com/induction-labs/transformers/blob/1e2e28f3c804db6c697ebcb37dc48093bd7d7190/src/transformers/models/qwen2_5_vl/modeling_qwen2_5_vl.py#L449
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -446,6 +447,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         position_embeddings = (emb.cos(), emb.sin())
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            # TODO: Fix this, get cu_seqlens from static args
             dim=0,
             # Select dtype based on the following factors:
             #  - FA2 requires that cu_seqlens_q must have dtype int32
