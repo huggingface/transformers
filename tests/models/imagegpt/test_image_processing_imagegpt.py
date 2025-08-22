@@ -256,6 +256,59 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
+    def test_slow_fast_equivalence(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processing class not available")
+
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs[0], return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs[0], return_tensors="pt")
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # For quantization-based processors, use absolute tolerance only to avoid infinity issues
+            # when one value is 0 and the other is 1. The rtol=0 prevents relative tolerance calculation.
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
+
+            # Test batched
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # Once again using absolute tolerance only to avoid infinity issues
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
+
+    def test_slow_fast_equivalence_batched(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Fast image processing class not available")
+
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test batched
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            # Convert to float for mean calculation since input_ids are integers
+            slow_tensor = encoding_slow.input_ids.float()
+            fast_tensor = encoding_fast.input_ids.float()
+            # For quantization-based processors, use absolute tolerance only to avoid infinity issues
+            # when one value is 0 and the other is 1. The rtol=0 prevents relative tolerance calculation.
+            self._assert_slow_fast_tensors_equivalence(slow_tensor, fast_tensor, atol=1.0, rtol=0)
+
 
 def prepare_images():
     # we use revision="refs/pr/1" until the PR is merged

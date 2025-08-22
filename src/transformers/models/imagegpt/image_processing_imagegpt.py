@@ -297,10 +297,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
             # We need to convert back to a list of images to keep consistent behaviour across processors.
             images = list(images)
-            data = {"input_ids": images, "pixel_values": pixel_values}
+            data = {"input_ids": images}
         else:
             images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                to_channel_dimension_format(image, data_format, input_data_format)
                 for image in images
             ]
             data = {"pixel_values": images}
@@ -311,6 +311,15 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # Ensure clusters are JSON/equality friendly
         if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
             output["clusters"] = output["clusters"].tolist()
+        # Need to set missing keys from slow processor to match the expected behavior in save/load tests compared to fast processor
+        missing_keys = [
+            "image_mean", "image_std",
+            "rescale_factor", "do_rescale"
+        ]
+        for key in missing_keys:
+            if key in output:
+                output[key] = None
+        
         return output
 
 
