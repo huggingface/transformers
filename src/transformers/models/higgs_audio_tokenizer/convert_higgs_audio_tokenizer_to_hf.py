@@ -194,12 +194,12 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     sample_rate = original_model_config["sample_rate"]
     bins = original_model_config["bins"]
     n_q = original_model_config["n_q"]
-    semantic_techer = original_model_config["semantic_techer"]
+    semantic_teacher = original_model_config["semantic_techer"]
 
-    if semantic_techer == "hubert_base_general":
+    if semantic_teacher == "hubert_base_general":
         semantic_model_config = AutoConfig.from_pretrained("bosonai/hubert_base")
     else:
-        raise ValueError(f"Unknown semantic model: {semantic_model}")
+        raise ValueError(f"Unknown semantic model: {semantic_teacher}")
 
     config = HiggsAudioTokenizerConfig(
         target_bandwidths=target_bandwidths,
