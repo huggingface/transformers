@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
-from ...modeling_utils import PreTrainedAudioTokenizerBase
+from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from ..auto.modeling_auto import AutoModel
 from .configuration_higgs_audio_tokenizer import HiggsAudioTokenizerConfig
@@ -52,10 +52,6 @@ class HiggsAudioTokenizerOutput(ModelOutput):
 @auto_docstring
 class HiggsAudioTokenizerEncoderOutput(ModelOutput):
     r"""
-    semantic_reconstruction_loss (`torch.Tensor`, *optional*):
-        Loss from semantic feature reconstruction.
-    commit_loss (`torch.Tensor`, *optional*):
-        Commitment loss from vector quantization.
     audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
         Codebook indices for each codebook (quantized discrete representation of input).
     """
@@ -460,7 +456,7 @@ class HiggsAudioTokenizerVectorQuantization(nn.Module):
 
 class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
     """
-    Residual vector quantization implementation.
+    Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
     """
 
     def __init__(self, config: HiggsAudioTokenizerConfig):
@@ -511,14 +507,14 @@ class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
 
 
 @auto_docstring
-class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
+class HiggsAudioTokenizerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = HiggsAudioTokenizerConfig
-    base_model_prefix = "model"
+    base_model_prefix = "higgs_audio_tokenizer"
     main_input_name = "input_values"
     supports_gradient_checkpointing = False
 
@@ -602,6 +598,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 kernel_size=config.semantic_downsample_factor, stride=config.semantic_downsample_factor
             )
 
+    # Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
         r"""

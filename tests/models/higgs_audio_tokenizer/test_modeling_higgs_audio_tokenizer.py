@@ -15,13 +15,16 @@
 """Testing suite for the PyTorch HiggsAudioTokenizer model."""
 
 import inspect
+import json
 import math
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 from datasets import Audio, load_dataset
+from parameterized import parameterized
 from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
@@ -479,3 +482,88 @@ class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
             rmse = compute_rmse(arr, arr_enc_dec)
             self.assertTrue(np.abs(rmse - exp_rmse) < 1e-5)
+
+
+"""
+Integration tests for HiggsAudioTokenizer
+
+Code for reproducing expected outputs can be found here:
+    https://gist.github.com/szhengac/dffa292afb669a44866642eb2cc5d3f3
+
+One reason for higher tolerances is because of different implementation of `Snake1d` within Transformer version DAC
+See here: https://gist.github.com/szhengac/dffa292afb669a44866642eb2cc5d3f3
+
+"""
+
+RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/higgs_audio_tokenizer/integration_tests.json"
+
+with open(RESULTS_PATH, "r") as f:
+    raw_data = json.load(f)
+
+# convert dicts into tuples ordered to match test args
+EXPECTED_OUTPUTS_JSON = [
+    (
+        f"{d['repo_id']}",
+        d["repo_id"],
+        d["codes"],
+        d["decoded"],
+        d["codec_error"],
+        d["codec_tol"],
+        d["dec_tol"],
+    )
+    for d in raw_data
+]
+
+
+@slow
+@require_torch
+class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
+    @parameterized.expand(EXPECTED_OUTPUTS_JSON)
+    def test_integration(
+        self, test_name, repo_id, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol
+    ):
+        # load model
+        model = HiggsAudioTokenizer.from_pretrained(repo_id).to(torch_device).eval()
+        feature_extractor = AutoFeatureExtractor.from_pretrained(repo_id)
+
+        # load audio example
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=feature_extractor.sampling_rate)
+        )
+        audio_array = librispeech_dummy[1]["audio"]["array"]
+        inputs = feature_extractor(
+            raw_audio=audio_array, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        ).to(torch_device)
+        x = inputs["input_values"]
+
+        with torch.no_grad():
+            ENC_TOL = 0
+            audio_codes = model.encode(x, return_dict=False)
+            if exp_codes is not None:
+                exp_codes = torch.tensor(exp_codes).to(torch_device)
+                torch.testing.assert_close(
+                    audio_codes[..., : exp_codes.shape[-1]],
+                    exp_codes,
+                    rtol=ENC_TOL,
+                    atol=ENC_TOL,
+                )
+
+            # dec_tol = 1e-5    # increased to 1e-4 for passing on 4 kbps
+            input_values_dec = model.decode(audio_codes).audio_values
+            if exp_decoded is not None:
+                exp_decoded = torch.tensor(exp_decoded).to(torch_device)
+                torch.testing.assert_close(
+                    input_values_dec[..., : exp_decoded.shape[-1]],
+                    exp_decoded,
+                    rtol=dec_tol,
+                    atol=dec_tol,
+                )
+
+            # compute codec error
+            codec_err = compute_rmse(input_values_dec, x)
+            torch.testing.assert_close(codec_err, exp_codec_err, rtol=codec_tol, atol=codec_tol)
+
+            # make sure forward and decode gives same result
+            audio_values_enc_dec = model(x).audio_values
+            torch.testing.assert_close(input_values_dec, audio_values_enc_dec, rtol=1e-6, atol=1e-6)

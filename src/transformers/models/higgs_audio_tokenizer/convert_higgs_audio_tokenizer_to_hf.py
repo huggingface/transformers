@@ -22,7 +22,7 @@ import re
 import torch
 
 from transformers import (
-    EncodecFeatureExtractor,
+    DacFeatureExtractor,
     HiggsAudioTokenizer,
     HiggsAudioTokenizerConfig,
     logging,
@@ -188,8 +188,11 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     else:
         config = HiggsAudioTokenizerConfig()
 
-    with torch.device("meta"):
-        model = HiggsAudioTokenizer(config)
+    # create model
+    if not torch.cuda.is_available():
+        raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
+    torch_device = "cuda"
+    model = HiggsAudioTokenizer(config).to(torch_device)
 
     logger.info("Loading original checkpoint ...")
 
@@ -214,7 +217,10 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-    feature_extractor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sample_rate)
+    feature_extractor = DacFeatureExtractor(
+        sampling_rate=config.sample_rate,
+        hop_length=config.acoustic_model_config.hop_length,
+    )
 
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
@@ -224,6 +230,17 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
         model.push_to_hub(push_to_hub)
 
 
+"""
+```
+# Download config and checkpoint files
+wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/model.pth -P /workspace/higgs_audio_tokenizer_original
+# The bosonai/higgs-audio-v2-tokenizer repo does not have complete config, so we will just use the default config which has been matched with the actual config.
+# Run conversion:
+python src/transformers/models/higgs_audio_tokenizer/convert_higgs_audio_tokenizer_to_hf.py \
+    --checkpoint_path /workspace/higgs_audio_tokenizer_original/model.pth \
+    --push_to_hub hf-audio/higgs-audio-v2-tokenizer
+```
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
