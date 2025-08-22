@@ -497,25 +497,6 @@ class Ernie4_5_DecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         output_gate_logits=True,  # PP model should not output gate logits,
     ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
-        """Forward pass through the decoder layer.
-
-        Args:
-            hidden_states (torch.Tensor): Input tensor [batch_size, seq_len, hidden_size]
-            attention_mask (Optional[torch.Tensor]): Attention mask tensor
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Indices for variable length attention
-            position_ids (Optional[torch.Tensor]): Position indices for rotary embeddings
-            output_attentions (Optional[bool]): Whether to return attention weights
-            past_key_value (Optional[Tuple[torch.Tensor]]): Cached key/value states
-            use_cache (Optional[bool]): Whether to cache key/value states
-            output_gate_logits (bool): Whether to return MoE gate logits
-
-        Returns:
-            Union: Various output combinations depending on arguments:
-                - Base case: Hidden states tensor
-                - With attention: Tuple of (hidden_states, attention_weights)
-                - With cache: Tuple of (hidden_states, cached_key_value)
-                - With MoE: May include gate logits in output tuple
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -1243,14 +1224,9 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
         images: Optional[torch.Tensor] = None,
-        ignored_index: Optional[int] = 0,
         return_dict: Optional[bool] = None,
-        image_position_ids: Optional[torch.Tensor] = None,
-        image_attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        image_type_ids: Optional[torch.Tensor] = None,
         grid_thw: Optional[torch.Tensor] = None,
         **kwargs,
     ):
@@ -1262,17 +1238,13 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
 
         image_mask = input_ids == self.config.image_token_id
 
-        if past_key_values is None:
-            if images is not None:
-                assert (image_mask).any().item(), (
-                    image_mask.detach().cpu().numpy().tolist(),
-                    input_ids.detach().cpu().numpy().tolist(),
-                    self.config.image_token_id,
-                    images.shape,
-                )
-                image_features = self.vision_forward(images, grid_thw)
-            else:
-                image_features = None  # no more faking
+        if past_key_values is None and images is not None:
+            assert (image_mask).any().item(), (
+                image_mask.detach().cpu().numpy().tolist(),
+                input_ids.detach().cpu().numpy().tolist(),
+                self.config.image_token_id,
+                images.shape,
+            )
         else:
             image_features = None
 
@@ -1290,8 +1262,6 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
                 inputs_embeds,
                 grid_thw,
             )
-        else:
-            pass  # do nothing, should not hang under DygraphShardingOptimizerV2
 
         outputs = self.language_model(
             position_ids=position_ids,
@@ -1334,17 +1304,6 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         return self.lm_head
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
-        """
-        Updates model kwargs for generation.
-
-        Args:
-            outputs (Any): Model outputs.
-            model_kwargs (dict): Current model kwargs.
-            is_encoder_decoder (bool): Whether using encoder-decoder architecture.
-
-        Returns:
-            dict: Updated model kwargs.
-        """
         # update cache
         if isinstance(outputs, tuple) and len(outputs) > 1 and not isinstance(outputs[1], torch.Tensor):
             model_kwargs["past_key_values"] = outputs[1]
@@ -1385,7 +1344,6 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         self,
         input_ids,
         images=None,
-        use_cache=False,
         past_key_values=None,
         inputs_embeds=None,
         image_position_ids=None,
@@ -1395,21 +1353,6 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
         grid_thw=None,
         **kwargs,
     ):
-        """
-        Prepare inputs for the decoder that can be used for generation.
-
-        Args:
-            input_ids (torch.Tensor): Input ids.
-            images (torch.Tensor): Images. Default to None.
-            use_cache (bool): Whether to use cache. Default to False.
-            past_key_values (list): Past key values. Default to None.
-            inputs_embeds (torch.Tensor): Input embeddings. Default to None.
-            image_position_ids (torch.Tensor): Image position ids. Default to None.
-            image_attention_mask (torch.Tensor): Image attention mask. Default to None.
-            token_type_ids (torch.Tensor): Token type ids. Default to None.
-            image_type_ids (torch.Tensor): Image type ids. Default to None.
-            grid_thw (torch.Tensor): Grid thw. Default to None.
-        """
         if past_key_values:
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
