@@ -112,7 +112,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -140,7 +140,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -165,13 +165,13 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
     torch_dtype=torch.float16,
-    device_map="cuda",
+    device_map="auto",
     quantization_config=quantization_config
 )
 
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -204,7 +204,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -239,7 +239,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -264,13 +264,13 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     "RedHatAI/Sparse-Llama-3.1-8B-2of4",
     torch_dtype=torch.float16,
-    device_map="cuda",
+    device_map="auto",
     quantization_config=quantization_config
 )
 
 tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -303,7 +303,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("xpu")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -334,7 +334,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("xpu")
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")

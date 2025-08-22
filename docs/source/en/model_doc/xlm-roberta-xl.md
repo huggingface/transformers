@@ -65,7 +65,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     device_map="auto",  
     attn_implementation="sdpa"  
 )  
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")  
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)  
 
 with torch.no_grad():  
     outputs = model(**inputs)  
@@ -106,7 +106,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     attn_implementation="sdpa",
     quantization_config=quantization_config
 )
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

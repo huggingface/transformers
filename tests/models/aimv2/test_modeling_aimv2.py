@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -563,7 +562,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self,
         name,

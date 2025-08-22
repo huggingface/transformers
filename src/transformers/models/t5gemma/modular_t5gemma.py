@@ -213,9 +213,8 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, decoder=False):
+    def get_text_config(self, *args, **kwargs):
         # Always return self, regardless of the decoder option.
-        del decoder
         return self
 
 
@@ -488,7 +487,7 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
 
     def _init_weights(self, module):
         # TODO: support intialization for encoders and decoders separately(?)
-        Gemma2PreTrainedModel._init_weights(module)
+        Gemma2PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5

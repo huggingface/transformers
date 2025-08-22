@@ -38,7 +38,7 @@ generous the support of [CoreWeave](https://www.coreweave.com/).
 GPT-NeoX-20B was trained with fp16, thus it is recommended to initialize the model as follows:
 
 ```python
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b").half().cuda()
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", device_map="auto", torch_dtype=torch.float16)
 ```
 
 GPT-NeoX-20B also has a different tokenizer from the one used in GPT-J-6B and GPT-Neo. The new tokenizer allocates
