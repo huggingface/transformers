@@ -30,7 +30,6 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import check_model_inputs
