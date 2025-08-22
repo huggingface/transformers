@@ -308,10 +308,10 @@ def flex_attention_forward(
 
     if return_lse:
         attention_output, lse = flex_attention_output  # type: ignore[misc]
-        attention_weights = lse.to(value.dtype)
+        lse = lse.to(value.dtype)
     else:
         attention_output = flex_attention_output  # type: ignore[assignment]
-        attention_weights = None
+        lse = None
 
     attention_output = attention_output.transpose(1, 2).contiguous()
-    return attention_output, attention_weights
+    return attention_output, lse
