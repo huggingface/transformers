@@ -597,6 +597,8 @@ class EsmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings.weight"]
     _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
     _can_record_outputs = {
         "hidden_states": EsmLayer,
