@@ -74,7 +74,7 @@ def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "e
         encodec_key = encodec_key.replace(".conv.conv.", ".conv.").replace(".convtr.convtr.", ".conv.")
         original_encodec[_rewrite_weight_norm(encodec_key)] = value
 
-    hf_encodec = EncodecModel.from_pretrained("facebook/encodec_24khz").eval()  # {model_name}").eval()
+    hf_encodec = EncodecModel.from_pretrained("facebook/encodec_24khz").eval()
     recursively_load_weights(original_encodec, hf_encodec, model_name)
     for key, value in hf_encodec.state_dict().items():
         converted_checkpoint[f"encodec_model.{key}"] = value
@@ -112,7 +112,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     original_state_dict = safe_load(checkpoint_path)
     new_state_dict = convert_old_keys_to_new_keys(original_state_dict, model_name="encodec_24khz")
-    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False, assign=True)  # , strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False, assign=True)
 
     if len(unexpected_keys) != 0:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
