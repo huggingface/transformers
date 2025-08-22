@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -139,41 +138,24 @@ alt="drawing" width="900"/>
 
 [[autodoc]] SamPromptEncoderConfig
 
-
 ## SamProcessor
 
 [[autodoc]] SamProcessor
-
 
 ## SamImageProcessor
 
 [[autodoc]] SamImageProcessor
 
-
 ## SamImageProcessorFast
 
 [[autodoc]] SamImageProcessorFast
-
 
 ## SamVisionModel
 
 [[autodoc]] SamVisionModel
     - forward
 
-
 ## SamModel
 
 [[autodoc]] SamModel
     - forward
-
-
-## TFSamVisionModel
-
-[[autodoc]] TFSamVisionModel
-    - call
-
-
-## TFSamModel
-
-[[autodoc]] TFSamModel
-    - call
