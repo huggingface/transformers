@@ -825,8 +825,11 @@ class PretrainedConfig(PushToHubMixin):
             if hasattr(config, key):
                 current_attr = getattr(config, key)
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
+                # We need to update only custom kwarg values instead and keep other attributes in subconfig.
                 if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
-                    value = current_attr.__class__(**value)
+                    current_attr_updated = current_attr.to_dict()
+                    current_attr_updated.update(value)
+                    value = current_attr.__class__(**current_attr_updated)
                 setattr(config, key, value)
                 if key != "dtype":
                     to_remove.append(key)
