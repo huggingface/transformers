@@ -1594,7 +1594,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     # if task is defined it'll overwrite task ids that might have already been defined via the generation_config
                     replace_or_add(init_tokens[i], task_id, generation_config.task_to_id.values())
                 else:
-                    raise ValueError(f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`")
+                    raise ValueError(f"The `{task}` task is not supported. The task should be one of `{TASK_IDS}`")
             elif language is not None and hasattr(generation_config, "task_to_id"):
                 # if language is defined, but no task id is in `init_tokens`, default to transcribe
                 if not any(ti in init_tokens[i] for ti in generation_config.task_to_id.values()):
