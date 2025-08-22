@@ -540,3 +540,18 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
         with self.assertRaises(ValueError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
+    @require_torch
+    def test_pipeline_skip_special_tokens(self):
+        """Tests that we can use `skip_special_tokens=False` to get the special tokens in the output"""
+        model_id = "google/gemma-3-270m-it"
+        chat = [{"role": "user", "content": "What's your name?"}]
+        generator = pipeline("text-generation", model=model_id)
+
+        # normal pipeline use
+        output = generator(chat, max_new_tokens=20, do_sample=False)
+        self.assertNotIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+        # forcing special tokens to be included in the output
+        output = generator(chat, max_new_tokens=1000, do_sample=False, skip_special_tokens=False)
+        self.assertIn("<end_of_turn>", str(output[0]["generated_text"]))
