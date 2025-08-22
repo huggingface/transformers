@@ -356,6 +356,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("video_llava", "VideoLlavaModel"),
         ("videomae", "VideoMAEModel"),
+        ("videoprism", "VideoPrismModel"),
         ("vilt", "ViltModel"),
         ("vipllava", "VipLlavaModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
@@ -367,7 +368,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vitdet", "VitDetModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
-        ("videoprism", "VideoPrismModel"),
         ("vjepa2", "VJEPA2Model"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("voxtral_encoder", "VoxtralEncoder"),
@@ -761,13 +761,13 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("timm_wrapper", "TimmWrapperModel"),
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
+        ("videoprism", "VideoPrismModel"),
         ("vit", "ViTModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
         ("vitdet", "VitDetModel"),
         ("vivit", "VivitModel"),
-        ("videoprism", "VideoPrismModel"),
         ("yolos", "YolosModel"),
     ]
 )
@@ -904,8 +904,8 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("timesformer", "TimesformerForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
-        ("vivit", "VivitForVideoClassification"),
         ("videoprism", "VideoPrismForVideoClassification"),
+        ("vivit", "VivitForVideoClassification"),
         ("vjepa2", "VJEPA2ForVideoClassification"),
     ]
 )

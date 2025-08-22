@@ -14,20 +14,22 @@
 # limitations under the License.
 """Video processor class for VideoPrism."""
 
+import numpy as np
+import torch
+from PIL import Image
+
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import is_vision_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import is_torchvision_available, is_torchvision_v2_available, is_vision_available
 from ...utils.import_utils import requires
 from ...video_processing_utils import (
     BaseVideoProcessor,
 )
-import numpy as np
-from PIL import Image
-import torch
+
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
@@ -46,7 +48,7 @@ class VideoPrismFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 @requires(backends=("torchvision",))
 class VideoPrismVideoProcessor(BaseVideoProcessor):
-    resample = PILImageResampling.BILINEAR # PILImageResampling.LANCZOS # PIL.Image.Resampling.LANCZOS
+    resample = PILImageResampling.BILINEAR  # PILImageResampling.LANCZOS # PIL.Image.Resampling.LANCZOS
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     size = {"height": 288, "width": 288}
@@ -98,7 +100,7 @@ class VideoPrismVideoProcessor(BaseVideoProcessor):
                 frame_np = frame.permute(1, 2, 0).numpy()  # Convert to (360, 640, 3)
                 if frame_np.ndim != 3 or frame_np.shape[-1] not in [1, 3, 4]:
                     raise ValueError(f"Invalid frame shape for PIL conversion: {frame_np.shape}")
-                
+
                 # Convert to PIL Image and resize
                 pil_frame = Image.fromarray(frame_np)  # Convert each frame to PIL Image
                 resized_frame = pil_frame.resize((size.width, size.height), resample=Image.LANCZOS)  # Resize h and w
@@ -121,5 +123,6 @@ class VideoPrismVideoProcessor(BaseVideoProcessor):
                 antialias,
                 **kwargs,
             )
+
 
 __all__ = ["VideoPrismVideoProcessor"]
