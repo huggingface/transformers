@@ -170,3 +170,27 @@ tags
 
 # modular conversion
 *.modular_backup
+# ---- Local conda noise (ignore) ----
+conda_init_out.txt
+conda_clean_out.txt
+*.conda
+*.conda-build
+*.conda.lock
+*.conda-env
+# Generic cache/output
+.envs/
+.conda/
+conda-meta/
+conda-bld/
+# ---- Local conda noise (ignore) ----
+conda_init_out.txt
+conda_clean_out.txt
+*.conda
+*.conda-build
+*.conda.lock
+*.conda-env
+# Generic cache/output
+.envs/
+.conda/
+conda-meta/
+conda-bld/
