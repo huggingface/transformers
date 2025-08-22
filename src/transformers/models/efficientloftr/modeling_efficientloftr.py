@@ -889,7 +889,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
     Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
     Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed
-    In CVPR, 2024. https://arxiv.org/abs/2403.04765
+    In CVPR, 2024. https://huggingface.co/papers/2403.04765
     """
 
     def __init__(self, config: EfficientLoFTRConfig):
