@@ -137,23 +137,6 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with pytest.raises(TypeError):
             processor(images=image_input)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-
-        inputs = processor(text=input_str, images=image_input, videos=video_inputs)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
     @require_torch
     @require_av
     def _test_apply_chat_template(
