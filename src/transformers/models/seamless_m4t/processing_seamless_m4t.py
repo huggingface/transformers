@@ -57,7 +57,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
-        `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
         SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audios` is not `None`. Please refer
         to the docstring of the above two methods for more information.
 
