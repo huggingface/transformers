@@ -630,7 +630,7 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
     Examples:
 
     ```python
-    >>> from nltk.tokenize.casual import _replace_html_entities
+    >>> from nltk.tokenize.causal import _replace_html_entities
 
     >>> _replace_html_entities(b"Price: &pound;100")
     'Price: \\xa3100'
@@ -754,7 +754,7 @@ def remove_handles(text):
 ######################################################################
 
 
-def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=False):
+def causal_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=False):
     """
     Convenience function for wrapping the tokenizer.
     """
