@@ -1146,6 +1146,19 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
+    # TODO: move to processor
     def add_image_preprocess(self, processor):
         logger.info("image preprocess is set")
 
@@ -1168,6 +1181,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
 
         self.image_preprocess = image_preprocess
 
+    # TODO: move to get xxx features
     def vision_forward(self, images, grid_thw):
         if self.image_preprocess is not None:
             assert images.dtype == torch.uint8, images.dtype
@@ -1196,6 +1210,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
         image_features = self.vision_tower(images, grid_thw)
         return image_features
 
+    # TODO: move to get xxx features
     def vision_mapping_forward(
         self,
         input_ids,
@@ -1236,6 +1251,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
+        # TODO: check if we can do similar with videos
         image_mask = input_ids == self.config.image_token_id
 
         if past_key_values is None and images is not None:
@@ -1297,12 +1313,17 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
 
         self.post_init()
 
-    # TODO: currently needed for tying correctly - fix whatever goes wrong here that it doesnt get recognized
     def get_input_embeddings(self):
-        return self.model.language_model.embed_tokens
+        return self.model.get_input_embeddings()
 
-    def get_output_embeddings(self):
-        return self.lm_head
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def set_decoder(self, decoder):
+        self.model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.model.get_decoder()
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
         # update cache
@@ -1415,7 +1436,7 @@ class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMix
             input_ids=input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values,  # TODO: use our cache class
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
