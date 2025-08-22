@@ -56,7 +56,7 @@ Create a [`ImageTextToTextPipeline`] and pass the chat to it. For large models, 
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map="auto", torch_dtype=torch.float16)
+pipeline = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device_map="auto", dtype=torch.float16)
 pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 [{'input_text': [{'role': 'system',
     'content': [{'type': 'text',
