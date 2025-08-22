@@ -21,7 +21,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .core import RequestState, logger, get_device_and_memory_breakdown
+from .core import RequestState, get_device_and_memory_breakdown, logger
 
 
 T = TypeVar("T")
@@ -92,10 +92,7 @@ class PagedAttentionCache:
         # Add the infered attributes to the class
         self.num_blocks = num_blocks
         self.max_batch_tokens = max_batch_tokens
-        logger.info(
-            f"After init, {self.num_blocks = }, {self.block_size = }, {self.max_batch_tokens = } "
-            f"{self.num_key_value_heads = }, {self.head_dim = }, {self.num_hidden_layers = }"
-        )
+        logger.warning(f"PagedAttentionCache initialized with {self.num_blocks = } and {self.max_batch_tokens = } ")
 
         # Initialize the cache
         self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)

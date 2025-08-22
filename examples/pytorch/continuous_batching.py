@@ -136,6 +136,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--use-cuda-graph", action="store_true", default=False)
+    parser.add_argument("--compile", action="store_true", default=False)
 
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -155,7 +156,8 @@ if __name__ == "__main__":
         torch_dtype=torch.bfloat16,
     )
     model = model.cuda().eval()
-    # model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
+    if args.compile:
+        model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
