@@ -519,9 +519,7 @@ EXPECTED_OUTPUTS_JSON = [
 @require_torch
 class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
     @parameterized.expand(EXPECTED_OUTPUTS_JSON)
-    def test_integration(
-        self, test_name, repo_id, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol
-    ):
+    def test_integration(self, test_name, repo_id, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol):
         # load model
         model = HiggsAudioTokenizer.from_pretrained(repo_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(repo_id)
