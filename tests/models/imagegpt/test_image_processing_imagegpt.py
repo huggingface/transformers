@@ -261,8 +261,6 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.skipTest("Fast image processing class not available")
 
         for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -292,8 +290,6 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.skipTest("Fast image processing class not available")
 
         for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:

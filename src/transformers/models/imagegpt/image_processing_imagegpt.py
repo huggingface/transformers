@@ -279,11 +279,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
-        # Need pixel_values (normalized, channels_first) for equivalence tests
-        pixel_values = [
-            to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-            for image in images
-        ]
 
         if do_color_quantize:
             images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
@@ -319,7 +314,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         for key in missing_keys:
             if key in output:
                 output[key] = None
-        
+
         return output
 
 
