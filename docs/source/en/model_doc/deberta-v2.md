@@ -69,7 +69,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     device_map="auto"
 )
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 logits = outputs.logits
@@ -110,7 +110,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     torch_dtype="float16"
 )
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits
 predicted_class_id = logits.argmax().item()
