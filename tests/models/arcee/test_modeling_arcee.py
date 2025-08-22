@@ -150,7 +150,7 @@ class ArceeIntegrationTest(unittest.TestCase):
         prompt = "This is a nice place. " * 1024 + "I really enjoy the scenery,"
         tokenizer = AutoTokenizer.from_pretrained("arcee-ai/model-id")
         model = ArceeForCausalLM.from_pretrained(
-            "arcee-ai/model-id", device_map="auto", attn_implementation="flash_attention_2", torch_dtype="auto"
+            "arcee-ai/model-id", device_map="auto", attn_implementation="flash_attention_2", dtype="auto"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

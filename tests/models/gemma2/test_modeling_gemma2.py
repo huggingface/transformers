@@ -197,9 +197,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -218,9 +218,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -242,7 +242,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -272,7 +272,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -296,7 +296,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype="float16"
+            model_id, attn_implementation="flash_attention_2", dtype="float16"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -345,7 +345,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b",
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -430,7 +430,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         assert model.config._attn_implementation == "flex_attention"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -468,7 +468,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
@@ -508,7 +508,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
