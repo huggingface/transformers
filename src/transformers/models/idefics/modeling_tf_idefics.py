@@ -1607,8 +1607,6 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLos
             name="lm_head",
         )
 
-
-
     def tie_weights(self):
         """
         Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of

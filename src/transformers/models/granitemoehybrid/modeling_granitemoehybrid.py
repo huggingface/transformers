@@ -1666,8 +1666,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
         # Initialize weights and apply final processing
         self.post_init()
 
-
-
     @auto_docstring
     def forward(
         self,

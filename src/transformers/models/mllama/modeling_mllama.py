@@ -1297,7 +1297,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-
     @can_return_tuple
     @auto_docstring
     def forward(

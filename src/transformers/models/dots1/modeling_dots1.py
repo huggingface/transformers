@@ -543,8 +543,6 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-
-
     @can_return_tuple
     @auto_docstring
     def forward(

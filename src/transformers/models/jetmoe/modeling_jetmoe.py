@@ -1134,7 +1134,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
 
-
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
 
     @can_return_tuple

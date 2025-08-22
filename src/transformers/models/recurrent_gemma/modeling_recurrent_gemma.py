@@ -699,8 +699,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-
-
     @auto_docstring
     # Ignore copy
     def forward(

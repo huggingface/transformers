@@ -1044,8 +1044,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         # Initialize weights and apply final processing
         self.post_init()
 
-
-
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 

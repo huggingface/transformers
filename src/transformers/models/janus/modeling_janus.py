@@ -1145,7 +1145,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         hidden_state = self.model.generation_aligner(hidden_state)
         return hidden_state
 
-
     @can_return_tuple
     @auto_docstring
     def forward(
