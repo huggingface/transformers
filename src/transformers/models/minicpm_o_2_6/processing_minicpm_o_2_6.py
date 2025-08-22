@@ -212,6 +212,108 @@ class MiniCPM_o_2_6Processor(ProcessorMixin):
 
         return MiniCPMOBatchFeature(data={**model_inputs})
 
+    def apply_chat_template(
+        self,
+        msgs,
+        chunk_input=True,
+        max_slice_nums=None,
+        max_inp_length=32768,
+        omni_input=False,
+        use_image_id=None,
+        use_tts_template=False,
+    ):
+        """
+        Unified chat function
+
+        Args:
+            msgs: the input chat msgs, support text: (string)  / image: (PIL.Image) / audio (numpy.ndarray)
+            chunk_input: whether to split audio into 1s chunks
+            max_inp_length: the maximum length of input
+            max_slice_nums: control the maximum number of image slices
+            omni_input: determine whether it is omni mode
+            use_image_id: for video understanding or omni understanding, use_image_id should be False
+            use_tts_template: if the msgs contain audio, use_tts_template should be True
+        """
+        import json
+        from copy import deepcopy
+        from PIL import Image
+
+        if isinstance(msgs[0], list):
+            batched = True
+        else:
+            batched = False
+
+        msgs_list = msgs
+        if not batched:
+            msgs_list = [msgs_list]
+
+        prompts_lists = []
+        input_images_list = []
+        input_audios_list = []
+        audio_parts_list = []
+
+        for msgs in msgs_list:
+            if isinstance(msgs, str):
+                msgs = json.loads(msgs)
+            copy_msgs = deepcopy(msgs)
+
+            assert len(msgs) > 0, "msgs is empty"
+
+            images = []
+            audios = []
+            audio_parts = []
+            for i, msg in enumerate(copy_msgs):
+                role = msg["role"]
+                content = msg["content"]
+                assert role in ["system", "user", "assistant"]
+                if i == 0:
+                    assert role in ["user", "system"], "The role of first msg should be user"
+                if isinstance(content, str):
+                    content = [content]
+                cur_msgs = []
+                for c in content:
+                    if isinstance(c, Image.Image):
+                        images.append(c)
+                        cur_msgs.append("(<image>./</image>)")
+                    elif isinstance(c, np.ndarray):  # audio
+                        audios.append(c)
+                        audio_parts.append(i)
+                        cur_msgs.append("(<audio>./</audio>)")
+                        use_tts_template = True
+                    elif isinstance(c, str):
+                        cur_msgs.append(c)
+                if omni_input:
+                    msg["content"] = "".join(cur_msgs)
+                else:
+                    msg["content"] = "\n".join(cur_msgs)
+
+            prompts_lists.append(
+                self.tokenizer.apply_chat_template(
+                    copy_msgs,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    chat_template=self.default_tts_chat_template if use_tts_template else None,
+                )
+            )
+            if images:
+                input_images_list.append(images)
+            if audios:
+                input_audios_list.append(audios)
+                audio_parts_list.append(audio_parts)
+
+        inputs = self.__call__(
+            prompts_lists,
+            input_images_list,
+            input_audios_list,
+            audio_parts=audio_parts_list,
+            max_slice_nums=max_slice_nums,
+            use_image_id=use_image_id,
+            chunk_input=chunk_input,
+            return_tensors="pt",
+            max_length=max_inp_length,
+        )
+        return inputs
+    
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
         """
