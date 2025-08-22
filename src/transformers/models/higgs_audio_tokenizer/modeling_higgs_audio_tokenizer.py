@@ -459,7 +459,7 @@ class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
     Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
     """
 
-    def __init__(self, config: XcodecConfig):
+    def __init__(self, config: HiggsAudioTokenizerConfig):
         super().__init__()
         self.quantizers = nn.ModuleList(
             [HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)]
