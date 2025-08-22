@@ -18,9 +18,9 @@
 import argparse
 import io
 import re
-import yaml
 
 import torch
+import yaml
 
 from transformers import (
     AutoConfig,
