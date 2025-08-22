@@ -313,7 +313,7 @@ class Ernie4_5_VLMoeStatics(nn.Module):
         super().__init__()
 
         self.e_score_correction_bias = nn.Parameter(
-            torch.zeros(num_experts_groups, num_experts, dtype=torch.float32),
+            torch.zeros(num_experts_groups, num_experts),
             requires_grad=False,
         )
 
@@ -337,7 +337,7 @@ class Ernie4_5_VLSparseMoeBlock(nn.Module):
         self.moe_statics = Ernie4_5_VLMoeStatics(num_experts_groups=1, num_experts=self.num_experts)
 
         # gating
-        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
         self.experts = nn.ModuleList(
             [Ernie4_5_VLMoeMLP(config, intermediate_size) for _ in range(self.num_experts)]
         )
@@ -573,24 +573,21 @@ class Ernie4_5_DecoderLayer(nn.Module):
 
 
 class Ernie4_5_PretrainedModel(PreTrainedModel):
-    """Base class for ERNIE pretrained models."""
+    config: Ernie4_5_VLConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Ernie4_5_DecoderLayer", "Ernie4_5VLVisionBlock"]
+    _skip_keys_device_placement = "past_key_values"
+    _keep_in_fp32_modules_strict = [r"gate", r"e_score_correction_bias"]
+    #_keep_in_fp16_modules = [...]  # TODO: enable some fp16 flag as well, using dtype workaround for now
 
-    config_class = Ernie4_5_VLTextConfig
-    base_model_prefix = "ernie"
-    _no_split_modules = ["Ernie4_5_DecoderLayer"]
-
-    _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
+    # TODO: set correct supports flags etc
 
 
-class Ernie4_5_Model(Ernie4_5_PretrainedModel):
-    """The core ERNIE transformer model with MoE (Mixture of Experts) support."""
+class Ernie4_5VLTextModel(Ernie4_5_PretrainedModel):
+    config: Ernie4_5_VLTextConfig
 
     def __init__(self, config: Ernie4_5_VLTextConfig):
-        """Initialize the ERNIE model architecture.
-
-        Args:
-            config (Ernie4_5_MoEConfig): Model configuration.
-        """
         super().__init__(config)
         self.config = config
 
@@ -623,30 +620,6 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         output_hidden_states=None,
         return_dict=False,
     ):
-        """Forward pass through the ERNIE model.
-
-        Args:
-            input_ids (Optional[torch.Tensor]): Input token IDs
-            position_ids (Optional[torch.Tensor]): Position indices
-            attention_mask (Optional[torch.Tensor]): Attention mask
-            attn_mask_start_row_indices (Optional[torch.Tensor]): Variable length attention indices
-            inputs_embeds (Optional[torch.Tensor]): Precomputed embeddings
-            use_cache (Optional[bool]): Whether to cache key/value states
-            past_key_values (Optional[Tuple[Tuple[torch.Tensor]]]): Cached key/value states
-            output_attentions (Optional[bool]): Whether to output attention weights
-            output_hidden_states (Optional[bool]): Whether to output all hidden states
-            return_dict (Optional[bool]): Whether to return dict or tuple
-
-        Returns:
-            Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-                Various outputs depending on configuration, including:
-                - last_hidden_state: Final layer hidden states
-                - past_key_values: Cached key/value states if use_cache=True
-                - hidden_states: All hidden states if output_hidden_states=True
-                - attentions: Attention weights if output_attentions=True
-                - router_loss: MoE router loss if use_moe=True
-                - gate_logits: MoE gate logits if use_moe=True
-        """
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -771,13 +744,13 @@ class Ernie4_5_Model(Ernie4_5_PretrainedModel):
         )
 
 
-# copy qwen2 vl
-class Ernie4_5VLVisionMlp(nn.Module):
+# copy qwen2 vl (change init to fp16)
+class Ernie4_5VLVisionMLP(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.fc1 = nn.Linear(dim, hidden_dim, dtype=torch.float16)  # TODO
         self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.fc2 = nn.Linear(hidden_dim, dim, dtype=torch.float16)  # TODO
 
     def forward(self, x) -> torch.Tensor:
         return self.fc2(self.act(self.fc1(x)))
@@ -796,7 +769,7 @@ class Ernie4_5VLPatchEmbed(nn.Module):
         self.in_channels = in_channels
         self.embed_dim = embed_dim
         self.proj = nn.Linear(
-            in_channels * patch_size * patch_size, embed_dim, bias=False
+            in_channels * patch_size * patch_size, embed_dim, bias=False, dtype=torch.float16  # TODO
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -842,7 +815,7 @@ def apply_rotary_pos_emb_vision(
     return q_embed, k_embed
 
 
-# copy qwen 2.5 vl
+# copy qwen 2.5 vl (init changes to fp16)
 class Ernie4_5VLVisionAttention(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -850,8 +823,8 @@ class Ernie4_5VLVisionAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        self.proj = nn.Linear(self.dim, self.dim)
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True, dtype=torch.float16)  # TODO
+        self.proj = nn.Linear(self.dim, self.dim, dtype=torch.float16)  # TODO
         self.scaling = self.head_dim**-0.5
         self.config = config
         self.attention_dropout = 0.0
@@ -942,10 +915,10 @@ class Ernie4_5VLVisionAttention(nn.Module):
 class Ernie4_5VLVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps)
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
         self.attn = Ernie4_5VLVisionAttention(config)
-        self.mlp = Ernie4_5VLVisionMlp(
+        self.mlp = Ernie4_5VLVisionMLP(
             dim=config.hidden_size,
             hidden_dim=config.intermediate_size,
             hidden_act=config.hidden_act,
@@ -995,7 +968,7 @@ class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
             [Ernie4_5VLVisionBlock(config) for _ in range(config.depth)]
         )
 
-        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps)
+        self.ln = nn.LayerNorm(config.hidden_size, eps=config.vision_rms_norm_eps, dtype=torch.float16)  # TODO
 
     # copy qwen 2.5 vl
     def rot_pos_emb(self, grid_thw):
@@ -1061,7 +1034,7 @@ class Ernie4_5VLVisionTransformerPreTrainedModel(PreTrainedModel):
 
 
 # no copy
-class VariableResolutionResamplerModel(nn.Module):
+class Ernie4_5VLVariableResolutionResamplerModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1167,7 +1140,7 @@ class VariableResolutionResamplerModel(nn.Module):
     def forward(self, x, grid_thw):
         # image spatial
         x = x.reshape([-1, x.shape[-1] * (self.spatial_conv_size**2)])
-        x = self.spatial_linear(x)
+        x = self.spatial_linear(x.to(self.mlp.weight.dtype))
 
         # video temporal
         x = self._temporal_slicing(x, grid_thw)
@@ -1180,44 +1153,19 @@ class VariableResolutionResamplerModel(nn.Module):
         return x
 
 
-class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMixin):
-    """Ernie4_5_VLMoeForConditionalGeneration"""
-
-    config_class = Ernie4_5_VLConfig
-    main_input_name = "pixel_values"
-    _keep_in_fp16_modules = ["vision_tower"]
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-    _tp_plan = {}
-
-    def __init__(
-        self, config: Ernie4_5_VLConfig, vision_model=None, resampler_model=None
-    ):
+class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
+    def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
 
-        self.language_model = Ernie4_5_Model(config.text_config)
+        self.language_model = Ernie4_5VLTextModel(config.text_config)
 
-        self.vision_tower = Ernie4_5VLVisionTransformerPreTrainedModel(
-            config.vision_config
-        )
-
-        self.resampler_model = VariableResolutionResamplerModel(
-            config.vision_config
-        )
-
-        self.image_preprocess = None
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.vision_tower = Ernie4_5VLVisionTransformerPreTrainedModel(config.vision_config)
+        self.resampler_model = Ernie4_5VLVariableResolutionResamplerModel(config.vision_config)
+        self.image_preprocess = None  # TODO: move to preprocessor
 
         self.post_init()
 
-    # TODO: move into model x lm_head logic - currently needed for tying correctly
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def add_image_preprocess(self, processor):
-        """add image preprocess"""
         logger.info("image preprocess is set")
 
         image_preprocess = processor.image_processor
@@ -1239,14 +1187,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
 
         self.image_preprocess = image_preprocess
 
-    def vision_forward(
-        self,
-        images,
-        image_position_ids,
-        image_attention_mask,
-        grid_thw,
-    ):
-        """vision_forward"""
+    def vision_forward(self, images, grid_thw):
         if self.image_preprocess is not None:
             assert images.dtype == torch.uint8, images.dtype
             current_device = images.device
@@ -1276,16 +1217,11 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
 
     def vision_mapping_forward(
         self,
-        token_type_ids,
-        token_type_ids_w_video,
         input_ids,
-        mm_input_ids,
         image_features,
         inputs_embeds,
-        image_type_ids,
         grid_thw,
     ):
-        """vision_mapping_forward"""
         image_mask = input_ids == self.config.image_token_id
         image_features = self.resampler_model(image_features, grid_thw)
 
@@ -1297,6 +1233,105 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
             inputs_embeds.device
         )
         return inputs_embeds
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        position_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[list[torch.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        images: Optional[torch.Tensor] = None,
+        ignored_index: Optional[int] = 0,
+        return_dict: Optional[bool] = None,
+        image_position_ids: Optional[torch.Tensor] = None,
+        image_attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        image_type_ids: Optional[torch.Tensor] = None,
+        grid_thw: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        if grid_thw is not None:
+            grid_thw = grid_thw[grid_thw > 0].reshape([-1, 3])
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        image_mask = input_ids == self.config.image_token_id
+
+        if past_key_values is None:
+            if images is not None:
+                assert (image_mask).any().item(), (
+                    image_mask.detach().cpu().numpy().tolist(),
+                    input_ids.detach().cpu().numpy().tolist(),
+                    self.config.image_token_id,
+                    images.shape,
+                )
+                image_features = self.vision_forward(images, grid_thw)
+            else:
+                image_features = None  # no more faking
+        else:
+            image_features = None
+
+        if token_type_ids is None:
+            token_type_ids = image_mask.to(torch.int64)
+
+        lm_input_ids = input_ids.clone()
+        inputs_embeds = self.language_model.embed_tokens(lm_input_ids)
+        token_type_ids[token_type_ids == TokenType.video] = TokenType.image
+
+        if images is not None and image_features is not None:
+            inputs_embeds = self.vision_mapping_forward(
+                input_ids,
+                image_features,
+                inputs_embeds,
+                grid_thw,
+            )
+        else:
+            pass  # do nothing, should not hang under DygraphShardingOptimizerV2
+
+        outputs = self.language_model(
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        # TODO: change output type
+        return CausalLMOutputWithCrossAttentions(
+            loss=None,
+            logits=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_loss=outputs.router_loss,
+        )
+
+
+class Ernie4_5VLForConditionalGeneration(Ernie4_5_PretrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config: Ernie4_5_VLConfig):
+        super().__init__(config)
+        self.model = Ernie4_5VLModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
+
+    # TODO: currently needed for tying correctly - fix whatever goes wrong here that it doesnt get recognized
+    def get_input_embeddings(self):
+        return self.model.language_model.embed_tokens
+
+    def get_output_embeddings(self):
+        return self.lm_head
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False):
         """
@@ -1416,17 +1451,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
 
         return model_inputs
 
-    def _post_init(self, original_init, *args, **kwargs):
-        """
-        Label all multimodal parameters in the model, only head and Embedding
-        Experts parameters are already labeled
-        """
-        super()._post_init(self, original_init, *args, **kwargs)
-        if self.lm_head.mm_head is not None:
-            self.lm_head.mm_head.weight.expert_type = "expert_type_1"
-        if getattr(self.lm_head.mm_head, "bias", None) is not None:
-            self.lm_head.mm_head.bias.expert_type = "expert_type_1"
-
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1447,108 +1471,30 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
         grid_thw: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        """
-        Forward for Ernie4_5_VLMoeForConditionalGeneration
-
-        Args:
-            input_ids (torch.Tensor): Input ids.
-            position_ids (Optional[torch.Tensor], optional): Position ids. Defaults to None.
-            attention_mask (Optional[torch.Tensor], optional): Attention mask. Defaults to None.
-            past_key_values (Optional[List[torch.Tensor]], optional): Past key values. Defaults to None.
-            use_cache (Optional[bool], optional): Use cache. Defaults to None.
-            output_attentions (Optional[bool], optional): Output attentions. Defaults to None.
-            output_hidden_states (Optional[bool], optional): Output hidden states. Defaults to None.
-            labels (Optional[torch.Tensor], optional): Labels. Defaults to None.
-            images (Optional[torch.Tensor]): Images. Defaults to None.
-            ignored_index (Optional[int], optional): Ignored index. Defaults to 0.
-            return_dict (Optional[bool], optional): Return dict. Defaults to None.
-            image_position_ids (Optional[torch.Tensor], optional): Image position ids. Defaults to None.
-            image_attention_mask (Optional[torch.Tensor], optional): Image attention mask. Defaults to None.
-            token_type_ids (Optional[torch.Tensor], optional): Token type ids. Defaults to None.
-            image_type_ids (Optional[torch.Tensor], optional): Image type ids. Defaults to None.
-            grid_thw (Optional[torch.Tensor], optional): Grid thw. Defaults to None.
-        """
-        if grid_thw is not None:
-            grid_thw = grid_thw[grid_thw > 0].reshape([-1, 3])
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        image_mask = input_ids == self.config.image_token_id
-
-        if past_key_values is None:
-            if images is not None:
-                assert (image_mask).any().item(), (
-                    image_mask.detach().cpu().numpy().tolist(),
-                    input_ids.detach().cpu().numpy().tolist(),
-                    self.config.image_token_id,
-                    images.shape,
-                )
-                image_features = self.vision_forward(
-                    images,
-                    image_position_ids,
-                    image_attention_mask,
-                    grid_thw,
-                )
-            else:
-                image_features = None  # no more faking
-        else:
-            image_features = None
-        if token_type_ids is None:
-            token_type_ids = image_mask.to(torch.int64)
-            token_type_ids_labels = torch.cat(
-                [token_type_ids[:, 1:], token_type_ids[:, -1:]], 1
-            )
-        else:
-            assert (
-                token_type_ids.shape[1] == input_ids.shape[1] + 1
-            ), f"token_type:{token_type_ids.shape}, ids:{input_ids.shape}"
-            token_type_ids_labels = token_type_ids[..., 1:]
-
-        lm_input_ids = input_ids.clone()
-        mm_input_ids = input_ids.clone()
-
-        inputs_embeds = self.language_model.embed_tokens(lm_input_ids)
-        token_type_ids_w_video = token_type_ids[..., :-1].clone()
-        token_type_ids[token_type_ids == TokenType.video] = TokenType.image
-
-        if images is not None and image_features is not None:
-            inputs_embeds = self.vision_mapping_forward(
-                token_type_ids[..., :-1],
-                token_type_ids_w_video,
-                input_ids,
-                mm_input_ids,
-                image_features,
-                inputs_embeds,
-                image_type_ids,
-                grid_thw,
-            )
-        else:
-            pass  # do nothing, should not hang under DygraphShardingOptimizerV2
-
-        outputs = self.language_model(
+        outputs = self.model(
+            input_ids=input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
+            labels=labels,
+            images=images,
+            ignored_index=ignored_index,
+            return_dict=return_dict,
+            image_position_ids=image_position_ids,
+            image_attention_mask=image_attention_mask,
+            token_type_ids=token_type_ids,
+            image_type_ids=image_type_ids,
+            grid_thw=grid_thw,
+            **kwargs,
         )
 
         if not use_cache:
-            assert outputs.last_hidden_state.shape[:2] == token_type_ids_labels.shape, (
-                outputs.last_hidden_state.shape,
-                token_type_ids_labels.shape,
-            )
-            if self.config.use_recompute_loss_fn:
-                logits = outputs.last_hidden_state
-            else:
-                logits = self.lm_head(outputs.last_hidden_state)
+            logits = self.lm_head(outputs.logits)
         else:
-            logits = self.lm_head(outputs.last_hidden_state[:, -1:, :])
+            logits = self.lm_head(outputs.logits[:, -1:, :])
 
         # aka Generate Decoding
         loss = None
@@ -1620,7 +1566,7 @@ class CausalLMOutputWithCrossAttentions(ModelOutput):
 
 
 __all__ = [
-    "Ernie4_5_VLMoeForConditionalGeneration",
+    "Ernie4_5VLForConditionalGeneration",
     "Ernie4_5VLVisionTransformerPreTrainedModel",
-    "VariableResolutionResamplerModel",
+    "Ernie4_5VLVariableResolutionResamplerModel",
 ]

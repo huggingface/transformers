@@ -69,9 +69,14 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
         key = re.sub("^vision_model", "vision_tower", key)
         key = re.sub("^model", "language_model", key)
         key = re.sub("^language_model.resampler_model", "resampler_model", key)
+        key = "model." + key
 
-        if "lm_head" in key and is_tied:  # skip tied weights
-            pass
+        if "lm_head" in key and is_tied:
+            if is_tied:  # skip tied weights
+                pass
+            else:
+                # avoid any prefix introduced before
+                converted_state_dict["lm_head"] = tensor.contiguous()
         # Moe is split into their modalities (text, vision)
         elif "mlp" in key:
             if "moe_statics" in key:
@@ -97,7 +102,7 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
                     moe_type = "vision_moe"
                     expert_number -= 64
                 # avoid subbing the layer idx + experts twice
-                prefix = re.findall(r'language_model.layers.\d+.mlp.experts.', key)[0]
+                prefix = re.findall(r'model.language_model.layers.\d+.mlp.experts.', key)[0]
                 converted_key = re.sub(r"\d+", f"{moe_type}.experts.{expert_number}", key.removeprefix(prefix))
                 converted_state_dict[re.sub(".experts", "", prefix) + converted_key] = tensor.contiguous()
             else:
@@ -224,3 +229,17 @@ convert_config(
     save_dir='AntonV/ErnieVL',
 )
 #"""
+
+
+"""import torch
+checkpoint_path = "/raid/anton/code/forks/transformers/src/transformers/models/ernie4_5_vl/AntonV/ErnieVL"
+for filename in sorted(os.listdir(checkpoint_path)):
+    # sharded files are converted 1 by 1
+    if filename.endswith('.safetensors'):
+        input_file = os.path.join(checkpoint_path, filename)
+        state_dict = load_file(input_file)
+
+        for k, v in state_dict.items():
+            if "vision_tower" in k:
+                assert v.dtype == torch.float16, f"First invalid key: {k}"
+"""

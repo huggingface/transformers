@@ -5434,6 +5434,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model._initialize_missing_keys(checkpoint_keys, ignore_mismatched_sizes, is_quantized)
 
         # Set some modules to fp32 if needed
+        # TODO: enable fp16 as well via a general flag
         if keep_in_fp32_regex is not None:
             for name, param in model.named_parameters():
                 if keep_in_fp32_regex.search(name):
