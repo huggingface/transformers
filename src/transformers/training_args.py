@@ -2567,7 +2567,7 @@ class TrainingArguments:
                 quantization_config = v.get("quantization_config")
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
-            if k == "parallelism_config":
+            if k == "parallelism_config" and v is not None:
                 import copy
 
                 # This is a hack as torch DeviceMesh is not json serializable
