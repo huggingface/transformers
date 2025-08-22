@@ -19,6 +19,10 @@ Audio/Text processor class for SeamlessM4T
 from typing import Optional
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class SeamlessM4TTextKwargs(TextKwargs):
@@ -53,7 +57,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, **kwargs):
+    def __call__(self, text=None, audios=None, audio=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
@@ -82,6 +86,10 @@ class SeamlessM4TProcessor(ProcessorMixin):
         if text is not None and audios is not None:
             raise ValueError(
                 "Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another."
+            )
+        if audio is None and audios is not None:
+            logger.warning(
+                "Passing `audios` as keyword argument is deprecated and will be removed in v4.63, please pass `audio` instead."
             )
         return super().__call__(text=text, audio=audios, **kwargs)
 
