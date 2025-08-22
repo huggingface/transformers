@@ -80,6 +80,9 @@ if is_accelerate_available():
     if is_accelerate_available("1.10.0"):
         from accelerate.parallelism_config import ParallelismConfig
 
+    if is_accelerate_available("1.10.0"):
+        from accelerate.parallelism_config import ParallelismConfig
+
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
