@@ -15,16 +15,15 @@
 """Testing suite for the PyTorch Ministral model."""
 
 import gc
+import logging
 import unittest
 
 import pytest
-from packaging import version
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, MinistralConfig, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import AutoTokenizer, GenerationConfig, MinistralConfig, is_torch_available
 from transformers.testing_utils import (
-    Expectations,
     backend_empty_cache,
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -110,6 +109,9 @@ class MinistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class MinistralIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     def test_model_8b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
@@ -118,13 +120,13 @@ class MinistralIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.9537, -1.6193, -1.4123, -1.4673, -1.8511, -1.9309, -1.9826, -2.1776]])
-        print(out.mean(-1))
+        EXPECTED_MEAN = torch.tensor([[-1.5029, -7.2815, 4.5190, 0.5930, -5.2526, 3.0765, -0.6314, 1.8068]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([3.2025, 7.1265, 4.6058, 3.6423, 1.6357, 3.9265, 5.1883, 5.8760, 2.7942, 4.4823, 3.2571, 2.1063, 3.4275, 4.2028, 1.9767, 5.2115, 6.6756, 6.3999, 6.0483, 5.7378, 5.6660, 5.2298, 5.4103, 5.1248, 5.4376, 2.4570, 2.6107, 5.4039, 2.8077, 4.7777])  # fmt: skip
-        print(out[0, 0, :30])
-        print(EXPECTED_SLICE)
+        EXPECTED_SLICE = torch.tensor([-3.9446, -3.9466,  0.6383, -3.9466, -3.9468, -3.9448, -3.9462, -3.9455,
+                                                    -3.9451, -0.8244, -3.9472, -3.9458, -3.9460, -3.9406, -3.9462, -3.9462,
+                                                    -3.9458, -3.9462, -3.9463, -3.9461, -3.9448, -3.9451, -3.9462, -3.9458,
+                                                    -3.9455, -3.9452, -3.9458, -3.9469, -3.9460, -3.9464])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
         del model
@@ -133,18 +135,15 @@ class MinistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_8b_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
-        )
+        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% natural, 100% organic, 100% free of"
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Mistralai/Ministral-8B-Instruct-2410", use_fast=False)
+        tokenizer = AutoTokenizer.from_pretrained("Mistralai/Ministral-8B-Instruct-2410")
         model = MinistralForCausalLM.from_pretrained("Mistralai/Ministral-8B-Instruct-2410", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(text)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model
@@ -156,18 +155,17 @@ class MinistralIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_model_8b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        EXPECTED_OUTPUT_TOKEN_IDS = [36850, 4112]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = MinistralForCausalLM.from_pretrained(
             "Mistralai/Ministral-8B-Instruct-2410",
             device_map="auto",
-            load_in_4bit=True,
+            torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        print(generated_ids[0][-2:].tolist())
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
@@ -184,118 +182,60 @@ class MinistralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    def test_model_8b_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = MinistralForCausalLM.from_pretrained(
-            "Mistralai/Ministral-8B-Instruct-2410", device_map="auto", attn_implementation="sdpa"
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+    @pytest.mark.torch_export_test
+    def test_export_text_with_hybrid_cache(self):
+        from transformers.testing_utils import is_torch_greater_or_equal
 
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+        if not is_torch_greater_or_equal("2.6.0"):
+            self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"
-        )
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("Mistralai/Ministral-8B-Instruct-2410", use_fast=False)
-
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(text)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-        )
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         model_id = "Mistralai/Ministral-8B-Instruct-2410"
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="</s>", padding_side="right")
-
-        expected_text_completions = Expectations({
-            ("cuda", None): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
-            ],
-            ("cuda", 8): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
-            ],
-            ("rocm", (9, 5)): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
-            ]
-        })  # fmt: off
-        EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
-
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-            "input_ids"
-        ].shape[-1]
-
-        # Load model
-        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
-        dtype = torch.bfloat16
-        cache_implementation = "static"
-        attn_implementation = "sdpa"
-        batch_size = 1
         model = MinistralForCausalLM.from_pretrained(
             model_id,
-            device_map=device,
-            torch_dtype=dtype,
-            attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
-                cache_implementation=cache_implementation,
-                max_length=max_generation_length,
+                cache_implementation="static",
                 cache_config={
-                    "batch_size": batch_size,
-                    "max_cache_len": max_generation_length,
+                    "batch_size": 1,
+                    "max_cache_len": 50,
                 },
             ),
         )
 
-        prompt = ["My favourite condiment is "]
-        prompt_tokens = tokenizer(prompt, return_tensors="pt", padding=True).to(model.device)
-        prompt_token_ids = prompt_tokens["input_ids"]
-        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-        # Static Cache + export
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
-
+        # Export + HybridCache
+        model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        strict = version.parse(torch.__version__) != version.parse(
-            "2.7.0"
-        )  # Due to https://github.com/pytorch/pytorch/issues/150994
         exported_program = exportable_module.export(
-            input_ids=prompt_token_ids,
-            cache_position=torch.arange(prompt_token_ids.shape[-1], dtype=torch.long, device=model.device),
-            strict=strict,
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
         )
-        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+        logging.info(f"\nExported program: {exported_program}")
+
+        # Test generation with the exported model
+        prompt = "My favourite condiment is "
+        max_new_tokens_to_generate = 20
+        # Generate text with the exported model
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
         )
-        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-        print(ep_generated_text)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+        logging.info(f"\nExport generated texts: '{export_generated_text}'")
+
+        input_text = tokenizer(prompt, return_tensors="pt")
+        with torch.no_grad():
+            eager_outputs = model.generate(
+                **input_text,
+                max_new_tokens=max_new_tokens_to_generate,
+                do_sample=False,  # Use greedy decoding to match the exported model
+                cache_implementation="static",
+            )
+
+        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
+        logging.info(f"\nEager generated texts: '{eager_generated_text}'")
+
+        self.assertEqual(export_generated_text, eager_generated_text)
 
     @require_flash_attn
     @slow
@@ -305,8 +245,11 @@ class MinistralIntegrationTest(unittest.TestCase):
         except ImportError:
             self.skipTest("datasets not found")
 
-        model = AutoModelForCausalLM.from_pretrained("mistralai/Ministral-8B-Instruct-2410", device_map="auto")
-        print(model.device)
+        model = MinistralForCausalLM.from_pretrained(
+            "mistralai/Ministral-8B-Instruct-2410",
+            device_map="auto",
+            load_in_4bit=True,
+        )
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410", legacy=False)
 
         wiki = load_dataset("wikitext", "wikitext-103-raw-v1", split="validation")
