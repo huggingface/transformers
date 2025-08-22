@@ -81,13 +81,13 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
   - sections:
     - local: serving
