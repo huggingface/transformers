@@ -419,7 +419,7 @@ class GraniteMoeMoE(nn.Module):
 
         hidden_states = scattered_experts(
             inputs=hidden_states,
-            expert_weights=self.weight.permute(0, 2, 1),
+            expert_weights=self.output_linear.weight.permute(0, 2, 1),
             k=1,
             sorted_expert_idxs=sorted_expert_idxs,
             sorted_scattered_idxs=sorted_scattered_idxs,
