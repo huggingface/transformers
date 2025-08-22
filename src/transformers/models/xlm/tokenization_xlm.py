@@ -437,7 +437,9 @@ class XLMTokenizer(PreTrainedTokenizer):
                 else:
                     rjieba = sys.modules["rjieba"]
             except (AttributeError, ImportError):
-                logger.error("Make sure you install rjieba (https://github.com/messense/rjieba-py) with the following steps")
+                logger.error(
+                    "Make sure you install rjieba (https://github.com/messense/rjieba-py) with the following steps"
+                )
                 logger.error("1. pip install rjieba")
                 raise
             text = " ".join(rjieba.cut(text))
