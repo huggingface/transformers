@@ -169,7 +169,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         """Tokenize a string."""
         output_tokens = []
-        for x in rjieba.cut(text):
+        for x in rjieba.cut(text, False):
             output_tokens.extend(self.wordpiece_tokenizer.tokenize(x))
         return output_tokens
 
