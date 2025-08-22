@@ -125,7 +125,9 @@ class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
 
     def __init__(self, config: HiggsAudioTokenizerConfig):
         super().__init__()
-        self.quantizers = nn.ModuleList([HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)])
+        self.quantizers = nn.ModuleList(
+            [HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)]
+        )
         self.frame_rate = config.frame_rate
         self.codebook_size = config.codebook_size
         self.num_quantizers = config.num_quantizers

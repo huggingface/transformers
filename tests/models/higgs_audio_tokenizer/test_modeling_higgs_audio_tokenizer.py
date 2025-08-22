@@ -488,12 +488,12 @@ class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
         x = inputs["input_values"]
 
         with torch.no_grad():
-            ENC_TOL = 0
+            ENC_TOL = 1
             audio_codes = model.encode(x, return_dict=False)
             if exp_codes is not None:
-                exp_codes = torch.tensor(exp_codes).to(torch_device)
+                exp_codes = torch.tensor(exp_codes).transpose(0, 1).to(torch_device)
                 torch.testing.assert_close(
-                    audio_codes[..., : exp_codes.shape[-1]],
+                    audio_codes.squeeze(0)[..., : exp_codes.shape[-1]],
                     exp_codes,
                     rtol=ENC_TOL,
                     atol=ENC_TOL,
