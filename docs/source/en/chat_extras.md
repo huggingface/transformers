@@ -58,7 +58,7 @@ You can optionally add a `Returns:` block to the docstring and a return type to 
 What really matters is the function name, argument names, argument types, and docstring describing the function's purpose
 and the purpose of its arguments. These create the "signature" the model will use to decide whether to call the tool.
 
-## A tool-calling example
+## Tool-calling Example
 
 Load a model and tokenizer that supports tool-use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
 
