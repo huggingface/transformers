@@ -26,12 +26,6 @@ VALID_VISION_CONFIG_KEYS = [
     "patch_size",
     "spatial_merge_size",
 ]
-TEXT_TO_VISION_CONFIG_KEYS = [
-    "spatial_conv_size",
-    "temporal_conv_size",
-    "rms_norm_eps",
-]
-ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
 VALID_TEXT_CONFIG_KEYS = [
     "hidden_size",
     "intermediate_size",
@@ -50,6 +44,12 @@ VALID_TEXT_CONFIG_KEYS = [
     "use_cache",
     "use_bias",
 ]
+TEXT_TO_VISION_CONFIG_KEYS = [
+    "spatial_conv_size",
+    "temporal_conv_size",
+    "rms_norm_eps",
+]
+ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size", "text_hidden_size", "vision_rms_norm_eps"]
 ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + ["hidden_act", "moe_layer_end_index", "moe_layer_start_index", "moe_num_experts", "freq_allocation"]
 
 
@@ -66,6 +66,10 @@ def write_json(json_object, save_dir, filename):
 def convert_state_dict_to_hf(state_dict, is_tied=True):
     converted_state_dict = {}
     for key, tensor in state_dict.items():
+        key = re.sub("^vision_model", "vision_tower", key)
+        key = re.sub("^model", "language_model", key)
+        key = re.sub("^language_model.resampler_model", "resampler_model", key)
+
         if "lm_head" in key and is_tied:  # skip tied weights
             pass
         # Moe is split into their modalities (text, vision)
@@ -93,7 +97,7 @@ def convert_state_dict_to_hf(state_dict, is_tied=True):
                     moe_type = "vision_moe"
                     expert_number -= 64
                 # avoid subbing the layer idx + experts twice
-                prefix = re.findall(r'model.layers.\d+.mlp.experts.', key)[0]
+                prefix = re.findall(r'language_model.layers.\d+.mlp.experts.', key)[0]
                 converted_key = re.sub(r"\d+", f"{moe_type}.experts.{expert_number}", key.removeprefix(prefix))
                 converted_state_dict[re.sub(".experts", "", prefix) + converted_key] = tensor.contiguous()
             else:
@@ -207,14 +211,16 @@ def convert_config(model_path, save_dir):
             final_config.save_pretrained(save_dir)
             break
 
-"""
+#"""
 convert_weights(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
-"""
+#"""
 
+"""
 convert_config(
     model_path='baidu/ERNIE-4.5-VL-28B-A3B-PT',
     save_dir='AntonV/ErnieVL',
 )
+#"""

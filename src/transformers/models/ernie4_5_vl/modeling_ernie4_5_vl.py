@@ -1185,31 +1185,22 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
 
     config_class = Ernie4_5_VLConfig
     main_input_name = "pixel_values"
-    _keep_in_fp16_modules = ["vision_model"]
+    _keep_in_fp16_modules = ["vision_tower"]
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tp_plan = {}
 
     def __init__(
         self, config: Ernie4_5_VLConfig, vision_model=None, resampler_model=None
     ):
-        """
-        initialize Ernie4_5_VLMoeForConditionalGeneration
-
-        Args:
-            config(Ernie4_5_VLMoEConfig): Model configuration.
-            vision_model(nn.Module): vision model
-            resampler_model(nn.Module): resampler model
-        """
         super().__init__(config)
 
-        self.model = Ernie4_5_Model(config.text_config)
+        self.language_model = Ernie4_5_Model(config.text_config)
 
-        self.vision_model = Ernie4_5VLVisionTransformerPreTrainedModel(
+        self.vision_tower = Ernie4_5VLVisionTransformerPreTrainedModel(
             config.vision_config
         )
 
-        # TODO: move to vision
-        self.model.resampler_model = VariableResolutionResamplerModel(
+        self.resampler_model = VariableResolutionResamplerModel(
             config.vision_config
         )
 
@@ -1217,6 +1208,13 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
+
+    # TODO: move into model x lm_head logic - currently needed for tying correctly
+    def get_input_embeddings(self):
+        return self.language_model.embed_tokens
+
+    def get_output_embeddings(self):
+        return self.lm_head
 
     def add_image_preprocess(self, processor):
         """add image preprocess"""
@@ -1273,7 +1271,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
                 [1, 0, 0, 0],
                 value=1,
             )
-        image_features = self.vision_model(images, grid_thw)
+        image_features = self.vision_tower(images, grid_thw)
         return image_features
 
     def vision_mapping_forward(
@@ -1289,7 +1287,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
     ):
         """vision_mapping_forward"""
         image_mask = input_ids == self.config.image_token_id
-        image_features = self.model.resampler_model(image_features, grid_thw)
+        image_features = self.resampler_model(image_features, grid_thw)
 
         if image_features.dim == 2:
             B, N, C = image_features.shape
@@ -1510,7 +1508,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
         lm_input_ids = input_ids.clone()
         mm_input_ids = input_ids.clone()
 
-        inputs_embeds = self.model.embed_tokens(lm_input_ids)
+        inputs_embeds = self.language_model.embed_tokens(lm_input_ids)
         token_type_ids_w_video = token_type_ids[..., :-1].clone()
         token_type_ids[token_type_ids == TokenType.video] = TokenType.image
 
@@ -1528,7 +1526,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_PretrainedModel, Generatio
         else:
             pass  # do nothing, should not hang under DygraphShardingOptimizerV2
 
-        outputs = self.model(
+        outputs = self.language_model(
             position_ids=position_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
