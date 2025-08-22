@@ -1,9 +1,10 @@
-import time
 import argparse
+import json
+import time
+from typing import Optional
+
 import datasets
 import torch
-import json
-from typing import Optional
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
@@ -12,27 +13,33 @@ from transformers.generation import GenerationConfig
 MODEL_ID = "meta-llama/Llama-3.2-3b-Instruct"
 
 
-def generate_simple(attn_implementation: str, simple_batch_inputs: list[int], generation_config: GenerationConfig) -> list[str]:
+def generate_simple(
+    attn_implementation: str, simple_batch_inputs: list[int], generation_config: GenerationConfig
+) -> list[str]:
     attn_implementation = {
         "sdpa_paged": "sdpa",
         "eager_paged": "eager",
     }[attn_implementation]
 
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.bfloat16,
-        attn_implementation=attn_implementation,
-    ).cuda().eval()
-    
+    model = (
+        AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            torch_dtype=torch.bfloat16,
+            attn_implementation=attn_implementation,
+        )
+        .cuda()
+        .eval()
+    )
+
     decoded_outputs = []
     for input_ids in simple_batch_inputs:
         input_ids = torch.tensor([input_ids]).to("cuda")
         attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
-        generated_tokens = outputs[0][input_ids.shape[1]:]
+        generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         decoded_outputs.append(decoded_output)
-    
+
     return decoded_outputs
 
 
@@ -41,11 +48,10 @@ def batch_generate(
     simple_batch_inputs: list,
     generation_config: GenerationConfig,
     tokenizer: AutoTokenizer,
-    displayed_samples: int = 0, # -1: no display, 0: display stats, >0: display inputs and some outputs
-    output_file: str = None,
+    displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
+    output_file: Optional[str] = None,
     expected_outputs: Optional[list[str]] = None,
 ) -> tuple[float, float]:
-
     # Actual batch generation
     if displayed_samples >= 0:
         print("--- Running CB Generation Example ---")
@@ -119,14 +125,15 @@ def batch_generate(
 
 
 if __name__ == "__main__":
-
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
-    parser.add_argument("--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation")
-    parser.add_argument("--matmul-precision", "-mp", type=str, default="high") # set to "none" to disable
+    parser.add_argument(
+        "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
+    )
+    parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--use-cuda-graph", action="store_true", default=False)
 
     parser.add_argument("--samples", type=int, default=500)
@@ -172,12 +179,14 @@ if __name__ == "__main__":
 
     # If no output file is provided, we pick a name based on the args
     if args.output_file is None:
-        args.output_file = f"cb_{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}_.json"
+        args.output_file = (
+            f"cb/{args.num_blocks}_{args.max_batch_tokens}_{args.attn}_{args.matmul_precision}_{args.samples}.json"
+        )
 
     # Run warmup batch generation
     batch_generate(
         model,
-        simple_batch_inputs[:min(5, args.samples)],
+        simple_batch_inputs[: min(5, args.samples)],
         generation_config,
         tokenizer,
         displayed_samples=-1,
