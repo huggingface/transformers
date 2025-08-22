@@ -161,7 +161,7 @@ class MinistralIntegrationTest(unittest.TestCase):
         model = MinistralForCausalLM.from_pretrained(
             "Mistralai/Ministral-8B-Instruct-2410",
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
