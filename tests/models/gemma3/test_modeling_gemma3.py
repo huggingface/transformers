@@ -725,7 +725,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
             }
         )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()        
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_deterministic_for_xpu
