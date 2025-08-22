@@ -581,10 +581,10 @@ class HiggsAudioSampleProcessor:
         )
 
 
-def audio_extraction(self, raw_audio, original_sr=None, target_sr=None):
+def audio_extraction(raw_audio, original_sr=None, target_sr=None, device="cuda"):
     # Convert from librosa to torch
     if not isinstance(raw_audio, torch.Tensor):
-        audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=self.device)
+        audio_signal = torch.tensor(raw_audio, dtype=torch.float32, device=device)
     else:
         audio_signal = raw_audio.float()
 
@@ -750,6 +750,7 @@ class HiggsAudioProcessor(ProcessorMixin):
                         processed_audio,
                         original_sr=original_sr[i] if original_sr is not None else None,
                         target_sr=target_sr,
+                        device=self.audio_tokenizer.device,
                     )
                     audio_ids = self.audio_tokenizer.encode(input_values)
                     audio_ids_list.append(audio_ids[0].squeeze(0).cpu())
