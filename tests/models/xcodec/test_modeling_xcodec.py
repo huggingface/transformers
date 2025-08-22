@@ -67,9 +67,10 @@ class XcodecModelTester:
         self.num_samples = num_samples
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {
+            "input_values": floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -82,7 +83,6 @@ class XcodecModelTester:
         inputs_dict["audio_codes"] = ids_tensor(
             [self.batch_size, config.num_quantizers, codes_length], config.codebook_size
         )
-
         return config, inputs_dict
 
     def get_config(self):
@@ -94,8 +94,7 @@ class XcodecModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = XcodecModel(config=config).to(torch_device).eval()
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        result = model(input_values=inputs_dict["input_values"])
         self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.num_channels, self.num_samples))
 
 
@@ -380,11 +379,11 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]

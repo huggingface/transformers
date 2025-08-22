@@ -162,7 +162,7 @@ TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION = [
 def _test_eager_matches_sdpa_inference(
     self,
     name,
-    torch_dtype,
+    dtype,
     padding_side,
     use_attention_mask,
     output_attentions,
@@ -186,17 +186,17 @@ def _test_eager_matches_sdpa_inference(
         self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
     # convert shorthand name to torch.dtype
-    if torch_dtype == "fp16":
-        torch_dtype = torch.float16
-    elif torch_dtype == "bf16":
-        torch_dtype = torch.bfloat16
-    elif torch_dtype == "fp32":
-        torch_dtype = torch.float32
+    if dtype == "fp16":
+        dtype = torch.float16
+    elif dtype == "bf16":
+        dtype = torch.bfloat16
+    elif dtype == "fp32":
+        dtype = torch.float32
 
-    if not is_torch_fp16_available_on_device(torch_device) and torch_dtype == torch.float16:
+    if not is_torch_fp16_available_on_device(torch_device) and dtype == torch.float16:
         self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
-    if not is_torch_bf16_available_on_device(torch_device) and torch_dtype == torch.bfloat16:
+    if not is_torch_bf16_available_on_device(torch_device) and dtype == torch.bfloat16:
         self.skipTest(
             f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
         )
@@ -249,7 +249,7 @@ def _test_eager_matches_sdpa_inference(
             model.save_pretrained(tmpdirname)
             model_from_pretrained_kwargs = {
                 "pretrained_model_name_or_path": tmpdirname,
-                "torch_dtype": torch_dtype,
+                "dtype": dtype,
             }
 
             if hasattr(config, "use_mask_token") or "use_mask_token" in inspect.signature(model.__init__).parameters:
@@ -295,7 +295,7 @@ def _test_eager_matches_sdpa_inference(
 
             for key, value in processed_inputs.items():
                 if torch.is_floating_point(value):
-                    value = value.to(torch_dtype)
+                    value = value.to(dtype)
 
                 # extend value to have at least `input_data_batch_size` elements
                 if value.shape[0] < input_data_batch_size:
@@ -440,17 +440,17 @@ def _test_eager_matches_sdpa_inference(
                 logits_sdpa[nan_mask] = 0
 
             if torch_device in ["cpu", "cuda"]:
-                atol = atols[torch_device, enable_kernels, torch_dtype]
-                rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                atol = atols[torch_device, enable_kernels, dtype]
+                rtol = rtols[torch_device, enable_kernels, dtype]
             elif torch_device == "hpu":
-                atol = atols["cuda", enable_kernels, torch_dtype]
-                rtol = rtols["cuda", enable_kernels, torch_dtype]
+                atol = atols["cuda", enable_kernels, dtype]
+                rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
                 # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                 # which is implemented on PyTorch level using aten operators and is
                 # device agnostic with respect to implementation of each aten operator.
-                atol = atols["cuda", False, torch_dtype]
-                rtol = rtols["cuda", False, torch_dtype]
+                atol = atols["cuda", False, dtype]
+                rtol = rtols["cuda", False, dtype]
             else:
                 atol = 1e-7
                 rtol = 1e-4
@@ -720,7 +720,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
 
                 for name, param in model.named_parameters():
                     if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
@@ -1195,12 +1195,10 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdir:
                     with torch.device(torch_device):
-                        model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
+                        model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
-                    model = AutoModelForCausalLM.from_pretrained(
-                        tmpdir, torch_dtype=torch.float32, device_map=torch_device
-                    )
+                    model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float32, device_map=torch_device)
                     inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
                     inputs_dict["labels"] = inputs_dict["input_ids"]
                     _ = model(**inputs_dict, return_dict=False)
@@ -3471,7 +3469,7 @@ class ModelTesterMixin:
     def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -3498,8 +3496,13 @@ class ModelTesterMixin:
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
+
+                # Some models have support for FA but not SDPA - making sure we have a valid attention
+                initial_attention_implementation = "sdpa"
+                if model.config._attn_implementation != "sdpa":
+                    initial_attention_implementation = "eager"
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
@@ -3526,7 +3529,7 @@ class ModelTesterMixin:
                     model.set_attn_implementation(attn_implementation)
                     outputs_fa = model(dummy_input, output_hidden_states=True)
 
-                model.set_attn_implementation("sdpa")
+                model.set_attn_implementation(initial_attention_implementation)
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder
@@ -3563,7 +3566,7 @@ class ModelTesterMixin:
                     model.set_attn_implementation(attn_implementation)
                     outputs_fa = model(dummy_input, **other_inputs)
 
-                model.set_attn_implementation("sdpa")
+                model.set_attn_implementation(initial_attention_implementation)
                 logits = (
                     outputs.hidden_states[-1]
                     if not model.config.is_encoder_decoder
@@ -3787,10 +3790,10 @@ class ModelTesterMixin:
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
-        self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         _test_eager_matches_sdpa_inference(
-            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
 
     @require_torch_accelerator
@@ -3861,7 +3864,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 inputs_dict.pop("attention_mask", None)
@@ -3922,7 +3925,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
@@ -3967,14 +3970,14 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdir:
                 with torch.device(torch_device):
                     model_eager = AutoModelForCausalLM.from_config(
-                        config, attn_implementation="eager", torch_dtype=torch.float32
+                        config, attn_implementation="eager", dtype=torch.float32
                     )
 
                 model_eager.save_pretrained(tmpdir)
 
                 with torch.device(torch_device):
                     model_sdpa = AutoModelForCausalLM.from_pretrained(
-                        tmpdir, attn_implementation="sdpa", torch_dtype=torch.float32
+                        tmpdir, attn_implementation="sdpa", dtype=torch.float32
                     )
 
                 model_eager = model_eager.eval()
@@ -4004,7 +4007,7 @@ class ModelTesterMixin:
         if not is_torch_bf16_available_on_device(torch_device):
             self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
-        torch_dtype = torch.bfloat16
+        dtype = torch.bfloat16
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -4013,7 +4016,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
                 sub_models_supporting_fa = [
                     module._supports_flash_attn
@@ -4027,12 +4030,12 @@ class ModelTesterMixin:
                     with self.assertRaises(ValueError):
                         model_fa = model_class.from_pretrained(
                             tmpdirname,
-                            torch_dtype=torch_dtype,
+                            dtype=dtype,
                             attn_implementation=attn_implementation,
                         )
                 else:
                     model_fa = model_class.from_pretrained(
-                        tmpdirname, torch_dtype=torch_dtype, attn_implementation=attn_implementation
+                        tmpdirname, dtype=dtype, attn_implementation=attn_implementation
                     )
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PretrainedConfig):
@@ -4093,7 +4096,7 @@ class ModelTesterMixin:
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="flash_attention_2",
                     load_in_4bit=True,
                 )
@@ -4139,13 +4142,11 @@ class ModelTesterMixin:
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
         torch.compiler.reset()
-        torch_dtype = torch.float16
+        dtype = torch.float16
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(
-            device=torch_device, dtype=torch_dtype
-        )
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -4226,7 +4227,7 @@ class ModelTesterMixin:
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation=attn_implementation,
                     )
                     .to(torch_device)
@@ -4345,7 +4346,7 @@ class ModelTesterMixin:
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation="flash_attention_2",
                     )
                     .to(torch_device)
@@ -4409,7 +4410,7 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
-                config, attn_implementation=attn_implementation, torch_dtype=torch.bfloat16
+                config, attn_implementation=attn_implementation, dtype=torch.bfloat16
             ).to(torch_device)
 
             dummy_input = inputs_dict[fa_model.main_input_name]
@@ -5072,6 +5073,31 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
                 self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+
+    @require_torch
+    def test_bc_torch_dtype(self):
+        """
+        Test that we can still use `torch_dtype` argument correctly, for BC.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if "TimmBackbone" in model_class.__name__:
+                self.skipTest("TimmBackbone should not run this test")
+            # First check that it works correctly
+            model = model_class(copy.deepcopy(config))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Check that it works for all dtypes
+                for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                    model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
+                    model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                    for (k1, v1), (k2, v2) in zip(
+                        model_torch_dtype.named_parameters(), model_dtype.named_parameters()
+                    ):
+                        self.assertEqual(k1, k2)
+                        self.assertEqual(v1.dtype, v2.dtype)
+                        self.assertTrue((v1 == v2).all())
 
 
 global_rng = random.Random()

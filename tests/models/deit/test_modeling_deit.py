@@ -454,7 +454,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         A small test to make sure that inference work in half precision without any problem.
         """
         model = DeiTModel.from_pretrained(
-            "facebook/deit-base-distilled-patch16-224", torch_dtype=torch.float16, device_map="auto"
+            "facebook/deit-base-distilled-patch16-224", dtype=torch.float16, device_map="auto"
         )
         image_processor = self.default_image_processor
 

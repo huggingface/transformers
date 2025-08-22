@@ -46,7 +46,7 @@ pipeline = pipeline(
     "image-text-to-text",
     model="ducviet00/Florence-2-base-hf",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 pipeline(
@@ -67,7 +67,7 @@ from transformers import AutoProcessor, Florence2ForConditionalGeneration
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", torch_dtype=torch.bfloat16, device_map="auto")
+model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base", dtype=torch.bfloat16, device_map="auto")
 processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
 
 task_prompt = "<OD>"
@@ -103,7 +103,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
 model = Florence2ForConditionalGeneration.from_pretrained(
     "microsoft/Florence-2-large",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

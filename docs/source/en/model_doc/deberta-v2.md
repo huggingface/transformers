@@ -47,7 +47,7 @@ pipeline = pipeline(
     task="text-classification",
     model="microsoft/deberta-v2-xlarge-mnli",
     device=0,
-    torch_dtype=torch.float16
+    dtype=torch.float16
 )
 result = pipeline("DeBERTa-v2 is great at understanding context!")
 print(result)
@@ -65,11 +65,11 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "microsoft/deberta-v2-xlarge-mnli",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 logits = outputs.logits
@@ -107,10 +107,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForSequenceClassification.from_pretrained(
     model_id,
     quantization_config=quantization_config,
-    torch_dtype="float16"
+    dtype="float16"
 )
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to("cuda")
+inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits
 predicted_class_id = logits.argmax().item()
