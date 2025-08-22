@@ -1273,7 +1273,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16)
+        >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
         >>> processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         >>> inputs = processor(text=["Can you write me a poem about winter."], return_tensors="pt").to(model.device)
@@ -1494,7 +1494,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def text_model(self):
         return self.model.text_model
@@ -1545,7 +1545,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from PIL import Image
 
-        >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", torch_dtype=torch.bfloat16)
+        >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
         >>> processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         >>> conversation = [

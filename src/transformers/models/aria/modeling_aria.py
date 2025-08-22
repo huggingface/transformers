@@ -632,7 +632,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     _supports_attention_backend = True
@@ -1123,7 +1123,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
         )
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model
@@ -1177,7 +1177,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
-        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

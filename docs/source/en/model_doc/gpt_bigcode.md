@@ -67,15 +67,15 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+>>> device = infer_device() # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+>>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
 >>> prompt = "def hello_world():"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(device)
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> model.to(device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)

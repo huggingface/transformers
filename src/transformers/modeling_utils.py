@@ -54,7 +54,7 @@ from .configuration_utils import PretrainedConfig
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -124,7 +124,6 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    strtobool,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
@@ -180,15 +179,6 @@ _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
     from torch.distributed.tensor import DTensor
-
-
-def is_fsdp_enabled():
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
 
 
 def is_local_dist_rank_0():
@@ -301,7 +291,7 @@ def set_zero3_state():
         _is_ds_init_called = False
 
 
-def restore_default_torch_dtype(func):
+def restore_default_dtype(func):
     """
     Decorator to restore the default torch dtype
     at the end of the function. Serves
@@ -409,8 +399,7 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    else:
-        return next(state_dict.values()).dtype
+    return next(state_dict.values()).dtype
 
 
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
@@ -1352,84 +1341,84 @@ def _get_resolved_checkpoint_files(
     return checkpoint_files, sharded_metadata
 
 
-def _get_torch_dtype(
+def _get_dtype(
     cls,
-    torch_dtype: Optional[Union[str, torch.dtype, dict]],
+    dtype: Optional[Union[str, torch.dtype, dict]],
     checkpoint_files: Optional[list[str]],
     config: PretrainedConfig,
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
 ) -> tuple[PretrainedConfig, Optional[torch.dtype], Optional[torch.dtype]]:
-    """Find the correct `torch_dtype` to use based on provided arguments. Also update the `config` based on the
+    """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
-    1. If torch_dtype is not None, we use that dtype
-    2. If torch_dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
+    1. If dtype is not None, we use that dtype
+    2. If dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
         weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
-    we also may have config.torch_dtype available, but we won't rely on it till v5
+    we also may have config.dtype available, but we won't rely on it till v5
     """
     dtype_orig = None
     is_sharded = sharded_metadata is not None
 
-    if torch_dtype is not None:
-        if isinstance(torch_dtype, str):
-            if torch_dtype == "auto":
-                if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
-                    torch_dtype = config.torch_dtype
-                    logger.info(f"Will use torch_dtype={torch_dtype} as defined in model's config object")
+    if dtype is not None:
+        if isinstance(dtype, str):
+            if dtype == "auto":
+                if hasattr(config, "dtype") and config.dtype is not None:
+                    dtype = config.dtype
+                    logger.info(f"Will use dtype={dtype} as defined in model's config object")
                 else:
                     if is_sharded and "dtype" in sharded_metadata:
-                        torch_dtype = sharded_metadata["dtype"]
+                        dtype = sharded_metadata["dtype"]
                     elif state_dict is not None:
-                        torch_dtype = get_state_dict_dtype(state_dict)
+                        dtype = get_state_dict_dtype(state_dict)
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
-                        torch_dtype = get_state_dict_dtype(state_dict)
+                        dtype = get_state_dict_dtype(state_dict)
                     logger.info(
-                        "Since the `torch_dtype` attribute can't be found in model's config object, "
-                        "will use torch_dtype={torch_dtype} as derived from model's weights"
+                        "Since the `dtype` attribute can't be found in model's config object, "
+                        "will use dtype={dtype} as derived from model's weights"
                     )
-            elif hasattr(torch, torch_dtype):
-                torch_dtype = getattr(torch, torch_dtype)
-                config.torch_dtype = torch_dtype
+            elif hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+                config.dtype = dtype
                 for sub_config_key in config.sub_configs:
                     sub_config = getattr(config, sub_config_key)
-                    sub_config.torch_dtype = torch_dtype
-        elif isinstance(torch_dtype, torch.dtype):
-            config.torch_dtype = torch_dtype
+                    sub_config.dtype = dtype
+        elif isinstance(dtype, torch.dtype):
+            config.dtype = dtype
             for sub_config_key in config.sub_configs:
                 sub_config = getattr(config, sub_config_key)
-                sub_config.torch_dtype = torch_dtype
-        elif isinstance(torch_dtype, dict):
-            for key, curr_dtype in torch_dtype.items():
+                sub_config.dtype = dtype
+        elif isinstance(dtype, dict):
+            for key, curr_dtype in dtype.items():
                 if hasattr(config, key):
                     value = getattr(config, key)
                     curr_dtype = curr_dtype if not isinstance(curr_dtype, str) else getattr(torch, curr_dtype)
-                    value.torch_dtype = curr_dtype
+                    value.dtype = curr_dtype
             # main torch dtype for modules that aren't part of any sub-config
-            torch_dtype = torch_dtype.get("")
-            torch_dtype = torch_dtype if not isinstance(torch_dtype, str) else getattr(torch, torch_dtype)
-            config.torch_dtype = torch_dtype
-            if torch_dtype is None:
-                torch_dtype = torch.float32
+            dtype = dtype.get("")
+            dtype = dtype if not isinstance(dtype, str) else getattr(torch, dtype)
+            config.dtype = dtype
+            if dtype is None:
+                dtype = torch.float32
         else:
             raise ValueError(
-                f"`torch_dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `torch_dtype` "
-                f"for each sub-config in composite configs, but received {torch_dtype}"
+                f"`dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `dtype` "
+                f"for each sub-config in composite configs, but received {dtype}"
             )
 
-        dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+        dtype_orig = cls._set_default_dtype(dtype)
     else:
         # set fp32 as the default dtype for BC
         default_dtype = torch.get_default_dtype()
-        config.torch_dtype = default_dtype
+        config.dtype = default_dtype
         for key in config.sub_configs:
             value = getattr(config, key)
-            value.torch_dtype = default_dtype
+            value.dtype = default_dtype
 
-    return config, torch_dtype, dtype_orig
+    return config, dtype, dtype_orig
 
 
 def _get_device_map(
@@ -1437,7 +1426,7 @@ def _get_device_map(
     device_map: Optional[Union[dict, str]],
     max_memory: Optional[dict],
     hf_quantizer: Optional[HfQuantizer],
-    torch_dtype: Optional[torch.dtype],
+    dtype: Optional[torch.dtype],
     keep_in_fp32_regex: Optional[re.Pattern],
 ) -> dict:
     """Compute the final `device_map` to use if we passed a value in ['auto', 'balanced', 'balanced_low_0', 'sequential'].
@@ -1446,13 +1435,13 @@ def _get_device_map(
     if isinstance(device_map, str):
         special_dtypes = {}
         if hf_quantizer is not None:
-            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
+            special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, dtype))
         if keep_in_fp32_regex is not None:
             special_dtypes.update(
                 {name: torch.float32 for name, _ in model.named_parameters() if keep_in_fp32_regex.search(name)}
             )
 
-        target_dtype = torch_dtype
+        target_dtype = dtype
 
         if hf_quantizer is not None:
             target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
@@ -1615,9 +1604,7 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    is_quantized
-                    and new_state_dict[key].shape[-1] == 1
-                    and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
+                    is_quantized and tensor.shape[-1] == 1 and tensor.numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
                     mismatched_shapes.append((tensor.shape, model_state_dict[key].shape))
@@ -2289,7 +2276,87 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
 
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
-        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else None
+        self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
+        self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+        self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+        for name, module in self.named_children():
+            if plan := getattr(module, "_ep_plan", None):
+                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_plan", None):
+                self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_pp_plan", None):
+                self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+    @property
+    def tp_plan(self) -> dict[str, str]:
+        """
+        The full tp plan for the model's modules
+        """
+        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+            return self._ep_plan
+        return self._tp_plan
+
+    @property
+    def pp_plan(self) -> dict[str, tuple[str, str]]:
+        return self._pp_plan
+
+    @tp_plan.setter
+    def tp_plan(self, plan: dict[str, str]):
+        if plan is not None:
+            # Validate that all parallel styles in the plan are supported
+            from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+
+            for layer_pattern, parallel_style in plan.items():
+                if parallel_style not in ALL_PARALLEL_STYLES:
+                    raise ValueError(
+                        f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
+                        f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                    )
+
+            # Validate that the layer patterns match existing model structure
+            # We check this by getting all parameter names and seeing if any match the patterns
+            if hasattr(self, "named_parameters"):
+                model_param_names = [name for name, _ in self.named_parameters()]
+                if model_param_names:  # Only validate if model has parameters
+                    import re
+
+                    for layer_pattern in plan.keys():
+                        # Convert pattern to regex (replace * with .*)
+                        regex_pattern = layer_pattern.replace("*", r"\d+")
+                        pattern_matched = False
+                        for param_name in model_param_names:
+                            if re.match(regex_pattern, param_name):
+                                pattern_matched = True
+                                break
+                        if not pattern_matched:
+                            # Try more flexible matching - check if pattern components exist
+                            pattern_parts = layer_pattern.split(".")
+                            flexible_matched = False
+                            for param_name in model_param_names:
+                                param_parts = param_name.split(".")
+                                if len(pattern_parts) <= len(param_parts):
+                                    match_count = 0
+                                    for i, pattern_part in enumerate(pattern_parts):
+                                        if pattern_part == "*":
+                                            match_count += 1
+                                        elif i < len(param_parts) and pattern_part == param_parts[i]:
+                                            match_count += 1
+                                    if match_count == len(pattern_parts):
+                                        flexible_matched = True
+                                        break
+                            if not flexible_matched:
+                                import warnings
+
+                                warnings.warn(
+                                    f"Layer pattern '{layer_pattern}' does not match any parameters in the model. "
+                                    f"This rule may not be applied during tensor parallelization."
+                                )
+
+        self._tp_plan = plan if plan is not None else {}
+
+    @pp_plan.setter
+    def pp_plan(self, plan: dict[str, tuple[str, str]]):
+        self._pp_plan = plan
 
     def dequantize(self):
         """
@@ -2342,26 +2409,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model_tags.append(tag)
 
     @classmethod
-    @restore_default_torch_dtype
+    @restore_default_dtype
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
 
         Args:
-            torch_dtype (`torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype.
+            dtype (`torch.dtype`, *optional*):
+                Override the default `dtype` and load the model under this dtype.
         """
         # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
         # a warning is raised that dtype should be fp16. Since we never pass dtype from within
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
-        torch_dtype = kwargs.pop("torch_dtype", config.torch_dtype)
-        if isinstance(torch_dtype, str):
-            torch_dtype = getattr(torch, torch_dtype)
+        # For BC on the old `torch_dtype`
+        dtype = kwargs.pop("dtype", config.dtype)
+        if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # if both kwargs are provided, use `dtype`
+            dtype = dtype if dtype != config.dtype else torch_dtype
+        if isinstance(dtype, str):
+            dtype = getattr(torch, dtype)
 
         # override default dtype if needed
         dtype_orig = None
-        if torch_dtype is not None:
-            dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+        if dtype is not None:
+            dtype_orig = cls._set_default_dtype(dtype)
 
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
@@ -2387,7 +2459,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return model
 
     @classmethod
-    def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
+    def _set_default_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
         Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
         under specific dtype.
@@ -2469,7 +2541,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        torch_dtype = self.config.torch_dtype
+        dtype = self.config.dtype
 
         # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
         if not (self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False)):
@@ -2512,18 +2584,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     else:
                         raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
 
-        if torch_dtype is None:
+        if dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
-        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 2 only supports torch.float16 and torch.bfloat16 dtypes, but"
-                f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", dtype=torch.float16)`'
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             if getattr(self, "use_bettertransformer", False):
                 raise ValueError(
@@ -2563,7 +2635,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
                 before instantiating the full models if we know that the model does not support the requested attention.
         """
-        torch_dtype = self.config.torch_dtype
+        dtype = self.config.dtype
 
         if not self._supports_flash_attn:
             raise ValueError(
@@ -2591,15 +2663,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
                 )
 
-        if torch_dtype is None:
+        if dtype is None:
             logger.warning_once(
                 "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
-        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
-                f" the current dype in {self.__class__.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", torch_dtype=torch.float16)`'
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", dtype=torch.float16)`'
             )
 
         if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
@@ -2611,7 +2683,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
             )
 
-        # With the early check, the parameters are not yet initalized correctly
+        # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
@@ -2948,13 +3020,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
-        initialization scheme, it should be overriden by the derived `PreTrainedModel` class. In case a model adds an explicit
-        `nn.Parameter`, this method should also be overriden in order to initialize it correctly.
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
         """
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value accross the library
+            # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
@@ -3933,7 +4005,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = get_parameter_dtype(model_to_save)
-        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+        model_to_save.config.dtype = str(dtype).split(".")[1]
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
@@ -4354,7 +4426,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
-                    " desired `dtype` by passing the correct `torch_dtype` argument."
+                    " desired `dtype` by passing the correct `dtype` argument."
                 )
 
             if getattr(self, "is_loaded_in_8bit", False):
@@ -4371,7 +4443,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
-                    " `dtype` by passing the correct `torch_dtype` argument."
+                    " `dtype` by passing the correct `dtype` argument."
                 )
         return super().to(*args, **kwargs)
 
@@ -4413,7 +4485,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return init_contexts
 
     @classmethod
-    @restore_default_torch_dtype
+    @restore_default_dtype
     def from_pretrained(
         cls: type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -4541,15 +4613,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             > Parameters for big model inference
 
-            torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
+            dtype (`str` or `torch.dtype`, *optional*):
+                Override the default `torch_dtype` and load the model under a specific `dtype`. The different options
                 are:
 
                 1. `torch.float16` or `torch.bfloat16` or `torch.float`: load in a specified
-                  `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified
+                  `dtype`, ignoring the model's `config.dtype` if one exists. If not specified
                   - the model will get loaded in `torch.float` (fp32).
 
-                2. `"auto"` - A `torch_dtype` entry in the `config.json` file of the model will be
+                2. `"auto"` - A `dtype` or `torch_dtype` entry in the `config.json` file of the model will be
                   attempted to be used. If this entry isn't found then next check the `dtype` of the first weight in
                   the checkpoint that's of a floating point type and use that as `dtype`. This will load the model
                   using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
@@ -4561,7 +4633,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
                 reach out to the authors and ask them to add this information to the model's card and to insert the
-                `torch_dtype` entry in `config.json` on the hub.
+                `dtype` or `torch_dtype` entry in `config.json` on the hub.
 
                 </Tip>
 
@@ -4665,7 +4737,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         use_auth_token = kwargs.pop("use_auth_token", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        torch_dtype = kwargs.pop("torch_dtype", None)
+        dtype = kwargs.pop("dtype", None)
+        torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
@@ -4703,6 +4776,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
+
+        # For BC on torch_dtype argument
+        if torch_dtype is not None:
+            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+            # If both kwargs are provided, use `dtype`
+            dtype = dtype if dtype is not None else torch_dtype
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
@@ -4936,13 +5015,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             hf_quantizer.validate_environment(
-                torch_dtype=torch_dtype,
+                dtype=dtype,
                 from_tf=from_tf,
                 from_flax=from_flax,
                 device_map=device_map,
                 weights_only=weights_only,
             )
-            torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
+            dtype = hf_quantizer.update_dtype(dtype)
             device_map = hf_quantizer.update_device_map(device_map)
             config = hf_quantizer.update_tp_plan(config)
 
@@ -5033,8 +5112,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ]
 
             # Find the correct dtype based on current state
-            config, torch_dtype, dtype_orig = _get_torch_dtype(
-                cls, torch_dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
+            config, dtype, dtype_orig = _get_dtype(
+                cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
             )
 
         config.name_or_path = pretrained_model_name_or_path
@@ -5056,13 +5135,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
         # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
         if model._keep_in_fp32_modules is not None and (
-            torch_dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
         ):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
 
-        if model._keep_in_fp32_modules_strict is not None and (
-            torch_dtype == torch.float16 or torch_dtype == torch.bfloat16
-        ):
+        if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
             keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
 
         keep_in_fp32_regex = None
@@ -5082,7 +5159,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
-            original_dtype = torch_dtype if torch_dtype is not None else torch.get_default_dtype()
+            original_dtype = dtype if dtype is not None else torch.get_default_dtype()
 
             def _assign_original_dtype(module):
                 for child in module.children():
@@ -5098,7 +5175,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Prepare the full device map
         if device_map is not None:
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
+            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, dtype, keep_in_fp32_regex)
 
         # Finalize model weight initialization
         if from_tf:
@@ -5127,7 +5204,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map=device_map,
                 disk_offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
-                dtype=torch_dtype,
+                dtype=dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_regex=keep_in_fp32_regex,
                 device_mesh=device_mesh,

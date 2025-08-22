@@ -211,8 +211,8 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         return attn_output
 
     def _setup_cache(self, batch_size, device, dtype=None):
-        if dtype is None and self.config.torch_dtype is not None:
-            dtype = self.config.torch_dtype
+        if dtype is None and self.config.dtype is not None:
+            dtype = self.config.dtype
         dtype = dtype if dtype is not None else torch.float32
         cache_shape = (batch_size, self.num_key_value_heads, self.config.attention_window_size, self.head_dim)
         self.value_states = torch.zeros(cache_shape, dtype=dtype, device=device)

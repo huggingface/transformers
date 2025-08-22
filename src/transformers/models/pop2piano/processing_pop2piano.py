@@ -123,12 +123,6 @@ class Pop2PianoProcessor(ProcessorMixin):
             token_ids=token_ids, feature_extractor_output=feature_extractor_output, return_midi=return_midi
         )
 
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
-
     def save_pretrained(self, save_directory, **kwargs):
         if os.path.isfile(save_directory):
             raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")

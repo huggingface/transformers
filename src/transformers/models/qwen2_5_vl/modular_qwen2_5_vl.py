@@ -142,7 +142,7 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
 
 class Qwen2_5_VLVisionAttention(VisionAttention):
     def __init__(self, config: Qwen2_5_VLVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.dim = config.hidden_size
 
 
@@ -749,7 +749,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Qwen2_5_VLCausalLMOutputWithPast(
             loss=loss,

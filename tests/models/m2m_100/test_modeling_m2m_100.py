@@ -428,7 +428,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         Overwriting the common test as the test is flaky on tiny models
         """
         model = M2M100ForConditionalGeneration.from_pretrained(
-            "facebook/m2m100_418M", attn_implementation="flash_attention_2", torch_dtype=torch.float16
+            "facebook/m2m100_418M", attn_implementation="flash_attention_2", dtype=torch.float16
         ).to(torch_device)
 
         tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")

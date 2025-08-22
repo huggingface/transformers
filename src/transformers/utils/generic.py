@@ -22,18 +22,16 @@ import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Iterable, MutableMapping
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, Optional, TypedDict
+from typing import Any, Callable, Optional, TypedDict
 
 import numpy as np
-from packaging import version
 
 from ..utils import logging
 from .import_utils import (
-    get_torch_version,
     is_flax_available,
     is_mlx_available,
     is_tf_available,
@@ -351,23 +349,14 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            if version.parse(get_torch_version()) >= version.parse("2.2"):
-                from torch.utils._pytree import register_pytree_node
+            from torch.utils._pytree import register_pytree_node
 
-                register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                    serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-                )
-            else:
-                from torch.utils._pytree import _register_pytree_node
-
-                _register_pytree_node(
-                    cls,
-                    _model_output_flatten,
-                    partial(_model_output_unflatten, output_type=cls),
-                )
+            register_pytree_node(
+                cls,
+                _model_output_flatten,
+                partial(_model_output_unflatten, output_type=cls),
+                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+            )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -494,19 +483,12 @@ if is_torch_available():
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 
-    if version.parse(get_torch_version()) >= version.parse("2.2"):
-        _torch_pytree.register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-            serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-        )
-    else:
-        _torch_pytree._register_pytree_node(
-            ModelOutput,
-            _model_output_flatten,
-            partial(_model_output_unflatten, output_type=ModelOutput),
-        )
+    _torch_pytree.register_pytree_node(
+        ModelOutput,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=ModelOutput),
+        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
+    )
 
 
 class ExplicitEnum(str, Enum):
@@ -551,7 +533,7 @@ class ContextManagers:
     in the `fastcore` library.
     """
 
-    def __init__(self, context_managers: list[ContextManager]):
+    def __init__(self, context_managers: list[AbstractContextManager]):
         self.context_managers = context_managers
         self.stack = ExitStack()
 
@@ -746,8 +728,7 @@ def infer_framework(model_class):
             return "pt"
         elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
             return "flax"
-    else:
-        raise TypeError(f"Could not infer framework from class {model_class}.")
+    raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def torch_int(x):
@@ -862,7 +843,7 @@ class TransformersKwargs(TypedDict, total=False):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
         output_hidden_states (`Optional[bool]`, *optional*):
-            Most of the models support outputing all hidden states computed during the forward pass.
+            Most of the models support outputting all hidden states computed during the forward pass.
         output_attentions (`Optional[bool]`, *optional*):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):

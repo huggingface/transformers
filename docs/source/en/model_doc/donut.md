@@ -46,7 +46,7 @@ pipeline = pipeline(
     task="document-question-answering",
     model="naver-clova-ix/donut-base-finetuned-docvqa",
     device=0,
-    torch_dtype=torch.float16
+    dtype=torch.float16
 )
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -119,14 +119,14 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
-    >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+    >>> device = infer_device()
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -161,14 +161,14 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
-    >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+    >>> device = infer_device()
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image

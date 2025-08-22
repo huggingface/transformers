@@ -68,8 +68,7 @@ The base model can be used as follows:
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
->>> model.to(device)
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -90,7 +89,7 @@ The instruction tuned model can be used as follows:
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -117,13 +116,12 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
 >>> prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
->>> model.to(device)
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -173,7 +171,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
 
 >>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
@@ -191,7 +189,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A demo notebook to perform supervised fine-tuning (SFT) of Mixtral-8x7B can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Mistral/Supervised_fine_tuning_(SFT)_of_an_LLM_using_Hugging_Face_tooling.ipynb). 🌎
 - A [blog post](https://medium.com/@prakharsaxena11111/finetuning-mixtral-7bx8-6071b0ebf114) on fine-tuning Mixtral-8x7B using PEFT. 🌎
-- The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
+- The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single accelerator as well as multi-accelerator fine-tuning.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
 ## MixtralConfig

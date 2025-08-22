@@ -32,9 +32,8 @@ from ..cache_utils import (
     Cache,
     DynamicCache,
     EncoderDecoderCache,
-    HybridChunkedCache,
-    OffloadedCache,
-    OffloadedHybridCache,
+    QuantizedCache,
+    StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -71,9 +70,9 @@ from .candidate_generator import (
     _prepare_token_type_ids,
 )
 from .configuration_utils import (
-    NEED_SETUP_CACHE_CLASSES_MAPPING,
-    QUANT_BACKEND_CLASSES_MAPPING,
-    CompileConfig,
+    ALL_STATIC_CACHE_IMPLEMENTATIONS,
+    DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS,
+    STATIC_CACHE_IMPLEMENTATIONS,
     GenerationConfig,
     GenerationMode,
 )
@@ -1755,6 +1754,9 @@ class GenerationMixin(ContinuousMixin):
                 for key, model_gen_config_value in model_generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
+                    # Don't set `cache_implementation = 'hybrid'` from the model defaults, see #40135
+                    if key == "cache_implementation" and model_generation_config.cache_implementation == "hybrid":
+                        continue
                     global_default_value = getattr(global_default_generation_config, key, None)
                     custom_gen_config_value = getattr(generation_config, key, None)
                     if (
@@ -1823,27 +1825,18 @@ class GenerationMixin(ContinuousMixin):
 
         Returns the resulting cache object.
         """
-        if cache_implementation == "hybrid" and "llama4" in getattr(self.config, "model_type", ""):
-            cache_implementation = "hybrid_chunked"
-
-        cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
+        offload_cache = "offloaded" in cache_implementation
 
         if hasattr(self, "_cache"):
             cache_to_check = self._cache.self_attention_cache if requires_cross_attention_cache else self._cache
 
-        if cache_implementation == "sliding_window":
-            max_cache_len = min(self.config.sliding_window, max_cache_len)
-
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(cache_to_check, cache_cls))
+            or cache_to_check.offloading != offload_cache
             or cache_to_check.max_batch_size != batch_size
-            or isinstance(
-                cache_to_check, (HybridChunkedCache, OffloadedHybridCache)
-            )  # due to internal slicing, we always re-init
             or cache_to_check.max_cache_len < max_cache_len
         )
 
@@ -1854,12 +1847,19 @@ class GenerationMixin(ContinuousMixin):
             )
 
         if need_new_cache:
-            cache_kwargs = {"config": self.config.get_text_config(), "max_cache_len": max_cache_len}
-            self._cache = cache_cls(**cache_kwargs)
+            self_attention_cache_kwargs = {
+                "config": self.config.get_text_config(decoder=True),
+                "max_cache_len": max_cache_len,
+                "offloading": offload_cache,
+            }
+            self._cache = StaticCache(**self_attention_cache_kwargs)
             if requires_cross_attention_cache:
-                encoder_kwargs = cache_kwargs.copy()
-                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
+                cross_attention_cache_kwargs = {
+                    "config": self.config.get_text_config(encoder=True),
+                    "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
+                    "offloading": offload_cache,
+                }
+                self._cache = EncoderDecoderCache(self._cache, StaticCache(**cross_attention_cache_kwargs))
         else:
             self._cache.reset()
         return self._cache
@@ -1958,11 +1958,11 @@ class GenerationMixin(ContinuousMixin):
             else {}
         )
         if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-                if generation_config.cache_implementation == "static" and not self._can_compile_fullgraph:
-                    raise ValueError(
-                        "This model does not support `cache_implementation='static'`. Please check the following "
-                        "issue: https://github.com/huggingface/transformers/issues/28981"
+            if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+                if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
+                    logger.warning_once(
+                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
+                        f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
@@ -1983,7 +1983,6 @@ class GenerationMixin(ContinuousMixin):
                     cache_config["config"] = self.config.get_text_config()
                 # Pop the backend from the config (defaults to quanto if not defined)
                 backend = cache_config.pop("backend", "quanto")
-                cache_class = QUANT_BACKEND_CLASSES_MAPPING[backend]
 
                 if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
@@ -1995,10 +1994,9 @@ class GenerationMixin(ContinuousMixin):
                         "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
                         "Please install it via  with `pip install hqq`"
                     )
-
-                model_kwargs[cache_name] = cache_class(**cache_config)
+                model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
             elif generation_config.cache_implementation == "offloaded":
-                model_kwargs[cache_name] = OffloadedCache()
+                model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
             elif generation_config.cache_implementation == "dynamic":
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
@@ -2115,8 +2113,7 @@ class GenerationMixin(ContinuousMixin):
         using_compilable_cache = (
             isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
         )
-        # TODO @raushan `self._can_compile_fullgraph` can be removed and inferred from model arch (e.g. MoE doesn't support compile)
-        can_compile = valid_hardware and using_compilable_cache and self._can_compile_fullgraph
+        can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
@@ -3475,13 +3472,9 @@ class GenerationMixin(ContinuousMixin):
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
             # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2" and getattr(
-                model_kwargs.get("past_key_values"), "is_compileable", False
-            ):
-                if generation_config.compile_config is None:
-                    generation_config.compile_config = CompileConfig(fullgraph=False)
-                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
-                elif generation_config.compile_config.fullgraph:
+            if self.config._attn_implementation == "flash_attention_2":
+                # only raise warning if the user passed an explicit compile-config
+                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
                         "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
