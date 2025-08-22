@@ -365,7 +365,7 @@ GPU, if available, which we didn't need to do earlier when training, as [`Traine
 >>> import torch
 
 >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+>>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16)
 >>> device = infer_device()
 >>> model.to(device)
 ```

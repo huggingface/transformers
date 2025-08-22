@@ -584,7 +584,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.float16,
+                        dtype=torch.float16,
                         attn_implementation="flash_attention_2",
                     )
                     .to(torch_device)
@@ -633,7 +633,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test

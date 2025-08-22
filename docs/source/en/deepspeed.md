@@ -260,7 +260,7 @@ with deepspeed.zero.Init():
 The DeepSped config file needs to have `is_deepspeed_zero3_enabled: true` setup in [`TrainingArguments`] and it needs a ZeRO configuration enabled. The [`TrainingArguments`] object must be created **before** calling [`~PreTrainedModel.from_pretrained`].
 
 > [!TIP]
-> You'll need ZeRO-3 when the fp16 weights don't fit on a single GPU. But if you're able to load the fp16 weights, set `torch_dtype=torch.float16` in [`~PreTrainedModel.from_pretrained`].
+> You'll need ZeRO-3 when the fp16 weights don't fit on a single GPU. But if you're able to load the fp16 weights, set `dtype=torch.float16` in [`~PreTrainedModel.from_pretrained`].
 
 ```py
 from transformers import AutoModel, Trainer, TrainingArguments
