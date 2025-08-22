@@ -16,6 +16,9 @@
 import copy
 import unittest
 
+import pytest
+from parameterized import parameterized
+
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
@@ -272,6 +275,12 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")
     def test_beam_search_low_memory(self):
+        pass
+
+    @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
+    @unittest.skip("Paligemma2 does not seem to be compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @unittest.skip("Paligemma position ids are 1 indexed")

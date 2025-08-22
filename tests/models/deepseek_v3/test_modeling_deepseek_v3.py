@@ -247,6 +247,27 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
 
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("DeepseekV3 is not compatible with dola decoding")
+    def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip("DeepseekV3 doesn't support contrastive generation")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
