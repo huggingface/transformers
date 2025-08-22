@@ -1075,9 +1075,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     and self.generation_config.max_length != 20  # global default
                 ):
                     self.generation_config.max_new_tokens = None
-                # Use dynamic cache shapes by default -- See #40135
-                if self.generation_config.cache_implementation == "hybrid":
-                    self.generation_config.cache_implementation = None
             else:
                 # TODO (joao): no PT model should reach this line. However, some audio models with complex
                 # inheritance patterns do. Streamline those models such that this line is no longer needed.
