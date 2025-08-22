@@ -46,7 +46,7 @@ class Llama4IntegrationTest(unittest.TestCase):
         cls.model = Llama4ForConditionalGeneration.from_pretrained(
             "meta-llama/Llama-4-Scout-17B-16E",
             device_map="auto",
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             attn_implementation="eager",
         )
 
