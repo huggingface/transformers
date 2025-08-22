@@ -600,7 +600,7 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-        ParallelismConfig (`ParallelismConfig`, *optional*):
+        parallelism_config (`ParallelismConfig`, *optional*):
             Parallelism configuration for the training run. Requires Accelerate `1.10.0`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
