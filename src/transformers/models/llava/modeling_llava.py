@@ -24,7 +24,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -261,7 +260,7 @@ class LlavaModel(LlavaPreTrainedModel):
         vision_feature_select_strategy: Optional[str] = None,
         cache_position: Optional[torch.LongTensor] = None,
         image_sizes: torch.Tensor = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, LlavaModelOutputWithPast]:
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer

@@ -177,7 +177,7 @@ class AyaVisionModel(LlavaModel):
         vision_feature_select_strategy: Optional[str] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, AyaVisionModelOutputWithPast]:
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer

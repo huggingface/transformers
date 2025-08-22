@@ -31,7 +31,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -125,8 +124,7 @@ class InternVLVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -387,7 +385,7 @@ class InternVLVisionEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
     ) -> Union[tuple, BaseModelOutput]:
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(
@@ -648,7 +646,7 @@ class InternVLModel(InternVLPreTrainedModel):
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InternVLModelOutputWithPast]:
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
