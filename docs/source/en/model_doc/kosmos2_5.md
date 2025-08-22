@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-09-23 and added to Hugging Face Transformers on 2025-08-19.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -48,14 +48,14 @@ import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
-repo = "ydshieh/kosmos-2.5"
-device = f"{infer_device()}:0"
+repo = "microsoft/kosmos-2.5"
+device = "cuda:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
@@ -87,14 +87,14 @@ import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration, infer_device
 
-repo = "ydshieh/kosmos-2.5"
-device = f"{infer_device()}:0"
+repo = "microsoft/kosmos-2.5"
+device = "cuda:0"
 dtype = torch.bfloat16
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, torch_dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
-url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
@@ -161,9 +161,9 @@ image.save("output.png")
 
 
 ## Example
-**Markdown Task:** For usage instructions, please refer to [md.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/md.py).
+**Markdown Task:** For usage instructions, please refer to [md.py](https://huggingface.co/microsoft/kosmos-2.5/blob/main/md.py).
 
-**OCR Task:** For usage instructions, please refer to [ocr.py](https://huggingface.co/ydshieh/kosmos-2.5/blob/main/ocr.py).
+**OCR Task:** For usage instructions, please refer to [ocr.py](https://huggingface.co/microsoft/kosmos-2.5/blob/main/ocr.py).
 
 
 

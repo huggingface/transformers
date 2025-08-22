@@ -523,8 +523,8 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "ydshieh/kosmos-2.5"
-        model = Kosmos2_5Model.from_pretrained(model_name)
+        model_name = "microsoft/kosmos-2.5"
+        model = Kosmos2_5Model.from_pretrained(model_name, revision="refs/pr/17")
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
@@ -677,15 +677,15 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager"
+            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="eager", revision="refs/pr/17"
         )
-        processor = AutoProcessor.from_pretrained(repo)
+        processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = {
@@ -714,15 +714,15 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     def test_sdpa(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
-            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa"
+            repo, device_map=torch_device, torch_dtype=dtype, attn_implementation="sdpa", revision="refs/pr/17"
         )
-        processor = AutoProcessor.from_pretrained(repo)
+        processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = {
@@ -755,18 +755,19 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/ydshieh/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
-        repo = "ydshieh/kosmos-2.5"
+        repo = "microsoft/kosmos-2.5"
         model = Kosmos2_5ForConditionalGeneration.from_pretrained(
             repo,
             device_map=torch_device,
             torch_dtype=dtype,
-            attn_implementation="flash_attention_2",
+            attn_implementation="flash_attention_2"
+            , revision="refs/pr/17"
         )
-        processor = AutoProcessor.from_pretrained(repo)
+        processor = AutoProcessor.from_pretrained(repo, revision="refs/pr/17")
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = [
