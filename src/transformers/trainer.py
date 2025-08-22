@@ -778,7 +778,6 @@ class Trainer:
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
-            parallelism_config=getattr(self, "parallelism_config", None),
         )
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
@@ -2429,7 +2428,6 @@ class Trainer:
             stateful_callbacks=[
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ],
-            parallelism_config=self.parallelism_config,
         )
         self.state.is_hyper_param_search = trial is not None
         self.state.train_batch_size = self._train_batch_size
@@ -3861,7 +3859,18 @@ class Trainer:
         # For unknown dimensions, be conservative and reject
         return False
 
-    def _prepare_cp(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
+    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
+        """
+        Prepare inputs for context parallelism by setting up buffers and validation.
+
+        Args:
+            model: The model being trained
+            inputs: Input tensors to prepare
+
+        Returns:
+            tuple: (context_manager, prepared_inputs) where context_manager is either
+                   the context parallelism wrapper or a no-op context
+        """
         if (
             getattr(self.accelerator, "parallelism_config") is not None
             and self.accelerator.parallelism_config.cp_enabled
@@ -3976,7 +3985,7 @@ class Trainer:
         """
         # Prepare buffers for context parallelism
 
-        cp_context, inputs = self._prepare_cp(model, inputs)
+        cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
 
         # Context manager is no-op if CP isn't enabled
         with cp_context():
@@ -4272,10 +4281,8 @@ class Trainer:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
 
-        # Defer to accelerate's get_state_dict when using parallelism configurations
-        # that require special state dict handling (e.g., context parallelism, tensor parallelism)
-        if state_dict is None and self.parallelism_config is not None:
-            # This handles context parallelism, tensor parallelism, and other distributed scenarios
+        # Defer to accelerate's get_state_dict when using distributed setups that require special state dict handling
+        if state_dict is None and (self.is_fsdp2 or self.is_deepspeed_enabled):
             state_dict = self.accelerator.get_state_dict(self.model)
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
@@ -5453,13 +5460,39 @@ class Trainer:
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
 
-        # Add parallelism_config if context parallelism is enabled
-        if getattr(self.args, "parallelism_config", None) is not None:
-            args["parallelism_config"] = self.args.parallelism_config
+        # Import accelerate version for version checks (needed for tensor parallelism and other features)
+        try:
+            accelerate_version = importlib.metadata.version("accelerate")
+        except ImportError as e:
+            raise ImportError(f"Failed to import accelerate: {e}. Please ensure accelerate is installed.")
 
-        # Add fsdp_plugin if it was created for context parallelism
-        if getattr(self.args, "fsdp_plugin", None) is not None:
-            args["fsdp_plugin"] = self.args.fsdp_plugin
+        # Add parallelism_config and fsdp_plugin if context parallelism is enabled
+        # Both require accelerate >= 1.10.0
+        # Note: parallelism_config can also be set via environment variables (e.g., by axolotl)
+        parallelism_config_from_env = os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false").lower() == "true"
+
+        if (
+            getattr(self.args, "parallelism_config", None) is not None
+            or getattr(self.args, "fsdp_plugin", None) is not None
+            or parallelism_config_from_env
+        ):
+            if version.parse(accelerate_version) < version.parse("1.10.0"):
+                raise ImportError(
+                    f"Context parallelism features require accelerate >= 1.10.0, but found {accelerate_version}. "
+                    f"Please upgrade accelerate to use parallelism configurations and FSDP v2."
+                )
+
+            # Add parallelism_config if present in args
+            if getattr(self.args, "parallelism_config", None) is not None:
+                args["parallelism_config"] = self.args.parallelism_config
+
+            # Add fsdp_plugin if present
+            if getattr(self.args, "fsdp_plugin", None) is not None:
+                args["fsdp_plugin"] = self.args.fsdp_plugin
+
+            # Note: If parallelism_config_from_env is True, accelerate will automatically
+            # create ParallelismConfig from environment variables (PARALLELISM_CONFIG_CP_SIZE, etc.)
+            # This allows axolotl and other tools to use context parallelism without FSDP
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:
@@ -5487,11 +5520,7 @@ class Trainer:
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
         self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
-        self.parallelism_config = getattr(self.accelerator.state, "parallelism_config", None)
-        self.is_cp_enabled = self.parallelism_config and self.parallelism_config.cp_enabled
-        # Update state with parallelism config for callbacks and logging (if state exists)
-        if hasattr(self, "state") and self.state is not None:
-            self.state.parallelism_config = self.parallelism_config
+
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
