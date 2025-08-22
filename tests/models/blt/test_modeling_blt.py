@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -219,7 +218,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(
         self,
         name,
