@@ -48,7 +48,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         """
-        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
+        Construct a CPM tokenizer. Based on [Jieba-RS](https://pypi.org/project/rjieba/) and
         [SentencePiece](https://github.com/google/sentencepiece).
 
         This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
@@ -135,13 +135,13 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
 
         try:
-            import jieba
+            import rjieba
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast. "
-                "See https://pypi.org/project/jieba/ for installation."
+                "You need to install rjieba to use CpmTokenizer or CpmTokenizerFast. "
+                "See https://pypi.org/project/rjieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens

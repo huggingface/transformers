@@ -29,7 +29,6 @@ deps = {
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jax": "jax>=0.4.1,<=0.4.13",
     "jaxlib": "jaxlib>=0.4.1,<=0.4.13",
-    "jieba": "jieba",
     "jinja2": "jinja2>=3.1.0",
     "kenlm": "kenlm",
     "keras": "keras>2.9,<2.16",
