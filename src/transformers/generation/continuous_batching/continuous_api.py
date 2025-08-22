@@ -27,6 +27,7 @@ from tqdm import tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
 from .core import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
@@ -779,7 +780,7 @@ class ContinuousMixin:
         """
         if not inputs:
             return []
-        if logger.getEffectiveLevel() <= logger.INFO:
+        if logger.getEffectiveLevel() <= logging.INFO:
             logger.warning("Progress bar is disabled when logger level is less than INFO")
             progress_bar = False
 
