@@ -1245,6 +1245,7 @@ class Ernie4_5VLModel(Ernie4_5_PretrainedModel):
                 self.config.image_token_id,
                 images.shape,
             )
+            image_features = self.vision_forward(images, grid_thw)
         else:
             image_features = None
 
