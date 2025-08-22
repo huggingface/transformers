@@ -67,7 +67,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -98,7 +98,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 texts = [f'This is a photo of {label}.' for label in candidate_labels]
-inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

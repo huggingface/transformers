@@ -20,7 +20,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
     <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
   </div>
 </div>
@@ -105,9 +104,6 @@ print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 
 [[autodoc]] RagRetriever
 
-<frameworkcontent>
-<pt>
-
 ## RagModel
 
 [[autodoc]] RagModel
@@ -124,26 +120,3 @@ print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 [[autodoc]] RagTokenForGeneration
     - forward
     - generate
-
-</pt>
-<tf>
-
-## TFRagModel
-
-[[autodoc]] TFRagModel
-    - call
-
-## TFRagSequenceForGeneration
-
-[[autodoc]] TFRagSequenceForGeneration
-    - call
-    - generate
-
-## TFRagTokenForGeneration
-
-[[autodoc]] TFRagTokenForGeneration
-    - call
-    - generate
-
-</tf>
-</frameworkcontent>
