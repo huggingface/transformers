@@ -244,7 +244,7 @@ class Glm4vMoeTextAttention(nn.Module):
 
 class Glm4vMoeTextTopkRouter(nn.Module):
     def __init__(self, config: Glm4vMoeTextConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
@@ -384,7 +384,7 @@ class Glm4vMoeTextRMSNorm(nn.Module):
 
 class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4vMoeTextAttention(config=config, layer_idx=layer_idx)

@@ -444,7 +444,7 @@ class DeepseekV3Attention(nn.Module):
 
 class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)

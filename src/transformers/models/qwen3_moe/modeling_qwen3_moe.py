@@ -287,7 +287,7 @@ class Qwen3MoeRMSNorm(nn.Module):
 
 class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3MoeAttention(config, layer_idx)

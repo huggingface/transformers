@@ -227,7 +227,7 @@ UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput
 
 class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
     def __init__(self, config: UniSpeechSatConfig):
-        UniSpeechSatPreTrainedModel.__init__(config)
+        UniSpeechSatPreTrainedModel.__init__(self, config)
         self.config = config
         self.feature_extractor = UniSpeechSatFeatureEncoder(config)
         self.feature_projection = UniSpeechSatFeatureProjection(config)

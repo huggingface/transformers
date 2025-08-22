@@ -190,9 +190,9 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
+class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
     def __init__(self, config, layer_idx):
-        nn.Module().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
@@ -314,7 +314,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
 @auto_docstring
 class Ernie4_5_MoeForCausalLM(MixtralForCausalLM, Ernie4_5_MoePreTrainedModel):
     def __init__(self, config):
-        Ernie4_5_MoePreTrainedModel().__init__(config)
+        super().__init__(config)
         self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)

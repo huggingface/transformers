@@ -416,7 +416,7 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
 
 class Phi4MultimodalVisionEmbeddings(nn.Module):
     def __init__(self, config: Phi4MultimodalVisionConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.patch_size = config.patch_size
         self.num_patches_per_side = config.image_size // self.patch_size

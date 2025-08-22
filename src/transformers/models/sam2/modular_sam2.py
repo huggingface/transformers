@@ -116,7 +116,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     mask_pad_size = None
 
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
-        SamImageProcessorFast().__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def pad_image():
         raise NotImplementedError("No pad_image for SAM 2.")
@@ -133,7 +133,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> "torch.Tensor":
-        return SamImageProcessorFast()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _preprocess_image_like_inputs(
         self,
@@ -844,7 +844,7 @@ class Sam2MaskEmbedding(SamMaskEmbedding):
 
 class Sam2PromptEncoder(SamPromptEncoder):
     def __init__(self, config: Sam2PromptEncoderConfig):
-        SamPromptEncoder().__init__()
+        nn.Module.__init__(self)
         self.shared_embedding = Sam2PositionalEmbedding(config)
         self.mask_embed = Sam2MaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
@@ -958,7 +958,7 @@ class Sam2Attention(nn.Module):
 
 class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
-        SamTwoWayAttentionBlock().__init__()
+        nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size)
 
@@ -982,7 +982,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
 
 class Sam2LayerNorm(SamLayerNorm):
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first"):
-        super().__init__()
+        super().__init__(normalized_shape=normalized_shape, eps=eps, data_format=data_format)
 
 
 class Sam2MaskDecoder(SamMaskDecoder):
@@ -1186,7 +1186,7 @@ class Sam2Model(SamModel):
     ]
 
     def __init__(self, config: Sam2Config):
-        SamModel().__init__(config)
+        super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
         self.vision_encoder = AutoModel.from_config(config.vision_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config)
