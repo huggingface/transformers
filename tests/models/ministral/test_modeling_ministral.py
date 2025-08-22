@@ -266,5 +266,5 @@ class MinistralIntegrationTest(unittest.TestCase):
         print(output_text)
         self.assertEqual(
             output_text,
-            "H. Gammarus lives on the continental shelf at depths of 0 – 150 metres ( 0 – 492 ft ) , although not normally deeper than 50 m ( 160 ft ) .",
+            " H. Gammarus lives on the continental shelf at depths of 0 – 150 metres ( 0 – 492 ft ) , although not normally deeper than 50 m ( 160 ft ) .",
         )
