@@ -39,6 +39,7 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "phi3", "modular_phi3.py"),
     os.path.join(MODEL_ROOT, "cohere", "modular_cohere.py"),
     os.path.join(MODEL_ROOT, "glm4", "modular_glm4.py"),
+    os.path.join(MODEL_ROOT, "seed_oss", "modular_seed_oss.py"),
 ]
 
 

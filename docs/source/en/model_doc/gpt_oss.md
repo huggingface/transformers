@@ -60,3 +60,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GptOssForSequenceClassification
     - forward
+
+## GptOssForTokenClassification
+
+[[autodoc]] GptOssForTokenClassification
+    - forward

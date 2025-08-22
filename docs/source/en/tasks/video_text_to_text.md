@@ -46,8 +46,7 @@ model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
 
 processor = LlavaProcessor.from_pretrained(model_id)
 
-model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.float16)
-model.to("cuda") # can also be xpu, mps, npu etc. depending on your hardware accelerator
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
 
 Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it. 

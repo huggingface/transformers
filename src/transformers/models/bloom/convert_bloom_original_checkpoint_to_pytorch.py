@@ -202,9 +202,9 @@ def convert_bloom_checkpoint_to_pytorch(
         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
         pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
-        print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.torch_dtype}")
-        if config.torch_dtype is not None:
-            model = model.to(config.torch_dtype)
+        print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.dtype}")
+        if config.dtype is not None:
+            model = model.to(config.dtype)
         torch.save(model.state_dict(), pytorch_weights_dump_path)
         print(f"Save configuration file to {pytorch_config_dump_path}")
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
