@@ -223,7 +223,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
         batch_text_or_text_pairs = [
-            " ".join([x.translate(self.translator) for x in self.jieba.cut(text, cut_all=False)])
+            " ".join([x.translate(self.translator) for x in self.jieba.cut(text)])
             for text in batch_text_or_text_pairs
         ]
         return super()._batch_encode_plus(batch_text_or_text_pairs, *args, **kwargs)
