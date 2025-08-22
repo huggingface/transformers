@@ -123,6 +123,7 @@ _VISION_CONFIG = {
 }
 
 _VARIANT_EMBEDDINGGEMMA = "embedding"
+_VARIANT_GEMMA_3_270M = "gemma3_270m"
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
 _VARIANT_GEMMA_3_12B = "gemma3_12b"
@@ -142,6 +143,22 @@ _VARIANTS = {
             sliding_window=512,
             rope_scaling=None,
             use_bidirectional_attention=True,
+        ),
+        vision_config=None,
+    ),
+    _VARIANT_GEMMA_3_270M: Gemma3Config(
+        text_config=Gemma3TextConfig(
+            vocab_size=262_144,
+            hidden_size=640,
+            intermediate_size=2048,
+            num_hidden_layers=18,
+            num_attention_heads=4,
+            num_key_value_heads=1,
+            head_dim=256,
+            max_position_embeddings=32768,
+            query_pre_attn_scalar=256,
+            sliding_window=512,
+            rope_scaling=None,
         ),
         vision_config=None,
     ),
@@ -219,7 +236,7 @@ _VARIANTS = {
     ),
 }
 
-_TEXT_ONLY_VARIANTS = (_VARIANT_EMBEDDINGGEMMA, _VARIANT_GEMMA_3_1B)
+_TEXT_ONLY_VARIANTS = (_VARIANT_EMBEDDINGGEMMA, _VARIANT_GEMMA_3_270M, _VARIANT_GEMMA_3_1B)
 
 # ==== Flags ====
 
