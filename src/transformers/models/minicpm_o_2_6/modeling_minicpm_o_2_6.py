@@ -38,21 +38,27 @@ from torch.nn.functional import *
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
 from torch.nn.modules.activation import *
 from torch.nn.utils.parametrizations import weight_norm
-from transformers.utils import logging
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer, AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings
+from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings, can_return_tuple, auto_docstring, LossKwargs
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from transformers.generation import GenerationMixin
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
+from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipEncoderLayer, SiglipPreTrainedModel
 from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
 from transformers.models.whisper.modeling_whisper import WhisperAttention, WhisperConfig, WhisperEncoder
+from transformers.modeling_layers import GradientCheckpointingLayer
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.activations import ACT2FN
-from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
-from transformers.integrations import is_deepspeed_zero3_enabled
+from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask, AttentionMaskConverter
+from transformers.integrations import is_deepspeed_zero3_enabled, use_kernel_forward_from_hub
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.processing_utils import Unpack
 
 try:
     from vector_quantize_pytorch import GroupedResidualFSQ
@@ -65,9 +71,9 @@ except:
 
 from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config
 from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, MiniCPM_o_2_6Processor
+from .feature_extractor_minicpm_o_2_6 import MiniCPM_o_2_6FeatureExtractor
 
 logger = logging.get_logger(__name__)
-
 
 @dataclass
 class OmniOutput(ModelOutput):
@@ -77,48 +83,474 @@ class OmniOutput(ModelOutput):
     sampling_rate: Optional[int] = None
 
 
-class MiniCPM_o_2_6PreTrainedModel(Qwen2PreTrainedModel):
+class MiniCPM_o_2_6TextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class MiniCPM_o_2_6TextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: MiniCPM_o_2_6Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,  # main diff with Llama
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class MiniCPM_o_2_6TextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        MiniCPM_o_2_6TextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class MiniCPM_o_2_6TextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniCPM_o_2_6Config, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = MiniCPM_o_2_6TextAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = MiniCPM_o_2_6TextMLP(config)
+        self.input_layernorm = MiniCPM_o_2_6TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniCPM_o_2_6TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
+
+@auto_docstring
+class MiniCPM_o_2_6PreTrainedModel(PreTrainedModel):
     config_class = MiniCPM_o_2_6Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MiniCPM_o_2_6TextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MiniCPM_o_2_6TextRMSNorm):
+            module.weight.data.fill_(1.0)
 
 
-class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
+class MiniCPM_o_2_6TextRotaryEmbedding(nn.Module):
+    def __init__(self, config: MiniCPM_o_2_6Config, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+@auto_docstring
+class MiniCPM_o_2_6TextModel(MiniCPM_o_2_6PreTrainedModel):
+    def __init__(self, config: MiniCPM_o_2_6Config):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [MiniCPM_o_2_6TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = MiniCPM_o_2_6TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MiniCPM_o_2_6TextRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+    ) -> BaseModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+            }
+            # The sliding window alternating layers are not always activated depending on the config
+            if self.has_sliding_layers:
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
+
+class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    
     def __init__(self, config):
         super().__init__(config)
-        self.llm = Qwen2ForCausalLM(config)
-        self.llm.prepare_inputs_for_generation = types.MethodType(prepare_inputs_for_generation, self.llm)  # patch llm
+        self.language_model = MiniCPM_o_2_6TextModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.embed_dim = self.llm.config.hidden_size
+        # Initialize weights and apply final processing
+        self.post_init()
+
+        self.embed_dim = self.language_model.config.hidden_size
+        self.scale_emb = getattr(self.language_model.config, "scale_emb", 1.0)
 
         # init vision module
-        if self.config.init_vision:
-            self.vpm = self.init_vision_module()
-            self.vision_dim = self.vpm.embed_dim
-            self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
+        self.vpm = self.init_vision_module()
+        self.vision_dim = self.vpm.embed_dim
+        self.resampler = self.init_resampler(self.embed_dim, self.vision_dim)
 
         # init audio module
-        if self.config.init_audio:
-            self.apm = self.init_audio_module()
-            audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
-            self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
-            self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
-            self.audio_encoder_layer = -1
+        self.apm = self.init_audio_module()
+        audio_output_dim = int(self.apm.config.encoder_ffn_dim // 4)
+        self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
+        self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
+        self.audio_encoder_layer = -1
 
         # init tts module
-        if self.config.init_tts:
-            assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
-            self.tts = self.init_tts_module()
+        assert _tts_deps, "please make sure vector_quantize_pytorch and vocos are installed."
+        self.tts = self.init_tts_module()
 
-        # self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
+        self.processor = AutoProcessor.from_pretrained(self.config._name_or_path)
 
-        image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
-        feature_extractor = WhisperFeatureExtractor.from_pretrained(config._name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(config._name_or_path, trust_remote_code=True)
-        image_processor.tokenizer = tokenizer
-        self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
+        # tokenizer = AutoTokenizer.from_pretrained(config._name_or_path)
+        # image_processor = AutoImageProcessor.from_pretrained(config._name_or_path)
+        # feature_extractor = MiniCPM_o_2_6FeatureExtractor.from_pretrained(config._name_or_path)
+        # self.processor = MiniCPM_o_2_6Processor(image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         self.terminators = ["<|im_end|>", "<|endoftext|>"]
 
-        self.default_tts_chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>' }}{% endif %}"
         self.force_no_stop = False
 
         # for stream api
@@ -215,22 +647,22 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         return model
 
     def get_input_embeddings(self):
-        return self.llm.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.llm.embed_tokens = value
+        self.language_model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.llm.lm_head
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.llm.lm_head = new_embeddings
+        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.llm = decoder
+        self.language_model = decoder
 
     def get_decoder(self):
-        return self.llm
+        return self.language_model
 
     def subsequent_chunk_mask(
         self,
@@ -261,15 +693,21 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             [1, 1, 1, 1],
             [1, 1, 1, 1]]
         """
-        ret = torch.zeros(size, size, device=device, dtype=torch.bool)
-        for i in range(size):
-            if num_left_chunks < 0:
-                start = 0
-            else:
-                start = max((i // chunk_size - num_left_chunks) * chunk_size, 0)
-            ending = min((i // chunk_size + 1) * chunk_size + num_lookhead, size)
-            ret[i, start:ending] = True
-        return ret
+        idx = torch.arange(size, device=device)
+        chunk_idx = idx // chunk_size
+
+        if num_left_chunks < 0:
+            starts = torch.zeros_like(chunk_idx)
+        else:
+            starts = ((chunk_idx - num_left_chunks).clamp(min=0)) * chunk_size
+        ends = ((chunk_idx + 1) * chunk_size + num_lookhead).clamp(max=size)
+
+        jdx = torch.arange(size, device=device).view(1, size).expand(size, size)
+        starts_mat = starts.view(size, 1).expand(size, size)
+        ends_mat = ends.view(size, 1).expand(size, size)
+
+        mask = (jdx >= starts_mat) & (jdx < ends_mat)
+        return mask
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -283,94 +721,88 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         return input_lengths_after_cnn, input_lengths_after_pooling
 
+    def get_image_features(self, pixel_values_list, tgt_sizes, dtype, device):
+        vision_hidden_states = []
+        all_pixel_values = []
+        img_cnt = []
+        for pixel_values in pixel_values_list:
+            img_cnt.append(len(pixel_values))
+            all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
+
+        # exist image
+        if all_pixel_values:
+            tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
+            tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
+
+            max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
+
+            all_pixel_values = torch.nn.utils.rnn.pad_sequence(
+                all_pixel_values, batch_first=True, padding_value=0.0
+            )
+            B, L, _ = all_pixel_values.shape
+            all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
+
+            patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
+            for i in range(B):
+                patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
+
+            vision_batch_size = self.config.vision_batch_size
+            all_pixel_values = all_pixel_values.type(dtype)
+            if B > vision_batch_size:
+                hs = []
+                for i in range(0, B, vision_batch_size):
+                    start_idx = i
+                    end_idx = i + vision_batch_size
+                    tmp_hs = self.vpm(
+                        all_pixel_values[start_idx:end_idx],
+                        patch_attention_mask=patch_attn_mask[start_idx:end_idx],
+                        tgt_sizes=tgt_sizes[start_idx:end_idx],
+                    ).last_hidden_state
+                    hs.append(tmp_hs)
+                vision_embedding = torch.cat(hs, dim=0)
+            else:
+                vision_embedding = self.vpm(
+                    all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
+                ).last_hidden_state
+
+            vision_embedding = self.resampler(vision_embedding, tgt_sizes)
+
+            start = 0
+            for pixel_values in pixel_values_list:
+                img_cnt = len(pixel_values)
+                if img_cnt > 0:
+                    vision_hidden_states.append(vision_embedding[start : start + img_cnt])
+                    start += img_cnt
+                else:
+                    vision_hidden_states.append([])
+        else:  # no image
+            vision_hidden_states.extend([[]] * len(pixel_values_list))
+
+        return vision_hidden_states
+
     def get_vllm_embedding(self, data):
         """
         Compute all visual embeddings, and set into llm embeddings.
         Args:
             data: Dict
-                tgt_sizes: image size after patch embedding
-                pixel_values: image features
-                image_bound: position of each picture corresponding to input_ids
-                input_ids: full input_ids, include placeholder
+                - tgt_sizes: image size after patch embedding
+                - pixel_values: image features
+                - image_bound: position of each picture corresponding to input_ids
+                - input_ids: full input_ids, include placeholder
+
         Returns:
-                embedding with vision, vision_hidden_states
+            embedding with vision, vision_hidden_states
         """
+        dtype = self.language_model.embed_tokens.weight.dtype
+        device = self.language_model.embed_tokens.weight.device
         if "vision_hidden_states" not in data:
-            dtype = self.llm.model.embed_tokens.weight.dtype
-            device = self.llm.model.embed_tokens.weight.device
-            tgt_sizes = data["tgt_sizes"]
-            pixel_values_list = data["pixel_values"]
-            vision_hidden_states = []
-            all_pixel_values = []
-            img_cnt = []
-            for pixel_values in pixel_values_list:
-                img_cnt.append(len(pixel_values))
-                all_pixel_values.extend([i.flatten(end_dim=1).permute(1, 0) for i in pixel_values])
-
-            # exist image
-            if all_pixel_values:
-                tgt_sizes = [tgt_size for tgt_size in tgt_sizes if isinstance(tgt_size, torch.Tensor)]
-                tgt_sizes = torch.vstack(tgt_sizes).type(torch.int32)
-
-                max_patches = torch.max(tgt_sizes[:, 0] * tgt_sizes[:, 1])
-
-                all_pixel_values = torch.nn.utils.rnn.pad_sequence(
-                    all_pixel_values, batch_first=True, padding_value=0.0
-                )
-                B, L, _ = all_pixel_values.shape
-                all_pixel_values = all_pixel_values.permute(0, 2, 1).reshape(B, 3, -1, L)
-
-                patch_attn_mask = torch.zeros((B, 1, max_patches), dtype=torch.bool, device=device)
-                for i in range(B):
-                    patch_attn_mask[i, 0, : tgt_sizes[i][0] * tgt_sizes[i][1]] = True
-
-                vision_batch_size = self.config.vision_batch_size
-                all_pixel_values = all_pixel_values.type(dtype)
-                if B > vision_batch_size:
-                    hs = []
-                    for i in range(0, B, vision_batch_size):
-                        start_idx = i
-                        end_idx = i + vision_batch_size
-                        tmp_hs = self.vpm(
-                            all_pixel_values[start_idx:end_idx],
-                            patch_attention_mask=patch_attn_mask[start_idx:end_idx],
-                            tgt_sizes=tgt_sizes[start_idx:end_idx],
-                        ).last_hidden_state
-                        hs.append(tmp_hs)
-                    vision_embedding = torch.cat(hs, dim=0)
-                else:
-                    vision_embedding = self.vpm(
-                        all_pixel_values, patch_attention_mask=patch_attn_mask, tgt_sizes=tgt_sizes
-                    ).last_hidden_state
-                vision_embedding = self.resampler(vision_embedding, tgt_sizes)
-
-                start = 0
-                for pixel_values in pixel_values_list:
-                    img_cnt = len(pixel_values)
-                    if img_cnt > 0:
-                        vision_hidden_states.append(vision_embedding[start : start + img_cnt])
-                        start += img_cnt
-                    else:
-                        vision_hidden_states.append([])
-            else:  # no image
-                if self.training:
-                    dummy_image = torch.zeros((1, 3, 224, 224), device=device, dtype=dtype)
-                    tgt_sizes = torch.Tensor(
-                        [[(224 // self.config.patch_size), math.ceil(224 / self.config.patch_size)]]
-                    ).type(torch.int32)
-                    dummy_feature = self.resampler(self.vpm(dummy_image).last_hidden_state, tgt_sizes)
-                else:
-                    dummy_feature = []
-                for _ in range(len(pixel_values_list)):
-                    vision_hidden_states.append(dummy_feature)
-
+            vision_hidden_states = self.get_image_features(
+                data["pixel_values"], data["tgt_sizes"], dtype, device
+            )
         else:
             vision_hidden_states = data["vision_hidden_states"]
 
-        if hasattr(self.llm.config, "scale_emb"):
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"]) * self.llm.config.scale_emb
-        else:
-            vllm_embedding = self.llm.model.embed_tokens(data["input_ids"])
+        vllm_embedding = self.language_model.embed_tokens(data["input_ids"]) * self.scale_emb
 
         new_vllm_embedding = vllm_embedding.clone()
         
@@ -400,7 +832,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         return new_vllm_embedding, vision_hidden_states
 
-    def get_audio_embedding_streaming(self, data):
+    def get_audio_embedding_streaming(self, audio_features: torch.FloatTensor = [], audio_feature_lens_raw: List[List[int]] = []):
         r"""
         Extract audio embeddings in a streaming manner using cached key-value pairs.
 
@@ -409,20 +841,16 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         for streaming scenarios.
 
         Args:
-            data (dict):
-                - **"audio_features"** (`torch.FloatTensor`): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
-                - **"audio_feature_lens"** (List[List[int]]): Lengths of each audio segment for each item in the batch.
+            audio_features (torch.FloatTensor): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
+            audio_feature_lens_raw (List[List[int]]): Lengths of each audio segment for each item in the batch.
 
         Returns:
             List[List[torch.Tensor]]: audio embeddings
         """
-        wavforms = data.get("audio_features", [])  # (bs, 80, frames) or [], multi audios need filled in advance
-        audio_feature_lens_raw = data.get("audio_feature_lens", [])  # list, [[x1, x2], [y1], [z1]]
-
         # exist audio
-        if len(wavforms) > 0:
+        if len(audio_features) > 0:
             audio_feature_lens = torch.hstack(audio_feature_lens_raw)
-            batch_size, _, max_mel_seq_len = wavforms.shape
+            batch_size, _, max_mel_seq_len = audio_features.shape
             assert batch_size == 1
             max_seq_len = (max_mel_seq_len - 1) // 2 + 1
 
@@ -435,7 +863,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     )
                     self.audio_past_key_values = None
 
-            audio_outputs = self.apm(wavforms, past_key_values=self.audio_past_key_values, use_cache=True)
+            audio_outputs = self.apm(audio_features, past_key_values=self.audio_past_key_values, use_cache=True)
             audio_states = audio_outputs.last_hidden_state  # [:, :audio_feat_lengths, :]
             self.audio_past_key_values = audio_outputs.past_key_values
 
@@ -461,7 +889,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             return []
 
-    def get_audio_embedding(self, data, chunk_length=-1, dummy=True):
+    def get_audio_embedding(self, audio_features: torch.FloatTensor = [], audio_feature_lens_raw: List[List[int]] = [], chunk_length=-1, dummy=True):
         r"""
         Extract full audio embeddings with optional chunk-based attention.
 
@@ -470,23 +898,18 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         not use key-value caching and is suitable for non-streaming inference.
 
         Args:
-            data (dict):
-                - **"audio_features"** (`torch.FloatTensor`): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
-                - **"audio_feature_lens"** (List[List[int]]): Lengths of each audio segment for each item in the batch.
+            audio_features (torch.FloatTensor): Input mel-spectrograms of shape `(batch_size, 80, frames)`.
+            audio_feature_lens_raw (List[List[int]]): Lengths of each audio segment for each item in the batch.
             chunk_length (int, optional): Determines whether to use full attention (-1) or chunk-based
                 attention (>0) during embedding computation.
 
         Returns:
             List[List[torch.Tensor]]: audio embeddings
         """
-        
-        wavforms = data.get("audio_features", [])  # (bs, 80, frames) or [], multi audios need filled in advance
-        audio_feature_lens_raw = data.get("audio_feature_lens", [])  # list, [[x1, x2], [y1], [z1]]
-
         # exist audio
-        if len(wavforms) > 0:
+        if len(audio_features) > 0:
             audio_feature_lens = torch.hstack(audio_feature_lens_raw)
-            batch_size, _, max_mel_seq_len = wavforms.shape
+            batch_size, _, max_mel_seq_len = audio_features.shape
             max_seq_len = (max_mel_seq_len - 1) // 2 + 1
 
             # Create a sequence tensor of shape (batch_size, max_seq_len)
@@ -518,7 +941,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
             audio_attention_mask[audio_attention_mask_] = float("-inf")
             audio_states = self.apm(
-                wavforms, output_hidden_states=True, attention_mask=audio_attention_mask
+                audio_features, output_hidden_states=True, attention_mask=audio_attention_mask
             ).hidden_states[self.audio_encoder_layer]
             audio_embeds = self.audio_projection_layer(audio_states)
 
@@ -539,20 +962,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     idx += 1
                 final_audio_embeds.append(target_audio_embeds)
             return final_audio_embeds
-        elif self.training and dummy:
-            dtype = self.apm.embed_positions.weight.dtype
-            device = self.apm.embed_positions.weight.device
-
-            dummy_wavs = torch.zeros((1, 80, 100), device=device, dtype=dtype)
-            audio_states = self.apm(dummy_wavs, output_hidden_states=True).hidden_states[self.audio_encoder_layer]
-
-            audio_embeds = self.audio_projection_layer(audio_states)
-
-            audio_embeds = audio_embeds.transpose(1, 2)
-            audio_embeds = self.audio_avg_pooler(audio_embeds)
-            audio_embeds = audio_embeds.transpose(1, 2)
-            return [audio_embeds]
-
         else:
             return []
 
@@ -567,43 +976,42 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             final embeddings with audio feature
         """
         if stream_input:
-            audio_embeddings = self.get_audio_embedding_streaming(data)
+            audio_embeddings = self.get_audio_embedding_streaming(data.get("audio_features", []), data.get("audio_feature_lens", []))
         else:
-            audio_embeddings = self.get_audio_embedding(data, chunk_length)
+            audio_embeddings = self.get_audio_embedding(data.get("audio_features", []), data.get("audio_feature_lens", []), chunk_length)
 
         bs = len(input_embeddings)
         if len(data.get("audio_features", [])) > 0:
             assert len(audio_embeddings) == len(input_embeddings)
-            if len(audio_embeddings) > 0:
-                audio_bounds = data["audio_bounds"]
+            audio_bounds = data["audio_bounds"]
 
-                if self.config.chunk_input:
-                    for i in range(bs):
-                        audio_embs = torch.cat(audio_embeddings[i], dim=0).to(
-                            device=input_embeddings.device, dtype=input_embeddings.dtype
+            if self.config.chunk_input:
+                for i in range(bs):
+                    audio_embs = torch.cat(audio_embeddings[i], dim=0).to(
+                        device=input_embeddings.device, dtype=input_embeddings.dtype
+                    )
+                    audio_start_pos = 0
+                    for bound in audio_bounds[i]:
+                        audio_len = bound[1] - bound[0]
+                        input_embeddings[i, bound[0] : bound[1]] = audio_embs[
+                            audio_start_pos : audio_start_pos + audio_len, :
+                        ]
+                        audio_start_pos += audio_len
+            else:
+                for i in range(bs):
+                    audio_embs = audio_embeddings[i]
+                    bounds = audio_bounds[i]
+                    for embs, bound in zip(audio_embs, bounds):
+                        audio_indices = torch.arange(bound[0], bound[1], dtype=torch.long).to(
+                            input_embeddings.device
                         )
-                        audio_start_pos = 0
-                        for bound in audio_bounds[i]:
-                            audio_len = bound[1] - bound[0]
-                            input_embeddings[i, bound[0] : bound[1]] = audio_embs[
-                                audio_start_pos : audio_start_pos + audio_len, :
-                            ]
-                            audio_start_pos += audio_len
-                else:
-                    for i in range(bs):
-                        audio_embs = audio_embeddings[i]
-                        bounds = audio_bounds[i]
-                        for embs, bound in zip(audio_embs, bounds):
-                            audio_indices = torch.arange(bound[0], bound[1], dtype=torch.long).to(
-                                input_embeddings.device
-                            )
 
-                            if embs.shape[0] != len(audio_indices):
-                                raise ValueError(
-                                    f"Shape mismatch: Trying to assign embeddings of shape {embs.shape} "
-                                    f"to input indices of length {len(audio_indices)}"
-                                )
-                            input_embeddings[i, audio_indices] = embs.to(input_embeddings.dtype)
+                        if embs.shape[0] != len(audio_indices):
+                            raise ValueError(
+                                f"Shape mismatch: Trying to assign embeddings of shape {embs.shape} "
+                                f"to input indices of length {len(audio_indices)}"
+                            )
+                        input_embeddings[i, audio_indices] = embs.to(input_embeddings.dtype)
         elif self.training:
             for i in range(bs):
                 # dummy audio_embeddings
@@ -611,28 +1019,130 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         return input_embeddings
 
-    def forward(self, data, **kwargs):
-        vllm_embedding, vision_hidden_states = self.get_vllm_embedding(data)
+    # def forward(self, data = None, **kwargs):
+    #     r"""
+    #     Perform a forward pass with multimodal inputs including vision and optional audio features.
 
-        if self.config.init_audio:
-            vllm_embedding = self.get_omni_embedding(
-                data, input_embeddings=vllm_embedding, chunk_length=self.config.audio_chunk_length
-            )
+    #     Args:
+    #         data (`Dict`):
+    #             A dictionary containing multimodal inputs required to compute embeddings:
 
-        position_ids = data["position_ids"]
-        if position_ids.dtype != torch.int64:
-            position_ids = position_ids.long()
+    #             - `pixel_values` (`torch.FloatTensor` of shape `(B, C, H, W)`): Image tensors used for visual embedding.
+    #             - `tgt_sizes` (`torch.LongTensor` of shape `(num_images, 2)`): Target spatial size (H, W) after patch embedding.
+    #             - `image_bound` (`torch.LongTensor` of shape `(num_images, 2)`): Token index boundaries in the input sequence for each image.
+    #             - `input_ids` (`torch.LongTensor`): Tokenized input ids including placeholders for multimodal tokens.
+    #             - `position_ids` (`torch.LongTensor`): Positional indices, will be cast to `torch.int64` if needed.
+    #             - `audio_values` (`torch.FloatTensor`, *optional*): Optional raw audio input, used if `config.init_audio` is True.
 
-        # compatible with llama factory
-        for key in ["input_ids", "inputs_embeds", "position_ids"]:
-            if key in kwargs:
-                del kwargs[key]
+    #         **kwargs:
+    #             Additional standard generation/model arguments passed to the underlying language model, e.g.:
+    #             - `attention_mask`
+    #             - `past_key_values`
+    #             - `use_cache`
+    #             - `output_attentions`
+    #             - `output_hidden_states`
+    #             - `return_dict`
 
-        return self.llm(input_ids=None, position_ids=position_ids, inputs_embeds=vllm_embedding, **kwargs)
+    #     Returns:
+    #         Model outputs from the underlying language model, depending on `return_dict`.
+    #     """
+    #     output_attentions = kwargs.pop('output_attentions') if kwargs.get('output_attentions', None) is not None else self.config.output_attentions
+    #     output_hidden_states = (
+    #         kwargs.pop('output_hidden_states') if kwargs.get('output_hidden_states', None) is not None else self.config.output_hidden_states
+    #     )
+    #     outputs = self.language_model(
+    #         output_attentions=output_attentions,
+    #         output_hidden_states=output_hidden_states,
+    #         **kwargs
+    #     )
+    #     hidden_states = outputs.last_hidden_state
+    #     # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+    #     slice_indices = slice(0, None)
+    #     logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+    #     return CausalLMOutputWithPast(
+    #         loss=None,
+    #         logits=logits,
+    #         past_key_values=outputs.past_key_values,
+    #         hidden_states=outputs.hidden_states,
+    #         attentions=outputs.attentions,
+    #     )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Qwen2ForCausalLM
+
+        >>> model = Qwen2ForCausalLM.from_pretrained("openbmb/MiniCPM-o-2_6")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM-o-2_6")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: BaseModelOutputWithPast = self.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     def _decode(self, inputs_embeds, tokenizer, attention_mask, **kwargs):
         terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
-        outputs = self.llm.generate(
+        outputs = super().generate(
             inputs_embeds=inputs_embeds,
             pad_token_id=0,
             eos_token_id=terminators,
@@ -654,109 +1164,10 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         }
         generation_kwargs.update(kwargs)
 
-        thread = Thread(target=self.llm.generate, kwargs=generation_kwargs)
+        thread = Thread(target=super().generate, kwargs=generation_kwargs)
         thread.start()
 
         return streamer
-
-    def _decode_text(self, result_ids, tokenizer):
-        terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
-        result_text = []
-        for result in result_ids:
-            result = result[result != 0]
-            if result[0] == tokenizer.bos_id:
-                result = result[1:]
-            if result[-1] in terminators:
-                result = result[:-1]
-            result_text.append(tokenizer.decode(result))
-        return result_text
-
-    def get_sys_prompt(self, ref_audio=None, mode="default", language="zh"):
-        """
-        Choose different system prompts according to different tasks
-        Args:
-            ref_audio: if ref_audio is not None, will use the voice cloning prompts, and the voice
-                       generated by the model will refer to the timbre of ref audio
-            mode:
-                "default": default system prompt and not refer to any task
-                "omni": input video and audio simultaneously
-                "audio_assistant": Default voice-only mode, the model will use the ref_audio's voice to reply user's question as a helpful assistant.
-                "audio_roleplay": Roleplay voice-only mode, the model will use the ref_audio's voice to reply, and also role-play the character based on the audio prompt.
-                "voice_cloning": TTS mode, the model will clone the voice of ref_audio.
-            language: prompts language, the model has the ability to automatically select the response language
-                    based on the question language
-        Returns:
-
-        """
-        if ref_audio is not None:
-            assert isinstance(ref_audio, np.ndarray), "ref_audio error"
-        if mode == "omni":
-            if language == "zh":
-                sys_prompt = "你是一个AI助手。你能接受视频，音频和文本输入并输出语音和文本。"
-                vc_prompt_prefix = sys_prompt + "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                sys_prompt = "You are a helpful assistant. You can accept video, audio and text input and output voice and text. "
-                vc_prompt_prefix = sys_prompt + "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
-        elif mode == "audio_assistant":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "作为助手，你将使用这种声音风格说话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "As an assistant, you will speak using this voice style."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-
-            else:
-                logger.warning(
-                    "Warning: ref_audio is None, speech generation will be performed based on the default voice."
-                )
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "audio_roleplay":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-                vc_prompt_suffix = "假装你是上述音频中的人物，与我进行对话。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-                vc_prompt_suffix = "Try to role-play the character based on the audio prompt above."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio, vc_prompt_suffix]}
-            else:
-                print("Warning: ref_audio is None, speech generation will be performed based on the default voice.")
-                sys_msgs = {"role": "user", "content": ["Use the <reserved_53> voice.", vc_prompt_suffix]}
-
-            return sys_msgs
-        elif mode == "voice_cloning":
-            if language == "zh":
-                vc_prompt_prefix = "模仿输入音频中的声音特征。"
-            else:
-                vc_prompt_prefix = "Clone the voice in the provided audio prompt."
-
-            if ref_audio is not None:
-                sys_msgs = {"role": "user", "content": [vc_prompt_prefix, ref_audio]}
-            else:
-                raise ValueError("ref_audio con't be None in voice_cloning mode.")
-
-            return sys_msgs
-        else:
-            sys_prompt = "You are a helpful assistant. You can accept audio and text input and output voice and text."
-            sys_msgs = {"role": "user", "content": [sys_prompt]}
-
-            return sys_msgs
 
     def generate(
         self,
@@ -792,7 +1203,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         else:
             model_inputs["vision_hidden_states"] = vision_hidden_states
 
-        model_output = {}
         with torch.inference_mode():
             model_inputs["inputs_embeds"], vision_hidden_states = self.get_vllm_embedding(model_inputs)
             model_inputs["inputs_embeds"] = self.get_omni_embedding(
@@ -806,9 +1216,17 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 # if stream return TextIteratorStreamer and output is empty
                 outputs = {}
             else:
-                outputs = self._decode(model_inputs["inputs_embeds"], tokenizer, attention_mask, **kwargs)
-
-                result = self._decode_text(outputs.sequences, tokenizer)
+                terminators = [tokenizer.convert_tokens_to_ids(i) for i in self.terminators]
+                outputs = super().generate(
+                    inputs_embeds=model_inputs["inputs_embeds"],
+                    pad_token_id=0,
+                    eos_token_id=terminators,
+                    attention_mask=attention_mask,
+                    output_hidden_states=True,
+                    return_dict_in_generate=True,
+                    **kwargs,
+                )
+                result = self.processor.decode_text(outputs.sequences, tokenizer, self.terminators)
 
         return result, outputs
 
@@ -878,8 +1296,6 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         assert len(images_list) == len(msgs_list), "The batch dim of images_list and msgs_list should be the same."
 
         if processor is None:
-            if self.processor is None:
-                self.processor = AutoProcessor.from_pretrained(self.config._name_or_path, trust_remote_code=True)
             processor = self.processor
 
         assert (
@@ -947,12 +1363,14 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                     copy_msgs,
                     tokenize=False,
                     add_generation_prompt=True,
-                    chat_template=self.default_tts_chat_template if use_tts_template else None,
+                    chat_template=self.processor.default_tts_chat_template if use_tts_template else None,
                 )
             )
-            input_images_list.append(images)
-            input_audios_list.append(audios)
-            audio_parts_list.append(audio_parts)
+            if images:
+                input_images_list.append(images)
+            if audios:
+                input_audios_list.append(audios)
+                audio_parts_list.append(audio_parts)
 
         inputs = processor(
             prompts_lists,
@@ -1018,7 +1436,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 answer = res[0]
 
                 if use_tts_template and generate_audio:
-                    mel_spec = self._generate_mel_spec(inputs, outputs, answer)
+                    mel_spec = self._generate_mel_spec(inputs, outputs, answer, tts_config={'top_p': 0.7, 'top_k': 20, 'repetition_penalty': 1.0})
                     wav_numpy, sr = self.decode_mel_to_audio(mel_spec, output_audio_path)
 
             if return_spk_embed:
@@ -1103,7 +1521,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             self.session_id = session_id
 
             prompt = tokenizer.apply_chat_template(
-                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=self.default_tts_chat_template
+                copy_msgs, tokenize=False, add_generation_prompt=False, chat_template=self.processor.default_tts_chat_template
             )
             add_special_tokens = True  # add bos
         else:
@@ -1112,8 +1530,8 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         model_inputs = self.processor(
             [prompt],
-            [images],
-            [audios],
+            [images] if images else None,
+            [audios] if audios else None,
             max_slice_nums=1 if max_slice_nums is None else max_slice_nums,
             use_image_id=False,
             chunk_input=True,
@@ -1142,16 +1560,102 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         attention_mask = torch.ones((1, cache_length + inputs_embeds.shape[1]), dtype=torch.bool, device=self.device)
 
         # 2. do prefill and predict listen/speak label
-        outputs = self.llm(
+        outputs = self.forward(
             past_key_values=self.llm_past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            position_ids=None,  # position_ids,
+            position_ids=None,
             use_cache=True,
             return_dict=True,
         )
+
         self.llm_past_key_values = outputs["past_key_values"]
         return
+        
+    # Copy and modified from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
+    # if use the same method in `GenerationMixin`, it will cause an error in `_cache_dependant_input_preparation`, the error message is as follows:
+    #   (cache_position[-1] >= input_ids.shape[1])  # Exception 3
+    #   IndexError: index -1 is out of bounds for dimension 0 with size 0
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        **kwargs,
+    ):
+        if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+            else:
+                cache_length = past_length = past_key_values[0][0].shape[2]
+
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+        #print("--------- my prepare_inputs_for_generation")
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            dtype = self.lm_head.weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                #"cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
 
     @torch.inference_mode()
     def streaming_generate(
@@ -1210,7 +1714,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         if generate_audio:
             result = self._generate_mel_spec_audio_streaming(
-                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate
+                spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate, tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
             )
             return result
         else:
@@ -1234,9 +1738,9 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         left_ids = None
 
         while True:
-            outputs = self.llm.generate(
+            outputs = super().generate(
                 input_ids=input_ids,
-                past_key_values=self.llm_past_key_values,
+                past_key_values=self.llm_past_key_values.to_legacy_cache() if isinstance(self.llm_past_key_values, DynamicCache) else self.llm_past_key_values,
                 attention_mask=attention_mask,
                 use_cache=True,
                 max_new_tokens=3,  # reduce first token delay
@@ -1257,7 +1761,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             end = check_uncompleted_token(cur_ids[0])
             left_ids = cur_ids[:, end:]
             cur_ids = cur_ids[:, :end]
-            text = self._decode_text(cur_ids, tokenizer)[0] if end > 0 else ""
+            text = self.processor.decode_text(cur_ids, tokenizer, self.terminators)[0] if end > 0 else ""
 
             self.llm_past_key_values = outputs.past_key_values
             input_ids = outputs.sequences[:, -1:]
@@ -1322,7 +1826,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         spk_embeds = last_hidden_states[spk_bound[0] : spk_bound[1]]
         return spk_embeds
 
-    def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048):
+    def _generate_mel_spec(self, inputs, outputs, text, output_chunk_size=25, tts_max_new_tokens=2048, tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}):
         spk_embeds = self._get_last_spk_embeds(inputs, outputs)
 
         text = text.split("<|tts_bos|>")[-1]
@@ -1333,7 +1837,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         streaming_tts_text_mask = self._build_streaming_mask(tts_token_lens).to(device=self.tts.device)
 
         logits_warpers, logits_processors = gen_logits(
-            num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
+            num_code=626, top_P=tts_config['top_p'], top_K=tts_config['top_k'], repetition_penalty=tts_config['repetition_penalty']
         )
 
         condition_length = (
@@ -1492,6 +1996,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
         prev_seg_text_left="",
         prev_seg_audio_ids=None,
         enable_regenerate=False,
+        tts_config: dict = {"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0},
     ):
         # get spk_embedding
         gen_text = ""
@@ -1508,7 +2013,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
         # init past_key_values
         logits_warpers, logits_processors = gen_logits(
-            num_code=626, top_P=self.tts.top_p, top_K=self.tts.top_k, repetition_penalty=self.tts.repetition_penalty
+            num_code=626, top_P=tts_config['top_p'], top_K=tts_config['top_k'], repetition_penalty=tts_config['repetition_penalty']
         )
         condition_length = (
             1 + self.tts.use_speaker_embedding * self.tts.num_spk_embs + self.tts.streaming_text_reserved_len + 1
@@ -1858,6 +2363,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
                 text_left,
                 prev_seg_audio_ids,
                 enable_regenerate=enable_regenerate,
+                tts_config={"top_p": 0.7, "top_k": 20, "repetition_penalty": 1.0}
             )
             for res in result:
                 yield res
@@ -2276,9 +2782,6 @@ class GFSQ(nn.Module):
         feat = self.quantizer.get_output_from_indices(x)
         return feat.transpose_(1, 2) if self.transpose else feat
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return super().__call__(x)
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.transpose:
             x.transpose_(1, 2)
@@ -2388,10 +2891,7 @@ class DVAE(nn.Module):
             del x
             return ind
 
-        if self.vq_layer is not None:
-            vq_feats = self.vq_layer._embed(inp)
-        else:
-            vq_feats = inp
+        vq_feats = self.vq_layer._embed(inp)
 
         vq_feats = (
             vq_feats.view(
@@ -2410,7 +2910,6 @@ class DVAE(nn.Module):
         del vq_feats
 
         return torch.mul(dec_out, self.coef, out=dec_out)
-
 
 def apply_spk_emb(
     input_ids: torch.Tensor = None,
@@ -2574,6 +3073,234 @@ class MultiModalProjector(nn.Module):
         return hidden_states
 
 
+def _prepare_4d_causal_attention_mask_with_cache_position(
+    attention_mask: torch.Tensor,
+    sequence_length: int,
+    target_length: int,
+    dtype: torch.dtype,
+    device: torch.device,
+    min_dtype: float,
+    cache_position: torch.Tensor,
+    batch_size: int,
+):
+    """
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+    Args:
+        attention_mask (`torch.Tensor`):
+            A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
+        sequence_length (`int`):
+            The sequence length being processed.
+        target_length (`int`):
+            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+        dtype (`torch.dtype`):
+            The dtype to use for the 4D attention mask.
+        device (`torch.device`):
+            The device to plcae the 4D attention mask on.
+        min_dtype (`float`):
+            The minimum value representable with the dtype `dtype`.
+        cache_position (`torch.Tensor`):
+            Indices depicting the position of the input sequence tokens in the sequence.
+        batch_size (`torch.Tensor`):
+            Batch size.
+    """
+    if attention_mask is not None and attention_mask.dim() == 4:
+        # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+        causal_mask = attention_mask
+    else:
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+            padding_mask = padding_mask == 0
+            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                padding_mask, min_dtype
+            )
+
+    return causal_mask
+
+
+class PatchLlamaModel(LlamaModel):
+    """
+    This is a patch for LlamaModel to support our audio
+    Mainly modifies by changing create_causal_mask to _update_causal_mask
+    """
+    
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+    ) -> BaseModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
+
+        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
+        if not isinstance(past_key_values, (type(None), Cache)):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        # ! in transformers>=4.53.1, this is `create_causal_mask`, but it will be wrong in our case
+        # so copy `_update_causal_mask` from LlamaModel which transformers=4.44.2
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
+
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            device=device,
+            min_dtype=min_dtype,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
 class ConditionalChatTTS(PreTrainedModel):
     """A conditional text-to-speech model that can generate speech from text with speaker conditioning.
 
@@ -2687,10 +3414,6 @@ class ConditionalChatTTS(PreTrainedModel):
         self.num_vq = config.num_vq
         self.num_audio_tokens = config.num_audio_tokens
 
-        self.top_p = config.top_p
-        self.top_k = config.top_k
-        self.repetition_penalty = config.repetition_penalty
-
         if self.config.use_mlp:
             self.projector = MultiModalProjector(config.llm_dim, config.hidden_size)
         else:
@@ -2720,7 +3443,7 @@ class ConditionalChatTTS(PreTrainedModel):
             attn_implementation=config.attn_implementation,
         )
 
-        model = LlamaModel(model_config)
+        model = PatchLlamaModel(model_config)
         self.model = model
 
     @torch.inference_mode()
@@ -2810,7 +3533,7 @@ class ConditionalChatTTS(PreTrainedModel):
         outputs_prefill: BaseModelOutputWithPast = self.model(
             attention_mask=None,  # because for text, it is standard causal attention mask, do nothing
             position_ids=position_ids,  # position_ids denotes the position of new text tokens in the sequence
-            past_key_values=past_key_values_for_prefill,  # `past_key_values` will be updated by the model
+            past_key_values=DynamicCache.from_legacy_cache(past_key_values_for_prefill),  # `past_key_values` will be updated by the model
             inputs_embeds=inputs_embeds,  # contains text and language model embedding
             use_cache=True,
             output_attentions=False,
@@ -2818,7 +3541,7 @@ class ConditionalChatTTS(PreTrainedModel):
         )
 
         # Get model updated KV Cache
-        past_key_values_for_prefill_updated = outputs_prefill.past_key_values
+        past_key_values_for_prefill_updated = outputs_prefill.past_key_values.to_legacy_cache()
 
         # Update generated KV Cache to input `past_key_values`
         for layer_idx in range(len(past_key_values)):
@@ -2886,13 +3609,13 @@ class ConditionalChatTTS(PreTrainedModel):
         outputs: BaseModelOutputWithPast = self.model(
             attention_mask=causal_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            past_key_values=DynamicCache.from_legacy_cache(past_key_values),
             inputs_embeds=inputs_embeds,
             use_cache=True,
             output_attentions=False,
             cache_position=cache_position,
         )
-        past_key_values = outputs.past_key_values
+        past_key_values = outputs.past_key_values.to_legacy_cache()
         return past_key_values
 
     @torch.inference_mode()
@@ -3013,7 +3736,7 @@ class ConditionalChatTTS(PreTrainedModel):
             outputs: BaseModelOutputWithPast = self.model(
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                past_key_values=DynamicCache.from_legacy_cache(past_key_values),
                 inputs_embeds=inputs_embeds,
                 use_cache=True,
                 output_attentions=False,
@@ -3026,7 +3749,7 @@ class ConditionalChatTTS(PreTrainedModel):
             del causal_mask
 
             hidden_states = outputs.last_hidden_state
-            past_key_values = outputs.past_key_values
+            past_key_values = outputs.past_key_values.to_legacy_cache()
 
             with P.cached():
                 logits = torch.empty(
@@ -3221,6 +3944,7 @@ def prepare_inputs_for_generation(
             input_ids = input_ids[:, past_length:]
         # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
 
+    #print("--------- my prepare_inputs_for_generation")
     if attention_mask is not None and position_ids is None:
         # create position_ids on the fly for batch generation
         position_ids = attention_mask.long().cumsum(-1) - 1
@@ -3228,14 +3952,14 @@ def prepare_inputs_for_generation(
         if past_key_values:
             position_ids = position_ids[:, -input_ids.shape[1] :]
 
-            # This clo≠clo≠clone call is needed to avoid recapturing cuda graphs with →rch.comπ≤→rch.comπ≤torch.compile's  mode=reduce−overheadmode=reduce-overheadmode="reduce-overhead, as otherwise the input positionidspositionidsposition_ids would have various stride during the decoding. Here, simply using .contiguous().contiguous().contiguous() is not sufficient as in the batch size = 1 case, positionidspositionidsposition_ids is already contiguous but with varying stride which retriggers a capture.
+            # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
             position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
-    # if ∈putsembeds∈putsembedsinputs_embeds are passed, we only want to use them in the 1st generation step
+    # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
     if inputs_embeds is not None and cache_position[0] == 0:
         model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
     else:
-        # The clone here is for the same reason as for positionidspositionidsposition_ids.
+        # The clone here is for the same reason as for `position_ids`.
         model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
     if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
@@ -3263,14 +3987,13 @@ def prepare_inputs_for_generation(
     model_inputs.update(
         {
             "position_ids": position_ids,
-            # "cache_position": cache_position,
+            #"cache_position": cache_position,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
             "attention_mask": attention_mask,
         }
     )
     return model_inputs
-
 
 
 def get_2d_sincos_pos_embed(embed_dim, image_size):
@@ -3338,7 +4061,6 @@ class Resampler(nn.Module):
         embed_dim,
         num_heads,
         kv_dim=None,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
         adaptive=False,
         max_size=(70, 70),
     ):
@@ -3356,6 +4078,7 @@ class Resampler(nn.Module):
         else:
             self.kv_proj = nn.Identity()
 
+        norm_layer=partial(nn.LayerNorm, eps=1e-6)
         self.attn = MultiheadAttention(embed_dim, num_heads)
         self.ln_q = norm_layer(embed_dim)
         self.ln_kv = norm_layer(embed_dim)
@@ -3377,15 +4100,6 @@ class Resampler(nn.Module):
         if max_h > self.max_size[0] or max_w > self.max_size[1]:
             self.max_size = [max(max_h, self.max_size[0]), max(max_w, self.max_size[1])]
             self._set_2d_pos_cache(self.max_size, device)
-
-    def _initialize_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x, tgt_sizes=None):
         assert x.shape[0] == tgt_sizes.shape[0]
@@ -3433,680 +4147,134 @@ class Resampler(nn.Module):
         return query.unsqueeze(1).repeat(1, N, 1)
 
 
-class MultiheadAttention(nn.MultiheadAttention):
+class MultiheadAttention(nn.Module):
     def __init__(
         self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        add_bias_kv=False,
-        add_zero_attn=False,
-        kdim=None,
-        vdim=None,
-        batch_first=False,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+        add_bias_kv: bool = False,
+        add_zero_attn: bool = False,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
+        batch_first: bool = False,
         device=None,
         dtype=None,
     ):
-        super().__init__(
-            embed_dim, num_heads, dropout, bias, add_bias_kv, add_zero_attn, kdim, vdim, batch_first, device, dtype
-        )
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.kdim = kdim if kdim is not None else embed_dim
+        self.vdim = vdim if vdim is not None else embed_dim
+        self._qkv_same_embed_dim = self.kdim == embed_dim and self.vdim == embed_dim
 
-        # rewrite out_proj layer，with nn.Linear
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias, device=device, dtype=dtype)
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.batch_first = batch_first
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+
+        factory_kwargs = {"device": device, "dtype": dtype}
+
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.k_proj = nn.Linear(self.kdim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.v_proj = nn.Linear(self.vdim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
 
     def forward(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Optional[Tensor] = None,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        key_padding_mask: Optional[torch.Tensor] = None,
         need_weights: bool = True,
-        attn_mask: Optional[Tensor] = None,
+        attn_mask: Optional[torch.Tensor] = None,
         average_attn_weights: bool = True,
         is_causal: bool = False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        why_not_fast_path = ""
-        if (
-            (attn_mask is not None and torch.is_floating_point(attn_mask))
-            or (key_padding_mask is not None)
-            and torch.is_floating_point(key_padding_mask)
-        ):
-            why_not_fast_path = "floating-point masks are not supported for fast path."
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if self.batch_first:
+            query, key, value = [x.transpose(1, 0) for x in (query, key, value)]
 
-        is_batched = query.dim() == 3
-
-        key_padding_mask = _canonical_mask(
-            mask=key_padding_mask,
-            mask_name="key_padding_mask",
-            other_type=F._none_or_dtype(attn_mask),
-            other_name="attn_mask",
-            target_type=query.dtype,
-        )
-
-        attn_mask = _canonical_mask(
-            mask=attn_mask,
-            mask_name="attn_mask",
-            other_type=None,
-            other_name="",
-            target_type=query.dtype,
-            check_other=False,
-        )
-
-        if not is_batched:
-            why_not_fast_path = f"input not batched; expected query.dim() of 3 but got {query.dim()}"
-        elif query is not key or key is not value:
-            # When lifting this restriction, don't forget to either
-            # enforce that the dtypes all match or test cases where
-            # they don't!
-            why_not_fast_path = "non-self attention was used (query, key, and value are not the same Tensor)"
-        elif self.in_proj_bias is not None and query.dtype != self.in_proj_bias.dtype:
-            why_not_fast_path = (
-                f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
-            )
-        elif self.in_proj_weight is None:
-            why_not_fast_path = "in_proj_weight was None"
-        elif query.dtype != self.in_proj_weight.dtype:
-            # this case will fail anyway, but at least they'll get a useful error message.
-            why_not_fast_path = (
-                f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
-            )
-        elif self.training:
-            why_not_fast_path = "training is enabled"
-        elif (self.num_heads % 2) != 0:
-            why_not_fast_path = "self.num_heads is not even"
-        elif not self.batch_first:
-            why_not_fast_path = "batch_first was not True"
-        elif self.bias_k is not None:
-            why_not_fast_path = "self.bias_k was not None"
-        elif self.bias_v is not None:
-            why_not_fast_path = "self.bias_v was not None"
-        elif self.add_zero_attn:
-            why_not_fast_path = "add_zero_attn was enabled"
-        elif not self._qkv_same_embed_dim:
-            why_not_fast_path = "_qkv_same_embed_dim was not True"
-        elif query.is_nested and (key_padding_mask is not None or attn_mask is not None):
-            why_not_fast_path = "supplying both src_key_padding_mask and src_mask at the same time \
-                                 is not supported with NestedTensor input"
-        elif torch.is_autocast_enabled():
-            why_not_fast_path = "autocast is enabled"
-
-        if not why_not_fast_path:
-            tensor_args = (
-                query,
-                key,
-                value,
-                self.in_proj_weight,
-                self.in_proj_bias,
-                self.out_proj.weight,
-                self.out_proj.bias,
-            )
-            # We have to use list comprehensions below because TorchScript does not support
-            # generator expressions.
-            if torch.overrides.has_torch_function(tensor_args):
-                why_not_fast_path = "some Tensor argument has_torch_function"
-            elif _is_make_fx_tracing():
-                why_not_fast_path = "we are running make_fx tracing"
-            elif not all(_check_arg_device(x) for x in tensor_args):
-                why_not_fast_path = (
-                    "some Tensor argument's device is neither one of "
-                    f"cpu, cuda or {torch.utils.backend_registration._privateuse1_backend_name}"
-                )
-            elif torch.is_grad_enabled() and any(_arg_requires_grad(x) for x in tensor_args):
-                why_not_fast_path = (
-                    "grad is enabled and at least one of query or the "
-                    "input/output projection weights or biases requires_grad"
-                )
-            if not why_not_fast_path:
-                merged_mask, mask_type = self.merge_masks(attn_mask, key_padding_mask, query)
-
-                if self.in_proj_bias is not None and self.in_proj_weight is not None:
-                    return torch._native_multi_head_attention(
-                        query,
-                        key,
-                        value,
-                        self.embed_dim,
-                        self.num_heads,
-                        self.in_proj_weight,
-                        self.in_proj_bias,
-                        self.out_proj.weight,
-                        self.out_proj.bias,
-                        merged_mask,
-                        need_weights,
-                        average_attn_weights,
-                        mask_type,
-                    )
-
-        any_nested = query.is_nested or key.is_nested or value.is_nested
-        assert not any_nested, (
-            "MultiheadAttention does not support NestedTensor outside of its fast path. "
-            + f"The fast path was not hit because {why_not_fast_path}"
-        )
-
-        if self.batch_first and is_batched:
-            # make sure that the transpose op does not affect the "is" property
-            if key is value:
-                if query is key:
-                    query = key = value = query.transpose(1, 0)
-                else:
-                    query, key = (x.transpose(1, 0) for x in (query, key))
-                    value = key
-            else:
-                query, key, value = (x.transpose(1, 0) for x in (query, key, value))
-
-        if not self._qkv_same_embed_dim:
-            attn_output, attn_output_weights = self.multi_head_attention_forward(
-                query,
-                key,
-                value,
-                self.embed_dim,
-                self.num_heads,
-                self.in_proj_weight,
-                self.in_proj_bias,
-                self.bias_k,
-                self.bias_v,
-                self.add_zero_attn,
-                self.dropout,
-                self.out_proj.weight,
-                self.out_proj.bias,
-                training=self.training,
-                key_padding_mask=key_padding_mask,
-                need_weights=need_weights,
-                attn_mask=attn_mask,
-                use_separate_proj_weight=True,
-                q_proj_weight=self.q_proj_weight,
-                k_proj_weight=self.k_proj_weight,
-                v_proj_weight=self.v_proj_weight,
-                average_attn_weights=average_attn_weights,
-                is_causal=is_causal,
-            )
-        else:
-            attn_output, attn_output_weights = self.multi_head_attention_forward(
-                query,
-                key,
-                value,
-                self.embed_dim,
-                self.num_heads,
-                self.in_proj_weight,
-                self.in_proj_bias,
-                self.bias_k,
-                self.bias_v,
-                self.add_zero_attn,
-                self.dropout,
-                self.out_proj.weight,
-                self.out_proj.bias,
-                training=self.training,
-                key_padding_mask=key_padding_mask,
-                need_weights=need_weights,
-                attn_mask=attn_mask,
-                average_attn_weights=average_attn_weights,
-                is_causal=is_causal,
-            )
-        if self.batch_first and is_batched:
-            return attn_output.transpose(1, 0), attn_output_weights
-        else:
-            return attn_output, attn_output_weights
-
-    def multi_head_attention_forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        embed_dim_to_check: int,
-        num_heads: int,
-        in_proj_weight: Optional[Tensor],
-        in_proj_bias: Optional[Tensor],
-        bias_k: Optional[Tensor],
-        bias_v: Optional[Tensor],
-        add_zero_attn: bool,
-        dropout_p: float,
-        out_proj_weight: Tensor,
-        out_proj_bias: Optional[Tensor],
-        training: bool = True,
-        key_padding_mask: Optional[Tensor] = None,
-        need_weights: bool = True,
-        attn_mask: Optional[Tensor] = None,
-        use_separate_proj_weight: bool = False,
-        q_proj_weight: Optional[Tensor] = None,
-        k_proj_weight: Optional[Tensor] = None,
-        v_proj_weight: Optional[Tensor] = None,
-        static_k: Optional[Tensor] = None,
-        static_v: Optional[Tensor] = None,
-        average_attn_weights: bool = True,
-        is_causal: bool = False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        tens_ops = (query, key, value, in_proj_weight, in_proj_bias, bias_k, bias_v, out_proj_weight, out_proj_bias)
-
-        is_batched = _mha_shape_check(query, key, value, key_padding_mask, attn_mask, num_heads)
-
-        # For unbatched input, we unsqueeze at the expected batch-dim to pretend that the input
-        # is batched, run the computation and before returning squeeze the
-        # batch dimension so that the output doesn't carry this temporary batch dimension.
-        if not is_batched:
-            # unsqueeze if the input is unbatched
-            query = query.unsqueeze(1)
-            key = key.unsqueeze(1)
-            value = value.unsqueeze(1)
-            if key_padding_mask is not None:
-                key_padding_mask = key_padding_mask.unsqueeze(0)
-
-        # set up shape vars
-        tgt_len, bsz, embed_dim = query.shape
+        tgt_len, bsz, _ = query.shape
         src_len, _, _ = key.shape
 
-        key_padding_mask = _canonical_mask(
-            mask=key_padding_mask,
-            mask_name="key_padding_mask",
-            other_type=F._none_or_dtype(attn_mask),
-            other_name="attn_mask",
-            target_type=query.dtype,
-        )
+        q = self.q_proj(query)
+        k = self.k_proj(key)
+        v = self.v_proj(value)
 
-        if is_causal and attn_mask is None:
-            raise RuntimeError(
-                "Need attn_mask if specifying the is_causal hint. "
-                "You may use the Transformer module method "
-                "`generate_square_subsequent_mask` to create this mask."
-            )
+        q = q.view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        k = k.view(src_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        v = v.view(src_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
-        if is_causal and key_padding_mask is None and not need_weights:
-            # when we have a kpm or need weights, we need attn_mask
-            # Otherwise, we use the is_causal hint go as is_causal
-            # indicator to SDPA.
-            attn_mask = None
-        else:
-            attn_mask = _canonical_mask(
-                mask=attn_mask,
-                mask_name="attn_mask",
-                other_type=None,
-                other_name="",
-                target_type=query.dtype,
-                check_other=False,
-            )
+        q = q.reshape(bsz, self.num_heads, tgt_len, self.head_dim)
+        k = k.reshape(bsz, self.num_heads, src_len, self.head_dim)
+        v = v.reshape(bsz, self.num_heads, src_len, self.head_dim)
 
-            if key_padding_mask is not None:
-                # We have the attn_mask, and use that to merge kpm into it.
-                # Turn off use of is_causal hint, as the merged mask is no
-                # longer causal.
-                is_causal = False
-
-        assert (
-            embed_dim == embed_dim_to_check
-        ), f"was expecting embedding dimension of {embed_dim_to_check}, but got {embed_dim}"
-        if isinstance(embed_dim, torch.Tensor):
-            # embed_dim can be a tensor when JIT tracing
-            head_dim = embed_dim.div(num_heads, rounding_mode="trunc")
-        else:
-            head_dim = embed_dim // num_heads
-        assert head_dim * num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
-        if use_separate_proj_weight:
-            # allow MHA to have different embedding dimensions when separate projection weights are used
-            assert (
-                key.shape[:2] == value.shape[:2]
-            ), f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
-        else:
-            assert key.shape == value.shape, f"key shape {key.shape} does not match value shape {value.shape}"
-
-        #
-        # compute in-projection
-        #
-        if not use_separate_proj_weight:
-            assert in_proj_weight is not None, "use_separate_proj_weight is False but in_proj_weight is None"
-            q, k, v = _in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
-        else:
-            assert q_proj_weight is not None, "use_separate_proj_weight is True but q_proj_weight is None"
-            assert k_proj_weight is not None, "use_separate_proj_weight is True but k_proj_weight is None"
-            assert v_proj_weight is not None, "use_separate_proj_weight is True but v_proj_weight is None"
-            if in_proj_bias is None:
-                b_q = b_k = b_v = None
-            else:
-                b_q, b_k, b_v = in_proj_bias.chunk(3)
-            q, k, v = _in_projection(query, key, value, q_proj_weight, k_proj_weight, v_proj_weight, b_q, b_k, b_v)
-
-        # prep attention mask
-
-        if attn_mask is not None:
-            # ensure attn_mask's dim is 3
-            if attn_mask.dim() == 2:
-                correct_2d_size = (tgt_len, src_len)
-                if attn_mask.shape != correct_2d_size:
-                    raise RuntimeError(
-                        f"The shape of the 2D attn_mask is {attn_mask.shape}, but should be {correct_2d_size}."
-                    )
-                attn_mask = attn_mask.unsqueeze(0)
-            elif attn_mask.dim() == 3:
-                correct_3d_size = (bsz * num_heads, tgt_len, src_len)
-                if attn_mask.shape != correct_3d_size:
-                    raise RuntimeError(
-                        f"The shape of the 3D attn_mask is {attn_mask.shape}, but should be {correct_3d_size}."
-                    )
-            else:
-                raise RuntimeError(f"attn_mask's dimension {attn_mask.dim()} is not supported")
-
-        # add bias along batch dimension (currently second)
-        if bias_k is not None and bias_v is not None:
-            assert static_k is None, "bias cannot be added to static key."
-            assert static_v is None, "bias cannot be added to static value."
-            k = torch.cat([k, bias_k.repeat(1, bsz, 1)])
-            v = torch.cat([v, bias_v.repeat(1, bsz, 1)])
-            if attn_mask is not None:
-                attn_mask = pad(attn_mask, (0, 1))
-            if key_padding_mask is not None:
-                key_padding_mask = pad(key_padding_mask, (0, 1))
-        else:
-            assert bias_k is None
-            assert bias_v is None
-
-        #
-        # reshape q, k, v for multihead attention and make em batch first
-        #
-        q = q.view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
-        if static_k is None:
-            k = k.view(k.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
-        else:
-            # TODO finish disentangling control flow so we don't do in-projections when statics are passed
-            assert (
-                static_k.size(0) == bsz * num_heads
-            ), f"expecting static_k.size(0) of {bsz * num_heads}, but got {static_k.size(0)}"
-            assert static_k.size(2) == head_dim, f"expecting static_k.size(2) of {head_dim}, but got {static_k.size(2)}"
-            k = static_k
-        if static_v is None:
-            v = v.view(v.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
-        else:
-            # TODO finish disentangling control flow so we don't do in-projections when statics are passed
-            assert (
-                static_v.size(0) == bsz * num_heads
-            ), f"expecting static_v.size(0) of {bsz * num_heads}, but got {static_v.size(0)}"
-            assert static_v.size(2) == head_dim, f"expecting static_v.size(2) of {head_dim}, but got {static_v.size(2)}"
-            v = static_v
-
-        # add zero attention along batch dimension (now first)
-        if add_zero_attn:
-            zero_attn_shape = (bsz * num_heads, 1, head_dim)
-            k = torch.cat([k, torch.zeros(zero_attn_shape, dtype=k.dtype, device=k.device)], dim=1)
-            v = torch.cat([v, torch.zeros(zero_attn_shape, dtype=v.dtype, device=v.device)], dim=1)
-            if attn_mask is not None:
-                attn_mask = pad(attn_mask, (0, 1))
-            if key_padding_mask is not None:
-                key_padding_mask = pad(key_padding_mask, (0, 1))
-
-        # update source sequence length after adjustments
-        src_len = k.size(1)
-
-        # merge key padding and attention masks
         if key_padding_mask is not None:
-            assert key_padding_mask.shape == (
-                bsz,
-                src_len,
-            ), f"expecting key_padding_mask shape of {(bsz, src_len)}, but got {key_padding_mask.shape}"
-            key_padding_mask = (
-                key_padding_mask.view(bsz, 1, 1, src_len)
-                .expand(-1, num_heads, -1, -1)
-                .reshape(bsz * num_heads, 1, src_len)
-            )
+            if key_padding_mask.dim() != 2 or key_padding_mask.shape != (bsz, src_len):
+                raise ValueError(
+                    f"Expected key_padding_mask shape of {(bsz, src_len)}, but got {key_padding_mask.shape}"
+                )
+            # F.sdpa expects mask where True means "don't attend"
+            # key_padding_mask is (bsz, src_len), needs to be broadcastable to (bsz, num_heads, tgt_len, src_len)
+            # So we reshape to (bsz, 1, 1, src_len)
             if attn_mask is None:
-                attn_mask = key_padding_mask
-            else:
-                attn_mask = attn_mask + key_padding_mask
+                attn_mask = key_padding_mask.view(bsz, 1, 1, src_len)
+            else:  # Float or bool mask
+                # Assuming attn_mask is already broadcastable or has shape (tgt_len, src_len)
+                if attn_mask.dim() == 2:
+                    attn_mask = attn_mask.unsqueeze(0).unsqueeze(0)  # to (1, 1, tgt_len, src_len)
+                elif attn_mask.dim() == 3:  # (bsz, tgt_len, src_len)
+                    attn_mask = attn_mask.unsqueeze(1)  # to (bsz, 1, tgt_len, src_len)
 
-        # adjust dropout probability
-        if not training:
-            dropout_p = 0.0
+                # Combine masks. Assuming both are boolean, True means ignore.
+                attn_mask = attn_mask.expand(-1, self.num_heads, -1, -1) | key_padding_mask.view(bsz, 1, 1, src_len)
 
-        #
-        # (deep breath) calculate attention and out projection
-        #
-
+        # F.scaled_dot_product_attention does not return attention weights.
+        # If weights are needed, we have to compute attention manually.
         if need_weights:
-            B, Nt, E = q.shape
-            q_scaled = q / math.sqrt(E)
-
-            assert not (is_causal and attn_mask is None), "FIXME: is_causal not implemented for need_weights"
+            # Manual calculation to get attention weights
+            scaling_factor = self.head_dim**-0.5
+            attn_output_weights = torch.matmul(q * scaling_factor, k.transpose(-2, -1))
 
             if attn_mask is not None:
-                attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
-            else:
-                attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
-            attn_output_weights = softmax(attn_output_weights, dim=-1)
-            if dropout_p > 0.0:
-                attn_output_weights = dropout(attn_output_weights, p=dropout_p)
+                if attn_mask.dtype == torch.bool:
+                    attn_output_weights.masked_fill_(attn_mask, float("-inf"))
+                else:
+                    attn_output_weights += attn_mask
 
-            attn_output = torch.bmm(attn_output_weights, v)
+            if is_causal:
+                # is_causal is a built-in option in F.sdpa, but here we apply it manually
+                # This is a simplified causal mask, assuming query and key have same length
+                causal_mask = torch.triu(torch.ones(tgt_len, src_len, device=q.device, dtype=torch.bool), diagonal=1)
+                attn_output_weights.masked_fill_(causal_mask, float("-inf"))
 
-            attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
-            attn_output = self.out_proj(attn_output)
-            attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+            attn_output_weights = F.softmax(attn_output_weights, dim=-1)
 
-            # optionally average attention weights over heads
-            attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+            if self.training and self.dropout > 0.0:
+                attn_output_weights = F.dropout(attn_output_weights, p=self.dropout)
+
+            attn_output = torch.matmul(attn_output_weights, v)
+
             if average_attn_weights:
-                attn_output_weights = attn_output_weights.mean(dim=1)
+                attn_output_weights = attn_output_weights.sum(dim=1) / self.num_heads
 
-            if not is_batched:
-                # squeeze the output if input was unbatched
-                attn_output = attn_output.squeeze(1)
-                attn_output_weights = attn_output_weights.squeeze(0)
+        else:
+            # Use the optimized F.scaled_dot_product_attention path
+            attn_output = F.scaled_dot_product_attention(
+                q, k, v, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0, is_causal=is_causal
+            )
+            attn_output_weights = None
+
+        attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, tgt_len, self.embed_dim)
+        attn_output = self.o_proj(attn_output)
+
+        if self.batch_first:
+            # Reshape back to (bsz, tgt_len, embed_dim)
             return attn_output, attn_output_weights
         else:
-            # attn_mask can be either (L,S) or (N*num_heads, L, S)
-            # if attn_mask's shape is (1, L, S) we need to unsqueeze to (1, 1, L, S)
-            # in order to match the input for SDPA of (N, num_heads, L, S)
-            if attn_mask is not None:
-                if attn_mask.size(0) == 1 and attn_mask.dim() == 3:
-                    attn_mask = attn_mask.unsqueeze(0)
-                else:
-                    attn_mask = attn_mask.view(bsz, num_heads, -1, src_len)
-
-            q = q.view(bsz, num_heads, tgt_len, head_dim)
-            k = k.view(bsz, num_heads, src_len, head_dim)
-            v = v.view(bsz, num_heads, src_len, head_dim)
-
-            attn_output = F.scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
-            attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
-
-            attn_output = self.out_proj(attn_output)
-            attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
-            if not is_batched:
-                # squeeze the output if input was unbatched
-                attn_output = attn_output.squeeze(1)
-            return attn_output, None
-
-
-def _mha_shape_check(
-    query: Tensor,
-    key: Tensor,
-    value: Tensor,
-    key_padding_mask: Optional[Tensor],
-    attn_mask: Optional[Tensor],
-    num_heads: int,
-):
-    # Verifies the expected shape for `query, `key`, `value`, `key_padding_mask` and `attn_mask`
-    # and returns if the input is batched or not.
-    # Raises an error if `query` is not 2-D (unbatched) or 3-D (batched) tensor.
-
-    # Shape check.
-    if query.dim() == 3:
-        # Batched Inputs
-        is_batched = True
-        assert key.dim() == 3 and value.dim() == 3, (
-            "For batched (3-D) `query`, expected `key` and `value` to be 3-D"
-            f" but found {key.dim()}-D and {value.dim()}-D tensors respectively"
-        )
-        if key_padding_mask is not None:
-            assert key_padding_mask.dim() == 2, (
-                "For batched (3-D) `query`, expected `key_padding_mask` to be `None` or 2-D"
-                f" but found {key_padding_mask.dim()}-D tensor instead"
-            )
-        if attn_mask is not None:
-            assert attn_mask.dim() in (2, 3), (
-                "For batched (3-D) `query`, expected `attn_mask` to be `None`, 2-D or 3-D"
-                f" but found {attn_mask.dim()}-D tensor instead"
-            )
-    elif query.dim() == 2:
-        # Unbatched Inputs
-        is_batched = False
-        assert key.dim() == 2 and value.dim() == 2, (
-            "For unbatched (2-D) `query`, expected `key` and `value` to be 2-D"
-            f" but found {key.dim()}-D and {value.dim()}-D tensors respectively"
-        )
-
-        if key_padding_mask is not None:
-            assert key_padding_mask.dim() == 1, (
-                "For unbatched (2-D) `query`, expected `key_padding_mask` to be `None` or 1-D"
-                f" but found {key_padding_mask.dim()}-D tensor instead"
-            )
-
-        if attn_mask is not None:
-            assert attn_mask.dim() in (2, 3), (
-                "For unbatched (2-D) `query`, expected `attn_mask` to be `None`, 2-D or 3-D"
-                f" but found {attn_mask.dim()}-D tensor instead"
-            )
-            if attn_mask.dim() == 3:
-                expected_shape = (num_heads, query.shape[0], key.shape[0])
-                assert (
-                    attn_mask.shape == expected_shape
-                ), f"Expected `attn_mask` shape to be {expected_shape} but got {attn_mask.shape}"
-    else:
-        raise AssertionError(
-            f"query should be unbatched 2D or batched 3D tensor but received {query.dim()}-D query tensor"
-        )
-
-    return is_batched
-
-
-def _canonical_mask(
-    mask: Optional[Tensor],
-    mask_name: str,
-    other_type: Optional[DType],
-    other_name: str,
-    target_type: DType,
-    check_other: bool = True,
-) -> Optional[Tensor]:
-
-    if mask is not None:
-        _mask_dtype = mask.dtype
-        _mask_is_float = torch.is_floating_point(mask)
-        if _mask_dtype != torch.bool and not _mask_is_float:
-            raise AssertionError(f"only bool and floating types of {mask_name} are supported")
-        if check_other and other_type is not None:
-            if _mask_dtype != other_type:
-                warnings.warn(
-                    f"Support for mismatched {mask_name} and {other_name} "
-                    "is deprecated. Use same type for both instead."
-                )
-        if not _mask_is_float:
-            mask = torch.zeros_like(mask, dtype=target_type).masked_fill_(mask, float("-inf"))
-    return mask
-
-
-def _in_projection_packed(
-    q: Tensor,
-    k: Tensor,
-    v: Tensor,
-    w: Tensor,
-    b: Optional[Tensor] = None,
-) -> List[Tensor]:
-    r"""
-    Performs the in-projection step of the attention operation, using packed weights.
-    Output is a triple containing projection tensors for query, key and value.
-    Args:
-        q, k, v: query, key and value tensors to be projected. For self-attention,
-            these are typically the same tensor; for encoder-decoder attention,
-            k and v are typically the same tensor. (We take advantage of these
-            identities for performance if they are present.) Regardless, q, k and v
-            must share a common embedding dimension; otherwise their shapes may vary.
-        w: projection weights for q, k and v, packed into a single tensor. Weights
-            are packed along dimension 0, in q, k, v order.
-        b: optional projection biases for q, k and v, packed into a single tensor
-            in q, k, v order.
-    Shape:
-        Inputs:
-        - q: :math:`(..., E)` where E is the embedding dimension
-        - k: :math:`(..., E)` where E is the embedding dimension
-        - v: :math:`(..., E)` where E is the embedding dimension
-        - w: :math:`(E * 3, E)` where E is the embedding dimension
-        - b: :math:`E * 3` where E is the embedding dimension
-        Output:
-        - in output list :math:`[q', k', v']`, each output tensor will have the
-            same shape as the corresponding input tensor.
-    """
-    E = q.size(-1)
-    if k is v:
-        if q is k:
-            # self-attention
-            proj = linear(q, w, b)
-            # reshape to 3, E and not E, 3 is deliberate for better memory coalescing and keeping same order as chunk()
-            proj = proj.unflatten(-1, (3, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
-            return proj[0], proj[1], proj[2]
-        else:
-            # encoder-decoder attention
-            w_q, w_kv = w.split([E, E * 2])
-            if b is None:
-                b_q = b_kv = None
-            else:
-                b_q, b_kv = b.split([E, E * 2])
-            q_proj = linear(q, w_q, b_q)
-            kv_proj = linear(k, w_kv, b_kv)
-            # reshape to 2, E and not E, 2 is deliberate for better memory coalescing and keeping same order as chunk()
-            kv_proj = kv_proj.unflatten(-1, (2, E)).unsqueeze(0).transpose(0, -2).squeeze(-2).contiguous()
-            return (q_proj, kv_proj[0], kv_proj[1])
-    else:
-        w_q, w_k, w_v = w.chunk(3)
-        if b is None:
-            b_q = b_k = b_v = None
-        else:
-            b_q, b_k, b_v = b.chunk(3)
-        return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
-
-
-def _in_projection(
-    q: Tensor,
-    k: Tensor,
-    v: Tensor,
-    w_q: Tensor,
-    w_k: Tensor,
-    w_v: Tensor,
-    b_q: Optional[Tensor] = None,
-    b_k: Optional[Tensor] = None,
-    b_v: Optional[Tensor] = None,
-) -> Tuple[Tensor, Tensor, Tensor]:
-    r"""
-    Performs the in-projection step of the attention operation. This is simply
-    a triple of linear projections, with shape constraints on the weights which
-    ensure embedding dimension uniformity in the projected outputs.
-    Output is a triple containing projection tensors for query, key and value.
-    Args:
-        q, k, v: query, key and value tensors to be projected.
-        w_q, w_k, w_v: weights for q, k and v, respectively.
-        b_q, b_k, b_v: optional biases for q, k and v, respectively.
-    Shape:
-        Inputs:
-        - q: :math:`(Qdims..., Eq)` where Eq is the query embedding dimension and Qdims are any
-            number of leading dimensions.
-        - k: :math:`(Kdims..., Ek)` where Ek is the key embedding dimension and Kdims are any
-            number of leading dimensions.
-        - v: :math:`(Vdims..., Ev)` where Ev is the value embedding dimension and Vdims are any
-            number of leading dimensions.
-        - w_q: :math:`(Eq, Eq)`
-        - w_k: :math:`(Eq, Ek)`
-        - w_v: :math:`(Eq, Ev)`
-        - b_q: :math:`(Eq)`
-        - b_k: :math:`(Eq)`
-        - b_v: :math:`(Eq)`
-        Output: in output triple :math:`(q', k', v')`,
-         - q': :math:`[Qdims..., Eq]`
-         - k': :math:`[Kdims..., Eq]`
-         - v': :math:`[Vdims..., Eq]`
-    """
-    Eq, Ek, Ev = q.size(-1), k.size(-1), v.size(-1)
-    assert w_q.shape == (Eq, Eq), f"expecting query weights shape of {(Eq, Eq)}, but got {w_q.shape}"
-    assert w_k.shape == (Eq, Ek), f"expecting key weights shape of {(Eq, Ek)}, but got {w_k.shape}"
-    assert w_v.shape == (Eq, Ev), f"expecting value weights shape of {(Eq, Ev)}, but got {w_v.shape}"
-    assert b_q is None or b_q.shape == (Eq,), f"expecting query bias shape of {(Eq,)}, but got {b_q.shape}"
-    assert b_k is None or b_k.shape == (Eq,), f"expecting key bias shape of {(Eq,)}, but got {b_k.shape}"
-    assert b_v is None or b_v.shape == (Eq,), f"expecting value bias shape of {(Eq,)}, but got {b_v.shape}"
-    return linear(q, w_q, b_q), linear(k, w_k, b_k), linear(v, w_v, b_v)
-
+            # Reshape back to (tgt_len, bsz, embed_dim)
+            return attn_output.transpose(0, 1), attn_output_weights
 
 
 _CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"

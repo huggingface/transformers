@@ -39,6 +39,7 @@ class MiniCPM_o_2_6TokenizerFast(Qwen2TokenizerFast):
         self.spk_end = "<|spk_eos|>"
         self.tts_start = "<|tts_bos|>"
         self.tts_end = "<|tts_eos|>"
+        self.unk_token = "<unk>"
 
     @property
     def eos_id(self):
