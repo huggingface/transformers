@@ -15,654 +15,22 @@
 # limitations under the License.
 import queue
 import threading
-import time
-from abc import ABC, abstractmethod
-from collections import deque
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar, Union
+from typing import Optional
 
 import torch
-import torch.nn as nn
 from tokenizers.decoders import DecodeStream
+from torch import nn
 from tqdm import tqdm
 
-from ..configuration_utils import PretrainedConfig
-from ..generation.configuration_utils import GenerationConfig
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils.logging import logging
-from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
-from .cb.memory_management import PagedAttentionMemoryHandler
-
-
-class RequestStatus(Enum):
-    """Status of a generation request through its lifecycle."""
-
-    PENDING = "pending"
-    PREFILLING = "prefilling"
-    PREFILLING_SPLIT = "prefilling_split"
-    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
-    DECODING = "decoding"
-    FINISHED = "finished"
-    FAILED = "failed"
-
-
-logger = logging.getLogger(__name__)
-# logger.setLevel(logging.INFO)
-
-
-@dataclass
-class GenerationOutput:
-    """Tracks the output of a generation request.
-
-    Attributes:
-        request_id (str): The ID of the generation request.
-        prompt_ids (list[int]): The IDs of the prompt tokens.
-        generated_tokens (list[int]): The generated tokens.
-        logprobs (list[float]): The log probabilities of the generated tokens.
-        error (Optional[str]): Any error message associated with the request. When None, the request was successful.
-        status (RequestStatus): The status of the request.
-        created_time (float): The time the request was created.
-        next_token (Optional[int]): The next token to be generated.
-    """
-
-    request_id: str
-    prompt_ids: list[int] = field(default_factory=list)
-    generated_tokens: list[int] = field(default_factory=list)
-    logprobs: list[float] = field(default_factory=list)
-    error: Optional[str] = None
-    status: RequestStatus = RequestStatus.PENDING
-    created_time: float = field(default_factory=time.time)
-    next_token: Optional[int] = field(default_factory=int)
-
-
-@dataclass
-class RequestState:
-    """Tracks the state of a generation request through its lifecycle.
-
-    Attributes:
-        request_id (str): The ID of the generation request.
-        full_prompt_ids (list[int] | None): The tokens IDs of the full prompt.
-        prompt_ids (list[int] | None): The tokens IDs currently being processed.
-        remaining_prompt_ids (list[int]): The tokens IDs remaining to be processed (for split requests).
-        static_outputs (list[int]): The generated tokens.
-        allocated_blocks (list[int]): The identifiers of the allocated blocks to the request.
-        position_offset (int): The current position in the sequence for position_ids.
-        status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
-                                SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
-        max_new_tokens (int): The maximum number of new tokens to generate.
-        eos_token_id (int): The ID of the end-of-sequence token.
-        created_time (float): The time the request was created.
-        error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
-        next_token (Optional[str]): The next token to be generated.
-    """
-
-    # Required fields
-    request_id: str
-    full_prompt_ids: Optional[list[int]] = None  # Full initial prompt
-    prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed (initial + generated)
-    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
-    static_outputs: list[int] = field(default_factory=list)  # Generated tokens
-    allocated_blocks: list[int] = field(default_factory=list)  # Block IDs allocated to the request
-    position_offset: int = 0  # Current position in the sequence for position_ids
-    status: RequestStatus = RequestStatus.PENDING  # Status of the request
-    max_new_tokens: int = 20  # Maximum number of new tokens to generate
-    eos_token_id: int = -1  # ID of the end-of-sequence token
-    created_time: float = field(default_factory=time.time)  # Time the request was created
-    error: Optional[str] = None  # Error message if the request failed
-    next_token: Optional[str] = None  # Next token to be generated
-
-    def current_len(self) -> int:
-        """Get the current length of the sequence (prompt + generated tokens)."""
-        return self.position_offset
-
-    def generated_len(self) -> int:
-        """Get the number of tokens generated so far."""
-        return len(self.static_outputs)
-
-    # TODO: this logic seems one token off, check it out
-    @traced
-    def update_with_token(self, token_id: int) -> bool:
-        """Update the request with a newly generated token and check for completion.
-
-        Args:
-            token_id: The token ID to add to the output sequence
-
-        Returns:
-            bool: True if the request is now complete, False otherwise
-        """
-        # Only update if we're in decoding state
-        if self.status != RequestStatus.DECODING:
-            return False
-
-        is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
-        is_max_len = self.generated_len() >= self.max_new_tokens
-
-        # Only add the token if we're not finishing due to max length
-        # (EOS tokens should still be added to the output)
-        if not (is_max_len and not is_eos):
-            self.static_outputs.extend([token_id])
-
-        if is_eos or is_max_len:
-            self.status = RequestStatus.FINISHED
-            return True
-        return False
-
-    def __repr__(self):
-        return f"RequestState(\n\trequest_id={self.request_id},\n\tstatus={self.status},\n\tout_tokens={self.generated_len()},\n\tquery_length={len(self.prompt_ids)}, \n\tremaining_tokens={len(self.remaining_prompt_ids)}, \n\tkv_length={self.position_offset}\n\tfull_prompt_lenght={len(self.full_prompt_ids)},\n\tallocated_blocks={self.allocated_blocks},\n\tgenerated_tokens={self.static_outputs}\n)"
-
-    def to_generation_output(self):
-        """Convert the request state to a GenerationOutput object."""
-        return GenerationOutput(
-            request_id=self.request_id,
-            prompt_ids=self.full_prompt_ids,
-            status=self.status,
-            generated_tokens=self.static_outputs,
-            logprobs=[],
-            error=self.error,
-            next_token=self.next_token,
-        )
-
-
-T = TypeVar("T")
-def getattr_no_none(obj: Any, attr: str, default: T) -> T:
-    x = getattr(obj, attr, None)
-    return x if x is not None else default
-
-
-@attach_tracer()
-class PagedAttentionCache:
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        generation_config: GenerationConfig,
-        device: torch.device,
-        dtype: torch.dtype = torch.float16,
-        num_requests: int = 100,
-        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
-        tp_size: Optional[int] = None,
-    ) -> None:
-        """Initialize a paged attention cache for efficient memory usage.
-
-        Args:
-            config: Model configuration
-            generation_config: Generation configuration containing cache parameters
-            device: Device for the cache tensors
-            dtype: Data type for the cache tensors
-            layer_device_map: Optional mapping of layer indices to devices
-            initial_prompt_shapes: Optional sample prompts to help calculate optimal cache size
-        """
-        self.dtype = dtype
-        self.device = device
-
-        # Extract model dimensions
-        self.num_key_value_heads: int = getattr_no_none(config, "num_key_value_heads", config.num_attention_heads)
-        self.head_dim: int = getattr_no_none(config, "head_dim", config.hidden_size // config.num_attention_heads)
-
-        self.num_hidden_layers = config.num_hidden_layers
-        self.block_size = getattr(generation_config, "block_size", 32)
-
-        # Handle TP
-        if tp_size is not None and tp_size > 1:
-            if self.num_key_value_heads % tp_size != 0:
-                raise ValueError(
-                    f"Number of key value heads {self.num_key_value_heads} must be divisible by tensor parallel size {tp_size}."
-                )
-            # If the model is using tensor parallelism, we need to adjust the number of heads accordingly.
-            # self.num_key_value_heads //= tp_size # TODO: why is this commented out?
-
-        # Infer number of blocks and max batch tokens
-        memory_handler = PagedAttentionMemoryHandler(
-            block_size=self.block_size,
-            head_dim=self.head_dim,
-            num_heads=self.num_key_value_heads,
-            num_layers=self.num_hidden_layers,
-            hidden_size=config.hidden_size,
-            vocab_size=config.vocab_size,
-        )
-        num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks=getattr(generation_config, "num_blocks", None),
-            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
-            cache_dtype=self.dtype,
-        )
-
-        # Add the infered attributes to the class
-        self.num_blocks = num_blocks
-        self.max_batch_tokens = max_batch_tokens
-        logger.info(
-            f"After init, {self.num_blocks = }, {self.block_size = }, {self.max_batch_tokens = } "
-            f"{self.num_key_value_heads = }, {self.head_dim = }, {self.num_hidden_layers = }"
-        )
-
-        # Initialize the cache
-        self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
-        self.key_cache: list[torch.Tensor] = []
-        self.value_cache: list[torch.Tensor] = []
-        for idx in range(config.num_hidden_layers):
-            layer_device = layer_device_map[idx] if layer_device_map is not None else device
-            new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
-            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
-            # preventing compiled graph breaks when updating the cache.
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
-
-        # Block management data structures
-        self._free_blocks = deque(range(num_blocks))
-        self._block_tables: dict[str, list[int]] = {}
-
-    @traced
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> list[int]:
-        """Allocates n_blocks for a given request_id."""
-        if len(self._free_blocks) < n_blocks:
-            return False
-
-        allocated = []
-        for _ in range(n_blocks):
-            allocated.append(self._free_blocks.popleft())
-
-        if request_id not in self._block_tables:
-            self._block_tables[request_id] = []
-        self._block_tables[request_id].extend(allocated)
-        return allocated
-
-    @traced
-    def free_blocks(self, request_id: str) -> None:
-        """Frees all blocks associated with a request_id."""
-        if request_id in self._block_tables:
-            blocks_to_free = self._block_tables.pop(request_id)
-            self._free_blocks.extend(blocks_to_free)
-        else:
-            logger.info(f"Attempted to free blocks for non-existent request_id: {request_id}")
-
-    def get_num_free_blocks(self) -> int:
-        """Returns the number of free blocks available."""
-        return len(self._free_blocks)
-
-    def get_block_table(self, request_id: str) -> list[int]:
-        """Returns the block table for a request."""
-        return self._block_tables.get(request_id, [])
-
-    @traced
-    def _get_physical_indices(self, state: RequestState, logical_indices: list[int]) -> list[int]:
-        """
-        Maps logical sequence indices to physical cache indices using the block table, using PyTorch.
-
-        Args:
-            request_id: The request ID.
-            logical_indices: A list of logical indices.
-
-        Returns:
-            A list of physical indices.
-
-        Raises:
-            ValueError: If no block table is found for the request ID.
-            IndexError: If a logical index maps to a block index that is out of bounds.
-        """
-        request_id = state.request_id
-        block_table = self._block_tables.get(request_id)
-        if not block_table:
-            raise ValueError(f"No block table found for request {request_id}")
-
-        block_size = self.block_size
-        physical_indices = []
-
-        for idx in logical_indices:
-            block_idx = idx // block_size
-            block_offset = idx % block_size
-
-            if block_idx >= len(block_table):
-                raise IndexError(
-                    f"Logical index {idx} maps to block index {block_idx} which is out of bounds "
-                    f"for request {request_id}"
-                )
-
-            physical_block_num = block_table[block_idx]
-            physical_index = physical_block_num * block_size + block_offset
-            physical_indices.append(physical_index)
-
-        return physical_indices
-
-    @traced
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        read_index,
-        write_index,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Reshape cache for easier indexing
-        total_slots = self.num_blocks * self.block_size
-        k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
-        k_cache_flat[:, write_index, :] = key_states[0]
-        v_cache_flat[:, write_index, :] = value_states[0]
-        return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
-
-
-class Scheduler(ABC):
-    """
-    Abstract base class for scheduling requests in the continuous batch processor.
-    It is expected that cache allocation and scheduling logic will be implemented in subclasses.
-    """
-
-    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False):
-        self.active_requests: dict[str, RequestState] = {}
-        self.waiting_requests: dict[str, RequestState] = {}
-        self.waiting_requests_order: deque[str] = deque()
-        self.cache = cache
-        self.retain_cache_on_finish = retain_cache_on_finish
-
-    @abstractmethod
-    def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
-        pass
-
-    @abstractmethod
-    def schedule_batch(self, token_budget: int) -> list[RequestState]:
-        pass
-
-    @traced
-    def has_pending_requests(self) -> bool:
-        """Check if there are requests ready to be processed."""
-        return len(self.active_requests) or len(self.waiting_requests)
-
-    @abstractmethod
-    def finish_request(self, request_id: str, evict_from_cache: bool = True):
-        """Finish processing a request and free its allocated blocks."""
-        pass
-
-    @traced
-    def get_active_request_static_outputs(self, request_id: str) -> list[int]:
-        if request_id in self.active_requests:
-            return self.active_requests[request_id].static_outputs
-        return []
-
-
-@attach_tracer()
-class FIFOScheduler(Scheduler):
-    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.1):
-        super().__init__(cache, retain_cache_on_finish)
-        self.safety_margin = safety_margin
-    
-    @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
-        # 1. we check that the occupancy is less than the requested length
-        # 2. we allocate enough blocks to cover the requested length
-        current_len = state.current_len()
-        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
-        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
-            blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
-                return False
-            state.allocated_blocks.extend(allocated)
-        return True
-
-    @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
-    ):
-        """Prepare a request for processing in the current batch."""
-        request_tokens = (
-            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
-        )
-        if len(request_tokens) < token_budget:
-            # Can process the entire prompt/remainder
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING
-                state.prompt_ids = state.remaining_prompt_ids
-                state.remaining_prompt_ids = []
-        else:
-            # Need to split the request
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING_SPLIT
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING_SPLIT
-            state.remaining_prompt_ids = request_tokens[token_budget:]
-            state.prompt_ids = request_tokens[:token_budget]
-
-    @traced
-    def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
-        if self.retain_cache_on_finish and state.request_id in self.active_requests:
-            old_state = self.active_requests.pop(state.request_id)
-            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]
-            state.allocated_blocks = old_state.allocated_blocks
-            state.position_offset = old_state.position_offset
-        self.waiting_requests[state.request_id] = state
-        self.waiting_requests_order.append(state.request_id)
-
-    @traced
-    def schedule_batch(self, token_budget: int) -> list[RequestState]:
-        priority_states: list[RequestState] = []
-        second_priority_states: list[RequestState] = []
-        scheduled_requests = []
-
-        for state in self.active_requests.values():
-            if state.status == RequestStatus.DECODING:
-                priority_states.append(state)
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                second_priority_states.append(state)
-
-        # Add waiting requests to second priority
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
-
-        candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
-        safety_margins = self.safety_margin * self.cache.num_blocks
-
-        for state in candidates:
-
-            # If we are out the safety margin, we only accept decoding requests or the first prefill request
-            num_free_blocks = self.cache.get_num_free_blocks()
-            outside_safety_margin = num_free_blocks < safety_margins
-            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-                break
-
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(state, len(state.prompt_ids)):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
-                    break
-                continue
-
-            @traced
-            def _add_to_scheduled_requests(state: RequestState):
-                scheduled_requests.append(state)
-
-            _add_to_scheduled_requests(state)
-
-            token_budget -= request_len
-
-            @traced
-            def _remove_from_waiting_requests(state: RequestState):
-                req_id = state.request_id
-                if req_id in self.waiting_requests:
-                    del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
-
-            _remove_from_waiting_requests(state)
-
-            if token_budget == 0:
-                break
-
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
-        )
-
-        return scheduled_requests
-
-    @traced
-    def finish_request(self, request_id: str, evict_from_cache: bool = True):
-        if evict_from_cache:
-            self.cache.free_blocks(request_id)
-            if request_id in self.active_requests:
-                del self.active_requests[request_id]
-
-
-@attach_tracer()
-class PrefillFirstScheduler(Scheduler):
-    @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
-        # 1. we check that the occupancy is less than the requested length
-        # 2. we allocate enough blocks to cover the requested length
-        current_len = state.current_len()
-        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
-        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
-            blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
-                return False
-            state.allocated_blocks.extend(allocated)
-        return True
-
-    @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
-    ):
-        """Prepare a request for processing in the current batch."""
-        request_tokens = (
-            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
-        )
-        if len(request_tokens) < token_budget:
-            # Can process the entire prompt/remainder
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING
-                state.prompt_ids = state.remaining_prompt_ids
-                state.remaining_prompt_ids = []
-        else:
-            # Need to split the request
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING_SPLIT
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING_SPLIT
-            state.remaining_prompt_ids = request_tokens[token_budget:]
-            state.prompt_ids = request_tokens[:token_budget]
-
-    @traced
-    def add_waiting_request(self, state: RequestState):
-        """Add a request to the waiting list."""
-        if self.retain_cache_on_finish and state.request_id in self.active_requests:
-            old_state = self.active_requests.pop(state.request_id)
-            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]  # XXX: check for indexing error?
-            state.allocated_blocks = old_state.allocated_blocks
-            state.position_offset = old_state.position_offset
-        self.waiting_requests[state.request_id] = state
-        self.waiting_requests_order.append(state.request_id)
-
-    @traced
-    def schedule_batch(self, token_budget: int) -> list[RequestState]:
-        priority_states: list[RequestState] = []
-        second_priority_states: list[RequestState] = []
-        scheduled_requests = []
-
-        for state in self.active_requests.values():
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                priority_states.append(state)
-            elif state.status == RequestStatus.DECODING:
-                second_priority_states.append(state)
-
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
-
-        candidates = priority_states + second_priority_states
-
-        request_ids_to_remove_from_waiting = set()
-
-        for state in candidates:
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(
-                state, len(state.prompt_ids)
-            ):  # don't schedule if we can't allocate blocks
-                if len(self.cache._free_blocks) == 0:
-                    break
-                continue
-
-            @traced
-            def _add_to_scheduled_requests(state: RequestState):
-                scheduled_requests.append(state)
-
-            _add_to_scheduled_requests(state)
-
-            token_budget -= request_len
-
-            @traced
-            def _remove_from_waiting_requests(state: RequestState):
-                req_id = state.request_id
-                if req_id in self.waiting_requests:
-                    del self.waiting_requests[req_id]
-                    request_ids_to_remove_from_waiting.add(req_id)
-
-            _remove_from_waiting_requests(state)
-
-            if token_budget == 0:
-                break
-
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
-        )
-
-        return scheduled_requests
-
-    @traced
-    def finish_request(self, request_id: str, evict_from_cache: bool = True):
-        if evict_from_cache:
-            self.cache.free_blocks(request_id)
-            if request_id in self.active_requests:
-                del self.active_requests[request_id]
-
-
-@traced(standalone=True)
-def compute_optimal_blocks(
-    max_num_tokens,
-    block_size,
-    head_dim,
-    num_heads,
-    num_layers,
-    max_memory_percent=0.9,
-    num_blocks=None,
-    dtype=torch.float16,
-):
-    device, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
-    available_memory = int((total - max(allocated, reserved)) * max_memory_percent)
-
-    dtype_size = torch.tensor([], dtype=dtype).element_size()
-    bytes_per_token = 2 * num_heads * head_dim * dtype_size * num_layers
-    if num_blocks is not None:
-        # TODO
-        max_possible_concurrent_requests = num_blocks * bytes_per_token
-    # FIXME: forgot to add the inintial prompt length in the mix....
-    max_possible_concurrent_requests = int(
-        available_memory // (bytes_per_token * max_num_tokens * max_num_tokens // 4)
-    )
-    if max_possible_concurrent_requests <= 0:
-        logger.warning("you are trying to generate a bit too many tokens")
-        max_possible_concurrent_requests = 32
-    max_concurrent_tokens = min(64, max_possible_concurrent_requests)
-    # FIXME: Optimal means uses all memory
-    optimal_num_blocks = max(((max_concurrent_tokens * max_num_tokens) // block_size) + 1, 64)
-    return optimal_num_blocks, max_concurrent_tokens
+from ...configuration_utils import PretrainedConfig
+from ...generation.configuration_utils import GenerationConfig
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+from .cache import PagedAttentionCache
+from .core import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
 @dataclass
@@ -698,7 +66,7 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         streaming: bool = False,
         manual_eviction: bool = False,
-        slice_inputs: bool = True, # TODO: remove this once parity is ensured
+        slice_inputs: bool = True,  # TODO: remove this once parity is ensured
     ):
         """Initialize the continuous batch processor.
 
@@ -745,7 +113,9 @@ class ContinuousBatchProcessor:
         self.tensor_metadata = tensor_metadata
         self.input_ids = torch.empty((1, T), **tensor_metadata)
         self.position_ids = torch.empty((1, T), **tensor_metadata)
-        self.attention_mask = torch.empty((1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device)
+        self.attention_mask = torch.empty(
+            (1, 1, T, max_token_budget), dtype=self.model_dtype, device=self.model_device
+        )
         self.cumulative_seqlens_q = torch.empty((T + 1,), **tensor_metadata)
         self.cumulative_seqlens_k = torch.empty((T + 1,), **tensor_metadata)
         self.write_index = torch.empty((T,), **tensor_metadata)
@@ -773,8 +143,8 @@ class ContinuousBatchProcessor:
         self.input_ids[:, :t].zero_()
         self.position_ids[:, :t].zero_()
         self.attention_mask[:, :, :t, :c].fill_(torch.finfo(self.model_dtype).min)
-        self.cumulative_seqlens_q[:t+1].zero_()
-        self.cumulative_seqlens_k[:t+1].zero_()
+        self.cumulative_seqlens_q[: t + 1].zero_()
+        self.cumulative_seqlens_k[: t + 1].zero_()
         self.write_index[:t].fill_(-1)
         self.read_index[:c].fill_(-1)
         self.logits_indices[:t].fill_(-1)
@@ -782,10 +152,9 @@ class ContinuousBatchProcessor:
         self.max_seqlen_k = 0
         self.output_ids[:, :t].fill_(-1)
 
-
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
-        # Compute the slice to return 
+        # Compute the slice to return
         t = self.actual_tokens if self.slice_inputs else self.write_index.size(0)
         c = self.cache_used if self.slice_inputs else self.read_index.size(0)
         # Return  the tensors
@@ -1035,12 +404,6 @@ class ContinuousBatchProcessor:
         self.scheduler.waiting_requests_order.clear()
 
 
-SCHEDULER_MAPPING = {
-    "fifo": FIFOScheduler,
-    "prefill_first": PrefillFirstScheduler,
-}
-
-
 # Manager Class (User Interface)
 @attach_tracer()
 class ContinuousBatchingManager:
@@ -1263,7 +626,7 @@ class ContinuousBatchingManager:
 
             scheduler = None
             if hasattr(self.generation_config, "scheduler"):
-                scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
+                scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler, None)
                 if scheduler is None:
                     logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
                     scheduler = FIFOScheduler
@@ -1301,7 +664,7 @@ class ContinuousBatchingManager:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
-        device, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
+        device, total, reserved, allocated = get_device_and_memory_breakdown()
         logger.info(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
         if torch.cuda.is_available() and self.use_cuda_graph:
             if self.current_batch == 0:
@@ -1416,7 +779,7 @@ class ContinuousMixin:
         """
         if not inputs:
             return []
-        if logger.getEffectiveLevel() <= logging.INFO:
+        if logger.getEffectiveLevel() <= logger.INFO:
             logger.warning("Progress bar is disabled when logger level is less than INFO")
             progress_bar = False
 
