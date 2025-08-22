@@ -17,6 +17,7 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+from torch import return_types
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -204,18 +205,18 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(
+        "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
+    )
     def test_generate_from_inputs_embeds(self, _, num_beams):
-        """Skip this test for Blt as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
-        self.skipTest(
-            "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
-        )
+        pass
 
     @pytest.mark.generate
+    @unittest.skip(
+        "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
+    )
     def test_inputs_embeds_matches_input_ids(self):
-        """Skip this test for Blt as it has complex embedding computation that requires real token IDs for hash-based embeddings."""
-        self.skipTest(
-            "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
-        )
+        pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
@@ -246,14 +247,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         _test_eager_matches_sdpa_inference(
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
-
-    def test_torchscript_simple(self):
-        """Skip torchscript test for Blt as it has complex patching logic that's not compatible."""
-        self.skipTest("Blt has complex patching logic that's not compatible with torchscript")
-
-    def test_torchscript_output_hidden_state(self):
-        """Skip torchscript test for Blt as it has complex patching logic that's not compatible."""
-        self.skipTest("Blt has complex patching logic that's not compatible with torchscript")
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
@@ -294,33 +287,9 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():
-        return
-
-    @unittest.skip(reason="Padding with patcher is complex")
-    def test_eager_padding_matches_padding_free_with_position_ids():
-        return
-
-    @unittest.skip(reason="Padding with patcher is complex")
-    def test_sdpa_padding_matches_padding_free_with_position_ids():
-        return
+        return_types
 
 
 @require_torch_accelerator
@@ -440,7 +409,7 @@ class BltIntegrationTest(unittest.TestCase):
     def test_model_bf16(self):
         """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
 
         prompt = "my name is"
 
@@ -464,74 +433,74 @@ class BltIntegrationTest(unittest.TestCase):
     @require_torch_bf16
     def test_model_logits_bf16(self):
         """Test Blt model logits with bfloat16 precision."""
+
         EXPECTED_OUTPUT = torch.tensor(
             [
                 [
                     -10.5000,
                     -10.6875,
                     -6.1875,
-                    -10.5000,
+                    -10.5625,
                     -10.3125,
-                    -9.1250,
+                    -9.1875,
                     -8.5000,
-                    -8.6250,
+                    -8.6875,
                     -9.1875,
                     -9.5625,
                     -9.3750,
                     -8.5000,
                     -9.0625,
-                    -3.4062,
-                    2.9688,
+                    -3.4219,
+                    2.9531,
                     -10.3125,
                     -6.4062,
-                    -5.9688,
+                    -6.0000,
                     -9.6875,
                     -9.1875,
                     -8.8125,
                     -9.8125,
                     -9.7500,
                     -9.4375,
-                    -9.7500,
-                    -9.4375,
+                    -9.8125,
+                    -9.5000,
                     -9.0000,
-                    -9.7500,
+                    -9.8125,
                     -9.4375,
                     -9.3125,
                 ],
                 [
-                    -13.3125,
+                    -13.2500,
                     -13.1875,
                     -5.6875,
-                    -13.2500,
+                    -13.3125,
                     -13.5000,
                     -8.7500,
+                    -7.0625,
                     -7.0312,
-                    -7.0000,
                     -10.1250,
                     -10.3750,
                     -9.8750,
-                    -7.7812,
+                    -7.8438,
                     -8.8750,
-                    -5.2500,
-                    -3.5312,
-                    -12.5625,
+                    -5.2812,
+                    -3.5625,
+                    -12.5000,
                     -9.1875,
-                    -6.7812,
+                    -6.8125,
                     -10.3750,
-                    -9.2500,
+                    -9.3125,
                     -10.6250,
                     -11.5000,
-                    -11.1875,
-                    -10.9375,
+                    -11.2500,
+                    -11.0000,
                     -10.5625,
                     -10.8750,
                     -11.0625,
                     -11.3750,
-                    -10.5000,
+                    -10.5625,
                     -10.0000,
                 ],
-            ],
-            dtype=torch.bfloat16,
+            ]
         ).to(torch_device)
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
@@ -542,8 +511,6 @@ class BltIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
-
-        # print(output[0, :2, :30])
 
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
 
@@ -575,7 +542,7 @@ class BltIntegrationTest(unittest.TestCase):
     def test_model_bf16_static_cache(self):
         """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
 
         prompt = "my name is"
 

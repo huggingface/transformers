@@ -168,18 +168,37 @@ class BltPatcherConfig(PretrainedConfig):
     Configuration class for the Blt Patcher/Entropy model component.
 
     Args:
-            vocab_size (`<fill_type>`, *optional*, defaults to 260): <fill_docstring>
-            hidden_size (`<fill_type>`, *optional*, defaults to 768): <fill_docstring>
-            num_hidden_layers (`<fill_type>`, *optional*, defaults to 14): <fill_docstring>
-            num_attention_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-            num_key_value_heads (`<fill_type>`, *optional*): <fill_docstring>
-            max_position_embeddings (`<fill_type>`, *optional*, defaults to 8192): <fill_docstring>
-            rms_norm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
-            dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
-            rope_theta (`<fill_type>`, *optional*, defaults to 10000.0): <fill_docstring>
-            intermediate_size (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
-            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
+            vocab_size (`int`, *optional*, defaults to 260):
+                Vocabulary size of the Blt patcher model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling the patcher model.
+            hidden_size (`int`, *optional*, defaults to 768):
+                Dimension of the hidden representations.
+            num_hidden_layers (`int`, *optional*, defaults to 14):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*):
+                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+                by meanpooling all the original heads within that group. For more details, check out [this
+                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+                `num_attention_heads`.
+            max_position_embeddings (`int`, *optional*, defaults to 8192):
+                The maximum sequence length that this model might ever be used with.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the rms normalization layers.
+            dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            rope_theta (`float`, *optional*, defaults to 10000.0):
+                The base period of the RoPE embeddings.
+            intermediate_size (`int`, *optional*, defaults to 2048):
+                Dimension of the MLP representations.
+            rope_scaling (`dict`, *optional*):
+                Dictionary containing the RoPE scaling configuration.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "blt_patcher"
@@ -229,26 +248,47 @@ class BltConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-            vocab_size (`<fill_type>`, *optional*, defaults to 260): <fill_docstring>
-            max_position_embeddings (`<fill_type>`, *optional*, defaults to 4096): <fill_docstring>
-            patch_in_forward (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-            patch_size (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-            patching_mode (`<fill_type>`, *optional*, defaults to `"entropy"`): <fill_docstring>
-            patching_threshold (`<fill_type>`, *optional*, defaults to 1.34): <fill_docstring>
-            patching_batch_size (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-            max_patch_length (`<fill_type>`, *optional*): <fill_docstring>
-            cross_attn_k (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-            encoder_hash_byte_group_size (`<fill_type>`, *optional*): <fill_docstring>
-            encoder_hash_byte_group_vocab (`<fill_type>`, *optional*, defaults to 500002): <fill_docstring>
-            encoder_hash_byte_group_nb_functions (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-            patcher_config (`<fill_type>`, *optional*): <fill_docstring>
-            encoder_config (`<fill_type>`, *optional*): <fill_docstring>
-            decoder_config (`<fill_type>`, *optional*): <fill_docstring>
-            global_config (`<fill_type>`, *optional*): <fill_docstring>
-            tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-            rope_theta (`<fill_type>`, *optional*, defaults to 500000.0): <fill_docstring>
-            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
+            vocab_size (`int`, *optional*, defaults to 260):
+                Vocabulary size of the Blt model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`BltModel`].
+            max_position_embeddings (`int`, *optional*, defaults to 4096):
+                The maximum sequence length that this model might ever be used with.
+            patch_in_forward (`bool`, *optional*, defaults to `True`):
+                Whether to perform patching during the forward pass.
+            patch_size (`int`, *optional*, defaults to 4):
+                Size of the patches used in the patching mechanism.
+            patching_mode (`str`, *optional*, defaults to `"entropy"`):
+                The mode used for patching, such as entropy-based patching.
+            patching_threshold (`float`, *optional*, defaults to 1.34):
+                Threshold value used for determining when to apply patches.
+            patching_batch_size (`int`, *optional*, defaults to 1):
+                Batch size used during the patching process.
+            max_patch_length (`int`, *optional*):
+                Maximum length of patches that can be generated.
+            cross_attn_k (`int`, *optional*, defaults to 2):
+                Number of cross-attention heads used in the model.
+            encoder_hash_byte_group_size (`list`, *optional*):
+                List of byte group sizes used in the encoder hash function.
+            encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
+                Vocabulary size for the encoder hash byte groups.
+            encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
+                Number of hash functions used in the encoder byte grouping.
+            patcher_config (`BltPatcherConfig`, *optional*):
+                Configuration for the patcher component of the model.
+            encoder_config (`BltLocalEncoderConfig`, *optional*):
+                Configuration for the local encoder component of the model.
+            decoder_config (`BltLocalDecoderConfig`, *optional*):
+                Configuration for the local decoder component of the model.
+            global_config (`BltGlobalTransformerConfig`, *optional*):
+                Configuration for the global transformer component of the model.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie weight embeddings.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rope_theta (`float`, *optional*, defaults to 500000.0):
+                The base period of the RoPE embeddings.
+            rope_scaling (`dict`, *optional*):
+                Dictionary containing the RoPE scaling configuration.
 
     ```python
     >>> from transformers import BltModel, BltConfig

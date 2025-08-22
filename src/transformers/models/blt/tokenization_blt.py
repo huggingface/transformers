@@ -44,15 +44,27 @@ class BltTokenizer(PreTrainedTokenizer):
     beginning of example (BOE), and padding (PAD).
 
     Args:
-            bos_token (`<fill_type>`, *optional*, defaults to `"<s>"`): <fill_docstring>
-            eos_token (`<fill_type>`, *optional*, defaults to `"</s>"`): <fill_docstring>
-            pad_token (`<fill_type>`, *optional*, defaults to `"<pad>"`): <fill_docstring>
-            unk_token (`<fill_type>`, *optional*, defaults to `"<unk>"`): <fill_docstring>
-            boe_token (`<fill_type>`, *optional*, defaults to `"<boe>"`): <fill_docstring>
-            add_bos_token (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-            add_eos_token (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-            clean_up_tokenization_spaces (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-            spaces_between_special_tokens (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+                The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+            eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+                The end of sequence token.
+            pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
+                A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+                attention mechanisms or loss computation.
+            unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
+                The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+                token instead.
+            boe_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<boe>"`):
+                The beginning of example token used for marking the start of individual examples in a sequence.
+            add_bos_token (`bool`, *optional*, defaults to `True`):
+                Whether or not to add an `bos_token` at the start of sequences.
+            add_eos_token (`bool`, *optional*, defaults to `False`):
+                Whether or not to add an `eos_token` at the end of sequences.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+                extra spaces.
+            spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to add spaces between special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

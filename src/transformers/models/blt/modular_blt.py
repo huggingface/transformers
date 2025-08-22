@@ -373,8 +373,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
 
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
-    base_model_prefix = "local_encoder"
-    _no_split_modules = ["BltTransformerLayer"]
 
     def __init__(self, config: BltLocalEncoderConfig):
         super().__init__(config)
@@ -487,8 +485,6 @@ class BltLocalEncoder(BltPreTrainedModel):
 
 class BltLocalDecoder(BltPreTrainedModel):
     config: BltLocalDecoderConfig
-    base_model_prefix = "local_decoder"
-    _no_split_modules = ["BltTransformerLayer"]
 
     def __init__(self, config: BltLocalDecoderConfig):
         super().__init__(config)
@@ -568,8 +564,6 @@ class BltLocalDecoder(BltPreTrainedModel):
 
 class BltGlobalTransformer(BltPreTrainedModel):
     config: BltGlobalTransformerConfig
-    base_model_prefix = "global_transformer"
-    _no_split_modules = ["BltTransformerLayer"]
 
     def __init__(self, config: BltGlobalTransformerConfig):
         super().__init__(config)
