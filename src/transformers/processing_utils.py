@@ -368,6 +368,8 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
 
     """
 
+    _defaults = {}
+
     common_kwargs: CommonKwargs = {
         **CommonKwargs.__annotations__,
     }
@@ -517,6 +519,7 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
+    valid_processor_kwargs = ProcessingKwargs
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -556,6 +559,65 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name, arg in kwargs.items():
             self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
+
+    def __call__(self, images=None, text=None, videos=None, audio=None, **kwargs: Unpack[ProcessingKwargs]):
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
+        of the above two methods for more information.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        if images is None and text is None and videos is None and audio is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+
+        attribute_to_kwargs = {
+            "tokenizer": (text, "text_kwargs"),
+            "image_processor": (images, "images_kwargs"),
+            "video_processor": (videos, "videos_kwargs"),
+            "feature_extractor": (audio, "audio_kwargs"),
+        }
+        outputs = {}
+        for attribute_name in self.attributes:
+            attribute = getattr(self, attribute_name, None)
+            input_data, input_kwargs = attribute_to_kwargs[attribute_name]
+            if input_data is not None and attribute is not None:
+                attribute_output = attribute(input_data, **kwargs[input_kwargs])
+                outputs.update(attribute_output)
+
+        return BatchFeature(outputs)
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
