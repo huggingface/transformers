@@ -129,7 +129,7 @@ def convert_colqwen2_weights_to_hf(
 
     # NOTE: The new model was initialized with float32 weights. We need to convert it to the desired precision.
     # There are two ways to set the model's dtype:
-    # - Using `model.from_pretrained(..., torch_dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
+    # - Using `model.from_pretrained(..., dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
     # - Using `model.to(dtype_precision)` converts all values - including the hyperparameters - to the desired precision.
     # The following snippet allows a fine-grained control over the model's dtype, making sure that all
     # the new weights' dtypes match the original model.

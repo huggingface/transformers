@@ -44,7 +44,7 @@ device = f"{infer_device()}:0"
 
 model = AutoModelForVision2Seq.from_pretrained(
     "thisisiron/Ovis2-2B-hf",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 ).eval().to(device)
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 

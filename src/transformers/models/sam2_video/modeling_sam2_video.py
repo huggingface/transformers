@@ -117,7 +117,7 @@ class Sam2VideoInferenceSession:
             The device to store the inference state on.
         video_storage_device (`torch.device`, *optional*, defaults to `"cpu"`):
             The device to store the video on.
-        torch_dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
+        dtype (`torch.dtype`, *optional*, defaults to `"float32"`):
             The dtype to use for the video.
         max_vision_features_cache_size (`int`, *optional*, defaults to 1):
             The maximum number of vision features to cache.
@@ -131,18 +131,18 @@ class Sam2VideoInferenceSession:
         inference_device: Union[torch.device, str] = "cpu",
         inference_state_device: Union[torch.device, str] = "cpu",
         video_storage_device: Union[torch.device, str] = "cpu",
-        torch_dtype: Union[torch.dtype, str] = "float32",
+        dtype: Union[torch.dtype, str] = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=torch_dtype)) if video is not None else None
+        self.processed_frames = list(video.to(video_storage_device, dtype=dtype)) if video is not None else None
         self.video_height = video_height
         self.video_width = video_width
 
         self.inference_device = inference_device
         self.inference_state_device = inference_state_device
         self.video_storage_device = video_storage_device
-        self.torch_dtype = torch_dtype
+        self.dtype = dtype
         self.max_vision_features_cache_size = max_vision_features_cache_size
 
         # Cache for computed features
@@ -221,7 +221,7 @@ class Sam2VideoInferenceSession:
     def add_mask_inputs(self, obj_idx: int, frame_idx: int, inputs: torch.Tensor):
         """Add mask inputs with automatic device placement."""
         self.mask_inputs_per_obj[obj_idx][frame_idx] = inputs.to(
-            self.inference_device, dtype=self.torch_dtype, non_blocking=True
+            self.inference_device, dtype=self.dtype, non_blocking=True
         )
 
     def remove_mask_inputs(self, obj_idx: int, frame_idx: int):
@@ -295,7 +295,7 @@ class Sam2VideoInferenceSession:
     # Video frame management
     def add_new_frame(self, pixel_values: torch.Tensor) -> int:
         """Add new frame with automatic device placement."""
-        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.torch_dtype, non_blocking=True)
+        pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 

@@ -255,7 +255,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         inputs = self.processor(images=self.image, text=self.text, return_tensors="pt").to(
@@ -276,7 +276,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_batch(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -298,7 +298,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
-            torch_dtype="bfloat16",
+            dtype="bfloat16",
             device_map=torch_device,
         )
 
@@ -329,7 +329,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
@@ -357,7 +357,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
-            torch_dtype="bfloat16",
+            dtype="bfloat16",
             device_map=torch_device,
         )
 
