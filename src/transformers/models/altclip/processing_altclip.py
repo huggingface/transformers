@@ -41,11 +41,6 @@ class AltCLIPProcessor(ProcessorMixin):
 
     @deprecate_kwarg(old_name="feature_extractor", version="5.0.0", new_name="image_processor")
     def __init__(self, image_processor=None, tokenizer=None):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
 
 
