@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
+    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -431,6 +432,8 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    # For multi-modal models like OwlV2, we need to include all required inputs for SDPA tests
+    additional_model_inputs = ["input_ids", "attention_mask", "pixel_values"]
 
     def setUp(self):
         self.model_tester = Owlv2ModelTester(self)
@@ -648,6 +651,8 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    # For multi-modal models like OwlV2, we need to include all required inputs for SDPA tests
+    additional_model_inputs = ["input_ids", "attention_mask", "pixel_values"]
 
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)
@@ -1037,6 +1042,38 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
+
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model.image_guided_detection(**inputs)
+
+        # No need to check the logits, we just check inference runs fine.
+        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+    @slow
+    @require_torch_accelerator
+    @require_torch_fp16
+    @require_torch_sdpa
+    def test_inference_one_shot_object_detection_fp16_sdpa(self):
+        model_name = "google/owlv2-base-patch16"
+        model = Owlv2ForObjectDetection.from_pretrained(
+            model_name, attn_implementation="sdpa", torch_dtype=torch.float16
+        ).to(torch_device)
+        self.assertTrue(model.config._attn_implementation == "sdpa")
+        self.assertTrue(model.owlv2.vision_model.config._attn_implementation == "sdpa")
+        self.assertTrue(model.owlv2.text_model.config._attn_implementation == "sdpa")
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 

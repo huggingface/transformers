@@ -423,6 +423,10 @@ def _test_eager_matches_sdpa_inference(
                 outputs_eager = outputs_eager["language_model_outputs"]
                 outputs_sdpa = outputs_sdpa["language_model_outputs"]
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            elif "text_model_output" in outputs_eager and "owl" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["text_model_output"]
+                outputs_sdpa = outputs_sdpa["text_model_output"]
+                key = "hidden_states"
             else:
                 key = "hidden_states"
 
@@ -3848,6 +3852,10 @@ class ModelTesterMixin:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             if config.model_type in ["sam"]:
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
+            if config.model_type in ["owlvit", "owlvit_text_model", "owlv2", "owlv2_text_model"]:
+                self.skipTest(
+                    reason="OwlViT/V2 models currently (transformers==4.55.0) use attention_mask inputs in attention"
+                )
 
             model = model_class(config)
 
