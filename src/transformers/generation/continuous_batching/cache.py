@@ -21,7 +21,7 @@ import torch
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
-from .core import RequestState, logger
+from .core import RequestState, logger, get_device_and_memory_breakdown
 
 
 T = TypeVar("T")
@@ -232,7 +232,7 @@ class PagedAttentionMemoryHandler:
 
     @staticmethod
     def get_available_memory(max_memory_percent: float = 1.0) -> int:
-        _, total, reserved, allocated = PagedAttentionMemoryHandler.get_device_and_memory_breakdown()
+        _, total, reserved, allocated = get_device_and_memory_breakdown()
         available_memory = total - max(allocated, reserved)
         available_memory = int(available_memory * max_memory_percent)
         return available_memory
