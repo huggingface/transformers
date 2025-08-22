@@ -53,10 +53,10 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import (
-    Qwen2_5_VLProcessor,
-    Qwen2_5_VLProcessorKwargs,
-    Qwen2_5_VLVideosProcessorKwargs,
+from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
+from ..qwen2_vl.processing_qwen2_vl import (
+    Qwen2_VLProcessor,
+    Qwen2_VLProcessorKwargs,
 )
 
 
@@ -1502,7 +1502,7 @@ class Glm4vImagesKwargs(ImagesKwargs):
     merge_size: Optional[int]
 
 
-class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
+class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
     images_kwargs: Glm4vImagesKwargs
     videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
@@ -1513,7 +1513,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     }
 
 
-class Glm4vProcessor(Qwen2_5_VLProcessor):
+class Glm4vProcessor(Qwen2_VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
