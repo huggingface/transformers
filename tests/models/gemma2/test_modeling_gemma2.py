@@ -20,7 +20,8 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, Gemma2Config, is_torch_available, pipeline
+from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -196,9 +197,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -217,9 +218,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, attn_implementation="eager"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16, attn_implementation="eager").to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -241,7 +242,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -271,7 +272,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -295,7 +296,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype="float16"
+            model_id, attn_implementation="flash_attention_2", dtype="float16"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -305,6 +306,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @pytest.mark.torch_export_test
     @slow
     @require_read_token
     def test_export_static_cache(self):
@@ -343,7 +345,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b",
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -365,7 +367,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
@@ -375,6 +380,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     @require_large_cpu_ram
+    @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
         from transformers.pytorch_utils import is_torch_greater_or_equal
@@ -389,7 +395,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         # Export + HybridCache
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
 
         # Test generation with the exported model
         prompt = "What is the capital of France?"
@@ -421,7 +430,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         assert model.config._attn_implementation == "flex_attention"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -459,14 +468,66 @@ class Gemma2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        # It should by Hybrid by default from hub config, but let's make sure!
+        out = model.generate(**inputs, max_new_tokens=20, cache_implementation="hybrid")[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @require_read_token
+    def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
+        """
+        Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for
+        the model on the hub
+        """
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FlashAttention2 is required for this test.")
+
+        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
+            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+
+        model_id = "google/gemma-2-2b"
+        EXPECTED_COMPLETIONS = [
+            " the people, the food, the culture, the history, the music, the art, the architecture",
+            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+        ]
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
+        output_text = tokenizer.batch_decode(out.sequences[:, input_size:])
+
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+
+        # Let's check that the dynamic cache has hybrid layers!
+        dynamic_cache = out.past_key_values
+        self.assertTrue(isinstance(dynamic_cache, DynamicCache))
+        for layer, layer_type in zip(dynamic_cache.layers, model.config.layer_types):
+            if layer_type == "sliding_attention":
+                self.assertTrue(isinstance(layer, DynamicSlidingWindowLayer))
+                self.assertEqual(layer.keys.shape[-2], model.config.sliding_window - 1)
+            else:
+                self.assertTrue(isinstance(layer, DynamicLayer))
+                # max_new_tokens - 1 because last token generated is not cached
+                self.assertEqual(layer.keys.shape[-2], input_size + 20 - 1)

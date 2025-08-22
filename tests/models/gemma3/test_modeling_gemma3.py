@@ -490,7 +490,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_bf16(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
             self.messages,
@@ -500,7 +500,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -519,7 +520,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages_2 = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -545,7 +546,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -579,7 +581,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         crop_config = {
             "images_kwargs": {
@@ -599,7 +601,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
@@ -620,7 +623,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         crop_config = {
             "images_kwargs": {
                 "do_pan_and_scan": True,
@@ -654,7 +657,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             **crop_config,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
         EXPECTED_TEXTS = Expectations(
@@ -686,7 +690,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_4b_multiimage(self):
         model_id = "google/gemma-3-4b-it"
 
-        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
         messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -708,7 +712,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
@@ -725,11 +730,12 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = Gemma3ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -752,7 +758,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -763,7 +769,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        # cache_implementation="hybrid" an in the original transformers implementation
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
@@ -796,19 +803,23 @@ class Gemma3IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+            model_id, attn_implementation=attn_implementation, dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
+        # cache_implementation="hybrid" an in the original transformers implementation
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="hybrid")[
+            :, input_size:
+        ]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
+    @pytest.mark.torch_export_test
     def test_export_text_only_with_hybrid_cache(self):
         if not is_torch_greater_or_equal("2.6.0"):
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
@@ -822,7 +833,10 @@ class Gemma3IntegrationTest(unittest.TestCase):
         # Export + HybridCache
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
-        exported_program = exportable_module.export()
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         logging.info(f"\nExported program: {exported_program}")
 
         # Test generation with the exported model
@@ -841,9 +855,44 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 **input_text,
                 max_new_tokens=max_new_tokens_to_generate,
                 do_sample=False,  # Use greedy decoding to match the exported model
+                cache_implementation="hybrid",
             )
 
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
         self.assertEqual(export_generated_text, eager_generated_text)
+
+    def test_dynamic_sliding_window_is_default(self):
+        """
+        Test that the dynamic sliding window cache (added in #40039) is the default cache implementation for Gemma3
+        models, despite the fact that Hub checkpoints may have `cache_implementation="hybrid"` (static sliding window).
+        """
+        model_id = "google/gemma-3-1b-it"
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+
+        # the default cache is static sliding window
+        self.assertEqual(model.config.cache_implementation, "hybrid")
+        self.assertEqual(model.generation_config.cache_implementation, "hybrid")
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        prompt = "What is the capital of France?"
+        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        foward_outputs = model(**model_inputs)
+        self.assertIn("DynamicSlidingWindowLayer", str(foward_outputs.past_key_values))
+
+        generate_outputs = model.generate(
+            **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True
+        )
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+
+        # If we manually specify the cache implementation = "hybrid", it will use the static sliding window cache
+        generate_outputs = model.generate(
+            **model_inputs,
+            max_new_tokens=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            cache_implementation="hybrid",
+        )
+        self.assertNotIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))

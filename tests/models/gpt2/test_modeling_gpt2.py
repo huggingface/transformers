@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 import unittest
 
 import pytest
 
-from transformers import GPT2Config, is_torch_available
+from transformers import DynamicCache, GPT2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -443,9 +442,15 @@ class GPT2ModelTester:
 
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         cache_outputs = model(**cache_inputs)
-        full_outputs_with_attention_mask = model(
-            **non_cache_inputs, past_key_values=cache_outputs.past_key_values
-        ).last_hidden_state
+        # Caches are mutable (unlike legacy tuples), so we need to copy them before using multiple times
+        pkv_copy = DynamicCache()
+        pkv_copy.update(
+            cache_outputs.past_key_values.layers[0].keys, cache_outputs.past_key_values.layers[0].values, 0
+        )
+        pkv_copy.update(
+            cache_outputs.past_key_values.layers[1].keys, cache_outputs.past_key_values.layers[1].values, 1
+        )
+        full_outputs_with_attention_mask = model(**non_cache_inputs, past_key_values=pkv_copy).last_hidden_state
         full_outputs_without_attention_mask = model(
             non_cache_inputs["input_ids"], past_key_values=cache_outputs.past_key_values
         ).last_hidden_state
@@ -874,7 +879,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         """
         Overwriting the common test as the test is flaky on tiny models
         """
-        model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
+        model = GPT2LMHeadModel.from_pretrained("gpt2", dtype=torch.float16).to(0)
 
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -889,7 +894,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_native = tokenizer.batch_decode(output_native)
 
         model = GPT2LMHeadModel.from_pretrained(
-            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", torch_dtype=torch.float16
+            "gpt2", device_map={"": 0}, attn_implementation="flash_attention_2", dtype=torch.float16
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)

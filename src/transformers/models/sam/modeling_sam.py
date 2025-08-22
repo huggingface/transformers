@@ -402,7 +402,7 @@ class SamTwoWayTransformer(nn.Module):
                 attention_similarity=attention_similarity,
                 **kwargs,
             )
-        # Apply the final attenion layer from the points to the image
+        # Apply the final attention layer from the points to the image
         query = queries + point_embeddings
         key = keys + image_positional_embeddings
 
@@ -1110,6 +1110,7 @@ class SamVisionModel(SamPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     Segment Anything Model (SAM) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
     """
 )
 class SamModel(SamPreTrainedModel):
@@ -1118,7 +1119,7 @@ class SamModel(SamPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
-    def __init__(self, config):
+    def __init__(self, config: SamConfig):
         super().__init__(config)
         self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
 

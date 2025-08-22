@@ -207,7 +207,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         del model
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -242,7 +242,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
-            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, torch_dtype=torch.bfloat16
+            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, dtype=torch.bfloat16
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
@@ -257,7 +257,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     def test_long_context(self):
         EXPECTED_GENERATION = [' Jean-Paul Delannoy told CNN that the BEA is "not aware of any video footage that could have been taken on board the plane." He added that the BEA is "not aware of any video footage that could have been taken on board the plane." The BEA is the French equivalent of the National Transportation Safety Board']  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -269,7 +269,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     def test_longer_than_window(self):
         EXPECTED_GENERATION = [" Robin's comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the"]  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16).to(torch_device)
         model.config.attention_window_size = 256  # Make the attention window size shorter than the current prompt
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)

@@ -129,20 +129,6 @@ class BlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = BlipProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
-
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):

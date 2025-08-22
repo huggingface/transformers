@@ -54,7 +54,7 @@ dist.broadcast(position_ids, src=0)
 
 # model and optimizer
 repo_id = "Qwen/Qwen2.5-Coder-0.5B-Instruct"
-model = AutoModelForCausalLM.from_pretrained(repo_id, torch_dtype=dtype, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(repo_id, dtype=dtype, device_map=device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
 model.train()

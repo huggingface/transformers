@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 from pytest import mark
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -163,7 +163,6 @@ class CLIPVisionModelTester:
         return config, inputs_dict
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     def test_eager_matches_sdpa_inference(self, *args):
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
@@ -175,7 +174,6 @@ class CLIPModelTesterMixin(ModelTesterMixin):
     different output logits, and are not supposed to be used or tested with padding_side="left".
     """
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -294,13 +292,11 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "visual_projection"))
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         super().test_sdpa_can_dispatch_composite_models()
 
@@ -464,18 +460,15 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "text_projection"))
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @slow
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         super().test_sdpa_can_dispatch_composite_models()
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(reason="CLIPTextModel has two attention masks: `causal_attention_mask` and `attention_mask`")
 
@@ -692,22 +685,19 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @slow
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         super().test_sdpa_can_dispatch_composite_models()
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_on_flash(self):
         self.skipTest(reason="CLIP text tower has two attention masks: `causal_attention_mask` and `attention_mask`")
 
-    @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
@@ -726,11 +716,11 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
@@ -764,13 +754,11 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
-                )
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
@@ -862,14 +850,12 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @slow
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         super().test_sdpa_can_dispatch_composite_models()
 

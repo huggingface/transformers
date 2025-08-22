@@ -365,28 +365,6 @@ class SmolVLMProcessor(ProcessorMixin):
 
         return BatchFeature(inputs, tensor_type=return_tensors)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SmolVLMTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return batched_decode_output
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SmolVLMTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return decode_output
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
-
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],

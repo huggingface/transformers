@@ -876,13 +876,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.bfloat16,
+                    dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 
@@ -922,11 +922,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -1420,7 +1420,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
-    def test_generate_compile_model_forward(self):
+    @pytest.mark.torch_compile_test
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
     # TODO (joao, eustache): fix me :)
@@ -1710,7 +1711,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        token = os.getenv("HF_HUB_READ_TOKEN", None)
+        if token is None:
+            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
@@ -2424,19 +2427,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_speculative_decoding_distil(self):
-        torch_dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
+        dtype = torch.float16 if (torch.cuda.is_available() or is_torch_xpu_available()) else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "distil-whisper/distil-large-v2"
-        assistant_model = WhisperForCausalLM.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        assistant_model = WhisperForCausalLM.from_pretrained(assistant_model_id, dtype=dtype, use_safetensors=True)
         assistant_model.to(torch_device)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -2474,18 +2473,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_speculative_decoding_non_distil(self):
-        torch_dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
+        dtype = torch.float16 if torch_device in ["cuda", "xpu"] else torch.float32
         model_id = "openai/whisper-large-v2"
-        model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch_dtype, use_safetensors=True
-        )
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, dtype=dtype, use_safetensors=True)
         model.to(torch_device)
 
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = WhisperForConditionalGeneration.from_pretrained(
-            assistant_model_id, torch_dtype=torch_dtype, use_safetensors=True
+            assistant_model_id, dtype=dtype, use_safetensors=True
         )
         assistant_model.to(torch_device)
 

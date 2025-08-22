@@ -13,21 +13,69 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-01 and added to Hugging Face Transformers on 2025-04-29.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # HGNet-V2
 
-## Overview
+[HGNetV2](https://github.com/PaddlePaddle/PaddleClas/blob/v2.6.0/docs/zh_CN/models/ImageNet1k/PP-HGNetV2.md) is a next-generation convolutional neural network (CNN) backbone built for optimal accuracy-latency tradeoff on NVIDIA GPUs. Building on the original[HGNet](https://github.com/PaddlePaddle/PaddleClas/blob/v2.6.0/docs/en/models/PP-HGNet_en.md), HGNetV2 delivers high accuracy at fast inference speeds and performs strongly on tasks like image classification, object detection, and segmentation, making it a practical choice for GPU-based computer vision applications.
 
-A HGNet-V2 (High Performance GPU Net) image classification model.
-HGNet arhtictecture was proposed in [HGNET: A Hierarchical Feature Guided Network for Occupancy Flow Field Prediction](https://huggingface.co/papers/2407.01097) by
-Zhan Chen, Chen Tang, Lu Xiong
+You can find all the original HGNet V2 models under the [USTC](https://huggingface.co/ustc-community/models?search=hgnet) organization.
 
-The abstract from the HGNET paper is the following:
+> [!TIP]
+> This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).
+> Click on the HGNet V2 models in the right sidebar for more examples of how to apply HGNet V2 to different computer vision tasks.
 
-*Predicting the motion of multiple traffic participants has always been one of the most challenging tasks in autonomous driving. The recently proposed occupancy flow field prediction method has shown to be a more effective and scalable representation compared to general trajectory prediction methods. However, in complex multi-agent traffic scenarios, it remains difficult to model the interactions among various factors and the dependencies among prediction outputs at different time steps. In view of this, we propose a transformer-based hierarchical feature guided network (HGNET), which can efficiently extract features of agents and map information from visual and vectorized inputs, modeling multimodal interaction relationships. Second, we design the Feature-Guided Attention (FGAT) module to leverage the potential guiding effects between different prediction targets, thereby improving prediction accuracy. Additionally, to enhance the temporal consistency and causal relationships of the predictions, we propose a Time Series Memory framework to learn the conditional distribution models of the prediction outputs at future time steps from multivariate time series. The results demonstrate that our model exhibits competitive performance, which ranks 3rd in the 2024 Waymo Occupancy and Flow Prediction Challenge.*
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber). 
-The original code can be found [here](https://github.com/PaddlePaddle/PaddleDetection/blob/develop/ppdet/modeling/backbones/hgnet_v2.py).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="image-classification",
+    model="ustc-community/hgnet-v2",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+import requests
+from transformers import HGNetV2ForImageClassification, AutoImageProcessor
+from PIL import Image
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
+processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
+
+inputs = processor(images=image, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
+
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted class label is: {predicted_class_label}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## HGNetV2Config
 

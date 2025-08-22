@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-01-22 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -36,15 +36,15 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch  
-from transformers import pipeline  
+import torch
+from transformers import pipeline
 
-pipeline = pipeline(  
-    task="fill-mask",  
-    model="facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
-    device=0  
-)  
+pipeline = pipeline(
+    task="fill-mask",
+    model="facebook/xlm-roberta-xl",
+    dtype=torch.float16,
+    device=0
+)
 pipeline("Bonjour, je suis un modèle <mask>.")
 ```
 
@@ -52,18 +52,18 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 <hfoption id="AutoModel">
 
 ```python
-import torch  
-from transformers import AutoModelForMaskedLM, AutoTokenizer  
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(  
-    "FacebookAI/xlm-mlm-en-2048",  
-)  
-model = AutoModelForMaskedLM.from_pretrained(  
-    "FacebookAI/xlm-mlm-en-2048",  
-    torch_dtype=torch.float16,  
-    device_map="auto",  
-)  
-inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to("cuda")
+tokenizer = AutoTokenizer.from_pretrained(
+    "FacebookAI/xlm-mlm-en-2048",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "FacebookAI/xlm-mlm-en-2048",
+    dtype=torch.float16,
+    device_map="auto",
+)
+inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -97,9 +97,6 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 ## XLM specific outputs
 
 [[autodoc]] models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput
-
-<frameworkcontent>
-<pt>
 
 ## XLMModel
 
@@ -135,41 +132,3 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 [[autodoc]] XLMForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLMModel
-
-[[autodoc]] TFXLMModel
-    - call
-
-## TFXLMWithLMHeadModel
-
-[[autodoc]] TFXLMWithLMHeadModel
-    - call
-
-## TFXLMForSequenceClassification
-
-[[autodoc]] TFXLMForSequenceClassification
-    - call
-
-## TFXLMForMultipleChoice
-
-[[autodoc]] TFXLMForMultipleChoice
-    - call
-
-## TFXLMForTokenClassification
-
-[[autodoc]] TFXLMForTokenClassification
-    - call
-
-## TFXLMForQuestionAnsweringSimple
-
-[[autodoc]] TFXLMForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>
-
-
