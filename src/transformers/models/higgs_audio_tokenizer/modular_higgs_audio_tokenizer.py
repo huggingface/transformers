@@ -186,7 +186,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
     def __init__(self, config: HiggsAudioTokenizerConfig):
         super().__init__(config)
         self.config = config
-        self.pad = 160
+        self.pad = config.pad
         self.acoustic_encoder = HiggsAudioTokenizerEncoder(config.acoustic_model_config)
         self.acoustic_decoder = HiggsAudioTokenizerDecoder(config.acoustic_model_config)
         self._adjust_dac_decoder(self.acoustic_decoder)
@@ -200,7 +200,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
 
         self.downsample_mode = config.downsample_mode
         self.semantic_downsample_factor = int(
-            config.hop_length / (config.sample_rate / config.semantic_sample_rate) / 320
+            config.hop_length / (config.sample_rate / config.semantic_sample_rate) / config.downsample_factor
         )
         self.sampling_rate = config.sample_rate
         self.semantic_sample_rate = config.semantic_sample_rate

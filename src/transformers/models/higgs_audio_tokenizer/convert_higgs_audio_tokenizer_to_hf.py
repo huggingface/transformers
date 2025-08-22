@@ -18,10 +18,12 @@
 import argparse
 import io
 import re
+import yaml
 
 import torch
 
 from transformers import (
+    AutoConfig,
     DacFeatureExtractor,
     HiggsAudioTokenizer,
     HiggsAudioTokenizerConfig,
@@ -183,10 +185,30 @@ def convert_old_keys_to_new_keys(original_state_dict: dict[str, torch.Tensor]) -
 
 @torch.no_grad()
 def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, push_to_hub=None):
-    if config_path is not None:
-        config = HiggsAudioTokenizerConfig.from_pretrained(config_path)
+    # load config yaml file
+    with open(config_path, "r") as f:
+        original_model_config = yaml.safe_load(f)
+
+    target_bandwidths = original_model_config["target_bandwidths"]
+    codebook_dim = original_model_config["codebook_dim"]
+    sample_rate = original_model_config["sample_rate"]
+    bins = original_model_config["bins"]
+    n_q = original_model_config["n_q"]
+    semantic_techer = original_model_config["semantic_techer"]
+
+    if semantic_techer == "hubert_base_general":
+        semantic_model_config = AutoConfig.from_pretrained("bosonai/hubert_base")
     else:
-        config = HiggsAudioTokenizerConfig()
+        raise ValueError(f"Unknown semantic model: {semantic_model}")
+
+    config = HiggsAudioTokenizerConfig(
+        target_bandwidths=target_bandwidths,
+        sample_rate=sample_rate,
+        codebook_dim=codebook_dim,
+        num_quantizers=n_q,
+        codebook_size=bins,
+        semantic_model_config=semantic_model_config,
+    )
 
     # create model
     if not torch.cuda.is_available():
@@ -234,10 +256,12 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 ```
 # Download config and checkpoint files
 wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/model.pth -P /workspace/higgs_audio_tokenizer_original
+wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/config.json -P /workspace/higgs_audio_tokenizer_original
 # The bosonai/higgs-audio-v2-tokenizer repo does not have complete config, so we will just use the default config which has been matched with the actual config.
 # Run conversion:
 python src/transformers/models/higgs_audio_tokenizer/convert_higgs_audio_tokenizer_to_hf.py \
     --checkpoint_path /workspace/higgs_audio_tokenizer_original/model.pth \
+    --config_path /workspace/higgs_audio_tokenizer_original/config.json \
     --push_to_hub hf-audio/higgs-audio-v2-tokenizer
 ```
 """

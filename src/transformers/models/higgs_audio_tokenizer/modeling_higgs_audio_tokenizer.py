@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from ..auto.modeling_auto import AutoModel
 from .configuration_higgs_audio_tokenizer import HiggsAudioTokenizerConfig
@@ -507,7 +507,7 @@ class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
 
 
 @auto_docstring
-class HiggsAudioTokenizerPreTrainedModel(PreTrainedModel):
+class HiggsAudioTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -516,7 +516,6 @@ class HiggsAudioTokenizerPreTrainedModel(PreTrainedModel):
     config_class = HiggsAudioTokenizerConfig
     base_model_prefix = "higgs_audio_tokenizer"
     main_input_name = "input_values"
-    supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -575,7 +574,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
     def __init__(self, config: HiggsAudioTokenizerConfig):
         super().__init__(config)
         self.config = config
-        self.pad = 160
+        self.pad = config.pad
         self.acoustic_encoder = HiggsAudioTokenizerEncoder(config.acoustic_model_config)
         self.acoustic_decoder = HiggsAudioTokenizerDecoder(config.acoustic_model_config)
         self._adjust_dac_decoder(self.acoustic_decoder)
@@ -589,7 +588,7 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
 
         self.downsample_mode = config.downsample_mode
         self.semantic_downsample_factor = int(
-            config.hop_length / (config.sample_rate / config.semantic_sample_rate) / 320
+            config.hop_length / (config.sample_rate / config.semantic_sample_rate) / config.downsample_factor
         )
         self.sampling_rate = config.sample_rate
         self.semantic_sample_rate = config.semantic_sample_rate

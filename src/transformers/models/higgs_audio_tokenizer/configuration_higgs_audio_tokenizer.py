@@ -66,6 +66,10 @@ class HiggsAudioTokenizerConfig(PretrainedConfig):
             An instance of the configuration object for the semantic (HuBERT) model.
         downsample_mode (`str`, *optional*, defaults to `"step_down"`):
             The downsample mode for the semantic features.
+        pad (`int`, *optional*, defaults to 160):
+            Padding size for the input to the semantic model.
+        downsample_factor (`int`, *optional*, defaults to 320):
+            The downsample factor used to compute actual downsample factor for the semantic features.
 
     Example:
 
@@ -106,6 +110,8 @@ class HiggsAudioTokenizerConfig(PretrainedConfig):
         acoustic_model_config: Union[dict, DacConfig] = None,
         semantic_model_config: Union[dict, HubertConfig] = None,
         downsample_mode: str = "step_down",
+        pad: int = 160,
+        downsample_factor: int = 320,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -146,6 +152,8 @@ class HiggsAudioTokenizerConfig(PretrainedConfig):
         self.codebook_dim = codebook_dim
         self.initializer_range = initializer_range
         self.downsample_mode = downsample_mode
+        self.pad = pad
+        self.downsample_factor = downsample_factor
 
     @property
     def frame_rate(self) -> int:
