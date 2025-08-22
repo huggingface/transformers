@@ -77,6 +77,9 @@ if is_accelerate_available():
 
     from .trainer_pt_utils import AcceleratorConfig
 
+    if is_accelerate_available("1.10.0"):
+        from accelerate.parallelism_config import ParallelismConfig
+
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -595,7 +598,8 @@ class TrainingArguments:
                     Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`.
                     If `True`, an `Accelerator` or `PartialState` must be initialized. Note that by doing so, this could lead to issues
                     with hyperparameter tuning.
-
+        ParallelismConfig (`ParallelismConfig`, *optional*):
+            Parallelism configuration for the training run. Requires Accelerate `1.10.0`
         label_smoothing_factor (`float`, *optional*, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to `label_smoothing_factor/num_labels` and `1 - label_smoothing_factor +
@@ -1269,6 +1273,10 @@ class TrainingArguments:
                 "accelerator json config file (e.g., `accelerator_config.json`) or an already loaded json file as `dict`."
             )
         },
+    )
+    parallelism_config: Optional["ParallelismConfig"] = field(
+        default=None,
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.0`")},
     )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,
@@ -2559,6 +2567,19 @@ class TrainingArguments:
                 quantization_config = v.get("quantization_config")
                 if quantization_config and not isinstance(quantization_config, dict):
                     d[k]["quantization_config"] = quantization_config.to_dict()
+            if k == "parallelism_config":
+                import copy
+
+                # This is a hack as torch DeviceMesh is not json serializable
+                # Should probably reside in accelerate, but we didn't add it for
+                # v1.10
+                d[k] = copy.deepcopy(
+                    {
+                        k2: copy.deepcopy(v2.__dict__) if hasattr(v2, "__dict__") else v2
+                        for k2, v2 in v.__dict__.items()
+                        if k2 != "device_mesh"
+                    }
+                )
         self._dict_torch_dtype_to_str(d)
 
         return d

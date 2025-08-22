@@ -4281,14 +4281,13 @@ class Trainer:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
 
-        # Defer to accelerate's get_state_dict when using distributed setups that require special state dict handling
-        if state_dict is None and (self.is_fsdp2 or self.is_deepspeed_enabled):
-            state_dict = self.accelerator.get_state_dict(self.model)
-
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
+            # Defer to accelerate's get_state_dict when using distributed setups that require special state dict handling
+            if state_dict is None and (getattr(self.accelerator, "is_fsdp2", False) or self.is_deepspeed_enabled):
+                state_dict = self.accelerator.get_state_dict(self.model)
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
@@ -5460,39 +5459,15 @@ class Trainer:
             "deepspeed_plugin": self.args.deepspeed_plugin,
         }
 
-        # Import accelerate version for version checks (needed for tensor parallelism and other features)
-        try:
-            accelerate_version = importlib.metadata.version("accelerate")
-        except ImportError as e:
-            raise ImportError(f"Failed to import accelerate: {e}. Please ensure accelerate is installed.")
-
-        # Add parallelism_config and fsdp_plugin if context parallelism is enabled
-        # Both require accelerate >= 1.10.0
-        # Note: parallelism_config can also be set via environment variables (e.g., by axolotl)
-        parallelism_config_from_env = os.environ.get("ACCELERATE_USE_PARALLELISM_CONFIG", "false").lower() == "true"
-
-        if (
-            getattr(self.args, "parallelism_config", None) is not None
-            or getattr(self.args, "fsdp_plugin", None) is not None
-            or parallelism_config_from_env
-        ):
-            if version.parse(accelerate_version) < version.parse("1.10.0"):
+        # We defer compatibility checks to accelerator
+        if self.args.parallelism_config is not None:
+            if not is_accelerate_available("1.10.0"):
                 raise ImportError(
-                    f"Context parallelism features require accelerate >= 1.10.0, but found {accelerate_version}. "
-                    f"Please upgrade accelerate to use parallelism configurations and FSDP v2."
+                    "ParallelismConfig requires accelerate v1.10.0 and above. Please upgrade accelerate to use this feature."
                 )
 
-            # Add parallelism_config if present in args
-            if getattr(self.args, "parallelism_config", None) is not None:
-                args["parallelism_config"] = self.args.parallelism_config
+            args["parallelism_config"] = self.args.parallelism_config
 
-            # Add fsdp_plugin if present
-            if getattr(self.args, "fsdp_plugin", None) is not None:
-                args["fsdp_plugin"] = self.args.fsdp_plugin
-
-            # Note: If parallelism_config_from_env is True, accelerate will automatically
-            # create ParallelismConfig from environment variables (PARALLELISM_CONFIG_CP_SIZE, etc.)
-            # This allows axolotl and other tools to use context parallelism without FSDP
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
         else:

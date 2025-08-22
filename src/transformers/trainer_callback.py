@@ -91,7 +91,6 @@ class TrainerState:
         stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
-
     """
 
     epoch: Optional[float] = None
