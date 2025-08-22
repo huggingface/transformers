@@ -645,6 +645,7 @@ def main(*args):
             "MultilabelClassification": "task: classification | query: ",
             "PairClassification": "task: sentence similarity | query: ",
             "Reranking": "task: search result | query: ",
+            "Retrieval": "task: search result | query: ",
             "Retrieval-query": "task: search result | query: ",
             "Retrieval-document": "title: none | text: ",
             "STS": "task: sentence similarity | query: ",
