@@ -61,7 +61,7 @@ def squared_euclidean_distance_torch(a: torch.Tensor, b: torch.Tensor) -> torch.
     b2 = torch.sum(b**2, dim=0)  # (M,)
     ab = torch.matmul(a, b)  # (N, M)
     d = a2[:, None] - 2 * ab + b2[None, :]  # Squared Euclidean Distance: a^2 - 2ab + b^2
-    return d # (N, M) tensor of squared distances
+    return d  # (N, M) tensor of squared distances
 
 
 def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tensor:
@@ -116,6 +116,7 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
         # Store clusters as torch tensor directly for efficiency
         self.clusters = torch.tensor(clusters, dtype=torch.float32) if clusters is not None else None
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -169,7 +170,9 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
             if clusters is None:
                 raise ValueError("Clusters must be provided for color quantization.")
             # Convert to torch tensor if needed (clusters might be passed as list/numpy)
-            clusters_torch = torch.as_tensor(clusters, dtype=torch.float32) if not isinstance(clusters, torch.Tensor) else clusters
+            clusters_torch = (
+                torch.as_tensor(clusters, dtype=torch.float32) if not isinstance(clusters, torch.Tensor) else clusters
+            )
 
             # Group images by shape for batch processing
             # We need to check if the pixel values are a tensor or a list of tensors

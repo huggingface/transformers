@@ -279,7 +279,6 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
-
         if do_color_quantize:
             images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
             # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
@@ -294,10 +293,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             images = list(images)
             data = {"input_ids": images}
         else:
-            images = [
-                to_channel_dimension_format(image, data_format, input_data_format)
-                for image in images
-            ]
+            images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
             data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -307,10 +303,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
             output["clusters"] = output["clusters"].tolist()
         # Need to set missing keys from slow processor to match the expected behavior in save/load tests compared to fast processor
-        missing_keys = [
-            "image_mean", "image_std",
-            "rescale_factor", "do_rescale"
-        ]
+        missing_keys = ["image_mean", "image_std", "rescale_factor", "do_rescale"]
         for key in missing_keys:
             if key in output:
                 output[key] = None

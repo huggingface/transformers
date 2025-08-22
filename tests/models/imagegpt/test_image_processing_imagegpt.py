@@ -267,8 +267,12 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
-            encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs[0], return_tensors="pt")
-            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs[0], return_tensors="pt")
+            encoding_slow = self.image_processing_class(**self.image_processor_dict)(
+                image_inputs[0], return_tensors="pt"
+            )
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs[0], return_tensors="pt"
+            )
             # Convert to float for mean calculation since input_ids are integers
             slow_tensor = encoding_slow.input_ids.float()
             fast_tensor = encoding_fast.input_ids.float()
@@ -278,7 +282,9 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test batched
             encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
-            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs, return_tensors="pt"
+            )
             # Convert to float for mean calculation since input_ids are integers
             slow_tensor = encoding_slow.input_ids.float()
             fast_tensor = encoding_fast.input_ids.float()
@@ -297,7 +303,9 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test batched
             encoding_slow = self.image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
-            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(image_inputs, return_tensors="pt")
+            encoding_fast = self.fast_image_processing_class(**self.image_processor_dict)(
+                image_inputs, return_tensors="pt"
+            )
             # Convert to float for mean calculation since input_ids are integers
             slow_tensor = encoding_slow.input_ids.float()
             fast_tensor = encoding_fast.input_ids.float()
