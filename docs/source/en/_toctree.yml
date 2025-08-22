@@ -635,6 +635,8 @@
         title: PhoBERT
       - local: model_doc/plbart
         title: PLBart
+      - local: model_doc/pldrllm
+        title: PLDR-LLM
       - local: model_doc/prophetnet
         title: ProphetNet
       - local: model_doc/qdqbert
