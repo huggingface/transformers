@@ -1754,6 +1754,9 @@ class GenerationMixin(ContinuousMixin):
                 for key, model_gen_config_value in model_generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
+                    # Don't set `cache_implementation = 'hybrid'` from the model defaults, see #40135
+                    if key == "cache_implementation" and model_generation_config.cache_implementation == "hybrid":
+                        continue
                     global_default_value = getattr(global_default_generation_config, key, None)
                     custom_gen_config_value = getattr(generation_config, key, None)
                     if (
