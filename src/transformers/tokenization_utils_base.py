@@ -2945,6 +2945,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
+        # Check if is_split_into_words is used with add_prefix_space
+        if is_split_into_words and hasattr(self, "add_prefix_space") and not getattr(self, "add_prefix_space", False):
+            raise ValueError(
+                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+                "to use it with pretokenized inputs."
+            )
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
