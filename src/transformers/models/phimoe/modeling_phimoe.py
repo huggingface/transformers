@@ -1209,10 +1209,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
-
     @can_return_tuple
     @auto_docstring
     def forward(
