@@ -459,7 +459,7 @@ class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
     Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
     """
 
-    def __init__(self, config: HiggsAudioTokenizerConfig):
+    def __init__(self, config: XcodecConfig):
         super().__init__()
         self.quantizers = nn.ModuleList(
             [HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)]
@@ -598,7 +598,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 kernel_size=config.semantic_downsample_factor, stride=config.semantic_downsample_factor
             )
 
-    # Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
         r"""

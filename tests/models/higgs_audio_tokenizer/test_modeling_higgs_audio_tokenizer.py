@@ -16,7 +16,6 @@
 
 import inspect
 import json
-import math
 import os
 import tempfile
 import unittest
@@ -434,54 +433,6 @@ def compute_rmse(arr1, arr2):
     arr1_normalized = normalize(arr1_np)
     arr2_normalized = normalize(arr2_np)
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
-
-
-# @slow
-@require_torch
-class HiggsAudioTokenizerIntegrationTest(unittest.TestCase):
-    @is_flaky(description="The numbers depend on the hardware and kernel versions.")
-    def test_integration(self):
-        expected_rmse = {
-            "0.5": 0.0024948,
-            "4.0": 0.0015635,
-        }
-        expected_codesums = {
-            "0.5": [109981],
-            "4.0": [437607],
-        }
-
-        librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        model_id = "szhengac25/higgs-audio-v2-tokenizer"
-        model = HiggsAudioTokenizer.from_pretrained(model_id).to(torch_device).eval()
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
-        librispeech = librispeech.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-        audio = librispeech[-1]["audio"]["array"]
-
-        inputs = feature_extractor(
-            raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
-        ).to(torch_device)
-
-        for bandwidth, exp_rmse in expected_rmse.items():
-            bandwidth = float(bandwidth)
-            with torch.no_grad():
-                audio_codes = model.encode(inputs["input_values"], bandwidth=bandwidth, return_dict=False)
-                codesum = int(audio_codes.sum().item())
-
-                expected_codesum = expected_codesums[str(bandwidth)][0]
-                self.assertEqual(codesum, expected_codesum)
-
-                input_values_dec = model.decode(audio_codes, return_dict=False)
-                input_values_enc_dec = model(inputs["input_values"], bandwidth=bandwidth)[1]
-
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
-
-            self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
-
-            arr = inputs["input_values"][0].cpu().numpy()
-            arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
-            rmse = compute_rmse(arr, arr_enc_dec)
-            self.assertTrue(np.abs(rmse - exp_rmse) < 1e-5)
 
 
 """

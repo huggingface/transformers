@@ -119,9 +119,54 @@ class HiggsAudioTokenizerVectorQuantization(nn.Module):
         return quantize
 
 
-# Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
-class HiggsAudioTokenizerResidualVectorQuantization(XcodecResidualVectorQuantization):
-    pass
+class HiggsAudioTokenizerResidualVectorQuantization(nn.Module):
+    """
+    Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
+    """
+
+    def __init__(self, config: XcodecConfig):
+        super().__init__()
+        self.quantizers = nn.ModuleList([HiggsAudioTokenizerVectorQuantization(config) for _ in range(config.num_quantizers)])
+        self.frame_rate = config.frame_rate
+        self.codebook_size = config.codebook_size
+        self.num_quantizers = config.num_quantizers
+
+    def get_bandwidth_per_quantizer(self):
+        """Return bandwidth per quantizer."""
+        return math.log2(self.codebook_size) * self.frame_rate / 1000
+
+    def get_num_quantizers_for_bandwidth(self, bandwidth=None) -> int:
+        """Return num_quantizers based on specified target bandwidth."""
+        bw_per_q = self.get_bandwidth_per_quantizer()
+        num_quantizers = self.num_quantizers
+        if bandwidth is not None and bandwidth > 0.0:
+            num_quantizers = int(max(1, math.floor(bandwidth / bw_per_q)))
+        return num_quantizers
+
+    def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
+        """
+        Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
+        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
+        """
+        num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
+        residual = embeddings
+        all_indices = []
+        for quantizer in self.quantizers[:num_quantizers]:
+            indices = quantizer.encode(residual)
+            quantized = quantizer.decode(indices)
+            residual = residual - quantized
+            all_indices.append(indices)
+        out_indices = torch.stack(all_indices)
+        return out_indices
+
+    def decode(self, codes: torch.Tensor) -> torch.Tensor:
+        """Decode the given codes to their quantized representation."""
+        quantized_out = torch.tensor(0.0, device=codes.device)
+        for i, indices in enumerate(codes):
+            quantizer = self.quantizers[i]
+            quantized = quantizer.decode(indices)
+            quantized_out = quantized_out + quantized
+        return quantized_out
 
 
 @auto_docstring
@@ -163,7 +208,6 @@ class HiggsAudioTokenizer(HiggsAudioTokenizerPreTrainedModel):
                 kernel_size=config.semantic_downsample_factor, stride=config.semantic_downsample_factor
             )
 
-    # Copied from transformers.models.xcodec.modeling_xcodec.XcodecModel with Xcodec->HiggsAudioTokenizer
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
         r"""
