@@ -294,8 +294,8 @@ class TextGenerationPipeline(Pipeline):
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
             tokenizer_encode_kwargs (`dict`, *optional*):
-                Additional keyword arguments to pass along to encoding step of the tokenizer. If the text input is a
-                chat, it is passed to `apply_chat_template`. Otherwise, it is passed to `__call__`.
+                Additional keyword arguments to pass along to the encoding step of the tokenizer. If the text input is
+                a chat, it is passed to `apply_chat_template`. Otherwise, it is passed to `__call__`.
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./text_generation)).
