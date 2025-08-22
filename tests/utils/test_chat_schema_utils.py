@@ -123,14 +123,14 @@ cohere_schema = {
                     "type": {"const": "function"},
                     "function": {
                         "type": "object",
-                        "x-scope-vars-dict": {
-                            # TODO This is hard because I don't have a way to extract a dict with keys derived from the regex.
-                            #      But I need that if I want to do lookups later.
-                            #      I think that means x-regex-iterator needs to work on objects if the regex returns "key" and "value" groups.
-                            #      Once we have that, we need a way to select from scope-vars-dict by key in other branches of the schema.
+                        "x-scope-vars": {
                             "argument_types": {
                                 "type": "object",
-
+                                "x-regex": r"def \w+\((.*?)\)(?:\:| ->)",
+                                "x-regex-to-dict": r"(?P<key>\w+)\s*:\s*(?P<value>\w+)",
+                                "additionalProperties": {
+                                    "x-parser": "python_type"
+                                }
                             }
                         },
                         "properties": {
@@ -140,7 +140,18 @@ cohere_schema = {
                                 "type": "object",
                                 "x-regex": r"\n\s*Args:\n\s*(.*?)$",
                                 "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "x-regex": r"\s*(\w+*):"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "x-regex": r"\s*:\s*(.*?)(?:\n\s*\w+:|$)"
+                                    },
 
+                                    # TODO There's some way we basically do some horizontal gene transfer from the scope
+                                    #      vars to the properties here but I don't fully grok it yet. I guess we somehow
+                                    #      swap the node content at a given point for a variable from scope vars?
                                 }
                             },
 

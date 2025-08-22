@@ -101,7 +101,7 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
     return type_mapping.get(param_type, {"type": "object"})
 
 
-def _parse_type_hint(hint: str) -> dict:
+def _parse_type_hint(hint) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
