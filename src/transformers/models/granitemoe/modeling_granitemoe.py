@@ -389,7 +389,7 @@ class GraniteMoeMoE(nn.Module):
     
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, self.hidden_size)
+        hidden_states = hidden_states.view(-1, self.input_size)
 
         router_logits = self.router.layer(hidden_states)
         router_weights, selected_experts = router_logits.topk(self.top_k, dim=-1)
