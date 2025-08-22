@@ -2077,6 +2077,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
+        ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
         ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
         ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
