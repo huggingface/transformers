@@ -8,7 +8,6 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-
 from transformers.testing_utils import TestCasePlus
 
 
