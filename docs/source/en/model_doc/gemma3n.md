@@ -202,5 +202,5 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
 [laurel]: https://huggingface.co/papers/2411.07501
 [matformer]: https://huggingface.co/papers/2310.07707
-[spark-transformer]: https://arxiv.org/abs/2506.06644
+[spark-transformer]: https://huggingface.co/papers/2506.06644
 [usm]: https://huggingface.co/papers/2303.01037
