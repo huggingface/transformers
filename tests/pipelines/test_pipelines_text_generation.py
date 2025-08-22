@@ -568,7 +568,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         tokenizer = text_generator.tokenizer
 
         with patch.object(tokenizer, "apply_chat_template", wraps=tokenizer.apply_chat_template) as mock:
-            text_generator(chat, tokenizer_kwargs={"enable_thinking": True})
+            text_generator(chat, tokenizer_encode_kwargs={"enable_thinking": True})
             self.assertGreater(mock.call_count, 0)
             kw_call_args = mock.call_args[1]
             self.assertIn("enable_thinking", kw_call_args)
