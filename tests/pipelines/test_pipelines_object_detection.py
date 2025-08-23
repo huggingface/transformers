@@ -30,7 +30,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_pytesseract,
-    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -127,11 +126,6 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                     },
                 )
                 compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
-
-    @require_tf
-    @unittest.skip(reason="Object detection not implemented in TF")
-    def test_small_model_tf(self):
-        pass
 
     @require_torch
     def test_small_model_pt(self):

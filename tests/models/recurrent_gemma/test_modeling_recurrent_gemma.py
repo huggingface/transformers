@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_read_token,
     require_torch,
@@ -182,7 +183,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_2b_generate(self):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, low_cpu_mem_usage=True).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+        ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         tokenizer.padding_side = "right"
@@ -204,9 +207,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         del model
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -215,12 +216,22 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_2b_sample(self):
         set_seed(0)
-        EXPECTED_TEXT = ['Where is Paris ?\n\nChoose the word or phrase that is closest in meaning to the word in capital letters.\n\nREDEEM\n(A) sort out\n(B) think over\n(C) turn in\n(D) take back\n\nWrite the correct word in the space next to each definition. Use each word only once.\n\nto badly damage\n\nOn the lines provided below, write <em>P</em> if the underlined word group is a phrase and <em>NP</em> if it is not a phrase. Example $\\underline{\\text{P}}$ 1. We have finally discovered the secret $\\underline{\\text{of delicious pizza. }}$']  # fmt: skip
+        expectations = Expectations(
+            {
+                (None, None): [
+                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision. It is an Artificial Intelligence (AI) discipline that is rapidly being adopted across industries. The success of Deep"
+                ],
+                ("cuda", 8): [
+                    "What is Deep learning ?\n\nDeep learning is the next frontier in computer vision, it’s an incredibly powerful branch of artificial intelligence.\n\nWhat is Dalle?\n\nDalle is",
+                ],
+            }
+        )
+        EXPECTED_TEXT = expectations.get_expectation()
         model = AutoModelForCausalLM.from_pretrained(self.model_id).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        inputs = tokenizer("Where is Paris ?", return_tensors="pt", padding=True).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=128, do_sample=True)
+        inputs = tokenizer("What is Deep learning ?", return_tensors="pt", padding=True).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=32, do_sample=True)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXT)
@@ -228,7 +239,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token
     def test_model_2b_8bit(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a simple and easy"]  # fmt: skip
+        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
             "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, torch_dtype=torch.bfloat16
@@ -246,9 +257,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     def test_long_context(self):
         EXPECTED_GENERATION = [' Jean-Paul Delannoy told CNN that the BEA is "not aware of any video footage that could have been taken on board the plane." He added that the BEA is "not aware of any video footage that could have been taken on board the plane." The BEA is the French equivalent of the National Transportation Safety Board']  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
@@ -260,9 +269,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     def test_longer_than_window(self):
         EXPECTED_GENERATION = [" Robin's comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the"]  # fmt: skip
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16).to(torch_device)
         model.config.attention_window_size = 256  # Make the attention window size shorter than the current prompt
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)

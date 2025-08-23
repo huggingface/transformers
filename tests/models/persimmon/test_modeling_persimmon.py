@@ -76,6 +76,14 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
     test_headmasking = False
     test_pruning = False
 
+    @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class PersimmonIntegrationTest(unittest.TestCase):

@@ -51,7 +51,7 @@ Library:
 - pipelines: @Rocketknight1
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @zach-huggingface and @SunMarc
+- trainer: @zach-huggingface, @SunMarc and @qgallouedec
 - chat templates: @Rocketknight1
 
 Integrations:

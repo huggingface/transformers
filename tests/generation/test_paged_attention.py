@@ -25,8 +25,8 @@ _EXPECTED_OUTPUTS = [
 
 
 @slow
-@require_torch_gpu
 @require_flash_attn
+@require_torch_gpu
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

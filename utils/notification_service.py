@@ -21,9 +21,10 @@ import os
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
+from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
@@ -74,6 +75,8 @@ def handle_test_results(test_results):
 
     failed = 0
     success = 0
+    errors = 0
+    skipped = 0
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
@@ -82,10 +85,14 @@ def handle_test_results(test_results):
     for i, expression in enumerate(expressions):
         if "failed" in expression:
             failed += int(expressions[i - 1])
+        if "errors" in expression:
+            errors += int(expressions[i - 1])
         if "passed" in expression:
             success += int(expressions[i - 1])
+        if "skipped" in expression:
+            skipped += int(expressions[i - 1])
 
-    return failed, success, time_spent
+    return failed, errors, success, skipped, time_spent
 
 
 def handle_stacktraces(test_results):
@@ -109,7 +116,7 @@ def handle_stacktraces(test_results):
     return stacktraces
 
 
-def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
+def dicts_to_sum(objects: Union[dict[str, dict], list[dict]]):
     if isinstance(objects, dict):
         lists = objects.values()
     else:
@@ -126,9 +133,9 @@ class Message:
         self,
         title: str,
         ci_title: str,
-        model_results: Dict,
-        additional_results: Dict,
-        selected_warnings: Optional[List] = None,
+        model_results: dict,
+        additional_results: dict,
+        selected_warnings: Optional[list] = None,
         prev_ci_artifacts=None,
         other_ci_artifacts=None,
     ):
@@ -203,15 +210,15 @@ class Message:
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
 
     @property
-    def header(self) -> Dict:
+    def header(self) -> dict:
         return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
 
     @property
-    def ci_title_section(self) -> Dict:
+    def ci_title_section(self) -> dict:
         return {"type": "section", "text": {"type": "mrkdwn", "text": self.ci_title}}
 
     @property
-    def no_failures(self) -> Dict:
+    def no_failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -227,7 +234,7 @@ class Message:
         }
 
     @property
-    def failures(self) -> Dict:
+    def failures(self) -> dict:
         return {
             "type": "section",
             "text": {
@@ -246,7 +253,7 @@ class Message:
         }
 
     @property
-    def warnings(self) -> Dict:
+    def warnings(self) -> dict:
         # If something goes wrong, let's avoid the CI report failing to be sent.
         button_text = "Check warnings (Link not found)"
         # Use the workflow run link
@@ -287,7 +294,7 @@ class Message:
             return f"{'0'.rjust(rjust)} | {str(report['multi']).rjust(rjust)} | "
 
     @property
-    def category_failures(self) -> Dict:
+    def category_failures(self) -> dict:
         if job_name != "run_models_gpu":
             category_failures_report = ""
             return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
@@ -360,7 +367,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> List[Dict]:
+    def model_failures(self) -> list[dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -523,7 +530,7 @@ class Message:
         return model_failure_sections
 
     @property
-    def additional_failures(self) -> Dict:
+    def additional_failures(self) -> dict:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
         errors = {k: v["error"] for k, v in self.additional_results.items()}
 
@@ -615,7 +622,10 @@ class Message:
                         pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                         items = re.findall(pattern, line)
                     elif "tests/" in line:
-                        if "tests/models/" in line or "tests/quantization/" in line:
+                        # TODO: Improve the condition here.
+                        if "tests/models/" in line or (
+                            "tests/quantization/" in line and job_name == "run_quantization_torch_gpu"
+                        ):
                             model = line.split("/")[2]
                         else:
                             model = line.split("/")[1]
@@ -668,6 +678,21 @@ class Message:
                         },
                     }
                     blocks.append(block)
+
+        if diff_file_url is not None:
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Test results diff*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check test result diff file"},
+                    "url": diff_file_url,
+                },
+            }
+            blocks.append(block)
 
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
@@ -950,7 +975,7 @@ def retrieve_available_artifacts():
         def add_path(self, path: str, gpu: Optional[str] = None):
             self.paths.append({"name": self.name, "path": path, "gpu": gpu})
 
-    _available_artifacts: Dict[str, Artifact] = {}
+    _available_artifacts: dict[str, Artifact] = {}
 
     directories = filter(os.path.isdir, os.listdir())
     for directory in directories:
@@ -1034,7 +1059,7 @@ if __name__ == "__main__":
     runner_not_available = False
     runner_failed = False
     # Some jobs don't depend (`needs`) on the job `setup`: in this case, the status of the job `setup` is `skipped`.
-    setup_failed = False if setup_status in ["skipped", "success"] else True
+    setup_failed = setup_status not in ["skipped", "success"]
 
     org = "huggingface"
     repo = "transformers"
@@ -1169,7 +1194,9 @@ if __name__ == "__main__":
     matrix_job_results = {
         matrix_name: {
             "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in test_categories},
+            "errors": 0,
             "success": 0,
+            "skipped": 0,
             "time_spent": "",
             "failures": {},
             "job_link": {},
@@ -1180,7 +1207,7 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    for matrix_name in matrix_job_results.keys():
+    for matrix_name in matrix_job_results:
         for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
@@ -1194,8 +1221,10 @@ if __name__ == "__main__":
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
                 matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
-                failed, success, time_spent = handle_test_results(artifact["stats"])
+                failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
                 matrix_job_results[matrix_name]["success"] += success
+                matrix_job_results[matrix_name]["errors"] += errors
+                matrix_job_results[matrix_name]["skipped"] += skipped
                 matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
@@ -1298,16 +1327,18 @@ if __name__ == "__main__":
     additional_results = {
         key: {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "errors": 0,
             "success": 0,
+            "skipped": 0,
             "time_spent": "",
             "error": False,
             "failures": {},
             "job_link": {},
         }
-        for key in additional_files.keys()
+        for key in additional_files
     }
 
-    for key in additional_results.keys():
+    for key in additional_results:
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True
@@ -1324,9 +1355,11 @@ if __name__ == "__main__":
             artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
 
-            failed, success, time_spent = handle_test_results(artifact["stats"])
+            failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
             additional_results[key]["failed"][artifact_gpu or "unclassified"] += failed
             additional_results[key]["success"] += success
+            additional_results[key]["errors"] += errors
+            additional_results[key]["skipped"] += skipped
             additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
 
             if len(artifact["errors"]):
@@ -1407,7 +1440,17 @@ if __name__ == "__main__":
     if len(matrix_job_results) > 0:
         target_results = matrix_job_results
     else:
-        target_results = additional_results[job_to_test_map[job_name]]
+        default_result = {
+            "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "success": 0,
+            "time_spent": "",
+            "error": False,
+            "failures": {},
+            "job_link": {},
+        }
+
+        key = job_to_test_map.get(job_name)
+        target_results = additional_results.get(key, default_result) if key is not None else default_result
 
     # Make the format uniform between `model_results` and `additional_results[XXX]`
     if "failures" in target_results:
@@ -1457,13 +1500,14 @@ if __name__ == "__main__":
     prev_ci_artifacts = (None, None)
     other_ci_artifacts = []
 
+    output_dir = os.path.join(os.getcwd(), "previous_reports")
+    os.makedirs(output_dir, exist_ok=True)
+
     for idx, target_workflow_run_id in enumerate([prev_workflow_run_id] + other_workflow_run_ids):
         if target_workflow_run_id is None or target_workflow_run_id == "":
             continue
         else:
             artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
             ci_artifacts = get_last_daily_ci_reports(
                 artifact_names=artifact_names,
                 output_dir=output_dir,
@@ -1474,6 +1518,44 @@ if __name__ == "__main__":
                 prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
+
+    # Only for AMD at this moment.
+    # TODO: put this into a method
+    diff_file_url = None
+    if is_amd_daily_ci_workflow:
+        if not (prev_workflow_run_id is None or prev_workflow_run_id == ""):
+            ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=None,
+                output_dir=output_dir,
+                token=os.environ["ACCESS_REPO_INFO_TOKEN"],
+                workflow_run_id=prev_workflow_run_id,
+            )
+
+            current_artifacts = sorted([d for d in os.listdir() if os.path.isdir(d) and d.endswith("_test_reports")])
+            prev_artifacts = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)) and d.endswith("_test_reports")])  # fmt: skip
+
+            current_artifacts_set = {}
+            for d in current_artifacts:
+                current_artifacts_set[d] = os.path.join(d, "summary_short.txt")
+
+            prev_artifacts_set = {}
+            for d in prev_artifacts:
+                prev_artifacts_set[d] = os.path.join(output_dir, d, "summary_short.txt")
+
+            report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
+
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+                fp.write(report)
+
+            # upload
+            commit_info = api.upload_file(
+                path_or_fileobj=f"ci_results_{job_name}/test_results_diff.json",
+                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/test_results_diff.json",
+                repo_id=report_repo_id,
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            diff_file_url = f"https://huggingface.co/datasets/{report_repo_id}/resolve/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/test_results_diff.json"
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:

@@ -14,7 +14,7 @@
 # limitations under the License.
 """PatchTSMixer model configuration"""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -175,11 +175,11 @@ class PatchTSMixerConfig(PretrainedConfig):
         # Pretrain model configuration
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: Optional[Union[List[int], int]] = [2],
+        num_forecast_mask_patches: Optional[Union[list[int], int]] = [2],
         mask_value: int = 0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
-        unmasked_channel_indices: Optional[List[int]] = None,
+        unmasked_channel_indices: Optional[list[int]] = None,
         # General head configuration
         head_dropout: float = 0.2,
         distribution_output: str = "student_t",

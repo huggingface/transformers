@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
@@ -265,9 +264,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_torch
     @require_pyctcdecode
     def test_large_model_pt_with_lm(self):
-        dataset = load_dataset("Narsil/asr_dummy", streaming=True, trust_remote_code=True)
-        third_item = next(iter(dataset["test"].skip(3)))
-        filename = third_item["file"]
+        filename = hf_hub_download("Narsil/asr_dummy", filename="4.flac", repo_type="dataset")
 
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -328,10 +325,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ):
             _ = speech_recognizer(filename, return_timestamps="char")
 
-    @require_tf
-    def test_small_model_tf(self):
-        self.skipTest(reason="Tensorflow not supported yet.")
-
     @require_torch
     @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
     def test_torch_small_no_tokenizer_files(self):
@@ -388,7 +381,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             chunk_length_s=8,
             stride_length_s=1,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -434,7 +427,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             stride_length_s=1,
             return_language=True,
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         sample = next(iter(data))
 
         res = pipe(sample["audio"]["array"])
@@ -489,7 +482,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             task="automatic-speech-recognition",
             model="openai/whisper-tiny.en",
         )
-        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True, trust_remote_code=True)
+        data = load_dataset("openslr/librispeech_asr", "clean", split="test", streaming=True)
         samples = [next(iter(data)) for _ in range(8)]
         audio = np.concatenate([sample["audio"]["array"] for sample in samples])
 
@@ -1125,9 +1118,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1169,9 +1160,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_speculative_decoding_whisper_distil(self):
         # Load data:
-        dataset = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]", trust_remote_code=True
-        )
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
         sample = dataset[0]["audio"]
 
         # Load model:
@@ -1201,7 +1190,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample, generate_kwargs={"assistant_model": assistant_model})["text"]
         transcription_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)

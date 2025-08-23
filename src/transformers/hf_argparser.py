@@ -81,7 +81,7 @@ def HfArg(
     ```
 
     Args:
-        aliases (Union[str, List[str]], optional):
+        aliases (Union[str, list[str]], optional):
             Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`.
             Defaults to None.
         help (str, optional): Help string to pass on to argparse that can be displayed with --help. Defaults to None.
@@ -119,7 +119,7 @@ class HfArgumentParser(ArgumentParser):
     Args:
         dataclass_types (`DataClassType` or `Iterable[DataClassType]`, *optional*):
             Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Passed to `argparse.ArgumentParser()` in the regular way.
     """
 
@@ -294,7 +294,7 @@ class HfArgumentParser(ArgumentParser):
         Parse command-line args into instances of the specified dataclass types.
 
         This relies on argparse's `ArgumentParser.parse_known_args`. See the doc at:
-        docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
+        docs.python.org/3/library/argparse.html#argparse.ArgumentParser.parse_args
 
         Args:
             args:

@@ -21,7 +21,14 @@ import numpy as np
 import requests
 from packaging import version
 
-from transformers.testing_utils import is_flaky, require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -305,10 +312,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     def test_slow_fast_equivalence_batched(self):
         # this only checks on equal resolution, since the slow processor doesn't work otherwise
@@ -331,13 +335,10 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     def test_can_compile_fast_image_processor(self):
         # override as trimaps are needed for the image processor

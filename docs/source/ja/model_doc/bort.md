@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BORT モデルは、[Optimal Subarchitecture Extraction for BERT](https://arxiv.org/abs/2010.10499) で提案されました。
+BORT モデルは、[Optimal Subarchitecture Extraction for BERT](https://huggingface.co/papers/2010.10499) で提案されました。
 Adrian de Wynter and Daniel J. Perry.これは、BERT のアーキテクチャ パラメータの最適なサブセットです。
 著者は「ボルト」と呼んでいます。
 

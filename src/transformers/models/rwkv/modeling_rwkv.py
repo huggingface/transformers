@@ -18,13 +18,14 @@
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -344,7 +345,7 @@ class RwkvFeedForward(nn.Module):
         return receptance * value, state
 
 
-class RwkvBlock(nn.Module):
+class RwkvBlock(GradientCheckpointingLayer):
     def __init__(self, config, layer_id):
         super().__init__()
         self.config = config
@@ -380,14 +381,14 @@ class RwkvBlock(nn.Module):
 
 @auto_docstring
 class RwkvPreTrainedModel(PreTrainedModel):
-    config_class = RwkvConfig
+    config: RwkvConfig
     base_model_prefix = "rwkv"
     _no_split_modules = ["RwkvBlock"]
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, RwkvSelfAttention):
             layer_id = module.layer_id
@@ -419,13 +420,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 * 0.5
             )
 
-            with torch.no_grad():
-                module.time_decay.data = decay_speed
-                module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
+            module.time_decay.data = decay_speed
+            module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
 
-                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
-                module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
+            module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -440,72 +440,71 @@ class RwkvPreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
-            with torch.no_grad():
-                module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-                module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
+            module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+        elif isinstance(module, nn.Linear):
+            shape = module.weight.data.shape
+            gain = 1.0
+            scale = 1.0  # extra scale for gain
+            if module.bias is not None:
+                module.bias.data.zero_()
+            if shape[0] > shape[1]:
+                gain = math.sqrt(shape[0] / shape[1])
+            if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
+                scale = 0.5
+
+            gain *= scale
+            nn.init.orthogonal_(module.weight, gain=gain)
+        elif isinstance(module, nn.Embedding):
+            shape = module.weight.data.shape
+            gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
+            nn.init.orthogonal_(module.weight, gain=gain)
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 @dataclass
-class RwkvOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for the RWKV model outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class RwkvOutput(ModelOutput):
+    r"""
+    state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    state: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class RwkvCausalLMOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class RwkvCausalLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+        The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+        avoid providing the old `input_ids`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    state: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
@@ -536,16 +535,16 @@ class RwkvModel(RwkvPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[List[torch.FloatTensor]] = None,
+        state: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, RwkvOutput]:
+    ) -> Union[tuple, RwkvOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -604,14 +603,9 @@ class RwkvModel(RwkvPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, state, attentions = self._gradient_checkpointing_func(
-                    block.__call__, hidden_states, state, use_cache, output_attentions
-                )
-            else:
-                hidden_states, state, attentions = block(
-                    hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
-                )
+            hidden_states, state, attentions = block(
+                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
+            )
 
             if (
                 self.layers_are_rescaled
@@ -733,18 +727,18 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[List[torch.FloatTensor]] = None,
+        state: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, RwkvCausalLMOutput]:
+    ) -> Union[tuple, RwkvCausalLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as

@@ -223,7 +223,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # TODO: replace by the following when it works
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
@@ -237,7 +239,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
+            self.assertIn(
+                "The model is quantized with QuantizationMethod.QUANTO and is not serializable", str(e.exception)
+            )
             # quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
             #     tmpdirname, torch_dtype=torch.float32, device_map="cpu"
             # )
@@ -247,7 +251,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         d0 = dict(model1.named_parameters())
         d1 = dict(model2.named_parameters())
         self.assertTrue(d0.keys() == d1.keys())
-        for k in d0.keys():
+        for k in d0:
             self.assertTrue(d0[k].shape == d1[k].shape)
             self.assertTrue(d0[k].device.type == d1[k].device.type)
             self.assertTrue(d0[k].device == d1[k].device)

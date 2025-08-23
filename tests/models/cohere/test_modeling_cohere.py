@@ -19,7 +19,7 @@ from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -203,7 +203,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @require_torch
 @slow
 class CohereIntegrationTest(unittest.TestCase):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @require_bitsandbytes
     def test_batched_4bit(self):
         model_id = "CohereForAI/c4ai-command-r-v01-4bit"
@@ -238,9 +238,7 @@ class CohereIntegrationTest(unittest.TestCase):
         ).to(device=torch_device, dtype=torch.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = CohereForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = CohereForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(torch_device)
 
         tokenizer.pad_token = tokenizer.eos_token
 

@@ -16,10 +16,9 @@
 Processor class for Idefics3.
 """
 
-import math
 import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -90,7 +89,7 @@ def get_image_prompt_string(
 
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
+    max_image_size: Optional[dict[str, int]]
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -186,8 +185,8 @@ class Idefics3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
         image_seq_len: Optional[int] = None,
@@ -224,10 +223,10 @@ class Idefics3Processor(ProcessorMixin):
         ```
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `List[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]`, *optional*):
+                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
+            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -377,7 +376,7 @@ class Idefics3Processor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
@@ -390,7 +389,7 @@ class Idefics3Processor(ProcessorMixin):
             images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
-            num_image_patches = [
+            num_image_row_cols = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
             ]
@@ -398,11 +397,12 @@ class Idefics3Processor(ProcessorMixin):
             base_image_length = self.image_seq_len + 3
             col_length = self.image_seq_len + 2
             num_image_tokens = []
+            num_image_patches = []
 
-            for num_patches in num_image_patches:
-                num_cols = num_rows = int(math.sqrt(num_patches - 1))
+            for num_patches, num_rows, num_cols in num_image_row_cols:
                 row_length = col_length * num_cols + 1
                 num_image_tokens.append(base_image_length + (row_length * num_rows))
+                num_image_patches.append(num_patches)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 

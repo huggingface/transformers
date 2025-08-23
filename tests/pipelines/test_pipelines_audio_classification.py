@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torchaudio,
     slow,
@@ -179,7 +178,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         model = "superb/wav2vec2-base-superb-ks"
 
         audio_classifier = pipeline("audio-classification", model=model)
-        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test", trust_remote_code=True)
+        dataset = datasets.load_dataset("anton-l/superb_dummy", "ks", split="test")
 
         audio = np.array(dataset[3]["speech"], dtype=np.float32)
         output = audio_classifier(audio, top_k=4)
@@ -192,11 +191,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
                 {"score": 0.001, "label": "down"},
             ],
         )
-
-    @require_tf
-    @unittest.skip(reason="Audio classification is not implemented for TF")
-    def test_small_model_tf(self):
-        pass
 
     @require_torch
     @slow

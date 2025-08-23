@@ -87,7 +87,7 @@ class FuyuConfig(PretrainedConfig):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
+        eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         image_token_id (`int`, *optional*, defaults to 71011):
             The id of the image placeholder token.
@@ -158,7 +158,7 @@ class FuyuConfig(PretrainedConfig):
                 "tie_word_embeddings": tie_word_embeddings,
             }
             logger.info("text_config is None. initializing the text model with default values.")
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
+        text_model_type = text_config.get("model_type", "persimmon")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self._vocab_size = vocab_size

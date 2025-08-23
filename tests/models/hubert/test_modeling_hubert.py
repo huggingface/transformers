@@ -22,7 +22,7 @@ import unittest
 import pytest
 
 from transformers import HubertConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -750,7 +750,7 @@ class HubertUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
@@ -767,7 +767,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -962,19 +962,23 @@ class HubertModelIntegrationTest(unittest.TestCase):
         # model(wav)['dense']
         expected_outputs_first = torch.tensor(
             [
-                [0.0267, 0.1776, -0.1706, -0.4559],
-                [-0.2430, -0.2943, -0.1864, -0.1187],
-                [-0.1812, -0.4239, -0.1916, -0.0858],
-                [-0.1495, -0.4758, -0.4036, 0.0302],
+                [
+                    [0.0267, 0.1776, -0.1706, -0.4559],
+                    [-0.2430, -0.2943, -0.1864, -0.1187],
+                    [-0.1812, -0.4239, -0.1916, -0.0858],
+                    [-0.1495, -0.4758, -0.4036, 0.0302],
+                ]
             ],
             device=torch_device,
         )
         expected_outputs_last = torch.tensor(
             [
-                [0.3366, -0.2734, -0.1415, -0.3055],
-                [0.2329, -0.3580, -0.1421, -0.3197],
-                [0.1631, -0.4301, -0.1965, -0.2956],
-                [0.3342, -0.2185, -0.2253, -0.2363],
+                [
+                    [0.3366, -0.2734, -0.1415, -0.3055],
+                    [0.2329, -0.3580, -0.1421, -0.3197],
+                    [0.1631, -0.4301, -0.1965, -0.2956],
+                    [0.3342, -0.2185, -0.2253, -0.2363],
+                ]
             ],
             device=torch_device,
         )

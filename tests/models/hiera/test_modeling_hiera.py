@@ -262,6 +262,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     # Overriding as Hiera `get_input_embeddings` returns HieraPatchEmbeddings
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -368,7 +371,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_patches, self.model_tester.embed_dim],
             )
 
-            if not model_class.__name__ == "HieraBackbone":
+            if model_class.__name__ != "HieraBackbone":
                 reshaped_hidden_states = outputs.reshaped_hidden_states
                 self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 

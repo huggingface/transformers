@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
@@ -95,16 +95,16 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
         pad_size: int,
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
-        interpolation: Optional["F.InterpolationMode"],
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_image_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_rescale:

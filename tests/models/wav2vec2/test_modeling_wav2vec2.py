@@ -34,10 +34,10 @@ from transformers.testing_utils import (
     is_torchaudio_available,
     require_flash_attn,
     require_pyctcdecode,
-    require_soundfile,
     require_torch,
     require_torch_gpu,
     require_torchaudio,
+    require_torchcodec,
     run_test_in_subprocess,
     slow,
     torch_device,
@@ -97,9 +97,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
     try:
         _ = in_queue.get(timeout=timeout)
 
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -815,12 +813,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip(
-        "Need to investigate why config.do_stable_layer_norm is set to False here when it doesn't seem to be supported"
-    )
-    def test_flax_from_pt_safetensors(self):
-        return
-
 
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
@@ -1452,7 +1444,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -1470,7 +1462,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
@@ -1836,9 +1828,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1862,9 +1852,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset(
-            "mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True, trust_remote_code=True
-        )
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "es", split="test", streaming=True)
         sample = next(iter(ds))
 
         resampled_audio = torchaudio.functional.resample(
@@ -1963,9 +1951,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         LANG_MAP = {"it": "ita", "es": "spa", "fr": "fra", "en": "eng"}
 
         def run_model(lang):
-            ds = load_dataset(
-                "mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True, trust_remote_code=True
-            )
+            ds = load_dataset("mozilla-foundation/common_voice_11_0", lang, split="test", streaming=True)
             sample = next(iter(ds))
 
             wav2vec2_lang = LANG_MAP[lang]
@@ -1996,7 +1982,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "en": "joe keton disapproved of films and buster also had reservations about the media",
         }
 
-        for lang in LANG_MAP.keys():
+        for lang in LANG_MAP:
             assert run_model(lang) == TRANSCRIPTIONS[lang]
 
     @require_flash_attn

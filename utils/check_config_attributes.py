@@ -32,11 +32,20 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Ernie4_5Config": ["tie_word_embeddings"],
+    "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
+    "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
+    # used internally during generation to provide the custom logit processors with their necessary information
+    "DiaConfig": [
+        "delay_pattern",
+    ],
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
     # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Dots1Config": ["max_window_layers"],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -212,6 +221,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "MMGroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "RTDetrConfig": [
         "eos_coefficient",
         "focal_loss_alpha",
@@ -271,6 +288,24 @@ SPECIAL_CASES_TO_ALLOW = {
         "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertDecoderConfig": [
+        "embedding_dropout",
+        "hidden_activation",
+        "initializer_cutoff_factor",
+        "intermediate_size",
+        "max_position_embeddings",
+        "mlp_bias",
+        "mlp_dropout",
+        "classifier_activation",
+        "global_attn_every_n_layers",
+        "local_attention",
+        "local_rope_theta",
+    ],
+    # position_embedding_type not used and deprecated. Should be deleted in v4.55
+    "LayoutLMConfig": ["position_embedding_type"],
+    "MarkupLMConfig": ["position_embedding_type"],
+    "SmolLM3Config": ["no_rope_layer_interval"],
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
 }
 
 
@@ -310,6 +345,8 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsConfig": True,
         "IdeficsVisionConfig": True,
         "IdeficsPerceiverConfig": True,
+        # TODO: @Arthur/Joao (`hidden_act` unused)
+        "GptOssConfig": True,
     }
 )
 

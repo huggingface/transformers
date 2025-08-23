@@ -10,7 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -134,7 +134,7 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
 
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
-    def forward(self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
         hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
@@ -159,17 +159,10 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
 
 @auto_docstring
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
-    config_class = PromptDepthAnythingConfig
+    config: PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
 
 class PromptDepthAnythingReassembleLayer(nn.Module):
@@ -201,14 +194,14 @@ class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
 class PromptDepthAnythingNeck(DepthAnythingNeck):
     def forward(
         self,
-        hidden_states: List[torch.Tensor],
+        hidden_states: list[torch.Tensor],
         patch_height: Optional[int] = None,
         patch_width: Optional[int] = None,
         prompt_depth: Optional[torch.Tensor] = None,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -242,7 +235,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
+    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a

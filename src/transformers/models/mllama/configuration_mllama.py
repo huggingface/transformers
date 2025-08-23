@@ -13,7 +13,7 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -62,10 +62,10 @@ class MllamaVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         max_num_tiles (`int`, *optional*, defaults to 4):
             Maximum number of tiles for image splitting.
-        intermediate_layers_indices (`List[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
+        intermediate_layers_indices (`list[int]`, *optional*, defaults to [3, 7, 15, 23, 30]):
             Indices of intermediate layers of transformer encoder from which to extract and output features.
             These output features are concatenated with final hidden state of transformer encoder.
-        supported_aspect_ratios (`List[List[int]]`, *optional*):
+        supported_aspect_ratios (`list[list[int]]`, *optional*):
             List of supported aspect ratios for image splitting. If not specified, the default supported aspect ratios
             are [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]] for `max_num_tiles=4`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -103,8 +103,8 @@ class MllamaVisionConfig(PretrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[List[int]] = None,
-        supported_aspect_ratios: Optional[List[List[int]]] = None,
+        intermediate_layers_indices: Optional[list[int]] = None,
+        supported_aspect_ratios: Optional[list[list[int]]] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -193,11 +193,11 @@ class MllamaTextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -215,7 +215,7 @@ class MllamaTextConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        cross_attention_layers (`List[int]`, *optional*):
+        cross_attention_layers (`list[int]`, *optional*):
             Indices of the cross attention layers. If not specified, will default to [3, 8, 13, 18, 23, 28, 33, 38].
         dropout (`float`, *optional*, defaults to 0):
             The dropout probability for self- and cross-attention layers.
@@ -254,13 +254,13 @@ class MllamaTextConfig(PretrainedConfig):
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
         rope_theta: float = 500_000,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[List[int]] = None,
+        cross_attention_layers: Optional[list[int]] = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,
