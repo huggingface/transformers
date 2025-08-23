@@ -207,15 +207,3 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        prompts = self.prepare_prompts()
-
-        inputs = processor(text=prompts, padding="longest", return_tensors="pt")
-
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertSetEqual(set(inputs.keys()), set(self.input_keys))

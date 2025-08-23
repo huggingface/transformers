@@ -71,7 +71,7 @@ SAM2's key strength is its ability to track objects across video frames. Here's 
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -190,7 +190,7 @@ For real-time applications, SAM2 supports processing video frames as they arrive
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
@@ -226,7 +226,7 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing

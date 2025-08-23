@@ -59,7 +59,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 # infer the model
 audio = model.generate(**inputs, output_audio=True)
@@ -104,7 +104,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 # infer the model
 audio = model.generate(**inputs, output_audio=True)
@@ -161,7 +161,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 audio = model.generate(**inputs, output_audio=True)
 processor.save_audio(audio, [f"speech_batch_idx_{i}.wav" for i in range(len(audio))])
@@ -251,7 +251,7 @@ padded_inputs_1 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 print("\n" + "="*50)
 print("First generation - compiling and recording CUDA graphs...")
@@ -292,7 +292,7 @@ padded_inputs_2 = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
-).to(device)
+).to(model.device)
 
 print("\n" + "="*50)
 print("Generation with other inputs!")
@@ -337,7 +337,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     output_labels=True,
-).to(device)
+).to(model.device)
 
 out = model(**inputs)
 out.loss.backward()

@@ -706,7 +706,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         super().__init__(config)
 
         self.patch_embed = Sam2PatchEmbeddings(config)
-        # Windowed positional embedding (https://arxiv.org/abs/2311.05613)
+        # Windowed positional embedding (https://huggingface.co/papers/2311.05613)
         self.pos_embed = nn.Parameter(
             torch.zeros(1, config.hidden_size, *config.window_positional_embedding_background_size)
         )

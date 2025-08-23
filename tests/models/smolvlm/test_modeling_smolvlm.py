@@ -559,7 +559,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -579,7 +579,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_video(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -625,7 +625,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Load model and extract vision encoder
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
 
@@ -648,7 +648,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Load the model and extract the connector (multi-modal projector)
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
 
@@ -686,7 +686,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Load the model and extract the text decoder
         model = SmolVLMForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             config=config,
         )
 

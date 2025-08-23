@@ -123,6 +123,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     size_divisor = 32
     valid_kwargs = BridgeTowerFastImageProcessorKwargs
+    model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
         super().__init__(**kwargs)

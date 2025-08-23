@@ -78,7 +78,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             has_dtensor = 0
@@ -116,7 +116,7 @@ class TestTensorParallel(TestCasePlus):
 
             model_id = "JackFram/llama-68m"
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
             torch.distributed.barrier()
 
             # Dummy forward and backward pass
@@ -144,7 +144,7 @@ class TestTensorParallel(TestCasePlus):
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
 
-            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", tp_plan="auto")
+            model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
             torch.distributed.barrier()
 
             model.forward = torch.compile(model.forward)
@@ -221,7 +221,7 @@ class TestTensorParallelProperties(TestCasePlus):
         from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting empty plan
         model.tp_plan = {}
@@ -250,7 +250,7 @@ class TestTensorParallelProperties(TestCasePlus):
         from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test invalid parallel style
         with self.assertRaises(ValueError) as context:
@@ -266,7 +266,7 @@ class TestTensorParallelProperties(TestCasePlus):
         from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test warning for non-existent layer pattern
         with warnings.catch_warnings(record=True) as w:
@@ -285,7 +285,7 @@ class TestTensorParallelProperties(TestCasePlus):
         from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test valid layer patterns that should match the model structure
         valid_plans = [
@@ -322,7 +322,7 @@ class TestTensorParallelProperties(TestCasePlus):
         from transformers import AutoModelForCausalLM
 
         model_id = "JackFram/llama-68m"
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
         # Test setting None
         model.tp_plan = None

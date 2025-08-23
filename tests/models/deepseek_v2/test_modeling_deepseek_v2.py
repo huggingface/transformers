@@ -191,7 +191,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
@@ -210,7 +210,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
@@ -241,7 +241,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
             device_map=torch_device,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)

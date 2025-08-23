@@ -2346,7 +2346,7 @@ class GenerationTesterMixin:
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation="eager",
                 ).to(torch_device)
                 set_model_for_less_flaky_test(model_eager)
@@ -2356,7 +2356,7 @@ class GenerationTesterMixin:
 
                 model_attn = model_class.from_pretrained(
                     tmpdirname,
-                    torch_dtype=torch.float16,
+                    dtype=torch.float16,
                     attn_implementation=attn_implementation,
                 ).to(torch_device)
                 set_model_for_less_flaky_test(model_attn)
@@ -4361,7 +4361,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         non-slow tests to prevent regressions!
         """
         model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM", torch_dtype=torch.bfloat16, device_map="auto"
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", dtype=torch.bfloat16, device_map="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
 
@@ -4933,9 +4933,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "language_model": "cpu",
         }
 
-        model = AutoModelForImageTextToText.from_pretrained(
-            model_id, device_map=device_map, torch_dtype=torch.bfloat16
-        )
+        model = AutoModelForImageTextToText.from_pretrained(model_id, device_map=device_map, dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(["This is a text input"], return_tensors="pt").to(model.device)
 

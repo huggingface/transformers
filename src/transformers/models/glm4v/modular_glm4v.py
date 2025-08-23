@@ -53,10 +53,10 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import (
-    Qwen2_5_VLProcessor,
-    Qwen2_5_VLProcessorKwargs,
-    Qwen2_5_VLVideosProcessorKwargs,
+from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
+from ..qwen2_vl.processing_qwen2_vl import (
+    Qwen2_VLProcessor,
+    Qwen2_VLProcessorKwargs,
 )
 
 
@@ -188,7 +188,7 @@ class Glm4vTextConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -1502,7 +1502,7 @@ class Glm4vImagesKwargs(ImagesKwargs):
     merge_size: Optional[int]
 
 
-class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
+class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
     images_kwargs: Glm4vImagesKwargs
     videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
@@ -1513,7 +1513,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     }
 
 
-class Glm4vProcessor(Qwen2_5_VLProcessor):
+class Glm4vProcessor(Qwen2_VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.

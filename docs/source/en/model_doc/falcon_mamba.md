@@ -42,7 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(
     "text-generation",
     model="tiiuae/falcon-mamba-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -63,7 +63,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto"
 )
 
@@ -77,7 +77,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-transformers chat tiiuae/falcon-mamba-7b-instruct --torch_dtype auto --device 0
+transformers chat tiiuae/falcon-mamba-7b-instruct --dtype auto --device 0
 ```
 
 </hfoption>
@@ -101,7 +101,7 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
 model = FalconMambaForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )

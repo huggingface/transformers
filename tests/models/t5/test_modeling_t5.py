@@ -1094,18 +1094,18 @@ class T5ModelFp16Tests(unittest.TestCase):
         with unittest.mock.patch("builtins.__import__", side_effect=import_accelerate_mock):
             accelerate_available = False
 
-            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.float16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", dtype=torch.float16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
             # Load without in bf16
-            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", torch_dtype=torch.bfloat16)
+            model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", dtype=torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
             self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.bfloat16, device_map="auto"
+            "google-t5/t5-small", dtype=torch.bfloat16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
@@ -1113,7 +1113,7 @@ class T5ModelFp16Tests(unittest.TestCase):
         # Load using `accelerate` in bf16
         model = T5ForConditionalGeneration.from_pretrained(
             "google-t5/t5-small",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
@@ -1121,14 +1121,14 @@ class T5ModelFp16Tests(unittest.TestCase):
         # Load without using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
             "google-t5/t5-small",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
         model = T5ForConditionalGeneration.from_pretrained(
-            "google-t5/t5-small", torch_dtype=torch.float16, device_map="auto"
+            "google-t5/t5-small", dtype=torch.float16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)

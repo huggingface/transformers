@@ -288,7 +288,7 @@ class SamProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names))
+        return list(image_processor_input_names + ["original_sizes", "reshaped_input_sizes"])
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)

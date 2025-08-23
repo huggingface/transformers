@@ -220,7 +220,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
-    def test_update_torch_dtype(self):
+    def test_update_dtype(self):
         """Test torch dtype updating"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -228,11 +228,11 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         quantizer = Mxfp4HfQuantizer(config)
 
         # Should default to bfloat16
-        result_dtype = quantizer.update_torch_dtype(None)
+        result_dtype = quantizer.update_dtype(None)
         self.assertEqual(result_dtype, torch.bfloat16)
 
         # Should preserve existing dtype
-        result_dtype = quantizer.update_torch_dtype(torch.float32)
+        result_dtype = quantizer.update_dtype(torch.float32)
         self.assertEqual(result_dtype, torch.float32)
 
     def test_update_expected_keys(self):
@@ -425,7 +425,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         model = GptOssForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -442,7 +442,7 @@ class Mxfp4ModelTest(unittest.TestCase):
         model = GptOssForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -467,12 +467,12 @@ class Mxfp4ModelTest(unittest.TestCase):
         quantization_config = Mxfp4Config(dequantize=True)
         quantized_model = GptOssForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
         dequantized_model = GptOssForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             quantization_config=quantization_config,
         )

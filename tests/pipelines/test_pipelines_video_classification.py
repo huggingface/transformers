@@ -54,7 +54,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         self._load_dataset()
         video_classifier = VideoClassificationPipeline(
@@ -63,7 +63,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             top_k=2,
         )
         examples = [

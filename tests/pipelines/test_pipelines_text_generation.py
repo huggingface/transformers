@@ -278,7 +278,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         text_generator = TextGenerationPipeline(
             model=model,
@@ -286,7 +286,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_new_tokens=5,
         )
         return text_generator, ["This is a test", "Another test"]
@@ -415,7 +415,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # Classic `model_kwargs`
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
-            model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
+            model_kwargs={"device_map": "auto", "dtype": torch.bfloat16},
             max_new_tokens=5,
             do_sample=False,
         )
@@ -430,7 +430,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             max_new_tokens=5,
             do_sample=False,
         )
@@ -441,7 +441,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             [{"generated_text": ("This is a test test test test test test")}],
         )
 
-        # torch_dtype will be automatically set to torch.bfloat16 if not provided - check: https://github.com/huggingface/transformers/pull/38882
+        # dtype will be automatically set to torch.bfloat16 if not provided - check: https://github.com/huggingface/transformers/pull/38882
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom", device_map="auto", max_new_tokens=5, do_sample=False
         )
@@ -460,7 +460,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
             device=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             max_new_tokens=3,
         )
         pipe("This is a test")
@@ -474,7 +474,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
             device_map=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             max_new_tokens=3,
         )
         pipe("This is a test", do_sample=True, top_p=0.5)
@@ -540,3 +540,18 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
         with self.assertRaises(ValueError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
+    @require_torch
+    def test_pipeline_skip_special_tokens(self):
+        """Tests that we can use `skip_special_tokens=False` to get the special tokens in the output"""
+        model_id = "google/gemma-3-270m-it"
+        chat = [{"role": "user", "content": "What's your name?"}]
+        generator = pipeline("text-generation", model=model_id)
+
+        # normal pipeline use
+        output = generator(chat, max_new_tokens=20, do_sample=False)
+        self.assertNotIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+        # forcing special tokens to be included in the output
+        output = generator(chat, max_new_tokens=1000, do_sample=False, skip_special_tokens=False)
+        self.assertIn("<end_of_turn>", str(output[0]["generated_text"]))

@@ -258,20 +258,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    # Copied from tests.models.clip.test_processing_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDino
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
     def test_text_preprocessing_equivalence(self):
         processor = GroundingDinoProcessor.from_pretrained(self.tmpdirname)
 

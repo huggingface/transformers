@@ -63,10 +63,10 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "nghuyong/ernie-3.0-xbase-zh",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto"
 )
-inputs = tokenizer("巴黎是[MASK]国的首都。", return_tensors="pt").to("cuda")
+inputs = tokenizer("巴黎是[MASK]国的首都。", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

@@ -56,8 +56,8 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
+            https://huggingface.co/papers/1909.11556) for more details.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         init_std (`float`, *optional*, defaults to 0.02):

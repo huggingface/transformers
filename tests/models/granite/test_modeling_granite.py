@@ -311,7 +311,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
         model = GraniteForCausalLM.from_pretrained(
-            "ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
+            "ibm/PowerLM-3b", device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
         )
 
         with torch.no_grad():
@@ -354,7 +354,7 @@ class GraniteIntegrationTest(unittest.TestCase):
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", torch_dtype=torch.float16)
+        model = GraniteForCausalLM.from_pretrained("ibm/PowerLM-3b", device_map="auto", dtype=torch.float16)
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))

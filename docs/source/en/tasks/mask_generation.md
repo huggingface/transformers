@@ -189,7 +189,7 @@ inputs = processor(
         image,
         input_boxes=[[[box]]],
         return_tensors="pt"
-    ).to("cuda")
+    ).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

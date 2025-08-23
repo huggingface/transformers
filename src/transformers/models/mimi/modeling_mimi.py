@@ -77,7 +77,7 @@ class MimiOutput(ModelOutput):
 class MimiConv1dPaddingCache:
     """
     Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
 
     A padding cache is a list of cached partial hidden states for each convolution layer.
     Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.

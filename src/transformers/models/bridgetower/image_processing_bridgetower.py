@@ -168,7 +168,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             the `do_pad` parameter in the `preprocess` method.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
         self,

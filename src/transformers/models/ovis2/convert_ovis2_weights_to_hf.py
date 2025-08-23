@@ -225,7 +225,7 @@ def load_orig_state_dict(model_name_or_path):
     """
     model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=True,
     ).eval()
 
@@ -364,7 +364,7 @@ def main():
     model = (
         AutoModelForImageTextToText.from_pretrained(
             args.save_dir,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         .eval()
         .to("cuda:0")

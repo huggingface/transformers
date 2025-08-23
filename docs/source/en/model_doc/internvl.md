@@ -88,7 +88,7 @@ This example demonstrates how to perform inference on a single image with the In
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -119,7 +119,7 @@ This example shows how to generate text using the InternVL model without providi
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     {
@@ -148,7 +148,7 @@ InternVL models also support batched image and text inputs.
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -191,7 +191,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [
@@ -273,7 +273,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", torch_dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
 
 >>> messages = [
 ...     [

@@ -81,13 +81,13 @@
     - local: conversations
       title: Chat basics
     - local: chat_templating
-      title: Templates
+      title: Chat templates
     - local: chat_templating_multimodal
-      title: Multimodal templates
-    - local: chat_templating_writing
-      title: Template writing
+      title: Multimodal chat templates
     - local: chat_extras
-      title: Tools and RAG
+      title: Tool use
+    - local: chat_templating_writing
+      title: Writing a chat template
     title: Chat with models
   - sections:
     - local: serving
@@ -529,6 +529,12 @@
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
+      - local: model_doc/hunyuan_v1_dense
+        title: HunYuanDenseV1
+      - local: model_doc/hunyuan_v1_moe
+        title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -669,6 +675,8 @@
         title: RoFormer
       - local: model_doc/rwkv
         title: RWKV
+      - local: model_doc/seed_oss
+        title: Seed-Oss
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert

@@ -42,7 +42,7 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
 </hfoption>
@@ -52,10 +52,10 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2")
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
 
-input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -93,7 +93,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-2.7B")
-inputs = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
+inputs = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

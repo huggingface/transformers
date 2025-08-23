@@ -146,8 +146,8 @@ class SmolVLMVisionEmbeddings(nn.Module):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=position_ids.dtype)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=position_ids.dtype)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
 
             fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
             fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
@@ -924,7 +924,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct")
-        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

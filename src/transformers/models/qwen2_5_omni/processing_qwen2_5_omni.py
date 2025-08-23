@@ -318,20 +318,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         return list(_iter())
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         is_batched = False
         if isinstance(conversations[0], dict):

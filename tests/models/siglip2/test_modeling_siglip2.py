@@ -119,10 +119,8 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
-                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype)
-                model_fa = model_class.from_pretrained(
-                    tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmp_dir, dtype=dtype)
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
 
             model_fa.to(torch_device)
             model.to(torch_device)

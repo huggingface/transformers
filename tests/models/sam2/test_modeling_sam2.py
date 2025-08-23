@@ -611,7 +611,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def flash_attn_inference_equivalence(self, attn_implementation: str, padding_side: str):
         r"""
         Tests the equivalence between the eager and flash attention implementations.
-        This test is only for inference and runs with `torch_dtype=torch.bfloat16`.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
         """
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
@@ -628,11 +628,11 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation=attn_implementation
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]

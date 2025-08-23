@@ -145,19 +145,6 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
 
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = UdopProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(images=image_input, text=input_str)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
     def test_text_target(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()

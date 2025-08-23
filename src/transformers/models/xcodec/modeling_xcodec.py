@@ -267,7 +267,7 @@ class XcodecVectorQuantization(nn.Module):
 
 class XcodecResidualVectorQuantization(nn.Module):
     """
-    Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
+    Residual vector quantization implementation. Follows Algorithm 1 in https://huggingface.co/papers/2107.03312
     """
 
     def __init__(self, config: XcodecConfig):

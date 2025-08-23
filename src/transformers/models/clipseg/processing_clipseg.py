@@ -130,20 +130,6 @@ class CLIPSegProcessor(ProcessorMixin):
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def feature_extractor_class(self):
         warnings.warn(

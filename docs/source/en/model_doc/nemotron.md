@@ -57,15 +57,15 @@ The following code provides an example of how to load the Minitron-4B model and 
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = 'cuda'
+device = infer_device()
 dtype  = torch.bfloat16
-model  = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, device_map=device)
+model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
 
 # Prepare the input text
 prompt = 'Complete the paragraph: our solar system is'
