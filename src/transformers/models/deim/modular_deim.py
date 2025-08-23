@@ -1,6 +1,6 @@
 from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
 from ..d_fine.modular_d_fine import DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder
+from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder
 
 class DEIMConvNormLayer(RTDetrConvNormLayer):
     pass
@@ -24,3 +24,5 @@ class DEIMHybridEncoder(DFineHybridEncoder):
     pass
 
 
+class DEIMConvEncoder(DFineConvEncoder):
+    pass
