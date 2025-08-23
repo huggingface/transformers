@@ -32,9 +32,7 @@ from transformers.utils import (
 
 if is_torch_available():
     from types import SimpleNamespace
-
     import torch
-
     from transformers.integrations.mxfp4 import mlp_forward
     from transformers.testing_utils import torch_device
 
