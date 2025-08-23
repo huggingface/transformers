@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-05 and added to Hugging Face Transformers on 2025-04-05.*
+*이 모델은 2025-04-05에 출시되었으며 2025-04-05에 Hugging Face Transformers에 추가되었습니다.*
 
-# Llama4
+# Llama4[[llama4]]
 
 
 <div style="float: right;">
@@ -26,32 +26,30 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-[Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/), developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
-This generation includes two models:
-- The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
-- The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.
+Meta에서 개발한 [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/)는 새로운 자기회귀 Mixture-of-Experts (MoE) 아키텍처를 도입합니다.
+이 세대에는 두 가지 모델이 포함됩니다:
+- 128개의 전문가(expert)를 사용하여 총 약 400B 매개변수 중 17B 활성 매개변수를 갖는 고성능 Llama 4 Maverick
+- 16개의 전문가만 사용하여 총 약 109B 매개변수 중 17B 활성 매개변수를 갖는 효율적인 Llama 4 Scout
 -
-Both models leverage early fusion for native multimodality, enabling them to process text and image inputs.
-Maverick and Scout are both trained on up to 40 trillion tokens on data encompassing 200 languages
-(with specific fine-tuning support for 12 languages including Arabic, Spanish, German, and Hindi).
+두 모델 모두 네이티브 멀티모달리티를 위한 초기 융합(early fusion)을 활용하여 텍스트와 이미지 입력을 처리할 수 있습니다.
+Maverick과 Scout 모두 200개 언어를 포함하는 데이터에서 최대 40조 토큰으로 훈련되었습니다
+(아랍어, 스페인어, 독일어, 힌디어를 포함한 12개 언어에 대한 특정 파인튜닝 지원 포함).
 
-For deployment, Llama 4 Scout is designed for accessibility, fitting on a single server-grade GPU via
-on-the-fly 4-bit or 8-bitint4 quantization, while Maverick is available in BF16 and FP8 formats.
-These models are released under the custom Llama 4 Community License Agreement, available on the model repositories.
+배포 측면에서 Llama 4 Scout은 접근성을 위해 설계되어 온더플라이 4비트 또는 8비트int4 양자화를 통해 단일 서버급 GPU에서 실행할 수 있으며,
+Maverick은 BF16 및 FP8 형식으로 제공됩니다.
+이 모델들은 모델 저장소에서 제공되는 사용자 지정 Llama 4 커뮤니티 라이선스 계약에 따라 출시됩니다.
 
-You can find all the original Llama checkpoints under the [meta-llama](https://huggingface.co/meta-llama) organization.
+모든 원본 Llama 체크포인트는 [meta-llama](https://huggingface.co/meta-llama) 조직에서 찾으실 수 있습니다.
 
 > [!TIP]
-> The Llama 4 family of models comes in two flavors: 109B, and 402B parameters. Both of these flavors are extremely
-> large and won't fit on your run-of-the-mill device. See below for some examples to reduce the memory usage of the
-> model.
+> Llama 4 모델 패밀리는 두 가지 변형으로 제공됩니다: 109B와 402B 매개변수입니다. 이 두 변형 모두 매우 크며
+> 일반적인 기기에서는 실행할 수 없습니다. 모델의 메모리 사용량을 줄이는 몇 가지 예시를 아래에서 확인하세요.
 >
-> For the download to be faster and more resilient, we recommend installing the `hf_xet` dependency as followed:
+> 더 빠르고 안정적인 다운로드를 위해 다음과 같이 `hf_xet` 종속성을 설치하는 것을 권장합니다:
 > `pip install transformers[hf_xet]`
 
-The examples below demonstrates how to generate with [`Pipeline`] or the [`AutoModel`]. We additionally add an example
-showcasing how to toggle the right attributes to enable very long-context generations, as some flavors of Llama 4
-have context lengths going up to 10 million tokens.
+아래 예시들은 [`Pipeline`] 또는 [`AutoModel`]로 생성하는 방법을 보여줍니다. 또한 일부 Llama 4 변형이
+최대 1천만 토큰의 컨텍스트 길이를 갖기 때문에, 매우 긴 컨텍스트 생성을 활성화하기 위해 올바른 속성을 토글하는 방법을 보여주는 예시도 추가했습니다.
 
 
 <hfoptions id="usage">
@@ -198,11 +196,11 @@ print(response)
 </hfoption>
 <hfoption id="AutoModel - Long context">
 
-Beware: the example below uses both `device_map="auto"` and flex-attention.
-Please use `torchrun` to run this example in tensor-parallel mode.
+주의: 아래 예시는 `device_map="auto"`와 flex-attention을 모두 사용합니다.
+이 예시를 텐서 병렬 모드로 실행하려면 `torchrun`을 사용하세요.
 
-We will work to enable running with `device_map="auto"` and flex-attention without
-tensor-parallel in the future.
+향후 텐서 병렬 없이 `device_map="auto"`와 flex-attention을 함께 실행할 수 있도록
+작업할 예정입니다.
 
 ```py
 from transformers import Llama4ForConditionalGeneration, AutoTokenizer, infer_device
@@ -246,26 +244,26 @@ print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} G
 </hfoption>
 </hfoptions>
 
-## Efficiency; how to get the best out of llama 4
+## 효율성; Llama 4의 최대 성능 활용하기[[efficiency-how-to-get-the-best-out-of-llama-4]]
 
-### The Attention methods
+### 어텐션 방법[[the-attention-methods]]
 
-Updating the default attention function can significantly improve compute performance as well as memory usage. Refer to the [Attention Interface](../attention_interface) overview for an in-depth explanation of our interface.
+기본 어텐션 함수를 업데이트하면 계산 성능과 메모리 사용량을 크게 개선할 수 있습니다. 인터페이스에 대한 자세한 설명은 [어텐션 인터페이스](../attention_interface) 개요를 참조하세요.
 
-As of release, the Llama 4 model supports the following attention methods: `eager`, `flex_attention`, `sdpa`. We recommend using `flex_attention` for best results.
-Switching attention mechanism is done at the model initialization step:
+출시 시점에서 Llama 4 모델은 다음 어텐션 방법들을 지원합니다: `eager`, `flex_attention`, `sdpa`. 최상의 결과를 위해 `flex_attention` 사용을 권장합니다.
+어텐션 메커니즘 전환은 모델 초기화 단계에서 수행됩니다:
 
 
 <hfoptions id="Attention">
 <hfoption id="Flex Attention">
 
-Setting Flex Attention ensures the best results with the very long context the model can handle.
+Flex Attention 설정은 모델이 처리할 수 있는 매우 긴 컨텍스트에서 최상의 결과를 보장합니다.
 
-> [!TIP] Beware: the example below uses both `device_map="auto"` and flex-attention.
-> Please use `torchrun` to run this example in tensor-parallel mode.
+> [!TIP] 주의: 아래 예시는 `device_map="auto"`와 flex-attention을 모두 사용합니다.
+> 이 예시를 텐서 병렬 모드로 실행하려면 `torchrun`을 사용하세요.
 >
-> We will work to enable running with `device_map="auto"` and flex-attention without
-> tensor-parallel in the future.
+> 향후 텐서 병렬 없이 `device_map="auto"`와 flex-attention을 함께 실행할 수 있도록
+> 작업할 예정입니다.
 
 ```py
 from transformers import Llama4ForConditionalGeneration
@@ -280,7 +278,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ```
 </hfoption>
 <hfoption id="SDPA">
-The `sdpa` attention method is generally more compute-efficient than the `eager` method.
+`sdpa` 어텐션 방법은 일반적으로 `eager` 방법보다 계산 효율적입니다.
 
 ```py
 from transformers import Llama4ForConditionalGeneration
@@ -295,7 +293,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ```
 </hfoption>
 <hfoption id="Eager">
-The `eager` attention method is set by default, so no need for anything different when loading the model:
+`eager` 어텐션 방법이 기본으로 설정되어 있으므로 모델 로드 시 다른 설정이 필요하지 않습니다:
 
 ```py
 from transformers import Llama4ForConditionalGeneration
@@ -311,16 +309,16 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 </hfoptions>
 
 
-### Quantization
+### 양자화[[quantization]]
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for available quantization backends.
-At time of release, both FBGEMM and LLM-Compressor are supported; more quantization methods will be supported in the days that follow the release.
+양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 양자화 백엔드에 대해서는 [양자화](../quantization/overview) 개요를 참조하세요.
+출시 시점에서 FBGEMM과 LLM-Compressor가 모두 지원되며, 출시 후 며칠 내에 더 많은 양자화 방법이 지원될 예정입니다.
 
-See below for examples using both:
+두 가지 방법을 사용하는 예시를 아래에서 확인하세요:
 
 
 
-Here is an example loading an BF16 model in FP8 using the FBGEMM approach:
+다음은 FBGEMM 접근법을 사용하여 BF16 모델을 FP8로 로드하는 예시입니다:
 
 <hfoptions id="Quantization">
 <hfoption id="FBGEMM">
@@ -353,7 +351,7 @@ print(outputs[0])
 </hfoption>
 <hfoption id="LLM-Compressor">
 
-To use the LLM-Compressor technique, we recommend leveraging the pre-quantized FP8 checkpoint available with the release:
+LLM-Compressor 기술을 사용하려면 출시와 함께 제공되는 사전 양자화된 FP8 체크포인트를 활용하는 것을 권장합니다:
 
 ```python
 from transformers import AutoTokenizer, Llama4ForConditionalGeneration
@@ -381,13 +379,13 @@ print(outputs[0])
 </hfoption>
 </hfoptions>
 
-### Offloading
+### 오프로딩[[offloading]]
 
-Enabling CPU-offloading means that components of the model might be moved to CPU instead of GPU in case the GPU-memory available isn't sufficient to load the entire model.
-At inference, different components will be loaded/unloaded from/to the GPU on the fly. This ensures that the model can be loaded on smaller machines as long as the CPU-memory is sufficient.
-However, this also slows down inference as it adds communication overhead.
+CPU 오프로딩 활성화는 사용 가능한 GPU 메모리가 전체 모델을 로드하기에 충분하지 않은 경우 모델의 구성 요소가 GPU 대신 CPU로 이동될 수 있음을 의미합니다.
+추론 시 다양한 구성 요소들이 GPU로/에서 동적으로 로드/언로드됩니다. 이를 통해 CPU 메모리가 충분한 한 더 작은 머신에서도 모델을 로드할 수 있습니다.
+그러나 이는 통신 오버헤드를 추가하므로 추론 속도도 느려집니다.
 
-In order to enable CPU-offloading, you simply need to specify the `device_map` to `auto` at model load:
+CPU 오프로딩을 활성화하려면 모델 로드 시 `device_map`을 `auto`로 지정하기만 하면 됩니다:
 
 ```py
 from transformers import Llama4ForConditionalGeneration
@@ -400,47 +398,47 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 )
 ```
 
-## Llama4Config
+## Llama4Config[[llama4config]]
 
 [[autodoc]] Llama4Config
 
-## Llama4TextConfig
+## Llama4TextConfig[[llama4textconfig]]
 
 [[autodoc]] Llama4TextConfig
 
-## Llama4VisionConfig
+## Llama4VisionConfig[[llama4visionconfig]]
 
 [[autodoc]] Llama4VisionConfig
 
-## Llama4Processor
+## Llama4Processor[[llama4processor]]
 
 [[autodoc]] Llama4Processor
 
-## Llama4ImageProcessorFast
+## Llama4ImageProcessorFast[[llama4imageprocessorfast]]
 
 [[autodoc]] Llama4ImageProcessorFast
 
-## Llama4ForConditionalGeneration
+## Llama4ForConditionalGeneration[[llama4forconditionalgeneration]]
 
 [[autodoc]] Llama4ForConditionalGeneration
 - forward
 
-## Llama4ForCausalLM
+## Llama4ForCausalLM[[llama4forcausallm]]
 
 [[autodoc]] Llama4ForCausalLM
 - forward
 
-## Llama4TextModel
+## Llama4TextModel[[llama4textmodel]]
 
 [[autodoc]] Llama4TextModel
 - forward
 
-## Llama4ForCausalLM
+## Llama4ForCausalLM[[llama4forcausallm]]
 
 [[autodoc]] Llama4ForCausalLM
 - forward
 
-## Llama4VisionModel
+## Llama4VisionModel[[llama4visionmodel]]
 
 [[autodoc]] Llama4VisionModel
 - forward
