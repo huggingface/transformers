@@ -9,7 +9,7 @@
 - isExpanded: false
   sections:
   - sections:
-    - local: in_translation
+    - local: models
       title: 모델 로드하기
     - local: custom_models
       title: 사용자 정의 모델 공유하기
