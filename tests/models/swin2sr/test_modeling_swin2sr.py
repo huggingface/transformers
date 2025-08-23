@@ -347,7 +347,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
     def test_inference_fp16(self):
         processor = Swin2SRImageProcessor()
         model = Swin2SRForImageSuperResolution.from_pretrained(
-            "caidas/swin2SR-classical-sr-x2-64", torch_dtype=torch.float16
+            "caidas/swin2SR-classical-sr-x2-64", dtype=torch.float16
         ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

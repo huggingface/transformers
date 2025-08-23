@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-02 and added to Hugging Face Transformers on 2022-01-29.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -42,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(  
     task="fill-mask",  
     model="facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device=0  
 )  
 pipeline("Bonjour, je suis un modèle <mask>.")  
@@ -60,11 +61,11 @@ tokenizer = AutoTokenizer.from_pretrained(
 )  
 model = AutoModelForMaskedLM.from_pretrained(  
     "facebook/xlm-roberta-xl",  
-    torch_dtype=torch.float16,  
+    dtype=torch.float16,  
     device_map="auto",  
     attn_implementation="sdpa"  
 )  
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")  
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)  
 
 with torch.no_grad():  
     outputs = model(**inputs)  
@@ -100,12 +101,12 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-xl",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa",
     quantization_config=quantization_config
 )
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

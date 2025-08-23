@@ -257,12 +257,13 @@ class Glm4MoeConfig(PretrainedConfig):
 
 class Glm4MoeAttention(CohereAttention, nn.Module):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.rope_scaling = config.rope_scaling
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -288,7 +289,7 @@ class Glm4MoeMLP(DeepseekV3MLP):
 
 class Glm4MoeTopkRouter(DeepseekV3TopkRouter, nn.Module):
     def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts

@@ -176,7 +176,7 @@ def list_repo_templates(
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (ConnectionError, HTTPError):
+        except (HTTPError, requests.exceptions.ConnectionError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -213,8 +213,8 @@ def define_sagemaker_information():
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
-        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", "0"),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", "0"),
         "sm_distributed_training": runs_distributed_training,
         "sm_deep_learning_container": dlc_container_used,
         "sm_deep_learning_container_tag": dlc_tag,

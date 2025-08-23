@@ -36,6 +36,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..esm.modeling_esm import (
     EsmAttention,
@@ -88,6 +89,8 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     matrices which depend on their relative positions.
     """
 
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, dim: int):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
@@ -126,7 +129,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
 class EvollaSaProtSelfAttention(EsmSelfAttention, nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -190,7 +193,6 @@ class EvollaSaProtPooler(EsmPooler):
 class EvollaSaProtPreTrainedModel(PreTrainedModel):
     config: SaProtConfig
     _no_split_modules = ["EvollaSaProtLayer"]
-    _supports_flash_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -611,6 +613,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
 
         return context_layer
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         query_states,
@@ -624,7 +627,7 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
         protein_batch_mask=None,
         structure_batch_mask=None,
         msa_batch_mask=None,
-        past_key_value=None,
+        past_key_values=None,
     ):
         if protein_kv_states is not None:
             bs, protein_kv_seq_len, dim = protein_kv_states.shape
@@ -710,13 +713,14 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
                 protein_encoder_dim=config.hidden_size,
             )
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         protein_kv_states: Optional[torch.Tensor] = None,
@@ -737,7 +741,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -767,6 +771,8 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
 
 
 class EvollaPreTrainedModel(LlamaPreTrainedModel):
+    _supports_flash_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
+    _supports_flex_attn = False  # see dependency on `EvollaSaProtProteinEncoder`
     _supports_attention_backend = False
     _no_split_modules = [
         "EvollaDecoderLayer",
@@ -776,7 +782,7 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
             module.gate_attention.zero_()
             module.gate_ffw.zero_()
@@ -893,7 +899,7 @@ class EvollaModel(EvollaPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,

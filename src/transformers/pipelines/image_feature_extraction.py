@@ -68,7 +68,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
         if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+            model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

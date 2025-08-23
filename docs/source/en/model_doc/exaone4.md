@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-26.*
 
 # EXAONE 4
 
@@ -28,7 +29,7 @@ In the EXAONE 4.0 architecture, we apply new architectural changes compared to p
 1. **Hybrid Attention**: For the 32B model, we adopt hybrid attention scheme, which combines *Local attention (sliding window attention)* with *Global attention (full attention)* in a 3:1 ratio. We do not use RoPE (Rotary Positional Embedding) for global attention for better global context understanding.
 2. **QK-Reorder-Norm**: We reorder the LayerNorm position from the traditional Pre-LN scheme by applying LayerNorm directly to the attention and MLP outputs, and we add RMS normalization right after the Q and K projection. It helps yield better performance on downstream tasks despite consuming more computation.
 
-For more details, please refer to our [technical report](https://arxiv.org/abs/2507.11407), [HuggingFace paper](https://huggingface.co/papers/2507.11407), [blog](https://www.lgresearch.ai/blog/view?seq=576), and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.0).
+For more details, please refer to our [technical report](https://huggingface.co/papers/2507.11407), [HuggingFace paper](https://huggingface.co/papers/2507.11407), [blog](https://www.lgresearch.ai/blog/view?seq=576), and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.0).
 
 All model weights including quantized versions are available at [Huggingface Collections](https://huggingface.co/collections/LGAI-EXAONE/exaone-40-686b2e0069800c835ed48375).
 
@@ -70,7 +71,7 @@ model_name = "LGAI-EXAONE/EXAONE-4.0-32B"
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype="bfloat16",
+    dtype="bfloat16",
     device_map="auto"
 )
 tokenizer = AutoTokenizer.from_pretrained(model_name)

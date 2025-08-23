@@ -1054,26 +1054,12 @@ class AriaProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
 
-        # Remove `num_crops`, it is popped and used only when processing. Make a copy of list when remocing
+        # Remove `num_crops`, it is popped and used only when processing. Make a copy of list when removing
         # otherwise `self.image_processor.model_input_names` is also modified
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
@@ -1091,7 +1077,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
     """
 
     def __init__(self, config: AriaTextConfig):
-        super().__init__(self)
+        super().__init__(config)
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
@@ -1255,8 +1241,7 @@ class AriaTextMoELayer(nn.Module):
 class AriaTextAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: AriaTextConfig, layer_idx: int):
-        super().__init__()
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -1273,7 +1258,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
     """
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
-        super().__init__(self)
+        super().__init__(config, layer_idx)
         self.mlp = AriaTextMoELayer(config)
 
 
@@ -1284,7 +1269,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     _supports_attention_backend = True
@@ -1306,7 +1291,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(module)
+        LlamaPreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
 
@@ -1414,18 +1399,9 @@ class AriaModel(LlavaModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, AriaModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1437,7 +1413,7 @@ class AriaModel(LlavaModel):
                 vision_feature_layer=self.config.vision_feature_layer,
             )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self._get_image_mask(
+            special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -1448,9 +1424,6 @@ class AriaModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1498,9 +1471,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1529,7 +1499,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
-        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [
@@ -1565,12 +1535,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         >>> print(generated_texts[1])
         Assistant: The bridge is in San Francisco.
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1580,9 +1544,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
