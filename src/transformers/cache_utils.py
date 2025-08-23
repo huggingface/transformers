@@ -85,6 +85,7 @@ class DynamicLayer(CacheLayerMixin):
     It stores the key and value states as tensors of shape `[batch_size, num_heads, seq_len, head_dim]`.
     """
 
+    is_compileable = True
     is_sliding = False
 
     def lazy_initialization(self, key_states: torch.Tensor):
@@ -952,6 +953,23 @@ class Cache:
         # Note: for DynamicCache, layers are initialized lazily, so this will not be accurate before the first
         # forward through all the layers
         return len(self.layers)
+
+    def add_torch_size_checks(self):
+        if not len(self.layers):
+            return
+
+        first_keys = self.layers[0].keys
+        first_values = self.layers[0].values
+        torch._check(first_keys.size(2) == first_values.size(2))
+
+        for layer in self.layers:
+            torch._check(first_keys.size(2) == layer.keys.size(2))
+            torch._check(first_values.size(2) == layer.values.size(2))
+
+    def mark_seq_len_dynamic(self):
+        for layer in self.layers:
+            torch._dynamo.mark_dynamic(layer.keys, 2)
+            torch._dynamo.mark_dynamic(layer.values, 2)
 
 
 class DynamicCache(Cache):

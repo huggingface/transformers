@@ -1558,7 +1558,8 @@ class CompileConfig:
     fullgraph: bool = False
     dynamic: Optional[bool] = None
     backend: Union[str, Callable] = "inductor"
-    mode: str = "reduce-overhead"
+    # TODO - this does not work with dynamic shapes because seq_len changing will cause cudagraph re-recordings. Revisit.
+    # mode: str = "reduce-overhead"
     options: Optional[dict] = None
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
