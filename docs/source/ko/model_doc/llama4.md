@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*이 모델은 2025-04-05에 출시되었으며 2025-04-05에 Hugging Face Transformers에 추가되었습니다.*
+*Meta는 이 모델을 2025-04-05에 출시하고 같은 날 Hugging Face Transformers에 추가했습니다.*
 
 # Llama4[[llama4]]
 
@@ -27,25 +27,24 @@ rendered properly in your Markdown viewer.
 </div>
 
 Meta에서 개발한 [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/)는 새로운 자기회귀 Mixture-of-Experts (MoE) 아키텍처를 도입합니다.
-이 세대에는 두 가지 모델이 포함됩니다:
+이 세대는 두 가지 모델로 나뉩니다:
 - 128개의 전문가(expert)를 사용하여 총 약 400B 매개변수 중 17B 활성 매개변수를 갖는 고성능 Llama 4 Maverick
-- 16개의 전문가만 사용하여 총 약 109B 매개변수 중 17B 활성 매개변수를 갖는 효율적인 Llama 4 Scout
+- 16개의 전문가만 사용하여 총 약 109B 매개변수 중 17B 활성 매개변수를 갖는 경량화된 Llama 4 Scout
 -
-두 모델 모두 네이티브 멀티모달리티를 위한 초기 융합(early fusion)을 활용하여 텍스트와 이미지 입력을 처리할 수 있습니다.
-Maverick과 Scout 모두 200개 언어를 포함하는 데이터에서 최대 40조 토큰으로 훈련되었습니다
-(아랍어, 스페인어, 독일어, 힌디어를 포함한 12개 언어에 대한 특정 파인튜닝 지원 포함).
+두 모델 모두 네이티브 멀티모달을 위한 초기 융합(early fusion)을 활용하여 텍스트와 이미지 입력을 처리할 수 있습니다.
+Maverick과 Scout 모두 200개 언어를 포함하는 데이터에서 최대 40조 토큰으로 훈련되었습니다.
+(아랍어, 스페인어, 독일어, 힌디어를 포함한 12개 언어에 대한 특정 미세 조정 지원 포함)
 
-배포 측면에서 Llama 4 Scout은 접근성을 위해 설계되어 온더플라이 4비트 또는 8비트int4 양자화를 통해 단일 서버급 GPU에서 실행할 수 있으며,
-Maverick은 BF16 및 FP8 형식으로 제공됩니다.
+Meta는 Llama 4 Scout을 누구나 쉽게 사용할 수 있도록 설계했습니다. Scout은 4비트 또는 8비트 양자화를 적용하면 단일 서버급 GPU에서도 실시간으로 실행할 수 있습니다. 반면, 더 대규모인 Llama 4 Maverick은 고성능 연산을 위해 BF16과 FP8 형식으로 제공합니다.
 이 모델들은 모델 저장소에서 제공되는 사용자 지정 Llama 4 커뮤니티 라이선스 계약에 따라 출시됩니다.
 
 모든 원본 Llama 체크포인트는 [meta-llama](https://huggingface.co/meta-llama) 조직에서 찾으실 수 있습니다.
 
 > [!TIP]
 > Llama 4 모델 패밀리는 두 가지 변형으로 제공됩니다: 109B와 402B 매개변수입니다. 이 두 변형 모두 매우 크며
-> 일반적인 기기에서는 실행할 수 없습니다. 모델의 메모리 사용량을 줄이는 몇 가지 예시를 아래에서 확인하세요.
+> 일반적인 기기에서는 실행할 수 없습니다. 아래에 메모리 사용량을 줄이는 방법 몇 가지를 정리했습니다.
 >
-> 더 빠르고 안정적인 다운로드를 위해 다음과 같이 `hf_xet` 종속성을 설치하는 것을 권장합니다:
+> 더욱 빠르고 안정적인 다운로드를 위해 `hf_xet` 종속성 설치를 권장합니다:
 > `pip install transformers[hf_xet]`
 
 아래 예시들은 [`Pipeline`] 또는 [`AutoModel`]로 생성하는 방법을 보여줍니다. 또한 일부 Llama 4 변형이
@@ -62,7 +61,7 @@ import torch
 model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 
 messages = [
-    {"role": "user", "content": "what is the recipe of mayonnaise?"},
+    {"role": "user", "content": "마요네즈 레시피가 무엇인가요?"},
 ]
 
 pipe = pipeline(
@@ -88,7 +87,7 @@ model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [
-    {"role": "user", "content": "Who are you?"},
+    {"role": "user", "content": "당신은 누구신가요?"},
 ]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
 
@@ -125,7 +124,7 @@ messages = [
         "role": "user",
         "content": [
             {"type": "image", "url": img_url},
-            {"type": "text", "text": "Describe this image in two sentences."},
+            {"type": "text", "text": "이 이미지를 두 문장으로 설명해주세요."},
         ]
     },
 ]
@@ -171,7 +170,7 @@ messages = [
         "content": [
             {"type": "image", "url": url1},
             {"type": "image", "url": url2},
-            {"type": "text", "text": "Can you describe how these two images are similar, and how they differ?"},
+            {"type": "text", "text": "이 두 이미지가 어떻게 비슷하고, 어떻게 다른지 설명해주실 수 있나요?"},
         ]
     },
 ]
@@ -222,7 +221,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 )
 
 messages = [
-    {"role": "user", "content": f"Look at the following texts: [{very_long_text}]\n\n\n\nWhat are the books, and who wrote them? Make me a nice list."},
+    {"role": "user", "content": f"다음 텍스트들을 보세요: [{very_long_text}]\n\n\n\n책들은 무엇이며, 누가 썼나요? 좋은 목록을 만들어주세요."},
 ]
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
@@ -250,14 +249,14 @@ print(f"{torch_device_module.max_memory_allocated(model.device) / 1024**3:.2f} G
 
 기본 어텐션 함수를 업데이트하면 계산 성능과 메모리 사용량을 크게 개선할 수 있습니다. 인터페이스에 대한 자세한 설명은 [어텐션 인터페이스](../attention_interface) 개요를 참조하세요.
 
-출시 시점에서 Llama 4 모델은 다음 어텐션 방법들을 지원합니다: `eager`, `flex_attention`, `sdpa`. 최상의 결과를 위해 `flex_attention` 사용을 권장합니다.
-어텐션 메커니즘 전환은 모델 초기화 단계에서 수행됩니다:
+Llama 4 모델은 처음 공개될 때부터 다음 어텐션 방식을 지원합니다: `eager`, `flex_attention`, `sdpa`. 최상의 결과를 위해 `flex_attention` 사용을 권장합니다.
+어텐션 메커니즘 전환은 모델을 초기화할 때 이루어집니다:
 
 
 <hfoptions id="Attention">
 <hfoption id="Flex Attention">
 
-Flex Attention 설정은 모델이 처리할 수 있는 매우 긴 컨텍스트에서 최상의 결과를 보장합니다.
+Flex Attention은 모델이 긴 컨텍스트를 처리할 때 최적의 성능을 발휘합니다.
 
 > [!TIP] 주의: 아래 예시는 `device_map="auto"`와 flex-attention을 모두 사용합니다.
 > 이 예시를 텐서 병렬 모드로 실행하려면 `torchrun`을 사용하세요.
@@ -311,8 +310,8 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 
 ### 양자화[[quantization]]
 
-양자화는 가중치를 더 낮은 정밀도로 표현하여 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 양자화 백엔드에 대해서는 [양자화](../quantization/overview) 개요를 참조하세요.
-출시 시점에서 FBGEMM과 LLM-Compressor가 모두 지원되며, 출시 후 며칠 내에 더 많은 양자화 방법이 지원될 예정입니다.
+양자화는 가중치를 더 낮은 정밀도로 바꿔 대형 모델의 메모리 부담을 줄입니다. 사용 가능한 양자화 백엔드에 대해서는 [양자화](../quantization/overview) 개요를 참조하세요.
+현재는 FBGEMM과 LLM-Compressor를 지원하며, 곧 더 많은 방식이 추가될 예정입니다.
 
 두 가지 방법을 사용하는 예시를 아래에서 확인하세요:
 
@@ -332,7 +331,7 @@ model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [
-    {"role": "user", "content": "Who are you?"},
+    {"role": "user", "content": "당신은 누구신가요?"},
 ]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
 
@@ -351,7 +350,7 @@ print(outputs[0])
 </hfoption>
 <hfoption id="LLM-Compressor">
 
-LLM-Compressor 기술을 사용하려면 출시와 함께 제공되는 사전 양자화된 FP8 체크포인트를 활용하는 것을 권장합니다:
+LLLM-Compressor를 사용할 때는 함께 제공되는 사전 양자화된 FP8 체크포인트를 쓰는 것이 좋습니다:
 
 ```python
 from transformers import AutoTokenizer, Llama4ForConditionalGeneration
@@ -362,7 +361,7 @@ model_id = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [
-    {"role": "user", "content": "Who are you?"},
+    {"role": "user", "content": "당신은 누구신가요?"},
 ]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
 
@@ -381,11 +380,11 @@ print(outputs[0])
 
 ### 오프로딩[[offloading]]
 
-CPU 오프로딩 활성화는 사용 가능한 GPU 메모리가 전체 모델을 로드하기에 충분하지 않은 경우 모델의 구성 요소가 GPU 대신 CPU로 이동될 수 있음을 의미합니다.
-추론 시 다양한 구성 요소들이 GPU로/에서 동적으로 로드/언로드됩니다. 이를 통해 CPU 메모리가 충분한 한 더 작은 머신에서도 모델을 로드할 수 있습니다.
-그러나 이는 통신 오버헤드를 추가하므로 추론 속도도 느려집니다.
+CPU 오프로딩을 활성화하면, GPU 메모리가 부족할 때 모델이 구성 요소를 CPU로 이동시킵니다.
+추론 시 다양한 구성 요소들이 GPU와 CPU 간에 동적으로 로드되고 언로드됩니다. 이를 통해 CPU 메모리가 충분한 한 더 작은 머신에서도 모델을 로드할 수 있습니다.
+다만 통신 오버헤드로 인해 추론 속도가 느려질 수 있습니다.
 
-CPU 오프로딩을 활성화하려면 모델 로드 시 `device_map`을 `auto`로 지정하기만 하면 됩니다:
+CPU 오프로딩을 활성화하려면 모델 로드 시 `device_map`을 `auto`로 지정하면 됩니다
 
 ```py
 from transformers import Llama4ForConditionalGeneration
@@ -398,47 +397,47 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 )
 ```
 
-## Llama4Config[[llama4config]]
+## Llama4Config
 
 [[autodoc]] Llama4Config
 
-## Llama4TextConfig[[llama4textconfig]]
+## Llama4TextConfig
 
 [[autodoc]] Llama4TextConfig
 
-## Llama4VisionConfig[[llama4visionconfig]]
+## Llama4VisionConfig
 
 [[autodoc]] Llama4VisionConfig
 
-## Llama4Processor[[llama4processor]]
+## Llama4Processor
 
 [[autodoc]] Llama4Processor
 
-## Llama4ImageProcessorFast[[llama4imageprocessorfast]]
+## Llama4ImageProcessorFast
 
 [[autodoc]] Llama4ImageProcessorFast
 
-## Llama4ForConditionalGeneration[[llama4forconditionalgeneration]]
+## Llama4ForConditionalGeneration
 
 [[autodoc]] Llama4ForConditionalGeneration
 - forward
 
-## Llama4ForCausalLM[[llama4forcausallm]]
+## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
 - forward
 
-## Llama4TextModel[[llama4textmodel]]
+## Llama4TextModel
 
 [[autodoc]] Llama4TextModel
 - forward
 
-## Llama4ForCausalLM[[llama4forcausallm]]
+## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
 - forward
 
-## Llama4VisionModel[[llama4visionmodel]]
+## Llama4VisionModel
 
 [[autodoc]] Llama4VisionModel
 - forward
