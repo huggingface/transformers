@@ -69,14 +69,14 @@ class VideoPrismConfig(PretrainedConfig):
     def __init__(
         self,
         image_size=288,
-        num_frames=16,
+        num_frames=16,  # ? embeds are made using 16 frames for base and 8 frames for large model size
         tubelet_size=[1, 18, 18],
         num_channels=3,
-        hidden_size=768,
-        num_spatial_layers=12,
-        num_temporal_layers=4,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=768,  # ? 1024 for large
+        num_spatial_layers=12,  # ? 24
+        num_temporal_layers=4,  # ? 4
+        num_attention_heads=12,  # ? 16
+        intermediate_size=3072,  # ? 4096
         hidden_act="gelu_python",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -86,9 +86,10 @@ class VideoPrismConfig(PretrainedConfig):
         _attn_implementation="eager",
         atten_logit_cap=50.0,
         num_auxiliary_layers=2,
-        enable_causal_atten=True,  #! vv imp but only for text encoder
+        enable_causal_atten=True,  #! only for text encoder
         num_unimodal_layers=12,
         vocabulary_size=32000,
+        apply_l2_norm=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -114,6 +115,7 @@ class VideoPrismConfig(PretrainedConfig):
         self.enable_causal_atten = enable_causal_atten  #! todo
         self.num_unimodal_layers = num_unimodal_layers
         self.vocabulary_size = vocabulary_size
+        self.apply_l2_norm = apply_l2_norm
 
 
 __all__ = ["VideoPrismConfig"]

@@ -29,14 +29,14 @@ class VideoPrismConfig(VivitConfig):
     def __init__(
         self,
         image_size=288,
-        num_frames=16,
-        tubelet_size=[1, 18, 18],
+        num_frames=16,    # ? embeds are made using 16 frames for base and 8 frames for large model size 
+        tubelet_size=[1, 18, 18],  
         num_channels=3,
-        hidden_size=768,
-        num_spatial_layers=12,
-        num_temporal_layers=4,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=768,   # ? 1024 for large
+        num_spatial_layers=12,     # ? 24
+        num_temporal_layers=4,     # ? 4
+        num_attention_heads=12,    # ? 16
+        intermediate_size=3072,    # ? 4096
         hidden_act="gelu_python",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -46,9 +46,10 @@ class VideoPrismConfig(VivitConfig):
         _attn_implementation="eager",
         atten_logit_cap=50.0,
         num_auxiliary_layers=2,
-        enable_causal_atten=True,  #! vv imp but only for text encoder
+        enable_causal_atten=True,  #! only for text encoder
         num_unimodal_layers=12,
         vocabulary_size=32000,
+        apply_l2_norm=True,
         **kwargs,
     ):
         super().__init__()
@@ -61,6 +62,7 @@ class VideoPrismConfig(VivitConfig):
         self.enable_causal_atten = enable_causal_atten  #! todo
         self.num_unimodal_layers = num_unimodal_layers
         self.vocabulary_size = vocabulary_size
+        self.apply_l2_norm = apply_l2_norm
 
 
 def lecun_normal_(tensor):
@@ -83,6 +85,13 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     spatial_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+@dataclass
+class VideoPrismClipOutput(ModelOutput):
+
+    video_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    text_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+
+
 class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
     def __init__(self, config):
         super().__init__(config)
@@ -98,22 +107,20 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
 
     def forward(self, pixel_values, interpolate_pos_encoding: bool = False, mode="spatial"):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        
         if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
             raise ValueError(
                 f"Image image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
-        x = self.projection(pixel_values)  # ? (B, 768, 16, 16, 16)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)  # ? (B, C=3, T=16, H=288, W=288)
+        
+        x = self.projection(pixel_values)  # ? (B, dim=768, T=16, 16, 16), here 16, 16 = h // 18, w // 18
 
-        # ? I need to reshape it to (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
+        x = x.flatten(3).permute(0, 2, 3, 1)  # ? (B, T=16, num_patches=256, dim=768)
 
-        x = x.flatten(3).permute(0, 2, 3, 1)  # ? (B, T, 256, 768)
-
-        x = x.view(
-            x.shape[0] * x.shape[1], x.shape[2], x.shape[3]
-        )  # ? (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
-
+        x = x.view(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])  # ? (B * T, 256, 768)
+        
         return x
 
 
@@ -134,59 +141,60 @@ class VideoPrismEmbeddings(VivitEmbeddings):
 
         if self.mode == "spatial":
             self.patch_embeddings = VideoPrismTubeletEmbeddings(config)
-            self.spatial_pos_emb = nn.Parameter(
-                torch.zeros(1, self.pos_emb_shape[1] * self.pos_emb_shape[2], config.hidden_size)
-            )  # ? takes in patches of shape (B * T, 256, 768) returns (1, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
+            self.spatial_pos_emb = nn.Parameter(torch.zeros(1, self.pos_emb_shape[1] * self.pos_emb_shape[2], config.hidden_size))   # ? (1, 256, 768)
+        
         elif self.mode == "temporal":
-            self.temporal_pos_emb = nn.Parameter(torch.zeros(1, self.pos_emb_shape[0], config.hidden_size))
+            self.temporal_pos_emb = nn.Parameter(torch.zeros(1, self.pos_emb_shape[0], config.hidden_size))  # ? (1, 16, 768)
 
     def interpolate_pos_encoding(self):
         raise AttributeError("Not needed for VideoPrism")
 
     def forward(self, pixel_values: torch.Tensor, input_shape, interpolate_pos_encoding: bool = False):
+        
         if self.mode == "spatial":
+
             b, t, c, h, w = input_shape
             assert h == w
             embeddings = self.patch_embeddings(pixel_values)
-            # raise Exception("stop")
-            num_row_patches = h // self.tubelet_size[1]  # ? 288/18 = 16
+            
+            num_row_patches = h // self.tubelet_size[1]     # ? 288/18 = 16
             num_column_patches = w // self.tubelet_size[2]  # ? 288/18 = 16
 
-            spatial_pos_emb_shape = self.pos_emb_shape[-2:]
+            spatial_pos_emb_shape = self.pos_emb_shape[-2:] # ? (16, 16)
 
             spatial_pos_emb = self.spatial_pos_emb
-            if spatial_pos_emb_shape != (num_row_patches, num_column_patches):  # ? got a big issue here
+            
+            if spatial_pos_emb_shape != (num_row_patches, num_column_patches):
                 spatial_pos_emb = self._interpolate_emb_2d(
-                    spatial_pos_emb,  # ? 1, 256, 768
-                    spatial_pos_emb_shape,
-                    (num_row_patches, num_column_patches),
+                    spatial_pos_emb,                        # ? (1, 256, 768)
+                    spatial_pos_emb_shape,                  # ? (16, 16)
+                    (num_row_patches, num_column_patches),  # ? (h//18, w//18)
                 )
-                # raise ValueError(f'Positional embedding should have batch size of 1, got {self.spatial_pos_emb.shape[0]}.')
 
-            embeddings = embeddings + spatial_pos_emb
+            embeddings = embeddings + spatial_pos_emb       # ? (B * T, 256, 768)
 
             return embeddings
 
         elif self.mode == "temporal":
+
             if input_shape is not None:
-                b, t, c, h, w = input_shape
+                b, t, c, h, w = input_shape  # ? input shape before it was passed into VideoPrismModel
 
-            _, features, dim = (
-                pixel_values.shape
-            )  # ? pixel_values has shape (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
+            _, features, dim = pixel_values.shape # ? pixel_values here corresponds to the hidden_states after spatial encoder output and has shape (B * T, 256, 768) 
 
-            embeddings = pixel_values.view(b, t, features, dim)  # ? embeddings has shape (B*T, 256, 768)
-            embeddings = embeddings.permute(0, 2, 1, 3)
-            embeddings = embeddings.view(b * features, t, dim)  # ? embeddings has shape (B * 256, T=16, 768)
+            hidden_states = pixel_values.view(b, t, features, dim)      # ? (B*T, 256, 768) -> (B, T, 256, 768)
+            hidden_states = hidden_states.permute(0, 2, 1, 3)           # ? (B, 256, T=16, 768)
+            hidden_states = hidden_states.view(b * features, t, dim)    # ? (B * 256, T=16, 768)
 
-            temporal_seq_length = self.pos_emb_shape[0]  # ? 16
-            # ? temporal_pos_emb shape is (1, 16, 768)
-            temporal_pos_emb = self.temporal_pos_emb
-            if temporal_seq_length != t:
-                temporal_pos_emb = self._interpolate_emb_1d(self.temporal_pos_emb, t)
-                # raise ValueError(f'Positional embedding should have batch size of 1, got {temporal_pos_emb.shape[0]}.') #! to remove
-            embeddings = embeddings + temporal_pos_emb  # ? embeddings has shape (B * 256, T=16, 768)
-            return embeddings
+            temporal_seq_length = self.pos_emb_shape[0]                 # ? 16
+            
+            temporal_pos_emb = self.temporal_pos_emb                    # ? (1, 16, 768)
+            
+            if t != temporal_seq_length:                                # ? if num_frames of input != num_frames in config
+                temporal_pos_emb = self._interpolate_emb_1d(temporal_pos_emb, t)
+                
+            hidden_states = hidden_states + temporal_pos_emb            # ? (B * 256, T=16, 768)
+            return hidden_states
 
         else:
             raise ValueError(f"Unknown mode: {self.mode}. Supported modes are: spatial, temporal.")
@@ -204,7 +212,8 @@ class VideoPrismEmbeddings(VivitEmbeddings):
         emb_dim = emb.shape[-1]
         emb = emb.view(
             emb_dim, source_emb_shape[0], source_emb_shape[1]
-        )  # ? 16, 16, 768, the first demsion is remove like squeeze
+        )  # ? (768, 16, 16)
+        
         emb = emb.unsqueeze(dim=0)
         target_emb = F.interpolate(
             emb,
@@ -213,7 +222,7 @@ class VideoPrismEmbeddings(VivitEmbeddings):
             antialias=True,  # ? set to True by default in jax.image.resize
         )
 
-        target_emb = target_emb.view(1, target_emb_shape[0] * target_emb_shape[1], emb_dim)
+        target_emb = target_emb.view(1, target_emb_shape[0] * target_emb_shape[1], emb_dim)  # ? (1, h//18 * w//18, 768)
         return target_emb
 
     def _interpolate_emb_1d(self, emb: torch.Tensor, target_emb_length: int):
@@ -221,15 +230,15 @@ class VideoPrismEmbeddings(VivitEmbeddings):
         Interpolates the embedding to the target sequence length
         """
         emb_dim = emb.shape[-1]
-        emb = emb.unsqueeze(dim=0)  # jnp.squeeze(emb, axis=0)
-
-        target_emb = F.interpolate(
-            emb,  # ? add batch dimension
-            (target_emb_length, emb_dim),
-            mode="bilinear",
-            antialias=True,  # ? set to True by default in jax.image.resize used in the original implementation
+        emb = emb.view(1, emb_dim, -1)  # ? (1, 768, 16) for large model size
+        # emb = emb.unsqueeze(dim=0)
+        target_emb = F.interpolate(     #todo check if linear works, otherwise follow the exact method as in videoprism repo
+            emb,                        # ? (1, 768, 16)
+            target_emb_length,
+            mode="linear",
+            antialias=True,             # ? set to True by default in jax.image.resize used in the original implementation
         )
-        target_emb = target_emb.squeeze(0).view(1, target_emb_length, emb_dim)
+        # target_emb = target_emb.squeeze(0).view(1, target_emb_length, emb_dim)
         return target_emb
 
 
@@ -246,16 +255,17 @@ def eager_attention_forward(
     **kwargs,
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    scaling = scaling if scale_logits_by_head_dims else 1.0
+    scaling = scaling if scale_logits_by_head_dims else 1.0   # ? scale_logits_by_head_dims is set to False when PerDimScale is applied in VideoPrismClip's attention pooler
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
     # Attention logit capping
     if not no_attention_logit_cap and module.config.atten_logit_cap > 0.0:
         attn_cap = torch.tensor(module.config.atten_logit_cap, dtype=attn_weights.dtype)  #! attention logit capping
-        attn_weights = attn_cap * torch.tanh(attn_weights / attn_cap)  #! is only supported in eager mode
+        attn_weights = attn_cap * torch.tanh(attn_weights / attn_cap)                     #! is only supported in eager mode
 
-    # Mask heads if we want to
+    # Mask heads
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask.expand(*attn_weights.shape)  #! must not be hard coded
+        attn_weights = attn_weights + attention_mask.expand(*attn_weights.shape)
 
     # Normalize the attention scores to probabilities.
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -270,7 +280,6 @@ def eager_attention_forward(
 
 
 class VideoPrismLayer(VivitLayer):
-    """This corresponds to the EncoderBlock class in the scenic/videoprism implementation."""
 
     def __init__(self, config):
         self.config = config
@@ -282,10 +291,10 @@ class VideoPrismLayer(VivitLayer):
         with torch.no_grad():
             self.layernorm_before.weight += nn.Parameter(
                 torch.ones(self.config.hidden_size)
-            )  # ? part of the original implementation, not sure why, could be an erorr, but is necessay for matching the logits
+            )
             self.layernorm_after.weight += nn.Parameter(
                 torch.ones(self.config.hidden_size)
-            )  # ? part of the original implementation, not sure why, could be an erorr, but is necessay for matching the logits
+            )
 
         super().forward(hidden_states, head_mask=head_mask, output_attentions=output_attentions)
 
@@ -303,7 +312,7 @@ class VideoPrismEncoder(VivitEncoder):
         elif mode == "unimodal":
             self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_unimodal_layers)])
         else:
-            raise ValueError(f"Unknown mode: {mode}. Supported modes are: spatial, temporal.")
+            raise ValueError(f"Unknown mode: {mode}. Supported modes are: spatial, temporal, auxiliary and unimodal.")
 
     def forward(
         self,
@@ -382,13 +391,11 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
 
         self.config = config
 
-        self.spatial_embeddings = VideoPrismEmbeddings(
-            config, mode="spatial"
-        )  # ? spatial embeddings, takes in (B, T=16, C=3, H=288, W=288) and returns (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
-
         self.layernorm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.layernorm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.spatial_embeddings = VideoPrismEmbeddings(config, mode="spatial")
 
         self.temporal_embeddings = VideoPrismEmbeddings(config, mode="temporal")
 
@@ -401,17 +408,13 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        spatial_head_mask: Optional[torch.FloatTensor] = None,  #! These two
-        temporal_head_mask: Optional[torch.FloatTensor] = None,  #! are new additions, needfurther work
+        pixel_values: Optional[torch.FloatTensor] = None,   # ? (B, T=16, C=3, H=288, W=288)
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: bool = False,  #? unused at the moment
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithPooling]:
-        """
-        Forward pass of the VideoPrism model
-        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -421,25 +424,12 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        spatial_head_mask = (
-            self.get_head_mask(spatial_head_mask, self.config.num_spatial_layers)
-            if spatial_head_mask is not None
-            else None
-        )
-
-        temporal_head_mask = (
-            self.get_head_mask(temporal_head_mask, self.config.num_temporal_layers)
-            if temporal_head_mask is not None
-            else None
-        )
-
         input_shape = pixel_values.shape  # ? (B, T=16, C=3, H=288, W=288)
 
-        spatial_embeds = self.spatial_embeddings(pixel_values, input_shape)  # ? embeds has shape (B * T, 256, 768)
+        spatial_embeds = self.spatial_embeddings(pixel_values, input_shape)  # ? embeds has shape (B * T, 256, 768); embedding for each frame
 
         spatial_encoder_outputs = self.spatial_encoder(
-            spatial_embeds,
-            head_mask=spatial_head_mask,
+            hidden_states=spatial_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -449,20 +439,17 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
         with torch.no_grad():
             self.layernorm1.weight += nn.Parameter(
                 torch.ones(self.config.hidden_size)
-            )  #! part of the original implementation, not sure why, could be an erorr, but is necessay for matching the logits
+            )  #! part of the original implementation, not sure why, could be an erorr, but it is necessary for matching the logits
         features = self.layernorm1(spatial_sequence_output)  # ? shape (B * T, 256, 768)
 
-        # ? spatial_features = (features,) + spatial_encoder_outputs[1:]  #! need to use
-
-        temporal_embeds = self.temporal_embeddings(features, input_shape)  # ? shape (B * T, 256, 768)
+        temporal_embeds = self.temporal_embeddings(features, input_shape)  # ? input shape (B * T, 256, 768) -> output shape (B * T, 256, 768)
 
         temporal_encoder_outputs = self.temporal_encoder(
-            temporal_embeds,
-            head_mask=spatial_head_mask,
+            hidden_states=temporal_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )  # ? shape (B * T, 256, 768)
+        )  # ? shape (B * 256, T=16, 768)
 
         temporal_sequence_output = temporal_encoder_outputs[0]
 
@@ -470,8 +457,6 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
             self.layernorm2.weight += nn.Parameter(torch.ones(self.config.hidden_size))
 
         features = self.layernorm2(temporal_sequence_output)  # ? shape is (256, 16, 768)
-
-        # ? temporal_features = (features,) + temporal_encoder_outputs[1:]
 
         features = (
             features.view(input_shape[0], -1, *features.shape[1:]).permute(0, 2, 1, 3).contiguous()
@@ -488,25 +473,17 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
             )
 
         return BaseModelOutputWithSpatialAndTemporalStates(
-            last_hidden_state=features,
+            last_hidden_state=features,                       # ? returns (B, 4096, 768)
             temporal_hidden_states=temporal_encoder_outputs.hidden_states,
             spatial_hidden_states=spatial_encoder_outputs.hidden_states,
             temporal_attentions=temporal_encoder_outputs.attentions,
             spatial_attentions=spatial_encoder_outputs.attentions,
-        )  # ? returns (B * T, 256, 768) where 256 is the number of patches and 768 is the embedding dimension
+        )
 
 
 def _l2_normalize(x: torch.Tensor, axis: int | Sequence[int] = -1, epsilon: float = 1e-12) -> torch.Tensor:
-    """L2-normalizes a torch.Tensor along certain dimension.
-
-    Args:
-      x: An input jax.Array.
-      axis: An integer or a sequence of integers for the axis to normalize.
-      epsilon: A small constant for numerical stability.
-
-    Returns:
-      Normalized torch.Tensor.
-    """
+    """ L2 Normalization of a tensor along the specified axis. """
+    
     norm = torch.sqrt(torch.sum(x**2, dim=axis, keepdims=True) + epsilon)
     return x / norm
 
@@ -519,7 +496,7 @@ class PerDimScale(nn.Module):
         self.per_dim_scale = nn.Parameter(torch.zeros(dim))
 
     def forward(self, inputs):
-        dim = inputs.shape[-1]  # ? dim is 256 for large lvt as inputs is (B, 1, N, H) = (1, 1, 16, 64)
+        dim = inputs.shape[-1]  # ? dim is 256
 
         # ? original comments
         # 1.0/jax.nn.softplus(0.0) = 1.442695041. Hard code this number so that we
@@ -528,9 +505,7 @@ class PerDimScale(nn.Module):
         r_softplus_0 = 1.442695041
 
         scale = torch.tensor(r_softplus_0 / (dim**0.5), dtype=inputs.dtype)
-        softplus = nn.Softplus()(self.per_dim_scale).expand(
-            *inputs.shape
-        )
+        softplus = nn.Softplus()(self.per_dim_scale).expand(*inputs.shape)
         scale = scale * softplus
         return inputs * scale
 
@@ -555,19 +530,20 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        batch_size, seq_length, hidden_size = hidden_states.shape
-        query = self.pooling_attention_query.expand(batch_size, -1, -1)  # Expand to (B, 1, D)
+        hidden_states: Optional[torch.FloatTensor] = None,  # ? (B, 4096, 768)
+        head_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+    ) -> torch.FloatTensor: # Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+        
+        batch_size, seq_length, hidden_size = hidden_states.shape        # ? (B, 4096, 768)
+        query = self.pooling_attention_query.expand(batch_size, -1, -1)  # ? Expand to (B, 1, dim)
         query_layer = (
-            self.query(query)  # Transform query to (B, 1, D')
+            self.query(query)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
 
-        query_layer = self.per_dim_scale(query_layer)
+        query_layer = self.per_dim_scale(query_layer)  # ? scale via softplus function, head dimention-wise
 
         key_layer = (
             self.key(hidden_states)
@@ -588,12 +564,12 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,  #! need to confirm
-            is_causal=self.is_causal,
+            head_mask,
+            is_causal=self.is_causal,         # ? is_causal is set to False obviously, but it can't be modified from the config
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
-            scale_logits_by_head_dims=False,  # ? this is only supported in eager mode
-            no_attention_logit_cap=True,
+            scale_logits_by_head_dims=False,  # ? PerDimScale is applied, so we do not need to scale logits by head dims
+            no_attention_logit_cap=True,      # ? to ensure that the attn logit cap is not applied for this
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -621,19 +597,19 @@ class PositionalEmbedding(nn.Module):
     def forward(self, seq_length):
         position = torch.arange(seq_length, dtype=torch.float32).unsqueeze(0)  # ? (1, seq_length)
         num_timescales = self.hidden_size // 2
+
         log_timescale_increment = math.log(
-            float(self.max_timescale) / float(self.min_timescale)  # ? 10000/1 = 10000
+            float(self.max_timescale) / float(self.min_timescale)  # ? log(10000/1) = log(10000) = 4
         ) / torch.maximum(torch.tensor(num_timescales, dtype=torch.float32) - 1, torch.tensor(1))
 
         inv_timescales = self.min_timescale * torch.exp(
             torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment
         )
 
-        scaled_time = position.unsqueeze(-1) * inv_timescales.unsqueeze(0).unsqueeze(0)
+        scaled_time = position.unsqueeze(-1) * inv_timescales.expand(1, 1, -1)
 
         embs = torch.cat((torch.sin(scaled_time), torch.cos(scaled_time)), dim=-1)
-        # Force usage of `np` to compute static values at trace time.
-        # embs = F.pad(embs, [[0, 0], [0, 0], [0, torch.remainder(torch.tensor(self.hidden_size), torch.tensor(2)).item()]])
+
         return embs
 
 
@@ -641,28 +617,35 @@ class VideoPrismTextEncoder(nn.Module):
     def __init__(self, config: VideoPrismConfig):
         super().__init__()
         self.config = config
-        self.config.hidden_act = "relu"
-        if self.config.enable_causal_atten:
-            self.config.is_causal = True
+        self.config.hidden_act = "relu"    # ? change hidden_act from python_gelu to relu in order to reuse encoder, layer, attention code
+        if config.enable_causal_atten:
+            config.is_causal = True
         self.unimodal_encoder = VideoPrismEncoder(config, mode="unimodal")
-        self.pos_embeddings = PositionalEmbedding(config)  # ? nn.Parameter(torch.zeros(config.hidden_size))
+        self.pos_embeddings = PositionalEmbedding(config)
         self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+
     def forward(
-        self, text_token_ids, attention_mask, output_attentions=False, output_hidden_states=False, return_dict=True
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,     #todo
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        batch_size, seq_length = text_token_ids.shape
-        hidden_states = self.token_embeddings(text_token_ids)  # ? text_token_ids = (B, 64)
-        hidden_states = hidden_states * (self.config.hidden_size**0.5)  #!
+        batch_size, seq_length = input_ids.shape
+        hidden_states = self.token_embeddings(input_ids)  # ? input_ids = (B, 64)
+        hidden_states = hidden_states * (self.config.hidden_size**0.5)  #! from original code
+        
         cls_padding = torch.ones(batch_size, 1)
-        text_token_ids = torch.cat(
-            (text_token_ids, cls_padding), dim=1
-        )  # ? add CLS token, text_token_ids shape is (B, 65)
+        input_ids = torch.cat(
+            (input_ids, cls_padding), dim=1
+        )  # ? concat CLS token, input_ids shape becomes (B, 65)
         attention_mask = torch.cat((attention_mask, cls_padding), dim=1) if attention_mask is not None else None
         causal_attention_mask = _create_4d_causal_attention_mask(
-            text_token_ids.shape, hidden_states.dtype, device=hidden_states.device
+            input_ids.shape, hidden_states.dtype, device=hidden_states.device
         )
 
         if attention_mask is not None:
@@ -670,10 +653,10 @@ class VideoPrismTextEncoder(nn.Module):
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype) + causal_attention_mask
 
         # ? the shape of input_embeds is (B, 64, 768)
-        features = hidden_states + self.pos_embeddings(seq_length)  # ? add positional embeddings
+        features = hidden_states + self.pos_embeddings(seq_length)
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
-        cls_emb = cls_emb.expand(features.shape[0], -1, -1)  # ? expand to (B, 1, 768)
-        features = torch.cat((features, cls_emb), dim=1)  # ? features shape (B, 65, 768)
+        cls_emb = cls_emb.expand(features.shape[0], -1, -1)         # ? expand to (B, 1, 768)
+        features = torch.cat((features, cls_emb), dim=1)            # ? features shape (B, 65, 768)
 
         features = self.unimodal_encoder(
             features,
@@ -688,42 +671,64 @@ class VideoPrismTextEncoder(nn.Module):
         with torch.no_grad():
             self.layernorm.weight += nn.Parameter(torch.ones(self.config.hidden_size))
 
-        features = self.layernorm(features)  # ? layernorm the features
+        features = self.layernorm(features)
         return features
 
 
-class VideoPrismClip(nn.Module):
+class VideoPrismClip(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.backbone = VideoPrismModel(config)
         self.auxiliary_encoder = VideoPrismEncoder(config, mode="auxiliary")
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
         self.text_encoder = VideoPrismTextEncoder(config)
         self.l2norm = _l2_normalize
-        self.normalize = True  #! need to store in config
+        self.normalize = config.apply_l2_norm
+        self.post_init()
 
-    def forward(self, pixel_values: torch.FloatTensor, text_token_ids, attention_mask, **kwargs):
-        video_features = self.backbone(pixel_values=pixel_values)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor, 
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        ) -> VideoPrismClipOutput:
+
+        backbone_outputs = self.backbone(pixel_values=pixel_values)     # ? returns (B, 4096, 768)
+        
+        video_features = backbone_outputs[0]
+        
         vision_features = self.auxiliary_encoder(
-            video_features.last_hidden_state, output_attentions=False, output_hidden_states=False, return_dict=True
-        ).last_hidden_state
-        video_embeddings = self.contrastive_vision_pooler(vision_features)[0]
+            video_features,
+            output_attentions=output_attentions, 
+            output_hidden_states=output_hidden_states, 
+            return_dict=return_dict
+        )                                          # ? returns (B, 4096, 768) 
+        video_embeddings = self.contrastive_vision_pooler(vision_features[0])[0]
+        
         if self.normalize:
             video_embeddings = self.l2norm(video_embeddings, axis=-1)
+        
         text_features = self.text_encoder(
-            text_token_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=True,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        text_embeddings = text_features[:, -1]  # ? (B, 1, 768)
+        text_embeddings = text_features[:, -1]  # ? the cls tokens (B, 1, 768)
+        
         if self.normalize:
             text_embeddings = self.l2norm(text_embeddings, axis=-1)
 
-        return video_embeddings, text_embeddings
+        return VideoPrismClipOutput(
+            video_hidden_states=video_embeddings, 
+            text_hidden_states=text_embeddings
+            )
 
 
 __all__ = [
