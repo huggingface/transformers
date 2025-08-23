@@ -14,7 +14,6 @@
 
 import gc
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
@@ -32,6 +31,8 @@ from transformers.utils import (
 
 
 if is_torch_available():
+    from types import SimpleNamespace
+
     import torch
 
     from transformers.integrations.mxfp4 import mlp_forward
@@ -73,11 +74,7 @@ class Mxfp4ConfigTest(unittest.TestCase):
 
     def test_from_dict(self):
         """Test configuration creation from dict"""
-        config_dict = {
-            "quant_method": "mxfp4",
-            "modules_to_not_convert": ["lm_head"],
-            "dequantize": True,
-        }
+        config_dict = {"quant_method": "mxfp4", "modules_to_not_convert": ["lm_head"], "dequantize": True}
         config = Mxfp4Config.from_dict(config_dict)
         self.assertEqual(config.modules_to_not_convert, ["lm_head"])
         self.assertTrue(config.dequantize)
@@ -93,10 +90,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
     def test_quantizer_validation_no_torch(self):
         """Test quantizer validation when torch is not available"""
-        with patch(
-            "transformers.quantizers.quantizer_mxfp4.is_torch_available",
-            return_value=False,
-        ):
+        with patch("transformers.quantizers.quantizer_mxfp4.is_torch_available", return_value=False):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
             config = Mxfp4Config()
@@ -153,9 +147,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 quantizer.validate_environment()
             except ValueError as e:
                 if "compute capability" in str(e):
-                    self.fail(
-                        "Should not raise compute capability error when dequantize=True"
-                    )
+                    self.fail("Should not raise compute capability error when dequantize=True")
 
     def test_quantizer_validation_dequantize_on_cpu(self):
         """Test quantizer validation with dequantize enabled on CPU-only environment"""
@@ -170,9 +162,7 @@ class Mxfp4QuantizerTest(unittest.TestCase):
                 quantizer.validate_environment()
             except RuntimeError as e:
                 if "requires a GPU" in str(e):
-                    self.fail(
-                        "Should not raise GPU requirement error when dequantize=True on CPU"
-                    )
+                    self.fail("Should not raise GPU requirement error when dequantize=True on CPU")
 
     def test_quantizer_validation_order_dequantize_before_cuda_check(self):
         """Test that dequantize check happens before CUDA availability check"""
@@ -208,14 +198,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     def test_quantizer_validation_missing_triton(self):
         """Test quantizer validation when triton is not available"""
         with (
-            patch(
-                "transformers.quantizers.quantizer_mxfp4.is_triton_available",
-                return_value=False,
-            ),
-            patch(
-                "transformers.quantizers.quantizer_mxfp4.is_kernels_available",
-                return_value=False,
-            ),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -228,14 +212,8 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     def test_quantizer_validation_missing_triton_pre_quantized_no_dequantize(self):
         """Test quantizer validation when triton is not available but model is pre-quantized and dequantize is False"""
         with (
-            patch(
-                "transformers.quantizers.quantizer_mxfp4.is_triton_available",
-                return_value=False,
-            ),
-            patch(
-                "transformers.quantizers.quantizer_mxfp4.is_kernels_available",
-                return_value=False,
-            ),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -353,15 +331,11 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
         # Should not convert if in exclusion list
         patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(
-            should_convert_module(["model", "layers", "0", "self_attn"], patterns)
-        )
+        self.assertFalse(should_convert_module(["model", "layers", "0", "self_attn"], patterns))
         self.assertFalse(should_convert_module(["lm_head"], patterns))
 
         # Should convert if not in exclusion list
-        self.assertTrue(
-            should_convert_module(["model", "layers", "0", "mlp", "experts"], patterns)
-        )
+        self.assertTrue(should_convert_module(["model", "layers", "0", "mlp", "experts"], patterns))
 
     @require_torch
     def test_convert_moe_packed_tensors(self):
@@ -414,11 +388,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         mock_routing_data = SimpleNamespace()  # Dummy object
         mock_gather_idx = torch.zeros(10, dtype=torch.int32, device=torch_device)
         mock_scatter_idx = torch.zeros(10, dtype=torch.int32, device=torch_device)
-        mock_triton_hub.routing.routing.return_value = (
-            mock_routing_data,
-            mock_gather_idx,
-            mock_scatter_idx,
-        )
+        mock_triton_hub.routing.routing.return_value = (mock_routing_data, mock_gather_idx, mock_scatter_idx)
 
         # Mock the 'self' object that mlp_forward is bound to
         mock_self = SimpleNamespace()
@@ -440,11 +410,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         output_2d, _ = mlp_forward(mock_self, hidden_states_2d)
 
         self.assertEqual(len(output_2d.shape), 2, "Output should be 2D for 2D input")
-        self.assertEqual(
-            hidden_states_2d.shape,
-            output_2d.shape,
-            "Shape should be preserved for 2D input",
-        )
+        self.assertEqual(hidden_states_2d.shape, output_2d.shape, "Shape should be preserved for 2D input")
 
         # 3. Test with 3D input
         hidden_states_3d = torch.randn(2, 5, hidden_dim, device=torch_device)
@@ -459,11 +425,7 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         output_3d, _ = mlp_forward(mock_self, hidden_states_3d)
 
         self.assertEqual(len(output_3d.shape), 3, "Output should be 3D for 3D input")
-        self.assertEqual(
-            hidden_states_3d.shape,
-            output_3d.shape,
-            "Shape should be preserved for 3D input",
-        )
+        self.assertEqual(hidden_states_3d.shape, output_3d.shape, "Shape should be preserved for 3D input")
 
 
 @require_torch
