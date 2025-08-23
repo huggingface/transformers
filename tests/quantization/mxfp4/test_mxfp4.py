@@ -15,6 +15,7 @@
 import gc
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from transformers import AutoTokenizer, GptOssForCausalLM, Mxfp4Config
 from transformers.testing_utils import (
@@ -32,7 +33,6 @@ from transformers.utils import (
 
 if is_torch_available():
     import torch
-    from types import SimpleNamespace
     from transformers.integrations.mxfp4 import mlp_forward
     from transformers.testing_utils import torch_device
 
