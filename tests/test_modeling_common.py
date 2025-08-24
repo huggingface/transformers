@@ -1138,6 +1138,7 @@ class ModelTesterMixin:
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
                 inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                print(inputs); input()
                 loss = model(**inputs).loss
                 loss.backward()
                 optimizer.step()
