@@ -700,7 +700,7 @@ class KeyeVisionEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False
+        self, embeddings: torch.Tensor, height: int, width: int
     ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -716,20 +716,13 @@ class KeyeVisionEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        if is_after_patchify:
-            new_height = height
-            new_width = width
-        else:
-            new_height = height // self.patch_size
-            new_width = width // self.patch_size
-
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            size=(new_height, new_width),
+            size=(height, width),
             mode="bilinear",
             align_corners=False,
         )
@@ -747,88 +740,58 @@ class KeyeVisionEmbeddings(nn.Module):
                 tmp_image_grid_thw.append(image_grid)
         return tmp_image_grid_thw
 
-    def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
-        grid = (h, w)
-        if grid in self.cache_position_embedding:
-            self.cache_position_count[grid] += 1
-            return self.cache_position_embedding[grid]
-
-        if len(self.cache_position_embedding) >= max_cache:
-            min_hit_grid = min(self.cache_position_count, key=self.cache_position_count.get)
-            self.cache_position_count.pop(min_hit_grid)
-            self.cache_position_embedding.pop(min_hit_grid)
-
-        position_embedding = self.interpolate_pos_encoding(embeddings, h, w, True)
-        self.cache_position_count[grid] = 1
-        self.cache_position_embedding[grid] = position_embedding
-        return position_embedding
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
-        interpolate_pos_encoding=False,
+        image_grid_thw: Optional[list[tuple[int, int, int]]] = None
     ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values: (B, L, C, H, W)  L = sum(t*h*w for all images in batch)
+            image_grid_thw: list[(t, h, w)]  len == num images = sum(n_images per sample)
+        Returns:
+            (B, L, D)
+        """
         if pixel_values.dim() == 6:
             assert pixel_values.shape[0] == 1
             pixel_values = pixel_values[0]
 
-        if pixel_values.dim() == 5:
-            assert position_ids is not None
-            from einops import rearrange
+        if pixel_values.dim() != 5:
+            raise NotImplementedError(
+                f"Expected 5-D input (B,L,C,H,W), got {pixel_values.shape}"
+            )
 
-            batch_size, squence_len, channel, height, width = pixel_values.shape
-            target_dtype = self.patch_embedding.weight.dtype
-            pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
-            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-            embeddings = patch_embeds.flatten(-2).squeeze(-1)
-            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+        B, L, C, H, W = pixel_values.shape
+        assert image_grid_thw is not None
 
-            # todo: not dubug
-            image_grid_thw_i = 0
-            next_image_grid_thw_i = 0
-            all_embeddings = []
-            for i in range(batch_size):
-                embeddings_i = embeddings[i][None, ...]
-                n_els = embeddings_i.shape[1]
-                while True:
-                    image_grid_thw_curr = image_grid_thw[next_image_grid_thw_i]
-                    n_image_pixels = image_grid_thw_curr[0] * image_grid_thw_curr[1] * image_grid_thw_curr[2]
-                    n_els -= n_image_pixels
-                    next_image_grid_thw_i += 1
+        tokens_per_img = [t * h * w for t, h, w in image_grid_thw]
+        total_tokens = sum(tokens_per_img)
+        assert total_tokens == B * L, f"token mismatch: {total_tokens} vs {L}"
 
-                    if n_els == 0:
-                        flatten_image_grid_thw = self.flatten_list(
-                            image_grid_thw[image_grid_thw_i:next_image_grid_thw_i]
-                        )
+        x = pixel_values.view(B * L, C, H, W)
 
-                        break
+        target_dtype = self.patch_embedding.weight.dtype
+        x = x.to(dtype=target_dtype)
+        x = self.patch_embedding(x)              # (B*L, D, gh, gw)
+        x = x.flatten(2).transpose(1, 2)       # (B*L, gh*gw, D)
 
-                start = 0
-                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings_i.shape[1], (
-                    flatten_image_grid_thw,
-                    embeddings_i.shape,
-                )
-                embeddings_i = embeddings_i.squeeze(0)
-                tmp_embeddings = []
-                for image_grid in image_grid_thw[image_grid_thw_i:next_image_grid_thw_i]:
-                    t, h, w = image_grid
-                    end = start + t * h * w
-                    image_embeddings = embeddings_i[start:end, :]
-                    position_embedding = (
-                        self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(t, 1)
-                    )
-                    image_embeddings = image_embeddings + position_embedding
-                    tmp_embeddings.append(image_embeddings)
-                    start = end
-                image_grid_thw_i = next_image_grid_thw_i
-                embeddings_i = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
-                all_embeddings.append(embeddings_i)
-            all_embeddings = torch.cat(all_embeddings, 0)
-            return all_embeddings
-        else:
-            raise NotImplementedError(str(pixel_values.shape))
+        token_list = torch.split(x.view(-1, x.size(-1)), tokens_per_img, dim=0)
+
+        outs = []
+        for img_tokens, (t, h, w) in zip(token_list, image_grid_thw):
+            # img_tokens: (t*h*w, D)
+            img_tokens = img_tokens.view(t, h * w, -1)  # (t, h*w, D)
+            pos = self.interpolate_pos_encoding(
+                img_tokens[0], h, w
+            )  # (1, h*w, D)
+            pos = pos.expand(t, -1, -1)  # (t, h*w, D)
+            img_tokens = img_tokens + pos
+            outs.append(img_tokens.view(-1, img_tokens.size(-1)))  # (t*h*w, D)
+
+        y = torch.cat(outs, dim=0)  # (L_total, D)
+        y = y.view(B, L, -1)
+        return y
 
 
 def apply_rotary_pos_emb_flashatt(
@@ -1155,8 +1118,6 @@ KEYEVISION_VISION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1180,7 +1141,6 @@ class KeyeVisionTransformer(nn.Module):
         pixel_values,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
         attention_mask: Optional[torch.Tensor] = None,
         sample_indices: Optional[torch.Tensor] = None,
         image_indices: Optional[torch.Tensor] = None,
@@ -1202,7 +1162,6 @@ class KeyeVisionTransformer(nn.Module):
         )
         hidden_states = self.embeddings(
             pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             position_ids=position_ids,
             image_grid_thw=image_grid_thw,
         )
@@ -1348,7 +1307,6 @@ class KeyeVisionModel(KeyePreTrainedModel):
         sample_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
         position_ids: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
         cu_seqlens: Optional[list[torch.Tensor]] = None,
@@ -1380,7 +1338,6 @@ class KeyeVisionModel(KeyePreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             position_ids=position_ids,
             image_grid_thw=image_grid_thw,
             sample_indices=sample_indices,
@@ -1832,7 +1789,7 @@ class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
         if pixel_values is not None:
             pixel_values = pixel_values.type(self.visual.dtype)
             pixel_values = pixel_values.unsqueeze(0)
-            keyevision_position_ids = []
+            vision_position_ids = []
             image_grid_hws = []
             sample_indices = []
             cu_seqlens = [0]
@@ -1842,19 +1799,18 @@ class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
                 numel = np.prod(thw_tuple)
                 image_grid_hws.append(thw_tuple)
                 image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                keyevision_position_ids.append(image_position_ids)
+                vision_position_ids.append(image_position_ids)
                 sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
                 cu_seqlens.append(cu_seqlens[-1] + numel)
 
-            keyevision_position_ids = torch.concat(keyevision_position_ids, dim=0).to(pixel_values.device)
+            vision_position_ids = torch.concat(vision_position_ids, dim=0).to(pixel_values.device)
             cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
             sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
 
             vision_outputs = self.visual(
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_hws,
-                position_ids=keyevision_position_ids,
-                interpolate_pos_encoding=True,
+                position_ids=vision_position_ids,
                 sample_indices=sample_indices,
                 cu_seqlens=cu_seqlens,
             )
@@ -1891,7 +1847,7 @@ class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
         if pixel_values_videos is not None:
             pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
             pixel_values_videos = pixel_values_videos.unsqueeze(0)
-            keyevision_position_ids = []
+            vision_position_ids = []
             video_grid_hws = []
             sample_indices = []
             cu_seqlens = [0]
@@ -1901,19 +1857,18 @@ class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
                 numel = np.prod(thw_tuple)
                 video_grid_hws.append(thw_tuple)
                 video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                keyevision_position_ids.append(video_position_ids)
+                vision_position_ids.append(video_position_ids)
                 sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
                 cu_seqlens.append(cu_seqlens[-1] + numel)
 
-            keyevision_position_ids = torch.concat(keyevision_position_ids, dim=0).to(pixel_values_videos.device)
+            vision_position_ids = torch.concat(vision_position_ids, dim=0).to(pixel_values_videos.device)
             cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
             sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
 
             vision_outputs = self.visual(
                 pixel_values=pixel_values_videos,
                 image_grid_thw=video_grid_hws,
-                position_ids=keyevision_position_ids,
-                interpolate_pos_encoding=True,
+                position_ids=vision_position_ids,
                 sample_indices=sample_indices,
                 cu_seqlens=cu_seqlens,
             )
