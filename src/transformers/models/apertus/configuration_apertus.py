@@ -117,10 +117,6 @@ class ApertusConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_norm (`bool`, *optional*, defaults to `True`):
-            Whether to use a normalization on the query and key states during self-attention.
-        post_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use a normalization on the output of the attention layer.
 
     ```python
     >>> from transformers import ApertusModel, ApertusConfig
@@ -179,8 +175,6 @@ class ApertusConfig(PretrainedConfig):
         },
         attention_bias=False,
         attention_dropout=0.0,
-        qk_norm=True,
-        post_norm=False,
         **kwargs,
     ):
         super().__init__(
@@ -215,8 +209,6 @@ class ApertusConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        self.qk_norm = qk_norm
-        self.post_norm = post_norm
 
 
 __all__ = ["ApertusConfig"]

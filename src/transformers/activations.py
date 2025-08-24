@@ -272,7 +272,7 @@ class XIELUActivation(nn.Module):
             if not is_torchdynamo_compiling():
                 return self._xielu_cuda_fn(input)
             else:
-                logger.warning("torch._dynamo is compiling, using Python version of xIELU.")
+                logger.warning_once("torch._dynamo is compiling, using Python version of xIELU.")
         return self._xielu_python(input)
 
 

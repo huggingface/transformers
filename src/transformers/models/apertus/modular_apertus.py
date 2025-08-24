@@ -134,10 +134,6 @@ class ApertusConfig(LlamaConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_norm (`bool`, *optional*, defaults to `True`):
-            Whether to use a normalization on the query and key states during self-attention.
-        post_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use a normalization on the output of the attention layer.
 
     ```python
     >>> from transformers import ApertusModel, ApertusConfig
@@ -190,8 +186,6 @@ class ApertusConfig(LlamaConfig):
         },
         attention_bias=False,
         attention_dropout=0.0,
-        qk_norm=True,
-        post_norm=False,
         **kwargs,
     ):
         super().__init__(
@@ -216,8 +210,6 @@ class ApertusConfig(LlamaConfig):
             attention_dropout=attention_dropout,
             **kwargs,
         )
-        self.qk_norm = qk_norm
-        self.post_norm = post_norm
         del self.pretraining_tp
         del self.mlp_bias
         del self.head_dim
@@ -232,16 +224,9 @@ class ApertusMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        if config.hidden_act != "xielu":
-            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
 
     def forward(self, x):
-        if self.config.hidden_act == "xielu":
-            # in case of xielu, no gated MLP
-            down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
-        else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 class ApertusRMSNorm(LlamaRMSNorm):
@@ -255,12 +240,8 @@ class ApertusRotaryEmbedding(LlamaRotaryEmbedding):
 class ApertusAttention(LlamaAttention):
     def __init__(self, config: ApertusConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        if self.config.qk_norm:
-            self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
-            self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
-        else:
-            self.q_norm = nn.Identity()
-            self.k_norm = nn.Identity()
+        self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
+        self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
 
     def forward(
         self,
@@ -313,8 +294,6 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
         self.attention_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.post_norm = config.post_norm
-
         del self.input_layernorm
         del self.post_attention_layernorm
 
@@ -330,8 +309,7 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
-        if not self.post_norm:
-            hidden_states = self.attention_layernorm(hidden_states)
+        hidden_states = self.attention_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -342,17 +320,12 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        if self.post_norm:
-            hidden_states = self.attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        if not self.post_norm:
-            hidden_states = self.feedforward_layernorm(hidden_states)
+        hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.post_norm:
-            hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 

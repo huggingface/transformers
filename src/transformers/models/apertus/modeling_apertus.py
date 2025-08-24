@@ -49,16 +49,9 @@ class ApertusMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        if config.hidden_act != "xielu":
-            self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
 
     def forward(self, x):
-        if self.config.hidden_act == "xielu":
-            # in case of xielu, no gated MLP
-            down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
-        else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -215,12 +208,8 @@ class ApertusAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        if self.config.qk_norm:
-            self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
-            self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
-        else:
-            self.q_norm = nn.Identity()
-            self.k_norm = nn.Identity()
+        self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
+        self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -279,8 +268,6 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
         self.attention_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.post_norm = config.post_norm
-
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
@@ -294,8 +281,7 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
-        if not self.post_norm:
-            hidden_states = self.attention_layernorm(hidden_states)
+        hidden_states = self.attention_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -306,17 +292,12 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        if self.post_norm:
-            hidden_states = self.attention_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
-        if not self.post_norm:
-            hidden_states = self.feedforward_layernorm(hidden_states)
+        hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        if self.post_norm:
-            hidden_states = self.feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
