@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -27,12 +26,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from PIL import Image
-from torchvision.transforms import functional as TF
 
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    eager_attention_forward,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLDecoderLayer,
@@ -44,13 +40,12 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLTextModel,
     apply_multimodal_rotary_pos_emb,
     apply_rotary_pos_emb_vision,
-    repeat_kv,
+    eager_attention_forward,
 )
-from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2RMSNorm
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
-
+from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2RMSNorm
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from transformers.models.siglip.configuration_siglip import KeyeVisionConfig
 from transformers.models.siglip.modeling_siglip import (
     SiglipMLP,
@@ -60,23 +55,18 @@ from transformers.models.siglip.modeling_siglip import (
 
 from ...activations import GELUActivation
 from ...cache_utils import Cache
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
-    SizeDict,
     PILImageResampling,
+    SizeDict,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -86,10 +76,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     ALL_ATTENTION_FUNCTIONS,
-    sdpa_attention_forward,
 )
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -105,8 +93,10 @@ from ...utils import (
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
-from ...video_utils import VideoInput, make_batched_videos, group_videos_by_shape, reorder_videos, VideoMetadata
+from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
+
 
 logger = logging.get_logger(__name__)
 

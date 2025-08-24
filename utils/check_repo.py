@@ -399,6 +399,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "Florence2VisionBackbone",  # Building part of a bigger model
+    "KeyeVisionModel",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!
