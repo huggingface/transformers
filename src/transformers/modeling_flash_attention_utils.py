@@ -352,7 +352,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids, is_packed_sequence: bool =
         max_length_q = int(q_len.max())
         max_length_k = int(last_position_ids.max()) + 1
     else:
-        position_ids = position_ids.view(-1)
+        position_ids = position_ids.reshape(-1)
         indices_q = (position_ids == 0).nonzero().view(-1)
 
         cu_seq_lens_q = torch.cat(
@@ -409,6 +409,18 @@ def _prepare_from_posids(query, key, value, position_ids, query_length):
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
+    # Validate and auto-correct query_length parameter
+    # This addresses the issue where QKV tensors might be modified after query_length is calculated
+    # (e.g., by ulysses-sp patch or other modifications)
+    actual_query_length = query.shape[1]
+    if query_length != actual_query_length:
+        logger.warning_once(
+            f"query_length parameter ({query_length}) does not match query.shape[1] ({actual_query_length}). "
+            f"Using query.shape[1] ({actual_query_length}) instead. "
+            f"This may indicate QKV tensors were modified after query_length was calculated."
+        )
+        query_length = actual_query_length
+
     kv_length = key.shape[1]
     is_packed_sequence = query_length == kv_length
 
