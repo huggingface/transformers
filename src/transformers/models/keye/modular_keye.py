@@ -52,7 +52,11 @@ from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoP
 
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from transformers.models.siglip.configuration_siglip import KeyeVisionConfig
-from transformers.models.siglip.modeling_siglip import SiglipMLP, SiglipMultiheadAttentionPoolingHead, SiglipVisionModelOutput
+from transformers.models.siglip.modeling_siglip import (
+    SiglipMLP,
+    SiglipMultiheadAttentionPoolingHead,
+    SiglipVisionModelOutput,
+)
 
 from ...activations import GELUActivation
 from ...cache_utils import Cache
@@ -101,9 +105,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...video_processing_utils import (
-    BASE_VIDEO_PROCESSOR_DOCSTRING
-)
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoInput, make_batched_videos, group_videos_by_shape, reorder_videos, VideoMetadata
 
 logger = logging.get_logger(__name__)
@@ -315,6 +317,7 @@ class KeyeTextConfig(Qwen2_5_VLTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "keye_text"
     base_config_key = "text_config"
 
@@ -411,7 +414,7 @@ class KeyeImageProcessor(Qwen2VLImageProcessor):
             patch_size=patch_size,
             temporal_patch_size=temporal_patch_size,
             merge_size=merge_size,
-            **kwargs
+            **kwargs,
         )
 
     def _preprocess(
@@ -590,7 +593,6 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
         device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
-            
         if do_sample_frames:
             # Sample video frames
             videos = [
@@ -665,7 +667,9 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
                 self.patch_size,
             )
             patches = patches.permute(0, 3, 5, 2, 1, 4, 6)
-            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * self.patch_size * self.patch_size)
+            flatten_patches = patches.reshape(
+                batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * self.patch_size * self.patch_size
+            )
 
             processed_videos_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
@@ -678,7 +682,7 @@ class KeyeVideoProcessor(Qwen2VLVideoProcessor):
         pixel_values_videos = pixel_values_videos.reshape(-1, channel, self.patch_size, self.patch_size)
 
         return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw":  video_grid_thw},
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
         )
         # return flatten_patches, (grid_t, grid_h, grid_w)
@@ -721,9 +725,7 @@ class KeyeVisionEmbeddings(nn.Module):
         self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, height: int, width: int
-    ) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing and no class embeddings.
@@ -766,7 +768,7 @@ class KeyeVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[list[tuple[int, int, int]]] = None
+        image_grid_thw: Optional[list[tuple[int, int, int]]] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -780,9 +782,7 @@ class KeyeVisionEmbeddings(nn.Module):
             pixel_values = pixel_values[0]
 
         if pixel_values.dim() != 5:
-            raise NotImplementedError(
-                f"Expected 5-D input (B,L,C,H,W), got {pixel_values.shape}"
-            )
+            raise NotImplementedError(f"Expected 5-D input (B,L,C,H,W), got {pixel_values.shape}")
 
         B, L, C, H, W = pixel_values.shape
         assert image_grid_thw is not None
@@ -795,8 +795,8 @@ class KeyeVisionEmbeddings(nn.Module):
 
         target_dtype = self.patch_embedding.weight.dtype
         x = x.to(dtype=target_dtype)
-        x = self.patch_embedding(x)              # (B*L, D, gh, gw)
-        x = x.flatten(2).transpose(1, 2)       # (B*L, gh*gw, D)
+        x = self.patch_embedding(x)  # (B*L, D, gh, gw)
+        x = x.flatten(2).transpose(1, 2)  # (B*L, gh*gw, D)
 
         token_list = torch.split(x.view(-1, x.size(-1)), tokens_per_img, dim=0)
 
@@ -804,9 +804,7 @@ class KeyeVisionEmbeddings(nn.Module):
         for img_tokens, (t, h, w) in zip(token_list, image_grid_thw):
             # img_tokens: (t*h*w, D)
             img_tokens = img_tokens.view(t, h * w, -1)  # (t, h*w, D)
-            pos = self.interpolate_pos_encoding(
-                img_tokens[0], h, w
-            )  # (1, h*w, D)
+            pos = self.interpolate_pos_encoding(img_tokens[0], h, w)  # (1, h*w, D)
             pos = pos.expand(t, -1, -1)  # (t, h*w, D)
             img_tokens = img_tokens + pos
             outs.append(img_tokens.view(-1, img_tokens.size(-1)))  # (t*h*w, D)
@@ -1144,6 +1142,8 @@ KEYEVISION_VISION_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
 class KeyeVisionTransformer(nn.Module):
     def __init__(self, config: KeyeVisionConfig):
         super().__init__()
@@ -1372,6 +1372,7 @@ class KeyeVisionModel(KeyePreTrainedModel):
 class KeyeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -1559,21 +1560,19 @@ class KeyeProjector(nn.Module):
         for image_feature, image_grid in zip(image_features, image_grid_thw):
             image_feature = self.pre_norm(image_feature)
             time, height, width = image_grid
-            from einops import rearrange
 
             image_feature = (
-                image_feature
-                .view(time, height // h_kernel, h_kernel,
-                    width  // w_kernel,  w_kernel,  -1)
+                image_feature.view(time, height // h_kernel, h_kernel, width // w_kernel, w_kernel, -1)
                 .permute(0, 1, 3, 2, 4, 5)
-                .flatten(0, 2)                    # T*H*W
-                .flatten(1, 3)                    # h_kernel*w_kernel*D
+                .flatten(0, 2)  # T*H*W
+                .flatten(1, 3)  # h_kernel*w_kernel*D
             )
             hidden_states = self.linear_1(image_feature)
             hidden_states = self.act(hidden_states)
             hidden_states = self.linear_2(hidden_states)
             processed_features.append(hidden_states)
         return processed_features
+
 
 @auto_docstring
 class KeyeModel(KeyePreTrainedModel, Qwen2_5_VLModel):
@@ -2323,5 +2322,5 @@ __all__ = [
     "KeyePreTrainedModel",
     "KeyeProcessor",
     "KeyeTextConfig",
-    "KeyeTextModel"
+    "KeyeTextModel",
 ]
